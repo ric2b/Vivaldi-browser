@@ -739,6 +739,9 @@ void SearchProvider::StartOrStopSuggestQuery(bool minimal_changes) {
 
   const bool can_send_any_suggest_request =
       (!query_is_private &&
+       //Vivaldi
+       !keyword_turl && !client()->VivaldiOnlyKeywordSearch() &&
+       //End Vivaldi
        CanSendSuggestRequest(page_classification, default_turl, client())) ||
       CanSendSuggestRequest(page_classification, keyword_turl, client());
   if (!can_send_any_suggest_request) {

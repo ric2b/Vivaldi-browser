@@ -3908,7 +3908,7 @@ Du kan hantera inställningarna för det här kontot genom att installera Family
 <translation id="3727144509609414201">Tillgängliga wifi-nätverk</translation>
 <translation id="3727187387656390258">Kontrollera popup</translation>
 <translation id="372722114124766626">Bara den här gången</translation>
-<translation id="3727332897090187514">Ingen anteckning lades till</translation>
+<translation id="3727332897090187514">Ingen kommentar har lagts till</translation>
 <translation id="3727473233247516571">Underram i vilocacheminne: <ph name="BACK_FORWARD_CACHE_PAGE_URL" /></translation>
 <translation id="3727843212509629024">Fel pinkod. Försök igen.</translation>
 <translation id="3727850735097852673">Om du vill använda Google Lösenordshantering med en macOS-nyckelring ska du starta om Chrome och tillåta åtkomst till nyckelringen. Flikarna öppnas igen när du har startat om enheten.</translation>
@@ -7712,7 +7712,7 @@ Du kan tilldela flera brytare denna åtgärd.</translation>
 <translation id="6469557521904094793">Aktivera mobilnätverk</translation>
 <translation id="6469702164109431067">Lösenord och nycklar</translation>
 <translation id="6470120577693311302">Blinkande aviseringar</translation>
-<translation id="6470823736074966819">Stäng av ljudet för aviseringar</translation>
+<translation id="6470823736074966819">Stäng av aviseringar</translation>
 <translation id="6472893788822429178">Visa hemknappen</translation>
 <translation id="6473315466413288899">Välj ett alternativ</translation>
 <translation id="6474498546677193336">Det gick inte att sluta dela eftersom ett program använder den här mappen. Mappen delas inte längre när Linux stängs av nästa gång.</translation>

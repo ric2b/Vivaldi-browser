@@ -120,6 +120,7 @@ class ChromeAutocompleteProviderClient : public AutocompleteProviderClient {
   direct_match::DirectMatchService* GetDirectMatchService() override;
   void SetFromSearchField(bool from_search_field) override;
   bool GetFromSearchField() override;
+  bool VivaldiOnlyKeywordSearch() override;
 
   // OmniboxAction::Client:
   void OpenSharingHub() override;

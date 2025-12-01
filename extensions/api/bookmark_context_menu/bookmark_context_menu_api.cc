@@ -187,7 +187,9 @@ std::string BookmarkContextMenuShowFunction::Open(
   if (model->is_root_node(node)) {
     return "Node with id " + id + " is root";
   }
-  if (node->type() != bookmarks::BookmarkNode::FOLDER) {
+
+  if (node->type() != bookmarks::BookmarkNode::FOLDER &&
+      node->type() != bookmarks::BookmarkNode::BOOKMARK_BAR) {
     return "Node with id " + id + " is not a folder";
   }
 

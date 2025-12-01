@@ -545,7 +545,7 @@
 <translation id="1365650529628379165">Поднять брови</translation>
 <translation id="1367817137674340530">Сгенерировано изображений: <ph name="COUNT" /></translation>
 <translation id="1368603372088757436">Linux не поддерживается на вашем устройстве <ph name="DEVICE_TYPE" />. <ph name="LINK_BEGIN" />Подробнее…<ph name="LINK_END" /></translation>
-<translation id="1370249617397887619">Добавить пароли в аккаунт Google, чтобы они были доступны на других устройствах</translation>
+<translation id="1370249617397887619">Добавьте пароли в аккаунт Google, чтобы они были доступны на других устройствах.</translation>
 <translation id="1370384480654163477">Просмотр и редактирование файлов, к которым вы разрешили доступ при предыдущем посещении этого сайта:</translation>
 <translation id="1372259917802609049">Не получилось удалить ограничение.</translation>
 <translation id="1372841398847029212">Синхронизировать с моим аккаунтом</translation>
@@ -2704,7 +2704,7 @@
 <translation id="2855243985454069333">История будет удалена со всех синхронизируемых устройств</translation>
 <translation id="2855812646048059450">Войти с аккаунтом <ph name="CREDENTIAL_PROVIDER" /></translation>
 <translation id="2856776373509145513">Создайте контейнер</translation>
-<translation id="2859741939921354763">Импортировать пароли в <ph name="BRAND" /></translation>
+<translation id="2859741939921354763">Импортируйте пароли в <ph name="BRAND" />.</translation>
 <translation id="2860710618359053450">Сместить губы вправо</translation>
 <translation id="2861301611394761800">Обновление системы завершено. Перезапустите компьютер.</translation>
 <translation id="2861402191395139055">Подписки Passpoint</translation>
@@ -4792,7 +4792,7 @@
 <translation id="4345457680916430965">&amp;Открыть в приложении "<ph name="APP" />"</translation>
 <translation id="4345587454538109430">Настройка...</translation>
 <translation id="4345732373643853732">Серверу неизвестно это имя пользователя.</translation>
-<translation id="4346159263667201092">Добавьте дополнительную информацию</translation>
+<translation id="4346159263667201092">Добавьте детали (необязательно)</translation>
 <translation id="4348766275249686434">Собирать данные об ошибках</translation>
 <translation id="4349828822184870497">Полезно</translation>
 <translation id="4350230709416545141">Не сообщать сайту <ph name="HOST" />, где я нахожусь</translation>
@@ -5395,7 +5395,7 @@
 <translation id="4789348252524569426">Невозможно установить файлы для распознавания речи. Обновите операционную систему и перезапустите устройство, затем повторите попытку.</translation>
 <translation id="4789550509729954245">Показывать уведомления, когда устройства обмениваются данными</translation>
 <translation id="4791037424585594169">(UDP)</translation>
-<translation id="4791793693640849493">Сохраните объекты в аккаунте</translation>
+<translation id="4791793693640849493">Сохраните данные в аккаунте</translation>
 <translation id="4792290259143007505">Включить ускорение TrackPoint</translation>
 <translation id="4792711294155034829">Сообщить о &amp;проблеме...</translation>
 <translation id="4794810983896241342">Обновлениями управляет <ph name="BEGIN_LINK" />администратор<ph name="END_LINK" />.</translation>
@@ -7326,7 +7326,7 @@
 <translation id="6185151644843671709">Ключ доступа сохранен, PIN-код создан</translation>
 <translation id="6186177419203903310">Уведомления обо всех новых периферийных USB-устройствах будут включены. Продолжить?</translation>
 <translation id="6190953336330058278">Управление телефоном: приложения</translation>
-<translation id="6192333916571137726">Скачивание файла</translation>
+<translation id="6192333916571137726">Скачать файл</translation>
 <translation id="6192413564913825901">Переместить во "Все закладки"</translation>
 <translation id="6194333736420234626">Способы оплаты</translation>
 <translation id="6195005504600220730">Доступ к информации о вашем браузере, ОС и устройстве</translation>

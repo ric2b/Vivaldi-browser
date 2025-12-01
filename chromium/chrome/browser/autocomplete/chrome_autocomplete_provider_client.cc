@@ -429,6 +429,12 @@ bool ChromeAutocompleteProviderClient::SearchSuggestEnabled() const {
 #endif
 }
 
+// Vivaldi
+bool ChromeAutocompleteProviderClient::VivaldiOnlyKeywordSearch() {
+  return profile_->GetPrefs()->GetBoolean(vivaldiprefs::kAddressBarInlineSearchSuggestOnNickname);
+}
+// End Vivaldi
+
 bool ChromeAutocompleteProviderClient::AllowDeletingBrowserHistory() const {
   return profile_->GetPrefs()->GetBoolean(prefs::kAllowDeletingBrowserHistory);
 }

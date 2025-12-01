@@ -4883,7 +4883,7 @@
         "order": {
           "description": "Mail label item order",
           "type": "list",
-          "default": []
+          "default": ["$label1", "$label2", "$label3", "$label4", "$label5"]
         },
         "hide": {
           "description": "Mail label hide items",
@@ -5252,8 +5252,8 @@
       },
       "vpn_notice_dismissed": {
         "description": "Timestamp when the mail over VPN notice was dismissed VB-114647",
-        "type": "integer",
-        "default": 0
+        "type": "double",
+        "default": 0.0
       }
     },
     "menu": {

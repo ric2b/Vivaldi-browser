@@ -466,7 +466,7 @@ Du hast <ph name="DSE_NAME" /> als Suchmaschine festgelegt. Informationen zum L�
 <translation id="2931440415625410757">Anleitung einblenden</translation>
 <translation id="2952278131021475699">Lens-Kamerasuche</translation>
 <translation id="2962516096219646456">Alle Autofill-Daten ansehen</translation>
-<translation id="2963044753825419640">Websites und Apps können vorhandene Konten automatisch auf die Verwendung von Passkeys umstellen, wenn diese Option verfügbar ist</translation>
+<translation id="2963044753825419640">Websites und Apps können vorhandene Konten automatisch auf die Verwendung von Passkeys umstellen, wenn diese Option verfügbar ist.</translation>
 <translation id="2969979262385602596">Anmeldefehler, bitte später erneut versuchen</translation>
 <translation id="2989523299700148168">Kürzlich besucht</translation>
 <translation id="2989805286512600854">In neuem Tab öffnen</translation>
@@ -665,7 +665,7 @@ Informationen zum Löschen deines Suchverlaufs findest du in der Anleitung deine
 <translation id="3950820424414687140">Anmelden</translation>
 <translation id="3955740319737378355">Fertig</translation>
 <translation id="3955822496205734389">Du nutzt schwache Passwörter.</translation>
-<translation id="3958312024468322930">Ziehe es zum Dock am unteren Rand des Startbildschirms</translation>
+<translation id="3958312024468322930">Ziehe es ins Dock am unteren Rand des Startbildschirms</translation>
 <translation id="3960218941754097036">Mit Google Lens beliebige Elemente auf dem Bildschirm suchen</translation>
 <translation id="3962326069546168954">Speichern</translation>
 <translation id="3967327056943561740">Lesezeichen</translation>
@@ -1005,7 +1005,7 @@ Informationen zum Löschen deines Suchverlaufs findest du in der Anleitung deine
 <translation id="5452354193031718372">Starkes Passwort verwenden:</translation>
 <translation id="5454211924362324495">Wenn du verhindern möchtest, dass andere dein Passwort verwenden, <ph name="BEGIN_LINK" />ändere es auf <ph name="WEBSITE" /><ph name="END_LINK" /></translation>
 <translation id="5454723301413569630">Das Konto <ph name="USER_EMAIL" /> wird von <ph name="HOSTED_DOMAIN" /> verwaltet – bestimmte Informationen sind für diese Domain sichtbar, einschließlich</translation>
-<translation id="5457082343331641453">Deiner Suche hinzufügen</translation>
+<translation id="5457082343331641453">Suchanfrage ergänzen</translation>
 <translation id="5457226814769348910">Offlineversion öffnen</translation>
 <translation id="5478327362747197944">Du kannst Kalendertermine durch Klicken auf ein Datum auf einer Webseite direkt erstellen.</translation>
 <translation id="5482922178977937393">Möchtest du auf deine Interessen abgestimmte Benachrichtigungen zu aktuellen Nachrichten, Sport und mehr erhalten?</translation>

@@ -901,9 +901,12 @@ void VivaldiBrowserWindow::CreateWebContents(
 
   // This will create a new instance of a VivaldiUIRelay maintained and owned by
   // the registry. The profile is key, there is only one relay per profile and
-  // it is removed when profile dies.
-  (void)send_tab_to_self::ReceivingUiHandlerRegistry::GetInstance()
-      ->GetVivaldiUIRelayForProfile(browser_->profile());
+  // it is removed when profile dies. Note: This is only true for "regular"
+  // profiles.
+  if (!browser_->profile()->IsOffTheRecord()) {
+    (void)send_tab_to_self::ReceivingUiHandlerRegistry::GetInstance()
+        ->GetVivaldiUIRelayForProfile(browser_->profile());
+  }
 }
 
 void VivaldiBrowserWindow::InitWidget(

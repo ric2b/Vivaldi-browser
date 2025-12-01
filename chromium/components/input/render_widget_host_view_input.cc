@@ -73,9 +73,10 @@ bool RenderWidgetHostViewInput::TransformPointToLocalCoordSpace(
   }
 
   // NOTE (andre@vivaldi.com) : Added to avoid CHECK in
-  // TransformPointToTargetCoordSpace. VB-107067.
+  // TransformPointToTargetCoordSpace. VB-107067 and VB-111080.
   auto* original_view = router->FindViewFromFrameSinkId(original_frame_sink_id);
-  if (!original_view)
+  auto* target_view = router->FindViewFromFrameSinkId(target_frame_sink_id);
+  if (!original_view || !target_view)
     return false;
   // End Vivaldi
 

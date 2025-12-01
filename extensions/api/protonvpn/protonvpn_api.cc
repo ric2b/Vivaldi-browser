@@ -12,11 +12,6 @@ namespace extensions {
 ExtensionFunction::ResponseAction ProtonvpnGetStatusFunction::Run() {
   namespace Results = vivaldi::protonvpn::GetStatus::Results;
 
-  // TODO: VPNGUARD - REMOVE WHEN GOING OFFICIAL!
-#if defined(OFFICIAL_BUILD)
-  // in official builds, we return error for now.
-  return RespondNow(Error("Not available."));
-#else
   auto* account_manager =
       ::vivaldi::VivaldiAccountManagerFactory::GetForProfile(
           Profile::FromBrowserContext(browser_context()));
@@ -28,7 +23,6 @@ ExtensionFunction::ResponseAction ProtonvpnGetStatusFunction::Run() {
   vivaldi::protonvpn::Status result;
   result.is_logged_in = account_manager->has_refresh_token();
   return RespondNow(ArgumentList(Results::Create(result)));
-#endif
 }
 
 

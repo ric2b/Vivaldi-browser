@@ -107,10 +107,14 @@ const int kSmallIconSizeViv = 16;
 
 class VivaldiSplashBackground : public views::Background {
  public:
-  explicit VivaldiSplashBackground(SkColor background_color,
-                                   const gfx::VectorIcon *icon,
+  explicit VivaldiSplashBackground(SkColor top_color,
+                                   SkColor bottom_color,
+                                   SkColor text_color,
+                                   const gfx::VectorIcon* icon,
                                    SkColor icon_color)
-      : background_color_(background_color),
+      : top_color_(top_color),
+        bottom_color_(bottom_color),
+        text_color_(text_color),
         icon_(icon),
         icon_color_(icon_color) {}
 
@@ -118,21 +122,67 @@ class VivaldiSplashBackground : public views::Background {
   VivaldiSplashBackground& operator=(const VivaldiSplashBackground&) = delete;
 
   void Paint(gfx::Canvas* canvas, views::View* view) const override {
-    canvas->DrawColor(background_color_);
+    const gfx::Rect& b = view->GetContentsBounds();
 
+    cc::PaintFlags flags;
+
+    if (top_color_ != bottom_color_) {
+      // 2 points for the gradient - top and bottom.
+      SkPoint points[2] = {SkPoint{}, SkPoint::Make(0, b.height())};
+
+      // Force colors to be fully opaque.
+      SkColor opaque_top = SkColorSetA(top_color_, 0xFF);
+      SkColor opaque_bottom = SkColorSetA(bottom_color_, 0xFF);
+
+      // Convert to SkColor4f - top and bottom gradient colors.
+      SkColor4f colors[2] = {SkColor4f::FromColor(opaque_top),
+                             SkColor4f::FromColor(opaque_bottom)};
+
+      flags.setShader(cc::PaintShader::MakeLinearGradient(
+          points, colors, nullptr, 2,
+          SkTileMode::kClamp));  // end index
+    } else {
+      flags.setColor(top_color_);
+    }
+
+    flags.setAntiAlias(true);
+
+    // Gradient/solid color fill for whole canvas.
+    canvas->DrawRect(gfx::RectF(b), flags);
+
+    // Draw the icon (centered)
     if (icon_ != nullptr) {
-      const gfx::Rect& b = view->GetContentsBounds();
       int size = b.width() * 0.16;
-      const ui::ThemedVectorIcon& logo = ui::ThemedVectorIcon(
-          icon_, icon_color_, size);
+      const ui::ThemedVectorIcon& logo =
+          ui::ThemedVectorIcon(icon_, icon_color_, size);
       canvas->DrawImageInt(logo.GetImageSkia(view->GetColorProvider()),
                            (b.width() - size) / 2, (b.height() - size) / 2);
     }
+
+    // Draw text at the bottom:
+    const std::u16string text = u"Made with ❤️ in Europe";
+
+    gfx::Font font("Arial", 16);
+    font = font.Derive(0, gfx::Font::NORMAL, gfx::Font::Weight::NORMAL);
+    gfx::FontList font_list(font);
+
+    int text_margin = 16;  // Spacing from the bottom of the screen.
+    int text_y = b.bottom() - 48 - text_margin;
+
+    // Allocate space near the bottom with padding.
+    // Horizontally it spans the whole canvas, vertically it's 32 pixels high.
+    gfx::Rect text_rect(b.x(), text_y, b.width(), 32);
+
+    // Draw the text centered inside text_rect.
+    canvas->DrawStringRectWithFlags(text, font_list, text_color_, text_rect,
+                                    gfx::Canvas::TEXT_ALIGN_CENTER);
   }
 
  private:
-  SkColor background_color_;
-  const gfx::VectorIcon *icon_;
+  SkColor top_color_;
+  SkColor bottom_color_;
+  SkColor text_color_;
+  const gfx::VectorIcon* icon_;
   SkColor icon_color_;
 };
 
@@ -219,19 +269,25 @@ views::ClientView* VivaldiWindowWidgetDelegate::CreateClientView(
   // The purpose of setting a background color for settings & popup windows is
   // to have something to render when resizing windows. Additionally for
   // browser windows is to show splash logo before first content is rendered.
-  SkColor background_color;
+  SkColor background_color_top;
+  SkColor background_color_bottom;
+  SkColor text_color = SkColorSetRGB(0x5B, 0x66, 0x7f);
   if (is_private_window) {
-    background_color = SkColorSetRGB(0x23, 0x23, 0x4f);
+    background_color_top = SkColorSetRGB(0x23, 0x23, 0x4f);
+    background_color_bottom = background_color_top;
   } else {
     ui::NativeTheme* theme = widget->GetNativeTheme();
     if (theme && theme->GetDefaultSystemColorScheme() ==
-                    ui::NativeTheme::ColorScheme::kDark) {
-      background_color = SkColorSetRGB(0x2d, 0x2d, 0x2d);
+                     ui::NativeTheme::ColorScheme::kDark) {
+      background_color_top = SkColorSetRGB(0x70, 0x6D, 0x84);
+      background_color_bottom = SkColorSetRGB(0x3b, 0x43, 0x53);
+      text_color = SkColorSetRGB(0xb2, 0xc0, 0xde);
     } else {
-      background_color = SkColorSetRGB(0xd2, 0xd2, 0xd2);
+      background_color_top = SkColorSetRGB(0xea, 0xe7, 0xff);
+      background_color_bottom = SkColorSetRGB(0xcb, 0xdc, 0xff);
     }
   }
-  const gfx::VectorIcon *icon = nullptr;
+  const gfx::VectorIcon* icon = nullptr;
   SkColor icon_color;
   bool show_logo = window_->browser()->is_type_normal();
   if (show_logo) {
@@ -244,8 +300,10 @@ views::ClientView* VivaldiWindowWidgetDelegate::CreateClientView(
       icon = &kVivaldiSplashIcon;
     }
   }
+
   web_view->SetBackground(std::make_unique<VivaldiSplashBackground>(
-      background_color, icon, icon_color));
+      background_color_top, background_color_bottom, text_color, icon,
+      icon_color));
 
   // ClientView manages the lifetime of its contents view manually.
   return new VivaldiWindowClientView(widget, web_view.release(), window_);

@@ -229,6 +229,7 @@ class AutocompleteProviderClient : public OmniboxAction::Client {
 
   virtual void SetFromSearchField(bool from_search_field) {}
   virtual bool GetFromSearchField() { return false; }
+  virtual bool VivaldiOnlyKeywordSearch() { return false; }
   // End Vivaldi
 };
 

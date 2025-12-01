@@ -15,7 +15,7 @@
     // Increment this if you change the data in ways that mean users with
     // existing data should get a new version. Otherwise, existing data may
     // continue to be used and updates made here will not always appear.
-    "kCurrentDataVersion": 10000166
+    "kCurrentDataVersion": 10000167
   },
 
   // The following engines are included in country lists and are added to the
@@ -804,6 +804,42 @@
       "type": "VIVALDI_SEARCH_ENGINE_QWANT",
       "id": 15
     },
+    "qwant_at": {
+      "name": "Qwant",
+      "keyword": "q",
+      "favicon_url":"https://www.qwant.com/public/favicon-32.c31d35a2488b8fc69760acb21042fb4b.png",
+      "search_url": "https://www.qwant.com/?client=brz-vivaldi&q={searchTerms}&t=web",
+      "suggest_url": "https://api.qwant.com/v3/suggest/?q={searchTerms}&client=opensearch&locale=de_AT",
+      "type": "VIVALDI_SEARCH_ENGINE_QWANT",
+      "id": 15
+    },
+    "qwant_nl": {
+      "name": "Qwant",
+      "keyword": "q",
+      "favicon_url":"https://www.qwant.com/public/favicon-32.c31d35a2488b8fc69760acb21042fb4b.png",
+      "search_url": "https://www.qwant.com/?client=brz-vivaldi&q={searchTerms}&t=web",
+      "suggest_url": "https://api.qwant.com/v3/suggest/?q={searchTerms}&client=opensearch&locale=nl_NL",
+      "type": "VIVALDI_SEARCH_ENGINE_QWANT",
+      "id": 15
+    },
+    "qwant_se": {
+      "name": "Qwant",
+      "keyword": "q",
+      "favicon_url":"https://www.qwant.com/public/favicon-32.c31d35a2488b8fc69760acb21042fb4b.png",
+      "search_url": "https://www.qwant.com/?client=brz-vivaldi&q={searchTerms}&t=web",
+      "suggest_url": "https://api.qwant.com/v3/suggest/?q={searchTerms}&client=opensearch&locale=sv_SE",
+      "type": "VIVALDI_SEARCH_ENGINE_QWANT",
+      "id": 15
+    },
+    "qwant_br": {
+      "name": "Qwant",
+      "keyword": "q",
+      "favicon_url":"https://www.qwant.com/public/favicon-32.c31d35a2488b8fc69760acb21042fb4b.png",
+      "search_url": "https://www.qwant.com/?client=brz-vivaldi&q={searchTerms}&t=web",
+      "suggest_url": "https://api.qwant.com/v3/suggest/?q={searchTerms}&client=opensearch&locale=pt_BR",
+      "type": "VIVALDI_SEARCH_ENGINE_QWANT",
+      "id": 15
+    },
     "yelp": {
       "name": "Yelp",
       "keyword": "yl",
@@ -938,6 +974,7 @@
       "yahoo_at",
       "duckduckgo",
       "ecosia",
+      "qwant_at",
       "*!startpage_com",
       "google",
       "wikipedia_de"
@@ -1216,6 +1253,7 @@
       "yahoo_nl",
       "duckduckgo",
       "ecosia",
+      "qwant_nl",
       "*!startpage_com",
       "wikipedia_nl",
       "google"
@@ -1243,6 +1281,7 @@
       "yahoo_br",
       "duckduckgo",
       "ecosia",
+      "qwant_br",
       "*!startpage_com",
       "wikipedia_pt",
       "google"
@@ -1279,6 +1318,7 @@
       "yahoo_se",
       "duckduckgo",
       "ecosia",
+      "qwant_se",
       "*!startpage_com",
       "wikipedia_se",
       "google"
