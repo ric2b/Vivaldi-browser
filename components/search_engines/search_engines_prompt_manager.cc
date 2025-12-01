@@ -16,9 +16,9 @@
 #include "components/search_engines/template_url_service.h"
 #include "url/gurl.h"
 
-#include "components/ad_blocker/adblock_known_sources_handler.h"
-#include "components/ad_blocker/adblock_rule_service.h"
-#include "components/ad_blocker/adblock_types.h"
+#include "components/ad_blocker/public/core/adblock_known_sources_handler.h"
+#include "components/ad_blocker/public/core/adblock_rule_service_core.h"
+#include "components/ad_blocker/public/core/adblock_types.h"
 #include "components/prefs/pref_service.h"
 #include "components/search_engines/parsed_search_engines_prompt.h"
 #include "components/search_engines/search_engines_manager.h"
@@ -57,7 +57,7 @@ void SearchEnginesPromptManager::PutProfileToQuarantine(
 bool SearchEnginesPromptManager::ShouldPrompt(
     PrefService* prefs,
     TemplateURLService* template_url_service,
-    adblock_filter::RuleService* rule_service) const {
+    adblock_filter::RuleServiceCore* rule_service) const {
   if (!prefs || !template_url_service || !template_url_service->loaded() ||
       !rule_service->IsLoaded()) {
     return false;

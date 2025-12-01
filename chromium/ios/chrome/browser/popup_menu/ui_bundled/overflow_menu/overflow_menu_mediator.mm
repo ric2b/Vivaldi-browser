@@ -42,6 +42,9 @@
 #import "ios/chrome/browser/follow/model/follow_menu_updater.h"
 #import "ios/chrome/browser/follow/model/follow_tab_helper.h"
 #import "ios/chrome/browser/follow/model/follow_util.h"
+#import "ios/chrome/browser/intelligence/bwg/model/bwg_service.h"
+#import "ios/chrome/browser/intelligence/bwg/model/bwg_service_factory.h"
+#import "ios/chrome/browser/intelligence/bwg/utils/bwg_constants.h"
 #import "ios/chrome/browser/intelligence/features/features.h"
 #import "ios/chrome/browser/intents/model/intents_donation_helper.h"
 #import "ios/chrome/browser/lens_overlay/coordinator/lens_overlay_availability.h"
@@ -79,6 +82,7 @@
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/commands/bookmarks_commands.h"
 #import "ios/chrome/browser/shared/public/commands/browser_coordinator_commands.h"
+#import "ios/chrome/browser/shared/public/commands/bwg_commands.h"
 #import "ios/chrome/browser/shared/public/commands/find_in_page_commands.h"
 #import "ios/chrome/browser/shared/public/commands/help_commands.h"
 #import "ios/chrome/browser/shared/public/commands/lens_overlay_commands.h"
@@ -270,7 +274,7 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
 
 @property(nonatomic, strong) OverflowMenuAction* setTabReminderAction;
 
-@property(nonatomic, strong) OverflowMenuAction* askGLICAction;
+@property(nonatomic, strong) OverflowMenuAction* askBWGAction;
 
 // Vivaldi
 @property(nonatomic, strong) OverflowMenuActionGroup* vivaldiActionsGroup;
@@ -812,7 +816,7 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
                                  handler:^{
                                    [weakSelf beginCustomization];
                                  }];
-  if (IsLensOverlayAvailable(_profilePrefs)) {
+  if ([self isLensOverlayEnabled]) {
     self.lensOverlayAction = [self openLensOverlayAction];
   }
 
@@ -820,8 +824,8 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
     self.AIPrototypeAction = [self openAIPrototypeAction];
   }
 
-  if (IsPageActionMenuEnabled()) {
-    self.askGLICAction = [self openAskGLICAction];
+  if ([self isGeminiAvailable]) {
+    self.askBWGAction = [self openAskBWGAction];
   }
 
   if (IsReaderModeAvailable()) {
@@ -908,7 +912,7 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
 - (OverflowMenuAction*)toggleReaderModeAction {
   ReaderModeTabHelper* tabHelper =
       ReaderModeTabHelper::FromWebState(self.webState);
-  BOOL isReaderModeActive = tabHelper->IsActive();
+  BOOL isReaderModeActive = tabHelper && tabHelper->IsActive();
   int nameID = isReaderModeActive ? IDS_IOS_TOOLS_MENU_HIDE_READER_MODE
                                   : IDS_IOS_TOOLS_MENU_READER_MODE;
   __weak __typeof(self) weakSelf = self;
@@ -998,19 +1002,26 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
                                  }];
 }
 
-- (OverflowMenuAction*)openAskGLICAction {
+- (OverflowMenuAction*)openAskBWGAction {
   __weak __typeof(self) weakSelf = self;
-  // TODO(crbug.com/414777888): Change the icon.
+#if BUILDFLAG(IOS_USE_BRANDED_SYMBOLS)
+  BOOL isBrandedIcon = YES;
+  NSString* symbolName = kGeminiBrandedLogoImage;
+#else
+  BOOL isBrandedIcon = NO;
+  NSString* symbolName = kGeminiNonBrandedLogoImage;
+#endif
   return
-      [self createOverflowMenuActionWithName:@"Ask GLIC"
-                                  actionType:overflow_menu::ActionType::AskGLIC
-                                  symbolName:kMagicStackSymbol
-                                systemSymbol:YES
+      [self createOverflowMenuActionWithName:l10n_util::GetNSString(
+                                                 IDS_IOS_AI_HUB_GEMINI_LABEL)
+                                  actionType:overflow_menu::ActionType::AskBWG
+                                  symbolName:symbolName
+                                systemSymbol:!isBrandedIcon
                             monochromeSymbol:NO
-                             accessibilityID:kToolsMenuOpenAskGLIC
+                             accessibilityID:kToolsMenuOpenAskBWG
                                 hideItemText:nil
                                      handler:^{
-                                       [weakSelf startAskGLIC];
+                                       [weakSelf startAskBWG];
                                      }];
 }
 
@@ -1744,6 +1755,12 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
   bool canFetchUserPolicies =
       _authenticationService && _profilePrefs &&
       CanFetchUserPolicy(_authenticationService, _profilePrefs);
+  bool isReaderModeActive = false;
+  if (IsReaderModeAvailable()) {
+    ReaderModeTabHelper* readerModeTabHelper =
+        ReaderModeTabHelper::FromWebState(self.webState);
+    isReaderModeActive = readerModeTabHelper && readerModeTabHelper->IsActive();
+  }
   // Set footer (on last section), if any.
   web::BrowserState* browserState =
       self.webState ? self.webState->GetBrowserState() : nullptr;
@@ -1776,9 +1793,10 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
       [self isCurrentURLWebURL] && [self isEditBookmarksEnabled];
   self.addBookmarkAction.enabled = bookmarkEnabled;
   self.editBookmarkAction.enabled = bookmarkEnabled;
-  self.translateAction.enabled = [self isTranslateEnabled];
+  self.translateAction.enabled =
+      [self isTranslateEnabled] && !isReaderModeActive;
   self.findInPageAction.enabled = [self isFindInPageEnabled];
-  self.textZoomAction.enabled = [self isTextZoomEnabled];
+  self.textZoomAction.enabled = [self isTextZoomEnabled] && !isReaderModeActive;
   self.requestDesktopAction.enabled =
       [self userAgentType] == web::UserAgentType::MOBILE;
   self.requestMobileAction.enabled =
@@ -1907,7 +1925,8 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
       search_engines::SupportsSearchImageWithLens(self.templateURLService);
   BOOL portraitOverride =
       IsLensOverlayLandscapeOrientationEnabled(_profilePrefs);
-  return isSupported && (isPortrait || portraitOverride) &&
+  BOOL isAvailable = IsLensOverlayAvailable(_profilePrefs);
+  return isAvailable && isSupported && (isPortrait || portraitOverride) &&
          ![self isLensOverlayVisible];
 }
 
@@ -1945,16 +1964,21 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
     return NO;
   }
 
-  // Reader Mode is always enabled in the Overflow menu if the triggering
-  // heuristic is disabled.
-  if (!base::FeatureList::IsEnabled(
-          kEnableReaderModePageEligibilityForToolsMenu)) {
-    return YES;
-  }
-
   ReaderModeTabHelper* helper =
       ReaderModeTabHelper::FromWebState(self.webState);
-  return helper && helper->CurrentPageSupportsReaderMode();
+  if (!helper || helper->CurrentPageDistillationAlreadyFailed()) {
+    return NO;
+  }
+
+  // If `kEnableReaderModePageEligibilityForToolsMenu` is enabled then not only
+  // the page needs to support Reader mode, but it needs to be probably
+  // distillable according to the heuristic.
+  if (base::FeatureList::IsEnabled(
+          kEnableReaderModePageEligibilityForToolsMenu)) {
+    return helper->CurrentPageIsDistillable();
+  } else {
+    return helper->CurrentPageIsEligibleForReaderMode();
+  }
 }
 
 // Whether or not text zoom is enabled for this page.
@@ -2096,6 +2120,23 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
     self.engagementTracker->NotifyEvent(
         feature_engagement::events::kIOSOverflowMenuOffscreenItemUsed);
   }
+}
+
+/// Returns whether the Ask Gemini feature is currently available for the web
+/// state.
+- (BOOL)isGeminiAvailable {
+  if (!IsPageActionMenuEnabled()) {
+    return NO;
+  }
+  if (_webState) {
+    ProfileIOS* profile =
+        ProfileIOS::FromBrowserState(_webState->GetBrowserState());
+    BwgService* BWGService = BwgServiceFactory::GetForProfile(profile);
+    if (BWGService) {
+      return BWGService->IsBwgAvailableForWebState(_webState);
+    }
+  }
+  return NO;
 }
 
 #pragma mark - CRWWebStateObserver
@@ -2481,7 +2522,6 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
     actions.push_back(overflow_menu::ActionType::SetTabReminder);
   }
 
-  actions.push_back(overflow_menu::ActionType::Follow);
   actions.push_back(overflow_menu::ActionType::Bookmark);
   actions.push_back(overflow_menu::ActionType::ReadingList);
   actions.push_back(overflow_menu::ActionType::ClearBrowsingData);
@@ -2490,7 +2530,7 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
   actions.push_back(overflow_menu::ActionType::FindInPage);
   actions.push_back(overflow_menu::ActionType::TextZoom);
 
-  if (IsLensOverlayAvailable(_profilePrefs)) {
+  if ([self isLensOverlayEnabled]) {
     actions.push_back(overflow_menu::ActionType::LensOverlay);
   }
 
@@ -2498,8 +2538,8 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
     actions.push_back(overflow_menu::ActionType::AIPrototype);
   }
 
-  if (IsPageActionMenuEnabled()) {
-    actions.push_back(overflow_menu::ActionType::AskGLIC);
+  if ([self isGeminiAvailable]) {
+    actions.push_back(overflow_menu::ActionType::AskBWG);
   }
 
   if (IsReaderModeAvailable()) {
@@ -2580,8 +2620,8 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
                  : nil;
     case overflow_menu::ActionType::ReaderMode:
       return self.readerModeAction;
-    case overflow_menu::ActionType::AskGLIC:
-      return self.askGLICAction;
+    case overflow_menu::ActionType::AskBWG:
+      return self.askBWGAction;
 
 
     // Vivaldi
@@ -2649,8 +2689,8 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
       return [self newSetTabReminderAction];
     case overflow_menu::ActionType::ReaderMode:
       return [self toggleReaderModeAction];
-    case overflow_menu::ActionType::AskGLIC:
-      return [self openAskGLICAction];
+    case overflow_menu::ActionType::AskBWG:
+      return [self openAskBWGAction];
 
 
     // Vivaldi
@@ -2905,10 +2945,10 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
   [self.applicationHandler openAIMenu];
 }
 
-// Starts ask GLIC.
-- (void)startAskGLIC {
+// Starts ask BWG.
+- (void)startAskBWG {
   [self dismissMenu];
-  [self.pageActionMenuHandler showPageActionMenu];
+  [self.BWGHandler startBWGFlowWithEntryPoint:bwg::EntryPoint::OverflowMenu];
 }
 
 // Opens the "Set a reminder" screen for the user's current tab.
@@ -2923,7 +2963,12 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
 
 // Sets the Reader mode UI visibility.
 - (void)setReaderModeVisibility:(BOOL)visible {
-  ReaderModeTabHelper::FromWebState(self.webState)->SetActive(visible);
+  if (visible) {
+    [self.readerModeHandler
+        showReaderModeFromAccessPoint:ReaderModeAccessPoint::kToolsMenu];
+  } else {
+    [self.readerModeHandler hideReaderMode];
+  }
   [self dismissMenu];
 }
 

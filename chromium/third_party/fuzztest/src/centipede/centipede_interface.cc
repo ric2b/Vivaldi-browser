@@ -52,6 +52,7 @@
 #include "./centipede/centipede_callbacks.h"
 #include "./centipede/command.h"
 #include "./centipede/coverage.h"
+#include "./centipede/crash_summary.h"
 #include "./centipede/distill.h"
 #include "./centipede/environment.h"
 #include "./centipede/minimize_crash.h"
@@ -82,6 +83,7 @@ namespace {
 // the called or `CentipedeMain()` to indicate when to stop.
 void SetSignalHandlers() {
   struct sigaction sigact = {};
+  sigact.sa_flags = SA_ONSTACK;
   sigact.sa_handler = [](int received_signum) {
     if (received_signum == SIGINT) {
       LOG(INFO) << "Ctrl-C pressed: winding down";
@@ -287,18 +289,18 @@ TestShard SetUpTestSharding() {
   return test_shard;
 }
 
-// Prunes non-reproducible and duplicate crashes and returns the crash metadata
-// of the remaining crashes.
-absl::flat_hash_set<std::string> PruneOldCrashesAndGetRemainingCrashMetadata(
+// Prunes non-reproducible and duplicate crashes and returns the crash
+// signatures of the remaining crashes.
+absl::flat_hash_set<std::string> PruneOldCrashesAndGetRemainingCrashSignatures(
     const std::filesystem::path &crashing_dir, const Environment &env,
-    CentipedeCallbacksFactory &callbacks_factory) {
+    CentipedeCallbacksFactory &callbacks_factory, CrashSummary &crash_summary) {
   const std::vector<std::string> crashing_input_files =
       // The corpus database layout assumes the crash input files are located
       // directly in the crashing subdirectory, so we don't list recursively.
       ValueOrDie(RemoteListFiles(crashing_dir.c_str(), /*recursively=*/false));
   ScopedCentipedeCallbacks scoped_callbacks(callbacks_factory, env);
   BatchResult batch_result;
-  absl::flat_hash_set<std::string> remaining_crash_metadata;
+  absl::flat_hash_set<std::string> remaining_crash_signatures;
 
   for (const std::string &crashing_input_file : crashing_input_files) {
     ByteArray crashing_input;
@@ -307,21 +309,27 @@ absl::flat_hash_set<std::string> PruneOldCrashesAndGetRemainingCrashMetadata(
         env.binary, {crashing_input}, batch_result);
     const bool is_duplicate =
         is_reproducible && !batch_result.IsSetupFailure() &&
-        !remaining_crash_metadata.insert(batch_result.failure_description())
+        !remaining_crash_signatures.insert(batch_result.failure_signature())
              .second;
     if (!is_reproducible || batch_result.IsSetupFailure() || is_duplicate) {
       CHECK_OK(RemotePathDelete(crashing_input_file, /*recursively=*/false));
     } else {
+      crash_summary.AddCrash(
+          {std::filesystem::path(crashing_input_file).filename(),
+           /*category=*/batch_result.failure_description(),
+           batch_result.failure_signature(),
+           batch_result.failure_description()});
       CHECK_OK(RemotePathTouchExistingFile(crashing_input_file));
     }
   }
-  return remaining_crash_metadata;
+  return remaining_crash_signatures;
 }
 
 // TODO(b/405382531): Add unit tests once the function is unit-testable.
 void DeduplicateAndStoreNewCrashes(
     const std::filesystem::path &crashing_dir, const WorkDir &workdir,
-    size_t total_shards, absl::flat_hash_set<std::string> crash_metadata) {
+    size_t total_shards, absl::flat_hash_set<std::string> crash_signatures,
+    CrashSummary &crash_summary) {
   for (size_t shard_idx = 0; shard_idx < total_shards; ++shard_idx) {
     const std::vector<std::string> new_crashing_input_files =
         // The crash reproducer directory may contain subdirectories with
@@ -337,20 +345,38 @@ void DeduplicateAndStoreNewCrashes(
     for (const std::string &crashing_input_file : new_crashing_input_files) {
       const std::string crashing_input_file_name =
           std::filesystem::path(crashing_input_file).filename();
-      const std::string crash_metadata_file =
-          crash_metadata_dir / crashing_input_file_name;
-      std::string new_crash_metadata;
+      const std::string crash_signature_path =
+          crash_metadata_dir / absl::StrCat(crashing_input_file_name, ".sig");
+      std::string new_crash_signature;
       const absl::Status status =
-          RemoteFileGetContents(crash_metadata_file, new_crash_metadata);
+          RemoteFileGetContents(crash_signature_path, new_crash_signature);
       if (!status.ok()) {
         LOG(WARNING) << "Ignoring crashing input " << crashing_input_file_name
-                     << " due to failure to read the crash metadata file: "
+                     << " due to failure to read the crash signature: "
                      << status;
         continue;
       }
       const bool is_duplicate =
-          !crash_metadata.insert(new_crash_metadata).second;
+          !crash_signatures.insert(new_crash_signature).second;
       if (is_duplicate) continue;
+
+      const std::string crash_description_path =
+          crash_metadata_dir / absl::StrCat(crashing_input_file_name, ".desc");
+      std::string new_crash_description;
+      const absl::Status description_status =
+          RemoteFileGetContents(crash_description_path, new_crash_description);
+      if (!description_status.ok()) {
+        LOG(WARNING)
+            << "Failed to read crash description for "
+            << crashing_input_file_name
+            << ". Will use the crash signature as the description. Status: "
+            << description_status;
+        new_crash_description = new_crash_signature;
+      }
+      crash_summary.AddCrash({crashing_input_file_name,
+                              /*category=*/new_crash_description,
+                              std::move(new_crash_signature),
+                              new_crash_description});
       CHECK_OK(
           RemoteFileRename(crashing_input_file,
                            (crashing_dir / crashing_input_file_name).c_str()));
@@ -491,43 +517,9 @@ int UpdateCorpusDatabaseForFuzzTests(
   LOG(INFO) << "Test shard index: " << test_shard_index
             << " Total test shards: " << total_test_shards;
 
-  // Step 2: Are we resuming from a previously terminated run?
-  // Currently there are two ways of determining this:
-  //
-  // The old way is to find the last index of a fuzz test for which we already
-  // have a workdir, which is done below, and then resume from the test. This
-  // requires Centipede to know the order of all the tests, which is unavailable
-  // in the single test execution model.
-  //
-  // The new way is to use the per-workflow execution ID to match with any
-  // previously stored execution ID, which works independently for each test -
-  // it is implemented and documented later.
-  //
-  // TODO(xinhaoyuan): Clean up the old approach when it's no longer used.
-  bool is_resuming = false;
-  int resuming_fuzztest_idx = 0;
-  if (!fuzztest_config.execution_id.has_value()) {
-    for (int i = 0; i < fuzz_tests_to_run.size(); ++i) {
-      if (!is_workdir_specified) {
-        env.workdir = base_workdir_path / fuzz_tests_to_run[i];
-      }
-      // Check the existence of the coverage path to not only make sure the
-      // workdir exists, but also that it was created for the same binary as in
-      // this run.
-      if (RemotePathExists(WorkDir{env}.CoverageDirPath())) {
-        is_resuming = true;
-        resuming_fuzztest_idx = i;
-      }
-    }
-  }
-
-  LOG_IF(INFO, is_resuming) << "Resuming from the fuzz test "
-                            << fuzz_tests_to_run[resuming_fuzztest_idx]
-                            << " (index: " << resuming_fuzztest_idx << ")";
-
-  // Step 3: Iterate over the fuzz tests and run them.
+  // Step 2: Iterate over the fuzz tests and run them.
   const std::string binary = env.binary;
-  for (int i = resuming_fuzztest_idx; i < fuzz_tests_to_run.size(); ++i) {
+  for (int i = 0; i < fuzz_tests_to_run.size(); ++i) {
     // Clean up previous stop requests. stop_time will be set later.
     ClearEarlyStopRequestAndSetStopTime(/*stop_time=*/absl::InfiniteFuture());
     if (!env.fuzztest_single_test_mode &&
@@ -548,6 +540,8 @@ int UpdateCorpusDatabaseForFuzzTests(
         (base_workdir_path /
          absl::StrCat(fuzz_tests_to_run[i], ".execution_id"))
             .string();
+
+    bool is_resuming = false;
     if (!is_workdir_specified && fuzztest_config.execution_id.has_value()) {
       // Use the execution IDs to resume or skip tests.
       const bool execution_id_matched = [&] {
@@ -597,7 +591,7 @@ int UpdateCorpusDatabaseForFuzzTests(
     }
 
     absl::Cleanup clean_up_workdir = [is_workdir_specified, &env] {
-      if (!is_workdir_specified) {
+      if (!is_workdir_specified && !EarlyStopRequested()) {
         CHECK_OK(RemotePathDelete(env.workdir, /*recursively=*/true));
       }
     };
@@ -669,6 +663,11 @@ int UpdateCorpusDatabaseForFuzzTests(
               .c_str()));
     }
 
+    if (EarlyStopRequested()) {
+      LOG(INFO) << "Skip updating corpus database due to early stop requested.";
+      continue;
+    }
+
     // TODO(xinhaoyuan): Have a separate flag to skip corpus updating instead
     // of checking whether workdir is specified or not.
     if (fuzztest_config.only_replay || is_workdir_specified) continue;
@@ -692,12 +691,15 @@ int UpdateCorpusDatabaseForFuzzTests(
     }
 
     // Deduplicate and update the crashing inputs.
+    CrashSummary crash_summary{fuzztest_config.binary_identifier,
+                               fuzz_tests_to_run[i]};
     const std::filesystem::path crashing_dir = fuzztest_db_path / "crashing";
-    absl::flat_hash_set<std::string> crash_metadata =
-        PruneOldCrashesAndGetRemainingCrashMetadata(crashing_dir, env,
-                                                    callbacks_factory);
+    absl::flat_hash_set<std::string> crash_signatures =
+        PruneOldCrashesAndGetRemainingCrashSignatures(
+            crashing_dir, env, callbacks_factory, crash_summary);
     DeduplicateAndStoreNewCrashes(crashing_dir, workdir, env.total_shards,
-                                  std::move(crash_metadata));
+                                  std::move(crash_signatures), crash_summary);
+    crash_summary.Report(&std::cerr);
   }
 
   return EXIT_SUCCESS;

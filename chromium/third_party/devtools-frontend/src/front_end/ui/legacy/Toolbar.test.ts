@@ -3,8 +3,9 @@
 // found in the LICENSE file.
 
 import * as Common from '../../core/common/common.js';
-import {dispatchClickEvent, doubleRaf, renderElementIntoDOM} from '../../testing/DOMHelpers.js';
+import {dispatchClickEvent, renderElementIntoDOM} from '../../testing/DOMHelpers.js';
 import {describeWithEnvironment, describeWithLocale} from '../../testing/EnvironmentHelpers.js';
+import {expectCall} from '../../testing/ExpectStubCall.js';
 import * as RenderCoordinator from '../components/render_coordinator/render_coordinator.js';
 
 import * as UI from './legacy.js';
@@ -190,16 +191,15 @@ describeWithLocale('Toolbar', () => {
         buttons: 1,
       });
       element.dispatchEvent(mouseDownEvent);
-      await doubleRaf();  // give the timer time to resolve + initiate the context menu
     }
 
-    // Flaky
-    it.skip('[crbug.com/404486704] creates the context menu if it is enabled', async () => {
+    it('creates the context menu if it is enabled', async () => {
       const contextHandler = sinon.stub();
       const menuButton = createToolbarWithButton(contextHandler);
       menuButton.setEnabled(true);
+      const contextHandlerCalled = expectCall(contextHandler);
       await dispatchMouseDownEvent(menuButton.element);
-      sinon.assert.called(contextHandler);
+      await contextHandlerCalled;
     });
 
     it('does not create a context menu if it is not enabled', async () => {
@@ -226,6 +226,19 @@ describeWithLocale('Toolbar', () => {
       // Ensure it works with setSelectedIndex()
       box.setSelectedIndex(0);
       assert.strictEqual(box.element.title, 'Option 1');
+    });
+
+    it('updates the title when the user changes the setting', async () => {
+      const setting = Common.Settings.Settings.instance().createSetting<string>('test-combo-box-setting', 'option-1');
+      setting.set('option-1');
+      const box = new UI.Toolbar.ToolbarSettingComboBox(
+          [{value: 'option-1', label: 'Option 1'}, {value: 'option-2', label: 'Option 2'}], setting, 'title-value');
+
+      // Pretend that the user has interacted & clicked Option 2
+      sinon.stub(box, 'selectedIndex').callsFake(() => 1);
+      const changeEvent = new Event('change');
+      box.element.dispatchEvent(changeEvent);
+      assert.strictEqual(box.element.title, 'Option 2');
     });
   });
 });

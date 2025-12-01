@@ -340,6 +340,8 @@ DAWN_NATIVE_EXPORT MemoryUsageInfo ComputeEstimatedMemoryUsageInfo(WGPUDevice de
 struct DAWN_NATIVE_EXPORT AllocatorMemoryInfo {
     uint64_t totalUsedMemory = 0;
     uint64_t totalAllocatedMemory = 0;
+    uint64_t totalLazyAllocatedMemory = 0;
+    uint64_t totalLazyUsedMemory = 0;
 };
 DAWN_NATIVE_EXPORT AllocatorMemoryInfo GetAllocatorMemoryInfo(WGPUDevice device);
 
@@ -351,6 +353,8 @@ DAWN_NATIVE_EXPORT bool ReduceMemoryUsage(WGPUDevice device);
 // Perform tasks that are appropriate to do when idle like serializing pipeline
 // caches, etc.
 DAWN_NATIVE_EXPORT void PerformIdleTasks(const wgpu::Device& device);
+
+DAWN_NATIVE_EXPORT bool IsDeviceLost(WGPUDevice device);
 
 }  // namespace dawn::native
 

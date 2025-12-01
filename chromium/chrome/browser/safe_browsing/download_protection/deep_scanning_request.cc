@@ -17,7 +17,6 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/download/download_item_warning_data.h"
 #include "chrome/browser/download/download_prefs.h"
-#include "chrome/browser/extensions/api/safe_browsing_private/safe_browsing_private_event_router.h"
 #include "chrome/browser/policy/dm_token_utils.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/binary_upload_service.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/deep_scanning_utils.h"
@@ -34,6 +33,7 @@
 #include "chrome/common/pref_names.h"
 #include "components/download/public/common/download_item.h"
 #include "components/enterprise/common/proto/connectors.pb.h"
+#include "components/enterprise/connectors/core/reporting_constants.h"
 #include "components/enterprise/connectors/core/reporting_utils.h"
 #include "components/policy/core/common/cloud/dm_token.h"
 #include "components/policy/core/common/policy_pref_names.h"
@@ -583,7 +583,7 @@ void DeepScanningRequest::OnScanComplete(
     enterprise_connectors::ContentAnalysisResponse response) {
   RecordDeepScanMetrics(
       analysis_settings_.cloud_or_local_settings.is_cloud_analysis(),
-      /*access_point=*/DeepScanAccessPoint::DOWNLOAD,
+      /*access_point=*/enterprise_connectors::DeepScanAccessPoint::DOWNLOAD,
       /*duration=*/base::TimeTicks::Now() - upload_start_times_[current_path],
       /*total_bytes=*/metadata_->GetTotalBytes(), /*result=*/result,
       /*response=*/response);
@@ -667,12 +667,12 @@ void DeepScanningRequest::OnEnterpriseScanComplete(
     safe_browsing::ReferrerChain referrers = referrer_chain();
     const auto& file_metadata = file_metadata_.at(current_path);
     report_callbacks_.AddUnsafe(base::BindOnce(
-        &MaybeReportDeepScanningVerdict, profile, metadata_->GetURL(),
-        metadata_->GetTabUrl(), "", "", file_metadata.filename,
-        file_metadata.sha256, file_metadata.mime_type,
-        extensions::SafeBrowsingPrivateEventRouter::kTriggerFileDownload, "",
-        DeepScanAccessPoint::DOWNLOAD, file_metadata.size, referrers, result,
-        file_metadata.scan_response));
+        &MaybeReportDeepScanningVerdict, profile, this, /*source=*/"",
+        /*destination=*/"", file_metadata.filename, file_metadata.sha256,
+        file_metadata.mime_type,
+        enterprise_connectors::kFileDownloadDataTransferEventTrigger,
+        /*content_transfer_method=*/"", GetContentAreaAccountEmail(),
+        file_metadata.size, referrers, result, file_metadata.scan_response));
 
     metadata_->AddScanResultMetadata(file_metadata);
   }
@@ -746,11 +746,12 @@ std::string DeepScanningRequest::email() const {
       Profile::FromBrowserContext(metadata_->GetBrowserContext()));
 }
 
-std::string DeepScanningRequest::url() const {
+const GURL& DeepScanningRequest::url() const {
   if (metadata_->GetURL().is_valid()) {
-    return metadata_->GetURL().spec();
+    return metadata_->GetURL();
   }
-  return "";
+  return GURL::EmptyGURL();
+  ;
 }
 
 const GURL& DeepScanningRequest::tab_url() const {
@@ -771,7 +772,11 @@ safe_browsing::ReferrerChain DeepScanningRequest::referrer_chain() const {
 
 google::protobuf::RepeatedPtrField<std::string>
 DeepScanningRequest::frame_url_chain() const {
-  return {};
+  return metadata_->CollectFrameUrls();
+}
+
+content::WebContents* DeepScanningRequest::web_contents() const {
+  return metadata_->web_contents();
 }
 
 void DeepScanningRequest::MaybeFinishRequest(DownloadCheckResult result) {
@@ -830,9 +835,12 @@ void DeepScanningRequest::FinishRequest(DownloadCheckResult result) {
   // Bypassed verdicts are given when a user continues a download after being
   // warned by WP, so it is considered safe here.
   // For obfuscated download files, deobfuscate it if the scan returns a safe
-  // verdict.
+  // verdict or result is unknown.
+  // TODO(crbug.com/378490429): Add support in obfuscation module for skipping
+  // malware scan for password protected files.
   if ((event_result == enterprise_connectors::EventResult::ALLOWED ||
-       event_result == enterprise_connectors::EventResult::BYPASSED) &&
+       event_result == enterprise_connectors::EventResult::BYPASSED ||
+       result == DownloadCheckResult::UNKNOWN) &&
       metadata_->IsObfuscated()) {
     base::ThreadPool::PostTaskAndReplyWithResult(
         FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},

@@ -21,6 +21,7 @@
 #import "ios/chrome/browser/overlays/model/public/overlay_response.h"
 #import "ios/chrome/browser/overlays/ui_bundled/infobar_banner/autofill_address_profile/save_address_profile_infobar_banner_overlay_mediator.h"
 #import "ios/chrome/browser/overlays/ui_bundled/infobar_banner/collaboration_group/collaboration_group_infobar_banner_overlay_mediator.h"
+#import "ios/chrome/browser/overlays/ui_bundled/infobar_banner/collaboration_out_of_date/collaboration_out_of_date_infobar_banner_overlay_mediator.h"
 #import "ios/chrome/browser/overlays/ui_bundled/infobar_banner/confirm/confirm_infobar_banner_overlay_mediator.h"
 #import "ios/chrome/browser/overlays/ui_bundled/infobar_banner/features.h"
 #import "ios/chrome/browser/overlays/ui_bundled/infobar_banner/infobar_banner_overlay_mediator.h"
@@ -38,13 +39,16 @@
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/non_modal_signin_promo_commands.h"
+#import "ios/chrome/browser/shared/public/commands/snackbar_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/util/layout_guide_names.h"
+#import "ios/chrome/browser/shared/ui/util/snackbar_util.h"
 #import "ios/chrome/browser/shared/ui/util/util_swift.h"
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
 #import "components/prefs/pref_service.h"
+#import "ios/chrome/browser/infobars/ui_bundled/banners/infobar_banner_constants.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/ui/helpers/vivaldi_global_helpers.h"
@@ -103,10 +107,13 @@ using vivaldi::IsVivaldiRunning;
   if (IsVivaldiRunning() &&
       GetApplicationContext()
           ->GetLocalState()->GetBoolean(prefs::kBottomOmnibox)) {
-    // Place the infobar just below the safe area insets when omnibox is at the
-    // bottom.
-    return [VivaldiGlobalHelpers safeAreaInsets].top +
-        kInfobarTopPaddingBottomOmnibox;
+    UIWindowScene* windowScene =
+        (UIWindowScene*)self.baseViewController.view.window.windowScene;
+    CGFloat sceneHeight = windowScene
+                            ? windowScene.coordinateSpace.bounds.size.height
+                              : self.baseViewController.view.bounds.size.height;
+    return sceneHeight - kInfobarBannerMaxHeight
+                                - kInfobarTopPaddingBottomOmnibox;
   } // End Vivaldi
 
   // Use the top toolbar's layout guide when the omnibox is at the bottom.
@@ -146,6 +153,13 @@ using vivaldi::IsVivaldiRunning;
       self.browser->GetCommandDispatcher(), NonModalSignInPromoCommands);
   mediator.engagementTracker =
       feature_engagement::TrackerFactory::GetForProfile(self.profile);
+
+  if ([mediator isKindOfClass:[SaveCardInfobarBannerOverlayMediator class]]) {
+    SaveCardInfobarBannerOverlayMediator* saveCardMediator =
+        (SaveCardInfobarBannerOverlayMediator*)mediator;
+    saveCardMediator.snackbarCommandsHandler = HandlerForProtocol(
+        self.browser->GetCommandDispatcher(), SnackbarCommands);
+  }
 
   self.mediator = mediator;
   // Present the banner.
@@ -270,6 +284,10 @@ using vivaldi::IsVivaldiRunning;
       break;
     case InfobarType::kInfobarTypeCollaborationGroup:
       mediatorClass = [CollaborationGroupInfobarBannerOverlayMediator class];
+      break;
+    case InfobarType::kInfobarTypeCollaborationOutOfDate:
+      mediatorClass =
+          [CollaborationOutOfDateInfobarBannerOverlayMediator class];
       break;
     default:
       NOTREACHED() << "Received unsupported infobarType.";

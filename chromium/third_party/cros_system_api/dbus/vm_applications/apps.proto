@@ -66,6 +66,7 @@ message App {
 }
 
 // Type of VM.
+// LINT.IfChange
 enum VmType {
   TERMINA = 0;
   PLUGIN_VM = 1;
@@ -77,6 +78,7 @@ enum VmType {
   ARCVM = 5;
   BAGUETTE = 6;
 }
+// LINT.ThenChange(/vm_tools/concierge/vm_util.cc,../vm_concierge/concierge_service.proto)
 
 // List of App.
 message ApplicationList {

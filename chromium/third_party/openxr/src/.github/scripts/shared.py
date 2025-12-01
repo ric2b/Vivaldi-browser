@@ -1,4 +1,4 @@
-# Copyright (c) 2019-2024, The Khronos Group Inc.
+# Copyright (c) 2019-2025 The Khronos Group Inc.
 # SPDX-License-Identifier: Apache-2.0
 
 import json
@@ -9,7 +9,7 @@ from itertools import product
 
 VS_VERSION = "Visual Studio 17 2022"
 
-PLATFORMS = ("Win32", "x64", "ARM", "ARM64")
+PLATFORMS = ("Win32", "x64", "ARM64")
 
 TRUE_FALSE = (True, False)
 

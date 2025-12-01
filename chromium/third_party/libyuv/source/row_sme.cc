@@ -19,45 +19,6 @@ extern "C" {
 #if !defined(LIBYUV_DISABLE_SME) && defined(CLANG_HAS_SME) && \
     defined(__aarch64__)
 
-// Read twice as much data from YUV, putting the even elements from the Y data
-// in z0.h and odd elements in z1.h.
-#define READYUV444_SVE_2X                        \
-  "ld1b       {z0.b}, p1/z, [%[src_y]]       \n" \
-  "ld1b       {z2.b}, p1/z, [%[src_u]]       \n" \
-  "ld1b       {z3.b}, p1/z, [%[src_v]]       \n" \
-  "incb       %[src_y]                       \n" \
-  "incb       %[src_u]                       \n" \
-  "incb       %[src_v]                       \n" \
-  "prfm       pldl1keep, [%[src_y], 448]     \n" \
-  "prfm       pldl1keep, [%[src_u], 128]     \n" \
-  "prfm       pldl1keep, [%[src_v], 128]     \n" \
-  "trn2       z1.b, z0.b, z0.b               \n" \
-  "trn1       z0.b, z0.b, z0.b               \n"
-
-#define I444TORGB_SVE_2X                                  \
-  "umulh      z0.h, z24.h, z0.h              \n" /* Y0 */ \
-  "umulh      z1.h, z24.h, z1.h              \n" /* Y1 */ \
-  "umullb     z6.h, z30.b, z2.b              \n"          \
-  "umullt     z7.h, z30.b, z2.b              \n"          \
-  "umullb     z4.h, z28.b, z2.b              \n" /* DB */ \
-  "umullt     z2.h, z28.b, z2.b              \n" /* DB */ \
-  "umlalb     z6.h, z31.b, z3.b              \n" /* DG */ \
-  "umlalt     z7.h, z31.b, z3.b              \n" /* DG */ \
-  "umullb     z5.h, z29.b, z3.b              \n" /* DR */ \
-  "umullt     z3.h, z29.b, z3.b              \n" /* DR */ \
-  "add        z17.h, z0.h, z26.h             \n" /* G */  \
-  "add        z21.h, z1.h, z26.h             \n" /* G */  \
-  "add        z16.h, z0.h, z4.h              \n" /* B */  \
-  "add        z20.h, z1.h, z2.h              \n" /* B */  \
-  "add        z18.h, z0.h, z5.h              \n" /* R */  \
-  "add        z22.h, z1.h, z3.h              \n" /* R */  \
-  "uqsub      z17.h, z17.h, z6.h             \n" /* G */  \
-  "uqsub      z21.h, z21.h, z7.h             \n" /* G */  \
-  "uqsub      z16.h, z16.h, z25.h            \n" /* B */  \
-  "uqsub      z20.h, z20.h, z25.h            \n" /* B */  \
-  "uqsub      z18.h, z18.h, z27.h            \n" /* R */  \
-  "uqsub      z22.h, z22.h, z27.h            \n" /* R */
-
 #define RGBTOARGB8_SVE_2X                                 \
   /* Inputs: B: z16.h,  G: z17.h,  R: z18.h,  A: z19.b */ \
   "uqshrnb     z16.b, z16.h, #6     \n" /* B0 */          \
@@ -113,6 +74,16 @@ __arm_locally_streaming void I444ToARGBRow_SME(
       : [kUVCoeff] "r"(&yuvconstants->kUVCoeff),           // %[kUVCoeff]
         [kRGBCoeffBias] "r"(&yuvconstants->kRGBCoeffBias)  // %[kRGBCoeffBias]
       : "cc", "memory", YUVTORGB_SVE_REGS);
+}
+
+__arm_locally_streaming void I444ToRGB24Row_SME(
+    const uint8_t* src_y,
+    const uint8_t* src_u,
+    const uint8_t* src_v,
+    uint8_t* dst_rgb24,
+    const struct YuvConstants* yuvconstants,
+    int width) {
+  I444ToRGB24Row_SVE_SC(src_y, src_u, src_v, dst_rgb24, yuvconstants, width);
 }
 
 __arm_locally_streaming void I400ToARGBRow_SME(
@@ -185,6 +156,16 @@ __arm_locally_streaming void I422ToRGBARow_SME(
     const struct YuvConstants* yuvconstants,
     int width) {
   I422ToRGBARow_SVE_SC(src_y, src_u, src_v, dst_argb, yuvconstants, width);
+}
+
+__arm_locally_streaming void I422ToAR30Row_SME(
+    const uint8_t* src_y,
+    const uint8_t* src_u,
+    const uint8_t* src_v,
+    uint8_t* dst_argb,
+    const struct YuvConstants* yuvconstants,
+    int width) {
+  I422ToAR30Row_SVE_SC(src_y, src_u, src_v, dst_argb, yuvconstants, width);
 }
 
 __arm_locally_streaming void I422AlphaToARGBRow_SME(
@@ -1081,6 +1062,116 @@ __arm_locally_streaming void Convert8To8Row_SME(const uint8_t* src_y,
                                                 int bias,
                                                 int width) {
   Convert8To8Row_SVE_SC(src_y, dst_y, scale, bias, width);
+}
+
+#define CONVERT8TO16_SVE                                 \
+  "ld1b        {z0.h}, p0/z, [%[src]]                \n" \
+  "ld1b        {z1.h}, p1/z, [%[src], #1, mul vl]    \n" \
+  "incb        %[src]                                \n" \
+  "subs        %w[width], %w[width], %w[vl], lsl #1  \n" \
+  "trn1        z0.b, z0.b, z0.b                      \n" \
+  "trn1        z1.b, z1.b, z1.b                      \n" \
+  "lsr         z0.h, p0/m, z0.h, z2.h                \n" \
+  "lsr         z1.h, p1/m, z1.h, z2.h                \n" \
+  "prfm        pldl1keep, [%[src], 448]              \n" \
+  "st1h        {z0.h}, p0, [%[dst]]                  \n" \
+  "st1h        {z1.h}, p1, [%[dst], #1, mul vl]      \n" \
+  "incb        %[dst], all, mul #2                   \n"
+
+__arm_locally_streaming void Convert8To16Row_SME(const uint8_t* src_y,
+                                                 uint16_t* dst_y,
+                                                 int scale,
+                                                 int width) {
+  // (src * 0x0101 * scale) >> 16.
+  // Since scale is a power of two, compute the shift to use to avoid needing
+  // to widen to int32.
+  int shift = __builtin_clz(scale) - 15;
+
+  uint64_t vl;
+  asm volatile(
+      "dup         z2.h, %w[shift]                      \n"
+      "cnth        %[vl]                                \n"
+      "subs        %w[width], %w[width], %w[vl], lsl #1 \n"
+      "b.lt        2f                                   \n"
+
+      // Run bulk of computation with all-true predicates to avoid predicate
+      // generation overhead.
+      "ptrue       p0.h                                 \n"
+      "ptrue       p1.h                                 \n"
+      "1:                                               \n"  //
+      CONVERT8TO16_SVE
+      "b.ge        1b                                   \n"
+
+      "2:                                               \n"
+      "adds        %w[width], %w[width], %w[vl], lsl #1 \n"
+      "b.eq        99f                                  \n"
+
+      // Calculate predicates for the final iteration to deal with the tail.
+      "whilelt     p0.h, wzr, %w[width]                 \n"
+      "whilelt     p1.h, %w[vl], %w[width]              \n"  //
+      CONVERT8TO16_SVE
+
+      "99:                                              \n"
+      : [src] "+r"(src_y),    // %[src]
+        [dst] "+r"(dst_y),    // %[dst]
+        [width] "+r"(width),  // %[width]
+        [vl] "=&r"(vl)        // %[vl]
+      : [shift] "r"(shift)    // %[shift]
+      : "cc", "memory", "z0", "z1", "z2", "p0", "p1");
+}
+
+__arm_locally_streaming void ARGBToUVRow_SME(const uint8_t* src_argb,
+                                             int src_stride_argb,
+                                             uint8_t* dst_u,
+                                             uint8_t* dst_v,
+                                             int width) {
+  ARGBToUVMatrixRow_SVE_SC(src_argb, src_stride_argb, dst_u, dst_v, width,
+                           kARGBToUVCoefficients);
+}
+
+__arm_locally_streaming void ARGBToUVJRow_SME(const uint8_t* src_argb,
+                                              int src_stride_argb,
+                                              uint8_t* dst_u,
+                                              uint8_t* dst_v,
+                                              int width) {
+  ARGBToUVMatrixRow_SVE_SC(src_argb, src_stride_argb, dst_u, dst_v, width,
+                           kARGBToUVJCoefficients);
+}
+
+__arm_locally_streaming void ABGRToUVJRow_SME(const uint8_t* src_abgr,
+                                              int src_stride_abgr,
+                                              uint8_t* dst_uj,
+                                              uint8_t* dst_vj,
+                                              int width) {
+  ARGBToUVMatrixRow_SVE_SC(src_abgr, src_stride_abgr, dst_uj, dst_vj, width,
+                           kABGRToUVJCoefficients);
+}
+
+__arm_locally_streaming void BGRAToUVRow_SME(const uint8_t* src_bgra,
+                                             int src_stride_bgra,
+                                             uint8_t* dst_u,
+                                             uint8_t* dst_v,
+                                             int width) {
+  ARGBToUVMatrixRow_SVE_SC(src_bgra, src_stride_bgra, dst_u, dst_v, width,
+                           kBGRAToUVCoefficients);
+}
+
+__arm_locally_streaming void ABGRToUVRow_SME(const uint8_t* src_abgr,
+                                             int src_stride_abgr,
+                                             uint8_t* dst_u,
+                                             uint8_t* dst_v,
+                                             int width) {
+  ARGBToUVMatrixRow_SVE_SC(src_abgr, src_stride_abgr, dst_u, dst_v, width,
+                           kABGRToUVCoefficients);
+}
+
+__arm_locally_streaming void RGBAToUVRow_SME(const uint8_t* src_rgba,
+                                             int src_stride_rgba,
+                                             uint8_t* dst_u,
+                                             uint8_t* dst_v,
+                                             int width) {
+  ARGBToUVMatrixRow_SVE_SC(src_rgba, src_stride_rgba, dst_u, dst_v, width,
+                           kRGBAToUVCoefficients);
 }
 
 #endif  // !defined(LIBYUV_DISABLE_SME) && defined(CLANG_HAS_SME) &&

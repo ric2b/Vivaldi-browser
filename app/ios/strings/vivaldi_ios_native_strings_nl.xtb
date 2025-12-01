@@ -5,6 +5,7 @@
 <translation id="1016495303386450659">Item bijgewerkt</translation>
 <translation id="1033201038396796706">Problemen met donkere modus, verversingssnelheid of thema</translation>
 <translation id="1041637248958093184">Zoekopdrachten, bezochte sites, cookies en tijdelijke bestanden worden niet opgeslagen door Vivaldi bij gebruik van privé-tabbladen.</translation>
+<translation id="104766043551382253">Pictogram</translation>
 <translation id="1062373127858055283">Voer een url van een afbeelding in</translation>
 <translation id="1066692930984703744">Blokkering van traceerders en reclame inschakelen voor sneller en veiliger browsen</translation>
 <translation id="1116694919640316211">Over</translation>
@@ -89,7 +90,6 @@
 <translation id="2034405583989639424">Snelkiezer bewerken</translation>
 <translation id="2048247880942380698">Arabisch (<ph name="ORIGIN" />)</translation>
 <translation id="2079545284768500474">Ongedaan maken</translation>
-<translation id="2129408066358825297">Leeftijd</translation>
 <translation id="2138901399878617625">Plant bomen terwijl je zoekt</translation>
 <translation id="2148384276939959392">Selectie synchroniseren</translation>
 <translation id="2195713384412091023">Hiermee worden alle synchronisatiegegevens van onze server verwijderd, het coderingswachtwoord gewist en je wordt uitgelogd.</translation>
@@ -100,7 +100,6 @@
 <translation id="2273327106802955778">Menu Meer</translation>
 <translation id="2283599456633275070">Reizen</translation>
 <translation id="2324160330092901720">Een verificatiecode is verzonden naar <ph name="EMAIL_ID" /></translation>
-<translation id="2324257568471626606">Een nieuwe zoekmachine</translation>
 <translation id="2326657631721795616">Je kunt Vivaldi nog steeds steunen door simpelweg een privacygerichte, onafhankelijke zoekmachine te kiezen:</translation>
 <translation id="2330644510603114741">Tabblad-gedrag</translation>
 <translation id="233493642829799329">Als je dit wijzigt, worden sommige tabbladen opnieuw geladen</translation>
@@ -122,7 +121,6 @@
 <translation id="2563886993995570961">Maximum aantal kolommen</translation>
 <translation id="257674075312929031">Groep</translation>
 <translation id="2577446409661931381">Nieuwe notitie</translation>
-<translation id="2578190116190373975"><ph name="OLD_SEARCH_ENGINE" /> blijven gebruiken</translation>
 <translation id="2590350610957954839">Laatst bezochte groep</translation>
 <translation id="261264557609353020">Startpagina</translation>
 <translation id="2619628557366098325">Portugees (<ph name="ORIGIN" />)</translation>
@@ -132,7 +130,6 @@
 <translation id="2677862276555105603">Advertentie
 geblokkeerd</translation>
 <translation id="2678542925523700624">Ests (<ph name="ORIGIN" />)</translation>
-<translation id="2697254781659515880">Om de ontwikkeling van Vivaldi te ondersteunen, zijn we een samenwerking aangegaan met <ph name="NEW_SEARCH_ENGINE" /> en hebben we deze ingesteld als nieuwe standaard zoekmachine.</translation>
 <translation id="2701366016894985129">Advertenties in zoekresultaten</translation>
 <translation id="2702801445560668637">Leeslijst</translation>
 <translation id="2709516037105925701">Automatische formulierinvoer</translation>
@@ -182,7 +179,6 @@ geblokkeerd</translation>
 <translation id="3288330578370776290">Bij voorkeur pagina's in de browser openen in plaats van externe apps</translation>
 <translation id="3335772982573114336">Nieuwe notitie</translation>
 <translation id="33451081266695216">Verbinding beperkt door server.</translation>
-<translation id="3346386541263128307">De e-mailadressen moeten overeenkomen.</translation>
 <translation id="3363375699928395745">Titel invoeren</translation>
 <translation id="3365991203476235715">Engels (<ph name="ORIGIN" />)</translation>
 <translation id="3368960138304620657">Litouws (<ph name="ORIGIN" />)</translation>
@@ -216,7 +212,6 @@ geblokkeerd</translation>
 <translation id="373855430416507951">Op pagina zoeken</translation>
 <translation id="3745190878148784130">Zoom tekst verbergen</translation>
 <translation id="3766350025418769949">Je kunt de in Vivaldi Wachtwoordbeheer opgeslagen wachtwoorden gebruiken in andere apps op jouw iPad.</translation>
-<translation id="3782426324365706059"><ph name="NEW_SEARCH_ENGINE" /> gebruiken</translation>
 <translation id="3815158430926662417">Ik kan niet inloggen op mijn Vivaldi Sync-account</translation>
 <translation id="3817539520771282781">Op soort</translation>
 <translation id="383723620494271391">Wil je nog iets toevoegen?</translation>
@@ -231,7 +226,6 @@ geblokkeerd</translation>
 <translation id="3897092660631435901">Menu</translation>
 <translation id="3920366244737784074"><ph name="ITEM_TYPE" /> toevoegen</translation>
 <translation id="3921585859122905677">Positie adresbalk</translation>
-<translation id="3925725503020335904">Om de ontwikkeling van Vivaldi te ondersteunen, zijn we een samenwerking aangegaan met <ph name="NEW_SEARCH_ENGINE_1" /> en hebben we deze ingesteld als je nieuwe standaard zoekmachine. <ph name="NEW_SEARCH_ENGINE_2" /> vinden wij een goede privézoekmachine, en we hopen dat jij dat ook vindt.</translation>
 <translation id="3934481038955624945">Alles herstellen</translation>
 <translation id="3953599441418463312">Japans (<ph name="ORIGIN" />)</translation>
 <translation id="395506590020066151">Traceerder geblokkeerd</translation>
@@ -287,6 +281,7 @@ geblokkeerd</translation>
 <translation id="445620040230332178">Tabbladstijl</translation>
 <translation id="4461652107878667683">Navigatie vooruit</translation>
 <translation id="4474581062946673155">Er zijn momenteel geen tabbladen gesynchroniseerd vanaf andere apparaten.</translation>
+<translation id="4478475525737953027">Strikte blokkering</translation>
 <translation id="4488900295693536220">Van toepassing met adresbalk onderaan, maakt de bovenste suggesties beter bereikbaar.</translation>
 <translation id="4497115807425788318">Locatie</translation>
 <translation id="4507213865286211606">Voorbeeldgrootte</translation>
@@ -358,7 +353,6 @@ geblokkeerd</translation>
 <translation id="5195305454041437917">Toon X voor het verwijderen van suggestie</translation>
 <translation id="5238642303473095117">Gegevens wissen</translation>
 <translation id="5245732982828228444">Hier vind je je notities</translation>
-<translation id="5249199221558969362">Voer een realistische levensduur in.</translation>
 <translation id="5271549068863921519">Wachtwoord opslaan</translation>
 <translation id="5290452628447338707">Geen notities</translation>
 <translation id="5317780077021120954">Opslaan</translation>
@@ -368,6 +362,7 @@ geblokkeerd</translation>
 <translation id="535312628536375213">We hebben een samenwerking met deze website en stellen advertenties in het zoekresultaat standaard vrij van blokkering. Deze advertenties genereren inkomsten voor Vivaldi als je met ze communiceert.</translation>
 <translation id="5378841821586202982">Prullenbak</translation>
 <translation id="5398772614898833570">Advertenties geblokkeerd</translation>
+<translation id="5415265829033764921">Toestaan dat blokkeringsregels bepaalde webpagina's blokkeren.</translation>
 <translation id="5421638721143596928">Je aanmeldgegevens kunnen niet gedecodeerd worden. Meld je nogmaals aan.</translation>
 <translation id="5439599923922718668">Vaak bezocht</translation>
 <translation id="5439835075346716808">Aanmelding is tijdelijk geblokkeerd van dit IP. Probeer het later nog eens.</translation>
@@ -439,7 +434,6 @@ geblokkeerd</translation>
 <translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" /> geselecteerd</translation>
 <translation id="6442584491342758233">Direct Match</translation>
 <translation id="6443682944493983866">Talen accepteren</translation>
-<translation id="6468130661190228905">Sorry, het lijkt erop dat je even moet wachten voordat je lid kunt worden van onze gemenschap. Onze leden moeten minstens 16 jaar oud zijn om toegelaten te worden.</translation>
 <translation id="6487150267908786236"><ph name="BEGIN_LINK" />Importeren<ph name="END_LINK" /></translation>
 <translation id="6517411226162529295">Herstelcode opslaan</translation>
 <translation id="6527303717912515753">Delen</translation>
@@ -569,7 +563,6 @@ geblokkeerd</translation>
 <translation id="7961270736686975887">Talen wisselen</translation>
 <translation id="7967161908152532036">Adres van de website</translation>
 <translation id="7979036127916589816">Synchronisatiefout</translation>
-<translation id="8008214489230610096">Herstelbericht bevestigen</translation>
 <translation id="8038592796033755028"><ph name="USERNAME" />'s apparaten</translation>
 <translation id="8041093619605951337">Gelukkig</translation>
 <translation id="8046542428651654244">Miniatuur bijwerken</translation>
@@ -584,7 +577,6 @@ geblokkeerd</translation>
 <translation id="8131740175452115882">Bevestigen</translation>
 <translation id="8134672010161840864">Knijp om de afbeelding bij te snijden en te positioneren</translation>
 <translation id="8142291334394582384">Draai volgorde zoeksuggesties om</translation>
-<translation id="8147118677117542370">Geef je leeftijd op.</translation>
 <translation id="8165573437634525334">Gegevens beveiligd door coderingswachtwoord</translation>
 <translation id="8237090677709100373">Aangepaste kleurcode</translation>
 <translation id="8255101384731542819">Onafhankelijk zoeken, gebouwd in Frankrijk</translation>

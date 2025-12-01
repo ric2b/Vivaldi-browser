@@ -15,7 +15,6 @@
 #include "internal/platform/implementation/windows/preferences_manager.h"
 
 #include <cstdint>
-#include <filesystem>  // NOLINT(build/c++17)
 #include <memory>
 #include <optional>
 #include <ostream>
@@ -30,30 +29,26 @@
 #include "nlohmann/json.hpp"
 #include "nlohmann/json_fwd.hpp"
 #include "internal/base/files.h"
+#include "internal/base/file_path.h"
 #include "internal/platform/implementation/platform.h"
-#include "internal/platform/implementation/preferences_manager.h"
 #include "internal/platform/implementation/windows/preferences_repository.h"
 #include "internal/platform/logging.h"
 
-namespace nearby {
-namespace windows {
+namespace nearby::windows {
 namespace {
 using json = ::nlohmann::json;
 }  // namespace
 
-PreferencesManager::PreferencesManager(absl::string_view file_path)
-    : api::PreferencesManager(file_path) {
-  std::optional<std::filesystem::path> path =
+PreferencesManager::PreferencesManager(FilePath file_path) {
+  std::optional<FilePath> path =
       nearby::api::ImplementationPlatform::CreateDeviceInfo()
           ->GetLocalAppDataPath();
   if (!path.has_value()) {
-    path = nearby::sharing::GetTemporaryDirectory().value_or(
-        nearby::sharing::CurrentDirectory());
+    path = Files::GetTemporaryDirectory();
   }
 
-  std::filesystem::path full_path = *path / std::string(file_path);
-  preferences_repository_ =
-      std::make_unique<PreferencesRepository>(full_path.string());
+  path->append(file_path);
+  preferences_repository_ = std::make_unique<PreferencesRepository>(*path);
   value_ = preferences_repository_->LoadPreferences();
 }
 
@@ -287,5 +282,4 @@ std::vector<T> PreferencesManager::GetArrayValue(
   return result;
 }
 
-}  // namespace windows
-}  // namespace nearby
+}  // namespace nearby::windows

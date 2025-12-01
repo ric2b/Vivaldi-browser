@@ -97,8 +97,9 @@ if (is_ios) {
 if (vivaldi_build_tests) {
   update_template_instance("//chrome/test/data/webui/settings:build") {
     files -= [
+      "ai_page_index_test.ts",
       "ai_page_test.ts",
-      "basic_page_test.ts",
+      "all_sites_test.ts",
       "incognito_tracking_protections_page_test.ts",
       "privacy_page_test.ts",
       "privacy_guide_ad_topics_fragment_test.ts",
@@ -112,14 +113,23 @@ if (vivaldi_build_tests) {
       "privacy_guide_safe_browsing_fragment_test.ts",
       "privacy_guide_welcome_fragment_test.ts",
       "privacy_guide_msbb_fragment_test.ts",
+      "privacy_guide_promo_test.ts",
+      "privacy_page_index_test.ts",
       "route_test.ts",
       "search_engine_entry_test.ts",
       "search_engines_page_test.ts",
+      "search_page_index_test.ts",
       "search_page_test.ts",
       "search_settings_test.ts",
+      "searchable_view_container_mixin_test.ts",
+      "security_page_v2_test.ts",
       "settings_animated_pages_test.ts",
+      "settings_main_plugins_test.ts",
       "settings_main_test.ts",
+      "settings_view_mixin_test.ts",
+      "test_privacy_guide_browser_proxy.ts",
       "test_search_engines_browser_proxy.ts",
+      "test_search_manager.ts",
     ]
   }
 }

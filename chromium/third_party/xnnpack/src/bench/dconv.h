@@ -8,7 +8,8 @@
 
 // clang-format off
 
-#pragma once
+#ifndef XNNPACK_BENCH_DCONV_H_
+#define XNNPACK_BENCH_DCONV_H_
 
 #include <benchmark/benchmark.h>
 
@@ -21,7 +22,7 @@
 
 
 // ShuffleNet v1/v2.
-static void ShuffleNetConvArguments(benchmark::internal::Benchmark* b) {
+inline void ShuffleNetConvArguments(benchmark::internal::Benchmark* b) {
   b->ArgNames({"H", "W", "Cout"});
 
   /********* Conv 1 ********/
@@ -30,7 +31,7 @@ static void ShuffleNetConvArguments(benchmark::internal::Benchmark* b) {
 }
 
 // MobileNet v1/v2.
-static void MobileNetConvArguments(benchmark::internal::Benchmark* b) {
+inline void MobileNetConvArguments(benchmark::internal::Benchmark* b) {
   b->ArgNames({"H", "W", "Cout"});
 
   /*        H    W   GCout */
@@ -38,7 +39,7 @@ static void MobileNetConvArguments(benchmark::internal::Benchmark* b) {
 }
 
 // MobileNet v3 Small/Large.
-static void MobileNetV3ConvArguments(benchmark::internal::Benchmark* b) {
+inline void MobileNetV3ConvArguments(benchmark::internal::Benchmark* b) {
   b->ArgNames({"H", "W", "Cout"});
 
   /******************* Initial Stage *******************/
@@ -47,10 +48,12 @@ static void MobileNetV3ConvArguments(benchmark::internal::Benchmark* b) {
 }
 
 // SqueezeNet 1.1
-static void SqueezeNetV11ConvArguments(benchmark::internal::Benchmark* b) {
+inline void SqueezeNetV11ConvArguments(benchmark::internal::Benchmark* b) {
   b->ArgNames({"H", "W", "GCout"});
 
   /*********************** Conv 1 **********************/
   /*        H    W   GCout */
   b->Args({224, 224,   64});
 }
+
+#endif  // XNNPACK_BENCH_DCONV_H_

@@ -3,7 +3,13 @@
 // This source code is licensed under the BSD-style license found in the
 // LICENSE file in the root directory of this source tree.
 
-#pragma once
+// Since many of the functions declared in this file are conditional on the
+// underlying system, compiler, and compiler version, automatic tooling may
+// incorrectly decide that this header file is not needed and remove it.
+// IWYU pragma: always_keep
+
+#ifndef XNNPACK_SRC_XNNPACK_INTRINSICS_POLYFILL_H_
+#define XNNPACK_SRC_XNNPACK_INTRINSICS_POLYFILL_H_
 
 #include "src/xnnpack/common.h"
 #include "src/xnnpack/unaligned.h"
@@ -459,3 +465,5 @@ static XNN_INTRINSIC HVX_Vector Q6_Vsf_vdiv_VsfVsf(HVX_Vector vin1,
 }
 
 #endif  // XNN_ARCH_HEXAGON
+
+#endif  // XNNPACK_SRC_XNNPACK_INTRINSICS_POLYFILL_H_

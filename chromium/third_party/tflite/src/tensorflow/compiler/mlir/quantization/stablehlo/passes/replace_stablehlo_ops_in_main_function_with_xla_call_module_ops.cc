@@ -33,6 +33,7 @@ limitations under the License.
 #include "mlir/Support/LLVM.h"  // from @llvm-project
 #include "mlir/Support/TypeID.h"  // from @llvm-project
 #include "stablehlo/dialect/StablehloOps.h"  // from @stablehlo
+#include "stablehlo/dialect/Version.h"  // from @stablehlo
 #include "tensorflow/compiler/mlir/quantization/common/func.h"
 #include "tensorflow/compiler/mlir/quantization/common/lift_as_function_call.h"
 #include "tensorflow/compiler/mlir/quantization/stablehlo/utils/stablehlo_type_utils.h"
@@ -49,6 +50,7 @@ namespace {
 
 constexpr StringRef kStablehloModuleAttrsAttrName = "_stablehlo_module_attrs";
 constexpr StringRef kUsesShapePolymorphismAttr = "jax.uses_shape_polymorphism";
+constexpr StringRef kNoXlaCallModuleAttrName = "_no_xla_call_module";
 
 // Default version number for native serialization.
 constexpr int64_t kDefaultVersion = 9;
@@ -171,8 +173,8 @@ void CreateXlaCallModuleOp(ValueRange inputs, ValueRange outputs,
       ctx,
       {StringAttr::get(ctx, kPlatformCpu), StringAttr::get(ctx, kPlatformTpu)});
 
-  auto xla_call_module_op = builder.create<TF::XlaCallModuleOp>(
-      module_op.getLoc(), /*output=*/result_types,
+  auto xla_call_module_op = TF::XlaCallModuleOp::create(
+      builder, module_op.getLoc(), /*output=*/result_types,
       /*args=*/inputs,
       /*version=*/kDefaultVersion, /*module=*/"",
       /*Sout=*/ArrayAttr::get(ctx, shape_attrs),
@@ -232,9 +234,10 @@ void ReplaceStablehloOpsWithXlaCallModuleOp(
 
   // 1) Create FuncOp for the StableHLO ops. They will be separate subgraphs.
   builder.setInsertionPoint(&*module_op.begin());
-  auto stablehlo_func_op = builder.create<func::FuncOp>(
-      module_op.getLoc(), CreateStablehloFunctionName(stablehlo_func_id),
-      FunctionType::get(ctx, arg_types, result_types));
+  auto stablehlo_func_op =
+      func::FuncOp::create(builder, module_op.getLoc(),
+                           CreateStablehloFunctionName(stablehlo_func_id),
+                           FunctionType::get(ctx, arg_types, result_types));
   stablehlo_func_op.setVisibility(SymbolTable::Visibility::Private);
   stablehlo_func_op->setAttr(TF::kFromXlaCallModuleAttrName,
                              builder.getUnitAttr());
@@ -260,7 +263,7 @@ void ReplaceStablehloOpsWithXlaCallModuleOp(
     // outputs in the original function.
     result_values.push_back(mapper.lookup(original_output_value));
   }
-  builder.create<func::ReturnOp>(module_op.getLoc(), result_values);
+  func::ReturnOp::create(builder, module_op.getLoc(), result_values);
 
   // 2) Create XlaCallModuleOp (with ops mapped).
   CreateXlaCallModuleOp(inputs, outputs, result_types, reverse_subgraph,
@@ -339,7 +342,8 @@ bool ShouldAddOpToSubgraph(Operation* op,
     current_depth++;
 
     for (Operation* descendant : current_layer_descendants) {
-      if (!IsStablehloOp(descendant) || !ops_to_add.contains(descendant)) {
+      if (!quant::stablehlo::IsStablehloOp(descendant) ||
+          !ops_to_add.contains(descendant)) {
         all_descendants.clear();
         return false;
       }
@@ -396,7 +400,7 @@ void ReplaceStablehloOpsInMainFunctionWithXlaCallModuleOps(
     liveouts.update(*op);
     ops_to_add.remove(op);
 
-    if (!IsStablehloOp(op)) {
+    if (!quant::stablehlo::IsStablehloOp(op)) {
       // Always update the liveouts when the subgraph isn't being continued.
       liveouts.snapshot_previous_state();
       return;
@@ -415,7 +419,7 @@ void ReplaceStablehloOpsInMainFunctionWithXlaCallModuleOps(
     // in the subgraph. We only trace StableHLO ops that have all users inside
     // the current subgraph.
     // TODO: b/311239049 - Consider rewrite this using BFS.
-    if (!IsStablehloOp(op)) {
+    if (!quant::stablehlo::IsStablehloOp(op)) {
       bool should_add_op = true;
       while (should_add_op) {
         should_add_op = false;
@@ -492,7 +496,7 @@ void ReplaceStablehloOpsInMainFunctionWithXlaCallModuleOpsPass::
     runOnOperation() {
   ModuleOp module_op = getOperation();
 
-  func::FuncOp main_func = FindMainFuncOp(module_op);
+  func::FuncOp main_func = quant::FindMainFuncOp(module_op);
   if (!main_func) return;
 
   // In case the model has tf.StatefulPartitionedCallOp or tf.PartitionedCallOp,
@@ -501,22 +505,29 @@ void ReplaceStablehloOpsInMainFunctionWithXlaCallModuleOpsPass::
   func_ops.push_back(main_func);
   int stablehlo_func_id = -1;
   while (!func_ops.empty()) {
-    auto main_func = func_ops.back();
+    auto func_op = func_ops.back();
     func_ops.pop_back();
-    if (!main_func) continue;
+    if (!func_op) continue;
+
+    // If the function has the _no_xla_call_module attribute, we don't need to
+    // replace StableHLO ops in this function with XlaCallModuleOps (including
+    // the functions called by this function).
+    if (func_op->getAttrOfType<mlir::UnitAttr>(kNoXlaCallModuleAttrName)) {
+      continue;
+    }
 
     SymbolTable symbol_table(module_op);
-    for (auto call_op : main_func.getOps<TF::PartitionedCallOp>()) {
+    for (auto call_op : func_op.getOps<TF::PartitionedCallOp>()) {
       func_ops.push_back(dyn_cast_or_null<func::FuncOp>(symbol_table.lookup(
           mlir::cast<FlatSymbolRefAttr>(call_op.getFAttr()).getValue())));
     }
-    for (auto call_op : main_func.getOps<TF::StatefulPartitionedCallOp>()) {
+    for (auto call_op : func_op.getOps<TF::StatefulPartitionedCallOp>()) {
       func_ops.push_back(
           dyn_cast_or_null<func::FuncOp>(symbol_table.lookup(call_op.getF())));
     }
 
-    DuplicateSmallConstantOps(module_op, main_func);
-    ReplaceStablehloOpsInMainFunctionWithXlaCallModuleOps(module_op, main_func,
+    DuplicateSmallConstantOps(module_op, func_op);
+    ReplaceStablehloOpsInMainFunctionWithXlaCallModuleOps(module_op, func_op,
                                                           stablehlo_func_id);
   }
 

@@ -90,7 +90,7 @@ export const DEFAULT_VIEW = (input: ViewInput, _output: object, target: HTMLElem
       </devtools-toolbar>
       ${input.metadataView}`,
       // clang-format on
-      target, {host: input});
+      target);
 };
 
 export type View = (input: ViewInput, output: object, target: HTMLElement) => void;
@@ -108,7 +108,7 @@ export class StorageItemsToolbar extends
   #mainToolbarItems: UI.Toolbar.ToolbarItem[] = [];
 
   constructor(element?: HTMLElement, view: View = DEFAULT_VIEW) {
-    super(false, false, element);
+    super(element);
     this.#view = view;
     this.filterRegex = null;
   }
@@ -136,7 +136,7 @@ export class StorageItemsToolbar extends
       onFilterChanged: this.filterChanged.bind(this),
       onRefresh: () => {
         this.dispatchEventToListeners(StorageItemsToolbar.Events.REFRESH);
-        UI.ARIAUtils.alert(i18nString(UIStrings.refreshedStatus));
+        UI.ARIAUtils.LiveAnnouncer.alert(i18nString(UIStrings.refreshedStatus));
       },
       onDeleteAll: () => this.dispatchEventToListeners(StorageItemsToolbar.Events.DELETE_ALL),
       onDeleteSelected: () => this.dispatchEventToListeners(StorageItemsToolbar.Events.DELETE_SELECTED),

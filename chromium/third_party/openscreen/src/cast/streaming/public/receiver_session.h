@@ -228,7 +228,7 @@ class ReceiverSession final : public Environment::SocketSubscriber {
   std::string negotiated_sender_id_;
 
   // The session messenger used for the lifetime of this session.
-  ReceiverSessionMessenger messenger_;
+  std::unique_ptr<ReceiverSessionMessenger> messenger_;
 
   // The packet router to be used for all Receivers spawned by this session.
   ReceiverPacketRouter packet_router_;

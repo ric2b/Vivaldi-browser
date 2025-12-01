@@ -129,6 +129,19 @@ struct Bindings {
                  input_attachment);
 };
 
+/// Supported SPIR-V binary versions.
+/// If a new version is added here, also add it to:
+/// * Writer::CanGenerate
+/// * Printer::Code
+/// Fully usable version will also need additions to:
+/// * --spir-version on the command line
+/// * Dawn in the Vulkan backend
+enum class SpvVersion : uint32_t {
+    kSpv13,  // SPIR-V 1.3
+    kSpv14,  // SPIR-V 1.4
+    kSpv15,  // SPIR-V 1.5, for testing purposes only
+};
+
 /// Configuration options used for generating SPIR-V.
 struct Options {
     struct RangeOffsets {
@@ -195,20 +208,27 @@ struct Options {
     /// `unpack4x8unorm` builtins
     bool polyfill_pack_unpack_4x8_norm = false;
 
+    /// Set to `true` to generate a polyfill clamp of `id` param of subgroupShuffle to within the
+    /// spec max subgroup size.
+    bool subgroup_shuffle_clamped = false;
+
     /// Set to `true` to disable the polyfills on integer division and modulo.
     bool disable_polyfill_integer_div_mod = false;
 
+    /// Set to `true` to scalarize max min and clamp builtins.
+    bool scalarize_max_min_clamp = false;
+
     /// Set to `true` if the Vulkan Memory Model should be used
     bool use_vulkan_memory_model = false;
-
-    /// Set to `true` if the clamp builtin should be scalarized for vector operations
-    bool scalarize_clamp_builtin = false;
 
     /// Set to `true` if handles should be transformed by direct variable access.
     bool dva_transform_handle = false;
 
     /// Offsets of the minDepth and maxDepth push constants.
     std::optional<RangeOffsets> depth_range_offsets = std::nullopt;
+
+    /// SPIR-V binary version.
+    SpvVersion spirv_version = SpvVersion::kSpv13;
 
     /// Reflect the fields of this class so that it can be used by tint::ForeachField()
     TINT_REFLECT(Options,
@@ -228,13 +248,22 @@ struct Options {
                  pass_matrix_by_pointer,
                  polyfill_dot_4x8_packed,
                  polyfill_pack_unpack_4x8_norm,
+                 subgroup_shuffle_clamped,
                  disable_polyfill_integer_div_mod,
+                 scalarize_max_min_clamp,
                  use_vulkan_memory_model,
-                 scalarize_clamp_builtin,
                  dva_transform_handle,
-                 depth_range_offsets);
+                 depth_range_offsets,
+                 spirv_version);
 };
 
 }  // namespace tint::spirv::writer
+
+namespace tint {
+
+/// Reflect enum information for SPIR-V version.
+TINT_REFLECT_ENUM_RANGE(spirv::writer::SpvVersion, kSpv13, kSpv14);
+
+}  // namespace tint
 
 #endif  // SRC_TINT_LANG_SPIRV_WRITER_COMMON_OPTIONS_H_

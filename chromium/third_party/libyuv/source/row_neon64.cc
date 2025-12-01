@@ -291,12 +291,12 @@ void I210ToAR30Row_NEON(const uint16_t* src_y,
   uint16_t limit = 0x3ff0;
   uint16_t alpha = 0xc000;
   asm volatile(YUVTORGB_SETUP
-               "dup         v22.8h, %w[limit]             \n"
-               "dup         v23.8h, %w[alpha]             \n"
-               "1:          \n"  //
+      "dup         v22.8h, %w[limit]             \n"
+      "dup         v23.8h, %w[alpha]             \n"
+      "1:          \n"  //
                READYUV210
-               "subs        %w[width], %w[width], #8      \n" NVTORGB STOREAR30
-               "b.gt        1b                            \n"
+      "subs        %w[width], %w[width], #8      \n" NVTORGB STOREAR30
+      "b.gt        1b                            \n"
                : [src_y] "+r"(src_y),             // %[src_y]
                  [src_u] "+r"(src_u),             // %[src_u]
                  [src_v] "+r"(src_v),             // %[src_v]
@@ -320,12 +320,12 @@ void I410ToAR30Row_NEON(const uint16_t* src_y,
   uint16_t limit = 0x3ff0;
   uint16_t alpha = 0xc000;
   asm volatile(YUVTORGB_SETUP
-               "dup         v22.8h, %w[limit]             \n"
-               "dup         v23.8h, %w[alpha]             \n"
-               "1:          \n"  //
+      "dup         v22.8h, %w[limit]             \n"
+      "dup         v23.8h, %w[alpha]             \n"
+      "1:          \n"  //
                READYUV410
-               "subs        %w[width], %w[width], #8      \n" NVTORGB STOREAR30
-               "b.gt        1b                            \n"
+      "subs        %w[width], %w[width], #8      \n" NVTORGB STOREAR30
+      "b.gt        1b                            \n"
                : [src_y] "+r"(src_y),             // %[src_y]
                  [src_u] "+r"(src_u),             // %[src_u]
                  [src_v] "+r"(src_v),             // %[src_v]
@@ -348,12 +348,12 @@ void I212ToAR30Row_NEON(const uint16_t* src_y,
   const vec16* rgb_coeff = &yuvconstants->kRGBCoeffBias;
   const uint16_t limit = 0x3ff0;
   asm volatile(YUVTORGB_SETUP
-               "dup         v22.8h, %w[limit]             \n"
-               "movi        v23.8h, #0xc0, lsl #8         \n"  // A
-               "1:          \n"                                //
+      "dup         v22.8h, %w[limit]             \n"
+      "movi        v23.8h, #0xc0, lsl #8         \n"  // A
+      "1:          \n"                                //
                READYUV212
-               "subs        %w[width], %w[width], #8      \n" NVTORGB STOREAR30
-               "b.gt        1b                            \n"
+      "subs        %w[width], %w[width], #8      \n" NVTORGB STOREAR30
+      "b.gt        1b                            \n"
                : [src_y] "+r"(src_y),             // %[src_y]
                  [src_u] "+r"(src_u),             // %[src_u]
                  [src_v] "+r"(src_v),             // %[src_v]
@@ -530,13 +530,13 @@ void P210ToAR30Row_NEON(const uint16_t* src_y,
   const vec16* rgb_coeff = &yuvconstants->kRGBCoeffBias;
   const uint16_t limit = 0x3ff0;
   asm volatile(YUVTORGB_SETUP
-               "dup         v22.8h, %w[limit]             \n"
-               "movi        v23.8h, #0xc0, lsl #8         \n"  // A
-               "ldr         q2, [%[kIndices]]             \n"
-               "1:          \n"  //
+      "dup         v22.8h, %w[limit]             \n"
+      "movi        v23.8h, #0xc0, lsl #8         \n"  // A
+      "ldr         q2, [%[kIndices]]             \n"
+      "1:          \n"  //
                READYUVP210
-               "subs        %w[width], %w[width], #8      \n" NVTORGB STOREAR30
-               "b.gt        1b                            \n"
+      "subs        %w[width], %w[width], #8      \n" NVTORGB STOREAR30
+      "b.gt        1b                            \n"
                : [src_y] "+r"(src_y),                     // %[src_y]
                  [src_uv] "+r"(src_uv),                   // %[src_uv]
                  [dst_ar30] "+r"(dst_ar30),               // %[dst_ar30]
@@ -557,13 +557,13 @@ void P410ToAR30Row_NEON(const uint16_t* src_y,
   const vec16* rgb_coeff = &yuvconstants->kRGBCoeffBias;
   uint16_t limit = 0x3ff0;
   asm volatile(YUVTORGB_SETUP
-               "dup         v22.8h, %w[limit]             \n"
-               "movi        v23.8h, #0xc0, lsl #8         \n"  // A
-               "ldr         q2, [%[kIndices]]             \n"
-               "1:          \n"  //
+      "dup         v22.8h, %w[limit]             \n"
+      "movi        v23.8h, #0xc0, lsl #8         \n"  // A
+      "ldr         q2, [%[kIndices]]             \n"
+      "1:          \n"  //
                READYUVP410
-               "subs        %w[width], %w[width], #8      \n" NVTORGB STOREAR30
-               "b.gt        1b                            \n"
+      "subs        %w[width], %w[width], #8      \n" NVTORGB STOREAR30
+      "b.gt        1b                            \n"
                : [src_y] "+r"(src_y),                     // %[src_y]
                  [src_uv] "+r"(src_uv),                   // %[src_uv]
                  [dst_ar30] "+r"(dst_ar30),               // %[dst_ar30]
@@ -3461,7 +3461,7 @@ static void ABCDToUVMatrixRow_NEON_I8MM(const uint8_t* src,
                                                         // 16-bit)
       "ld2r        {v24.4s, v25.4s}, [%[uvconstants]] \n"
 
-      "1:                                          \n"
+      "1:          \n"
       "ld2         {v0.4s, v1.4s}, [%[src]], #32   \n"  // load 8 pixels
       "ld2         {v2.4s, v3.4s}, [%[src]], #32   \n"  // load 8 pixels
       "subs        %w[width], %w[width], #16       \n"  // 16 processed per loop
@@ -5580,6 +5580,34 @@ void Convert8To8Row_NEON(const uint8_t* src_y,
       : "r"(scale),   // %3
         "r"(bias)     // %4
       : "cc", "memory", "v0", "v1", "v2", "v3", "v4", "v5");
+}
+
+// Use scale to convert lsb formats to msb, depending how many bits there are:
+// 1024 = 10 bits
+void Convert8To16Row_NEON(const uint8_t* src_y,
+                          uint16_t* dst_y,
+                          int scale,
+                          int width) {
+  // (src * 0x0101 * scale) >> 16.
+  // Since scale is a power of two, compute the shift to use to avoid needing
+  // to widen to int32.
+  int shift = 15 - __builtin_clz(scale);
+  asm volatile(
+      "dup         v2.8h, %w[shift]                 \n"
+      "1:          \n"
+      "ldr         q0, [%[src]], #16                \n"
+      "zip2        v1.16b, v0.16b, v0.16b           \n"
+      "zip1        v0.16b, v0.16b, v0.16b           \n"
+      "subs        %w[width], %w[width], #16        \n"
+      "ushl        v1.8h, v1.8h, v2.8h              \n"
+      "ushl        v0.8h, v0.8h, v2.8h              \n"
+      "stp         q0, q1, [%[dst]], #32            \n"
+      "b.ne        1b                               \n"
+      : [src] "+r"(src_y),   // %[src]
+        [dst] "+r"(dst_y),   // %[dst]
+        [width] "+r"(width)  // %[width]
+      : [shift] "r"(shift)   // %[shift]
+      : "cc", "memory", "v0", "v1", "v2");
 }
 
 #endif  // !defined(LIBYUV_DISABLE_NEON) && defined(__aarch64__)

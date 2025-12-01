@@ -22,7 +22,7 @@ limitations under the License.
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include "xla/client/executable_build_options.h"
-#include "xla/pjrt/compile_options.pb.h"
+#include "xla/pjrt/proto/compile_options.pb.h"
 #include "xla/shape_util.h"
 #include "xla/tsl/lib/core/status_test_util.h"
 #include "xla/xla_data.pb.h"
@@ -59,7 +59,7 @@ TEST(CompileOptionsTest, MultiSliceConfigNotSupported) {
 
   EXPECT_THAT(
       option.status(),
-      StatusIs(
+      absl_testing::StatusIs(
           absl::StatusCode::kUnimplemented,
           "multi_slice_config not supported in CompileOptions::FromProto."));
 }
@@ -90,8 +90,9 @@ TEST(ExecuteOptionsTest, SendRecvNotSupported) {
 
   EXPECT_THAT(
       options.ToProto(),
-      StatusIs(absl::StatusCode::kUnimplemented,
-               "ExecuteOptions with send/recv calbacks is not serializable"));
+      absl_testing::StatusIs(
+          absl::StatusCode::kUnimplemented,
+          "ExecuteOptions with send/recv calbacks is not serializable"));
 }
 
 TEST(ExecuteOptionsTest, ApplyOptionsCanParseStringsAndEnums) {
@@ -149,6 +150,7 @@ TEST(CompiledMemoryStatsTest, Serialization) {
   stats.host_output_size_in_bytes = 19;
   stats.host_alias_size_in_bytes = 23;
   stats.host_temp_size_in_bytes = 29;
+  stats.peak_memory_in_bytes = 31;
 
   CompiledMemoryStatsProto serialized = stats.ToProto();
   CompiledMemoryStats deserialized = CompiledMemoryStats::FromProto(serialized);

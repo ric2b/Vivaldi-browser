@@ -18,6 +18,10 @@
 // translate::prefs::kBlockedLanguages change.
 - (void)languagePrefsChanged;
 
+// Vivaldi
+- (void)translateDisableInfobarDisabled:(BOOL)disabled;
+// End Vivaldi
+
 @end
 
 #endif  // IOS_CHROME_BROWSER_SETTINGS_UI_BUNDLED_LANGUAGE_LANGUAGE_SETTINGS_CONSUMER_H_

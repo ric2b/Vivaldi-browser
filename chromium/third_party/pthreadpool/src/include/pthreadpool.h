@@ -104,6 +104,8 @@ typedef void (*pthreadpool_task_2d_tile_1d_dynamic_with_id_with_thread_t)(
     void*, uint32_t, size_t, size_t, size_t, size_t);
 typedef void (*pthreadpool_task_3d_tile_1d_with_id_with_thread_t)(
     void*, uint32_t, size_t, size_t, size_t, size_t, size_t);
+typedef void (*pthreadpool_task_3d_tile_1d_dynamic_with_id_with_thread_t)(
+    void*, uint32_t, size_t, size_t, size_t, size_t, size_t);
 
 /**
  * Disable support for denormalized numbers to the maximum extent possible for
@@ -1209,6 +1211,68 @@ void pthreadpool_parallelize_3d_tile_1d_with_uarch_with_thread(
 void pthreadpool_parallelize_3d_tile_1d_dynamic_with_thread(
     pthreadpool_t threadpool,
     pthreadpool_task_3d_tile_1d_dynamic_with_id_t function, void* context,
+    size_t range_i, size_t range_j, size_t range_k, size_t tile_k,
+    uint32_t flags);
+
+/**
+ * Process items on a 3D grid with specified prefered tile size along the last
+ * grid dimension, passing along the thread ID.
+ *
+ * The function repeatedly calls
+ *
+ *   function(context, uarch_index, thread_index, i, j, k, count_k)
+ *
+ * in parallel where:
+ *  - `i` is in the range `[0, range_i)`,
+ *  - `j` is in the range `[0, range_j)`,
+ *  - `k` is in the range `[0, range_k)` and a multiple of the provided @a
+ *    tile_k,
+ *  - `count_k` is an integer multiple of @a tile_k, unless `k + count_k ==
+ *    range_k`.
+ *
+ * The `count`s are chosen such as to minimize the number of calls to @a
+ * function while keeping the computation load balanced across all threads.
+ *
+ * When the call returns, all items have been processed and the thread pool is
+ * ready for a new task.
+ *
+ * @note If multiple threads call this function with the same thread pool,
+ *    the calls are serialized.
+ *
+ * @param threadpool           the thread pool to use for parallelisation. If
+ *                             threadpool is NULL, all items are processed
+ *                             serially on the calling thread.
+ * @param function             the function to call for each interval of the
+ *                             given range.
+ * @param context              the first argument passed to the specified
+ *                             function.
+ * @param default_uarch_index  the microarchitecture index to use when
+ *                             pthreadpool is configured without cpuinfo,
+ *                             cpuinfo initialization failed, or index returned
+ *                             by cpuinfo_get_current_uarch_index() exceeds the
+ *                             max_uarch_index value.
+ * @param max_uarch_index      the maximum microarchitecture index expected by
+ *                             the specified function. If the index returned by
+ *                             cpuinfo_get_current_uarch_index() exceeds this
+ *                             value, default_uarch_index will be used instead.
+ *                             default_uarch_index can exceed max_uarch_index.
+ * @param range_i              the number of items on the first dimension of the
+ *                             3D grid to process.
+ * @param range_j              the number of items on the second dimension of
+ *                             the 3D grid to process.
+ * @param range_k              the number of items on the third dimension of the
+ *                             3D grid to process.
+ * @param tile_k               the preferred multiple number of items on the
+ *                             third dimension of the 3D grid to process in each
+ *                             function call.
+ * @param flags                a bitwise combination of zero or more optional
+ *                             flags (PTHREADPOOL_FLAG_DISABLE_DENORMALS or
+ *                             PTHREADPOOL_FLAG_YIELD_WORKERS)
+ */
+void pthreadpool_parallelize_3d_tile_1d_dynamic_with_uarch_with_thread(
+    pthreadpool_t threadpool,
+    pthreadpool_task_3d_tile_1d_dynamic_with_id_with_thread_t function,
+    void* context, uint32_t default_uarch_index, uint32_t max_uarch_index,
     size_t range_i, size_t range_j, size_t range_k, size_t tile_k,
     uint32_t flags);
 

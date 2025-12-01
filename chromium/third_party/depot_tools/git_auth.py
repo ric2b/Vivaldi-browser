@@ -765,8 +765,9 @@ class ConfigWizard(object):
         """Checks various things about the user's gitcookies situation."""
         gitcookies = self._gitcookies()
         gitcookies_exists = os.path.exists(gitcookies)
-        cookiefile = scm.GIT.GetConfig(
-            os.getcwd(), 'http.cookiefile', scope='global') or ''
+        cookiefile = os.path.expanduser(
+            scm.GIT.GetConfig(os.getcwd(), 'http.cookiefile', scope='global')
+            or '')
         cookiefile_exists = os.path.exists(cookiefile)
         divergent_cookiefiles = gitcookies_exists and cookiefile_exists and not os.path.samefile(
             gitcookies, cookiefile)

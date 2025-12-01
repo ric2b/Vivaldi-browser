@@ -11,8 +11,8 @@ const path = require('path');
  * Converts a string to camelCase.
  * e.g., "my-component-name" -> "myComponentName"
  * e.g., "MyComponentName" -> "myComponentName"
- * @param {string} str
- * @returns {string}
+ * @param str
+ * @returns
  */
 function toCamelCase(str) {
   if (!str) {
@@ -27,8 +27,8 @@ function toCamelCase(str) {
  * Converts a string to PascalCase.
  * e.g., "my-component-name" -> "MyComponentName"
  * e.g., "myComponentName" -> "MyComponentName"
- * @param {string} str
- * @returns {string}
+ * @param str
+ * @returns
  */
 function toPascalCase(str) {
   if (!str) {
@@ -43,8 +43,8 @@ function toPascalCase(str) {
  * Converts a string to kebab-case.
  * e.g., "MyComponentName" -> "my-component-name"
  * e.g., "myComponentName" -> "my-component-name"
- * @param {string} str
- * @returns {string}
+ * @param str
+ * @returns
  */
 function toKebabCase(str) {
   if (!str) {
@@ -144,7 +144,7 @@ function main() {
     // Paths for build system (relative, forward slashes)
     const grdTsPath = path.join(componentDestPath, `${pascalCaseName}.js`).replace(/\\/g, '/');
     const grdCssPath = path.join(componentDestPath, `${camelCaseName}.css.js`).replace(/\\/g, '/');
-    console.log('1. Update \'grd_files_debug_sources\' in \'devtools_grd_files.gni\':');
+    console.log('1. Update \'grd_files_unbundled_sources\' in \'devtools_grd_files.gni\':');
     console.log('   Add the following generated JavaScript files:');
     console.log(`     "${grdTsPath}",`);
     console.log(`     "${grdCssPath}",`);

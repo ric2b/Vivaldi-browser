@@ -38,7 +38,7 @@ fate-sub-microdvd-remux: CMD = fmtstdout microdvd -i $(TARGET_SAMPLES)/sub/Micro
 FATE_SUBTITLES_ASS-$(call DEMDEC, MOV, MOVTEXT) += fate-sub-movtext
 fate-sub-movtext: CMD = fmtstdout ass -i $(TARGET_SAMPLES)/sub/MovText_capability_tester.mp4
 
-FATE_SUBTITLES-$(call ENCDEC, MOVTEXT, MOV) += fate-binsub-movtextenc
+FATE_SUBTITLES-$(call ENCDEC, MOVTEXT, MP4 MOV) += fate-binsub-movtextenc
 fate-binsub-movtextenc: CMD = md5 -i $(TARGET_SAMPLES)/sub/MovText_capability_tester.mp4 -map 0 -scodec mov_text -f mp4 -flags +bitexact -fflags +bitexact -movflags +frag_keyframe+empty_moov
 
 FATE_SUBTITLES_ASS-$(call DEMDEC, MPL2, MPL2) += fate-sub-mpl2
@@ -124,14 +124,15 @@ fate-sub-rcwt: CMD = md5 -i $(TARGET_SAMPLES)/sub/witch.scc -map 0 -c copy -f rc
 fate-sub-rcwt: CMP = oneline
 fate-sub-rcwt: REF = d86f179094a5752d68aa97d82cf887b0
 
-FATE_SUBTITLES-$(call ALLYES, MPEGTS_DEMUXER DVBSUB_DECODER DVBSUB_ENCODER) += fate-sub-dvb
+FATE_SUBTITLES-$(call FRAMECRC, MPEGTS, DVBSUB, DVBSUB_ENCODER) += fate-sub-dvb
 fate-sub-dvb: CMD = framecrc -i $(TARGET_SAMPLES)/sub/dvbsubtest_filter.ts -map s:0 -c dvbsub
 
-FATE_SUBTITLES-$(call ALLYES, FILE_PROTOCOL PIPE_PROTOCOL SRT_DEMUXER SUBRIP_DECODER TTML_ENCODER TTML_MUXER) += fate-sub-ttmlenc
+FATE_SUBTITLES-$(call ALLYES, PIPE_PROTOCOL SRT_DEMUXER SUBRIP_DECODER TTML_ENCODER TTML_MUXER) += fate-sub-ttmlenc
 fate-sub-ttmlenc: CMD = fmtstdout ttml -i $(TARGET_SAMPLES)/sub/SubRip_capability_tester.srt
 
 FATE_SUBTITLES-$(call ENCMUX, ASS, ASS) += $(FATE_SUBTITLES_ASS-yes)
 FATE_SUBTITLES += $(FATE_SUBTITLES-yes)
+FATE_SUBTITLES := $(if $(CONFIG_PIPE_PROTOCOL), $(FATE_SUBTITLES))
 
 fate-sub-%: CMP = rawdiff
 

@@ -46,6 +46,7 @@
 #include "src/tint/lang/core/ir/transform/remove_terminator_args.h"
 #include "src/tint/lang/core/ir/transform/rename_conflicts.h"
 #include "src/tint/lang/core/ir/transform/robustness.h"
+#include "src/tint/lang/core/ir/transform/signed_integer_polyfill.h"
 #include "src/tint/lang/core/ir/transform/std140.h"
 #include "src/tint/lang/core/ir/transform/value_to_let.h"
 #include "src/tint/lang/core/ir/transform/vectorize_scalar_matrix_constructors.h"
@@ -107,11 +108,6 @@ Result<SuccessType> Raise(core::ir::Module& module, const Options& options) {
         return immediate_data_layout.Failure();
     }
 
-    // Note, this comes before binding remapper as Dawn inserts _pre-remapping_ binding information.
-    // So, in order to move this later we'd need to update Dawn to send the _post-remapping_ data.
-    RUN_TRANSFORM(raise::TextureBuiltinsFromUniform, module,
-                  options.bindings.texture_builtins_from_uniform);
-
     // Note, this must come after Robustness as it may add `arrayLength`.
     // This also needs to come before binding remapper as Dawn inserts _pre-remapping_ binding
     // information. So, in order to move this later we'd need to update Dawn to send the
@@ -126,7 +122,7 @@ Result<SuccessType> Raise(core::ir::Module& module, const Options& options) {
     RemapperData remapper_data{};
     PopulateBindingInfo(options, remapper_data, multiplanar_map);
     RUN_TRANSFORM(core::ir::transform::BindingRemapper, module, remapper_data);
-
+    // Capability::kAllowDuplicateBindings needed after BindingRemapper
     {
         core::ir::transform::BinaryPolyfillConfig binary_polyfills{};
         binary_polyfills.int_div_mod = !options.disable_polyfill_integer_div_mod;
@@ -148,7 +144,7 @@ Result<SuccessType> Raise(core::ir::Module& module, const Options& options) {
         core_polyfills.dot_4x8_packed = true;
         core_polyfills.pack_unpack_4x8 = true;
         core_polyfills.pack_4xu8_clamp = true;
-
+        core_polyfills.abs_signed_int = true;
         RUN_TRANSFORM(core::ir::transform::BuiltinPolyfill, module, core_polyfills);
     }
 
@@ -176,6 +172,12 @@ Result<SuccessType> Raise(core::ir::Module& module, const Options& options) {
         RUN_TRANSFORM(core::ir::transform::DirectVariableAccess, module, dva_config);
     }
 
+    // Note, this must come after remapping as it uses post-remapping indices for its options.
+    // Note, this must come after DirectVariableAccess as it doesn't handle tracing through function
+    // calls.
+    RUN_TRANSFORM(raise::TextureBuiltinsFromUniform, module,
+                  options.bindings.texture_builtins_from_uniform);
+
     if (!options.disable_workgroup_init) {
         RUN_TRANSFORM(core::ir::transform::ZeroInitWorkgroupMemory, module);
     }
@@ -191,9 +193,13 @@ Result<SuccessType> Raise(core::ir::Module& module, const Options& options) {
         // Must come after DirectVariableAccess
         raise::TexturePolyfillConfig tex_config;
         tex_config.placeholder_sampler_bind_point = options.bindings.placeholder_sampler_bind_point;
-        tex_config.texture_builtins_from_uniform = options.bindings.texture_builtins_from_uniform;
         RUN_TRANSFORM(raise::TexturePolyfill, module, tex_config);
     }
+
+    // must come before 'BitcastPolyfill' as this adds bitcasts
+    core::ir::transform::SignedIntegerPolyfillConfig signed_integer_cfg{
+        .signed_negation = true, .signed_arithmetic = true, .signed_shiftleft = true};
+    RUN_TRANSFORM(core::ir::transform::SignedIntegerPolyfill, module, signed_integer_cfg);
 
     // Must come after BuiltinPolyfill as builtins can add bitcasts
     RUN_TRANSFORM(raise::BitcastPolyfill, module);

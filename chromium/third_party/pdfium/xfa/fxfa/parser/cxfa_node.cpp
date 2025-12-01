@@ -478,7 +478,7 @@ FXCODEC_IMAGE_TYPE XFA_GetImageType(const WideString& wsType) {
   return FXCODEC_IMAGE_UNKNOWN;
 }
 
-RetainPtr<CFX_DIBitmap> XFA_LoadImageData(CXFA_FFDoc* pDoc,
+RetainPtr<CFX_DIBitmap> XFA_LoadImageData(CXFA_FFDoc* doc,
                                           CXFA_Image* pImage,
                                           bool& bNameImage,
                                           int32_t& iImageXDpi,
@@ -509,13 +509,13 @@ RetainPtr<CFX_DIBitmap> XFA_LoadImageData(CXFA_FFDoc* pDoc,
     if (!(wsURL.First(7).EqualsASCII("http://") ||
           wsURL.First(6).EqualsASCII("ftp://"))) {
       RetainPtr<CFX_DIBitmap> pBitmap =
-          pDoc->GetPDFNamedImage(wsURL.AsStringView(), iImageXDpi, iImageYDpi);
+          doc->GetPDFNamedImage(wsURL.AsStringView(), iImageXDpi, iImageYDpi);
       if (pBitmap) {
         bNameImage = true;
         return pBitmap;
       }
     }
-    pImageFileRead = pDoc->OpenLinkedFile(wsURL);
+    pImageFileRead = doc->OpenLinkedFile(wsURL);
   }
   if (!pImageFileRead) {
     return nullptr;
@@ -584,14 +584,14 @@ NodeVector NodesSortedByDocumentIdx(const NodeSet& rgNodeSet) {
   return rgNodeArray;
 }
 
-NodeSetPair* NodeSetPairForNode(CXFA_Node* pNode, NodeSetPairMapMap* pMap) {
+NodeSetPair* NodeSetPairForNode(CXFA_Node* pNode, NodeSetPairMapMap* map) {
   CXFA_Node* pParentNode = pNode->GetParent();
   uint32_t dwNameHash = pNode->GetNameHash();
   if (!pParentNode || !dwNameHash) {
     return nullptr;
   }
 
-  return &((*pMap)[pParentNode][dwNameHash]);
+  return &((*map)[pParentNode][dwNameHash]);
 }
 
 void ReorderDataNodes(const NodeSet& sSet1,
@@ -1029,7 +1029,7 @@ class CXFA_ImageEditData final : public CXFA_FieldLayoutData {
   RetainPtr<CFX_DIBitmap> dibitmap_;
 };
 
-CXFA_Node::CXFA_Node(CXFA_Document* pDoc,
+CXFA_Node::CXFA_Node(CXFA_Document* doc,
                      XFA_PacketType ePacket,
                      Mask<XFA_XDPPACKET> validPackets,
                      XFA_ObjectType oType,
@@ -1037,7 +1037,7 @@ CXFA_Node::CXFA_Node(CXFA_Document* pDoc,
                      pdfium::span<const PropertyData> properties,
                      pdfium::span<const AttributeData> attributes,
                      CJX_Object* js_object)
-    : CXFA_Object(pDoc, oType, eType, js_object),
+    : CXFA_Object(doc, oType, eType, js_object),
       properties_(properties),
       attributes_(attributes),
       valid_packets_(validPackets),
@@ -2143,7 +2143,7 @@ void CXFA_Node::RemoveItem(CXFA_Node* pRemoveInstance,
 }
 
 CXFA_Node* CXFA_Node::CreateInstanceIfPossible(bool bDataMerge) {
-  CXFA_Document* pDocument = GetDocument();
+  CXFA_Document* document = GetDocument();
   CXFA_Node* pTemplateNode = GetTemplateNodeIfExists();
   if (!pTemplateNode) {
     return nullptr;
@@ -2160,14 +2160,14 @@ CXFA_Node* CXFA_Node::CreateInstanceIfPossible(bool bDataMerge) {
     }
   }
   if (!pDataScope) {
-    pDataScope = ToNode(pDocument->GetXFAObject(XFA_HASHCODE_Record));
+    pDataScope = ToNode(document->GetXFAObject(XFA_HASHCODE_Record));
     DCHECK(pDataScope);
   }
 
-  CXFA_Node* pInstance = pDocument->DataMerge_CopyContainer(
+  CXFA_Node* pInstance = document->DataMerge_CopyContainer(
       pTemplateNode, pFormParent, pDataScope, true, bDataMerge, true);
   if (pInstance) {
-    pDocument->DataMerge_UpdateBindingRelations(pInstance);
+    document->DataMerge_UpdateBindingRelations(pInstance);
     pFormParent->RemoveChildAndNotify(pInstance, true);
   }
   return pInstance;
@@ -2950,8 +2950,8 @@ CXFA_Node::BoolScriptResult CXFA_Node::ExecuteBoolScript(
     return {XFA_EventError::kSuccess, false};
   }
 
-  CXFA_FFDoc* pDoc = pDocView->GetDoc();
-  CFXJSE_Engine* pContext = pDoc->GetXFADoc()->GetScriptContext();
+  CXFA_FFDoc* doc = pDocView->GetDoc();
+  CFXJSE_Engine* pContext = doc->GetXFADoc()->GetScriptContext();
   CFXJSE_Engine::EventParamScope paramScope(
       pContext, pEventParam->targeted_ ? this : nullptr, pEventParam);
   pContext->SetRunAtType(script->GetRunAt());
@@ -2998,7 +2998,7 @@ CXFA_Node::BoolScriptResult CXFA_Node::ExecuteBoolScript(
         }
 
         CJX_Object::CalcData* pGlobalData =
-            pRefNode->JSObject()->GetOrCreateCalcData(pDoc->GetHeap());
+            pRefNode->JSObject()->GetOrCreateCalcData(doc->GetHeap());
         if (!pdfium::Contains(pGlobalData->globals_, this)) {
           pGlobalData->globals_.push_back(this);
         }

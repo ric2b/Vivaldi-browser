@@ -22,19 +22,20 @@
 #include "flvenc.h"
 #include "mpegvideo.h"
 #include "mpegvideoenc.h"
+#include "put_bits.h"
 
 int ff_flv_encode_picture_header(MPVMainEncContext *const m)
 {
     MPVEncContext *const s = &m->s;
     int format;
 
-    align_put_bits(&s->pb);
+    put_bits_assume_flushed(&s->pb);
 
     put_bits(&s->pb, 17, 1);
     /* 0: H.263 escape codes 1: 11-bit escape codes */
-    put_bits(&s->pb, 5, (s->c.h263_flv - 1));
+    put_bits(&s->pb, 5, 1);
     put_bits(&s->pb, 8,
-             (((int64_t) s->c.picture_number * 30 * s->c.avctx->time_base.num) /   // FIXME use timestamp
+             (((int64_t) s->picture_number * 30 * s->c.avctx->time_base.num) /   // FIXME use timestamp
               s->c.avctx->time_base.den) & 0xff);   /* TemporalReference */
     if (s->c.width == 352 && s->c.height == 288)
         format = 2;
@@ -64,25 +65,6 @@ int ff_flv_encode_picture_header(MPVMainEncContext *const m)
     put_bits(&s->pb, 1, 0);   /* ExtraInformation */
 
     return 0;
-}
-
-void ff_flv2_encode_ac_esc(PutBitContext *pb, int slevel, int level,
-                           int run, int last)
-{
-    if (level < 64) { // 7-bit level
-        put_bits(pb, 1, 0);
-        put_bits(pb, 1, last);
-        put_bits(pb, 6, run);
-
-        put_sbits(pb, 7, slevel);
-    } else {
-        /* 11-bit level */
-        put_bits(pb, 1, 1);
-        put_bits(pb, 1, last);
-        put_bits(pb, 6, run);
-
-        put_sbits(pb, 11, slevel);
-    }
 }
 
 const FFCodec ff_flv_encoder = {

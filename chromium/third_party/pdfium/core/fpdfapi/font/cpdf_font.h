@@ -54,7 +54,7 @@ class CPDF_Font : public Retainable, public Observable {
     virtual ~FormFactoryIface() = default;
 
     virtual std::unique_ptr<FormIface> CreateForm(
-        CPDF_Document* pDocument,
+        CPDF_Document* document,
         RetainPtr<CPDF_Dictionary> pPageResources,
         RetainPtr<CPDF_Stream> pFormStream) = 0;
   };
@@ -62,10 +62,10 @@ class CPDF_Font : public Retainable, public Observable {
   static constexpr uint32_t kInvalidCharCode = static_cast<uint32_t>(-1);
 
   // |pFactory| only required for Type3 fonts.
-  static RetainPtr<CPDF_Font> Create(CPDF_Document* pDoc,
-                                     RetainPtr<CPDF_Dictionary> pFontDict,
+  static RetainPtr<CPDF_Font> Create(CPDF_Document* doc,
+                                     RetainPtr<CPDF_Dictionary> font_dict,
                                      FormFactoryIface* pFactory);
-  static RetainPtr<CPDF_Font> GetStockFont(CPDF_Document* pDoc,
+  static RetainPtr<CPDF_Font> GetStockFont(CPDF_Document* doc,
                                            ByteStringView fontname);
 
   virtual bool IsType1Font() const;
@@ -137,13 +137,13 @@ class CPDF_Font : public Retainable, public Observable {
   void SetResourceName(const ByteString& name) { resource_name_ = name; }
 
  protected:
-  CPDF_Font(CPDF_Document* pDocument, RetainPtr<CPDF_Dictionary> pFontDict);
+  CPDF_Font(CPDF_Document* document, RetainPtr<CPDF_Dictionary> font_dict);
   ~CPDF_Font() override;
 
+  // Tries to select any Unicode character map.
+  static bool UseTTCharmapUnicode(const RetainPtr<CFX_Face>& face);
+
   // Commonly used wrappers for UseTTCharmap().
-  static bool UseTTCharmapMSUnicode(const RetainPtr<CFX_Face>& face) {
-    return UseTTCharmap(face, 3, 1);
-  }
   static bool UseTTCharmapMSSymbol(const RetainPtr<CFX_Face>& face) {
     return UseTTCharmap(face, 3, 0);
   }
@@ -161,7 +161,7 @@ class CPDF_Font : public Retainable, public Observable {
   virtual bool Load() = 0;
 
   void LoadUnicodeMap() const;  // logically const only.
-  void LoadFontDescriptor(const CPDF_Dictionary* pFontDesc);
+  void LoadFontDescriptor(const CPDF_Dictionary* font_desc);
   void CheckFontMetrics();
 
   UnownedPtr<CPDF_Document> const document_;

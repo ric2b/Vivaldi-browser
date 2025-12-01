@@ -218,10 +218,10 @@ std::vector<CPDFSDK_Annot*> CPDFSDK_PageView::GetAnnotList() const {
   return list;
 }
 
-CPDFSDK_Annot* CPDFSDK_PageView::GetAnnotByDict(const CPDF_Dictionary* pDict) {
+CPDFSDK_Annot* CPDFSDK_PageView::GetAnnotByDict(const CPDF_Dictionary* dict) {
   for (std::unique_ptr<CPDFSDK_Annot>& pAnnot : sdkannot_array_) {
     CPDF_Annot* pPDFAnnot = pAnnot->GetPDFAnnot();
-    if (pPDFAnnot && pPDFAnnot->GetAnnotDict() == pDict) {
+    if (pPDFAnnot && pPDFAnnot->GetAnnotDict() == dict) {
       return pAnnot.get();
     }
   }
@@ -658,6 +658,6 @@ CPDFSDK_Annot* CPDFSDK_PageView::GetFocusAnnot() {
 }
 
 int CPDFSDK_PageView::GetPageIndexForStaticPDF() const {
-  CPDF_Document* pDoc = form_fill_env_->GetPDFDocument();
-  return pDoc->GetPageIndex(GetPDFPage()->GetDict()->GetObjNum());
+  CPDF_Document* doc = form_fill_env_->GetPDFDocument();
+  return doc->GetPageIndex(GetPDFPage()->GetDict()->GetObjNum());
 }

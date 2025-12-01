@@ -62,6 +62,8 @@ OPTION_TAGS = 'TAGS'
 OPTION_ESTIMATE = 'ESTIMATE'
 OPTION_INPUTS = 'INPUTS'
 
+_JOB_ORIGIN_CQ = 'CQ'
+
 COMPARISON_MODES = job_state.COMPARISON_MODES
 
 RETRY_OPTIONS = taskqueue.TaskRetryOptions(
@@ -699,9 +701,19 @@ class Job(ndb.Model):
         }
       else:
         kind = 'commit'
+        commit_info = change_b.last_commit.AsDict()
+        review_url = commit_info.get('review_url')  # Safely get the URL
+
+        cl_number = ''
+        if not review_url:
+          logging.warning('[CULPRITS] Culprit commit does not have review_url.')
+        else:
+          cl_number = review_url.split('/')[-1]
+
         commit_dict = {
             'repository': change_b.last_commit.repository,
             'git_hash': change_b.last_commit.git_hash,
+            'cl_number': cl_number,
         }
       regression_cnt += 1
       # Call sandwich verification workflow.
@@ -713,7 +725,8 @@ class Job(ndb.Model):
           kind=kind,
           commit_dict=commit_dict,
           values_a=values_a,
-          values_b=values_b)
+          values_b=values_b,
+          anomaly=wf_execution_request)
       cloud_workflow_key = cloud_workflow.put()
       cloud_workflows_keys.append(cloud_workflow_key.id())
       workflow_executions.append(execution_name)
@@ -858,6 +871,10 @@ class Job(ndb.Model):
         _retry_options=RETRY_OPTIONS)
 
   def _UpdateGerritIfNeeded(self, success=True):
+    if self.origin == _JOB_ORIGIN_CQ:
+      # Do not spam on Gerrit as jobs from CQ will have results reported
+      # on the Checks tab.
+      return
     if self.gerrit_server and self.gerrit_change_id:
       icon = _ROUND_PUSHPIN if success else _CRYING_CAT_FACE
       state = 'complete' if success else 'failed'

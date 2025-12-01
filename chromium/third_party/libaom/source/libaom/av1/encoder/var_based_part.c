@@ -25,6 +25,7 @@
 
 #include "av1/common/reconinter.h"
 #include "av1/common/blockd.h"
+#include "av1/common/quant_common.h"
 
 #include "av1/encoder/encodeframe.h"
 #include "av1/encoder/encodeframe_utils.h"
@@ -549,7 +550,7 @@ static void set_vbp_thresholds_key_frame(AV1_COMP *cpi, int64_t thresholds[],
   } else {
     int shift_val = 2;
     if (cpi->sf.rt_sf.force_large_partition_blocks_intra) {
-      shift_val = 0;
+      shift_val = (cpi->oxcf.mode == ALLINTRA ? 1 : 0);
     }
 
     thresholds[2] = threshold_base >> shift_val;
@@ -1347,6 +1348,11 @@ static void do_int_pro_motion_estimation(AV1_COMP *cpi, MACROBLOCK *x,
   int me_search_size_row = is_screen
                                ? source_sad_nonrd > kMedSad ? 512 : 192
                                : block_size_high[cm->seq_params->sb_size] >> 1;
+  if (cm->width * cm->height >= 3840 * 2160 &&
+      cpi->svc.temporal_layer_id == 0 && cpi->svc.number_temporal_layers > 1) {
+    me_search_size_row = me_search_size_row << 1;
+    me_search_size_col = me_search_size_col << 1;
+  }
   unsigned int y_sad_zero;
   *y_sad = av1_int_pro_motion_estimation(
       cpi, x, cm->seq_params->sb_size, mi_row, mi_col, &kZeroMv, &y_sad_zero,
@@ -1416,7 +1422,7 @@ static void setup_planes(AV1_COMP *cpi, MACROBLOCK *x, unsigned int *y_sad,
       yv12_g = av1_get_scaled_ref_frame(cpi, GOLDEN_FRAME);
       scaled_ref_golden = true;
     }
-    if (yv12_g && yv12_g != yv12) {
+    if (yv12_g && (yv12_g != yv12 || !use_last_ref)) {
       av1_setup_pre_planes(
           xd, 0, yv12_g, mi_row, mi_col,
           scaled_ref_golden ? NULL : get_ref_scale_factors(cm, GOLDEN_FRAME),
@@ -1440,7 +1446,7 @@ static void setup_planes(AV1_COMP *cpi, MACROBLOCK *x, unsigned int *y_sad,
       yv12_alt = av1_get_scaled_ref_frame(cpi, ALTREF_FRAME);
       scaled_ref_alt = true;
     }
-    if (yv12_alt && yv12_alt != yv12) {
+    if (yv12_alt && (yv12_alt != yv12 || !use_last_ref)) {
       av1_setup_pre_planes(
           xd, 0, yv12_alt, mi_row, mi_col,
           scaled_ref_alt ? NULL : get_ref_scale_factors(cm, ALTREF_FRAME),
@@ -1669,10 +1675,14 @@ int av1_choose_var_based_partitioning(AV1_COMP *cpi, const TileInfo *const tile,
   const bool is_segment_id_boosted =
       cpi->oxcf.q_cfg.aq_mode == CYCLIC_REFRESH_AQ && cm->seg.enabled &&
       cyclic_refresh_segment_id_boosted(segment_id);
-  const int qindex =
-      is_segment_id_boosted
-          ? av1_get_qindex(&cm->seg, segment_id, cm->quant_params.base_qindex)
-          : cm->quant_params.base_qindex;
+  const int sb_qindex =
+      clamp(cm->delta_q_info.delta_q_present_flag
+                ? cm->quant_params.base_qindex + x->delta_qindex
+                : cm->quant_params.base_qindex,
+            0, QINDEX_RANGE - 1);
+  const int qindex = is_segment_id_boosted || cpi->roi.delta_qp_enabled
+                         ? av1_get_qindex(&cm->seg, segment_id, sb_qindex)
+                         : sb_qindex;
   set_vbp_thresholds(
       cpi, thresholds, blk_sad, qindex, x->content_state_sb.low_sumdiff,
       x->content_state_sb.source_sad_nonrd, x->content_state_sb.source_sad_rd,

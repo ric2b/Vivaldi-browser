@@ -14,10 +14,10 @@ import androidx.core.view.WindowInsetsCompat;
 
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
-import org.chromium.ui.InsetObserver;
-import org.chromium.ui.InsetObserver.WindowInsetsAnimationListener;
-import org.chromium.ui.InsetObserver.WindowInsetsConsumer;
 import org.chromium.ui.base.WindowAndroid;
+import org.chromium.ui.insets.InsetObserver;
+import org.chromium.ui.insets.InsetObserver.WindowInsetsAnimationListener;
+import org.chromium.ui.insets.InsetObserver.WindowInsetsConsumer;
 
 import java.util.List;
 
@@ -163,7 +163,15 @@ public class DeferredIMEWindowInsetApplicationCallback
                 new WindowInsetsCompat.Builder(windowInsetsCompat)
                         .setInsets(WindowInsetsCompat.Type.ime(), Insets.NONE);
         if (imeInsets.bottom > 0) {
-            builder.setInsets(WindowInsetsCompat.Type.navigationBars(), Insets.NONE);
+            Insets navigationInsets =
+                    windowInsetsCompat.getInsets(WindowInsetsCompat.Type.navigationBars());
+            builder.setInsets(
+                    WindowInsetsCompat.Type.navigationBars(),
+                    Insets.of(
+                            navigationInsets.left,
+                            navigationInsets.top,
+                            navigationInsets.right,
+                            /* bottom= */ 0));
         }
         return builder.build();
     }

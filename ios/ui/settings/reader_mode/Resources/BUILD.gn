@@ -1,0 +1,11 @@
+# Copyright (c) 2025 Vivaldi Technologies AS. All rights reserved
+
+import("//build/config/ios/rules.gni")
+
+bundle_data_xcassets("assets") {
+  catalog = "Assets.xcassets"
+  sources = [
+    "Assets.xcassets/readerview_settings.imageset/Contents.json",
+    "Assets.xcassets/readerview_settings.imageset/readerview_settings.pdf",
+  ]
+}

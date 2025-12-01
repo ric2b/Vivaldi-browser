@@ -283,6 +283,36 @@ public abstract class BaseSuggestionViewProcessor implements SuggestionProcessor
         if (suggestion.isSearchSuggestion()) {
             fetchImage(model, suggestion.getImageUrl());
         }
+
+        // Action button should not be provided in the hub.
+        if (input.getPageClassification() != PageClassification.ANDROID_HUB_VALUE) {
+            addActionButtonIfAvailable(suggestion, model, position);
+        }
+    }
+
+    private void addActionButtonIfAvailable(
+            AutocompleteMatch suggestion, PropertyModel model, int position) {
+        for (var action : suggestion.getActions()) {
+            if (!action.showAsActionButton) {
+                continue;
+            }
+            setActionButtons(
+                    model,
+                    List.of(
+                            new Action(
+                                    OmniboxDrawableState.forSmallIconWithIncognitoVariant(
+                                            mContext,
+                                            action.icon.iconRes,
+                                            action.icon.incognitoIconRes,
+                                            /* allowTint= */ false),
+                                    action.accessibilityHint,
+                                    null,
+                                    () -> {
+                                        mSuggestionHost.onOmniboxActionClicked(action, position);
+                                    })));
+            // Only one action button is supported.
+            return;
+        }
     }
 
     @Override

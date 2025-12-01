@@ -5,7 +5,10 @@
 package org.chromium.chrome.browser.suggestions.tile;
 
 import android.text.TextUtils;
+import android.view.KeyEvent;
 
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
 import org.chromium.chrome.browser.suggestions.SuggestionsConfig;
@@ -19,9 +22,10 @@ import java.util.List;
 import java.util.Set;
 
 /** Utility class for {@link Tile}s related queries or operations. */
+@NullMarked
 public class TileUtils {
     private static final Set<String> CUSTOM_TILE_SCHEMES =
-            new HashSet<String>(
+            new HashSet<>(
                     Arrays.asList(
                             UrlConstants.CHROME_SCHEME,
                             UrlConstants.CHROME_NATIVE_SCHEME,
@@ -63,7 +67,7 @@ public class TileUtils {
     /**
      * @return Whether {@param url} is a valid URL for usage Custom Tiles.
      */
-    public static boolean isValidCustomTileUrl(GURL url) {
+    public static boolean isValidCustomTileUrl(@Nullable GURL url) {
         return !GURL.isEmptyOrInvalid(url)
                 && url.getSpec().length() <= SuggestionsConfig.MAX_CUSTOM_TILES_URL_LENGTH
                 && CUSTOM_TILE_SCHEMES.contains(url.getScheme());
@@ -80,5 +84,16 @@ public class TileUtils {
             }
         }
         return numCustomTiles < SuggestionsConfig.MAX_NUM_CUSTOM_LINKS;
+    }
+
+    /**
+     * Returns whether {@param keyCode} and {@param event} from an onKey() event is the combo for
+     * reorder a Custom Tile by swapping it with a neighbor. Implementation: Ctrl+Shift+{Page Up,
+     * Page Down} swaps with the {previous, next} Custom Tile.
+     */
+    public static boolean isCustomTileSwapKeyCombo(int keyCode, KeyEvent event) {
+        return (keyCode == KeyEvent.KEYCODE_PAGE_UP || keyCode == KeyEvent.KEYCODE_PAGE_DOWN)
+                && event.isShiftPressed()
+                && event.isCtrlPressed();
     }
 }

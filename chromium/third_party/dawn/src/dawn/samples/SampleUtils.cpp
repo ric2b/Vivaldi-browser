@@ -178,7 +178,9 @@ int SampleBase::Run(unsigned int delay) {
     // Create the instance with the toggles
     wgpu::InstanceDescriptor instanceDescriptor = {};
     instanceDescriptor.nextInChain = togglesChain;
-    instanceDescriptor.capabilities.timedWaitAnyEnable = true;
+    static constexpr auto kTimedWaitAny = wgpu::InstanceFeatureName::TimedWaitAny;
+    instanceDescriptor.requiredFeatureCount = 1;
+    instanceDescriptor.requiredFeatures = &kTimedWaitAny;
     sample->instance = wgpu::CreateInstance(&instanceDescriptor);
 
     // Synchronously create the adapter
@@ -277,7 +279,8 @@ int SampleBase::Run(unsigned int delay) {
 
     while (!glfwWindowShouldClose(sample->window)) {
         sample->FrameImpl();
-        sample->surface.Present();
+        wgpu::Status presentStatus = sample->surface.Present();
+        DAWN_ASSERT(presentStatus == wgpu::Status::Success);
         glfwPollEvents();
         if (delay) {
             dawn::utils::USleep(delay);

@@ -107,6 +107,8 @@ const char *ff_vk_ret2str(VkResult res)
                VK_IMAGE_USAGE_VIDEO_ENCODE_DPB_BIT_KHR);                \
         MAP_TO(VK_FORMAT_FEATURE_2_VIDEO_ENCODE_INPUT_BIT_KHR,          \
                VK_IMAGE_USAGE_VIDEO_ENCODE_SRC_BIT_KHR);                \
+        MAP_TO(VK_FORMAT_FEATURE_2_HOST_IMAGE_TRANSFER_BIT_EXT,         \
+               VK_IMAGE_USAGE_HOST_TRANSFER_BIT_EXT);                   \
         return dst;                                                     \
     }
 
@@ -162,6 +164,8 @@ int ff_vk_load_props(FFVulkanContext *s)
                      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_PROPERTIES_EXT);
     FF_VK_STRUCT_EXT(s, &s->props, &s->optical_flow_props, FF_VK_EXT_OPTICAL_FLOW,
                      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_OPTICAL_FLOW_PROPERTIES_NV);
+    FF_VK_STRUCT_EXT(s, &s->props, &s->host_image_props, FF_VK_EXT_HOST_IMAGE_COPY,
+                     VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_IMAGE_COPY_PROPERTIES_EXT);
 
     s->feats = (VkPhysicalDeviceFeatures2) {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
@@ -172,7 +176,39 @@ int ff_vk_load_props(FFVulkanContext *s)
     FF_VK_STRUCT_EXT(s, &s->feats, &s->atomic_float_feats, FF_VK_EXT_ATOMIC_FLOAT,
                      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT);
 
+    /* Try allocating 1024 layouts */
+    s->host_image_copy_layouts = av_malloc(sizeof(*s->host_image_copy_layouts)*1024);
+    s->host_image_props.pCopySrcLayouts = s->host_image_copy_layouts;
+    s->host_image_props.copySrcLayoutCount = 512;
+    s->host_image_props.pCopyDstLayouts = s->host_image_copy_layouts + 512;
+    s->host_image_props.copyDstLayoutCount = 512;
+
     vk->GetPhysicalDeviceProperties2(s->hwctx->phys_dev, &s->props);
+
+    /* Check if we had enough memory for all layouts */
+    if (s->host_image_props.copySrcLayoutCount == 512 ||
+        s->host_image_props.copyDstLayoutCount == 512) {
+        VkImageLayout *new_array;
+        size_t new_size;
+        s->host_image_props.pCopySrcLayouts =
+        s->host_image_props.pCopyDstLayouts = NULL;
+        s->host_image_props.copySrcLayoutCount =
+        s->host_image_props.copyDstLayoutCount = 0;
+        vk->GetPhysicalDeviceProperties2(s->hwctx->phys_dev, &s->props);
+
+        new_size = s->host_image_props.copySrcLayoutCount +
+                   s->host_image_props.copyDstLayoutCount;
+        new_size *= sizeof(*s->host_image_copy_layouts);
+        new_array = av_realloc(s->host_image_copy_layouts, new_size);
+        if (!new_array)
+            return AVERROR(ENOMEM);
+
+        s->host_image_copy_layouts = new_array;
+        s->host_image_props.pCopySrcLayouts = new_array;
+        s->host_image_props.pCopyDstLayouts = new_array + s->host_image_props.copySrcLayoutCount;
+        vk->GetPhysicalDeviceProperties2(s->hwctx->phys_dev, &s->props);
+    }
+
     vk->GetPhysicalDeviceMemoryProperties(s->hwctx->phys_dev, &s->mprops);
     vk->GetPhysicalDeviceFeatures2(s->hwctx->phys_dev, &s->feats);
 
@@ -297,6 +333,8 @@ void ff_vk_exec_pool_free(FFVulkanContext *s, FFVkExecPool *pool)
         av_freep(&sd->desc_bind);
         av_freep(&sd->desc_sets);
     }
+
+    av_freep(&pool->reg_shd);
 
     for (int i = 0; i < pool->pool_size; i++) {
         if (pool->cmd_buf_pools[i])
@@ -989,6 +1027,16 @@ int ff_vk_create_buf(FFVulkanContext *s, FFVkBuffer *buf, size_t size,
     int use_ded_mem;
     FFVulkanFunctions *vk = &s->vkfn;
 
+    /* Buffer usage flags corresponding to buffer descriptor types */
+    const VkBufferUsageFlags desc_usage =
+        VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
+        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
+        VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT |
+        VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT;
+
+    if ((s->extensions & FF_VK_EXT_DESCRIPTOR_BUFFER) && (usage & desc_usage))
+        usage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+
     VkBufferCreateInfo buf_spawn = {
         .sType       = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
         .pNext       = pNext,
@@ -1493,7 +1541,8 @@ int ff_vk_mt_is_np_rgb(enum AVPixelFormat pix_fmt)
         pix_fmt == AV_PIX_FMT_GBRPF32 || pix_fmt == AV_PIX_FMT_GBRAPF32 ||
         pix_fmt == AV_PIX_FMT_X2RGB10 || pix_fmt == AV_PIX_FMT_X2BGR10 ||
         pix_fmt == AV_PIX_FMT_RGBAF32 || pix_fmt == AV_PIX_FMT_RGBF32 ||
-        pix_fmt == AV_PIX_FMT_RGBA128 || pix_fmt == AV_PIX_FMT_RGB96)
+        pix_fmt == AV_PIX_FMT_RGBA128 || pix_fmt == AV_PIX_FMT_RGB96 ||
+        pix_fmt == AV_PIX_FMT_GBRP)
         return 1;
     return 0;
 }
@@ -1501,8 +1550,8 @@ int ff_vk_mt_is_np_rgb(enum AVPixelFormat pix_fmt)
 void ff_vk_set_perm(enum AVPixelFormat pix_fmt, int lut[4], int inv)
 {
     switch (pix_fmt) {
-    case AV_PIX_FMT_GBRAP:
     case AV_PIX_FMT_GBRP:
+    case AV_PIX_FMT_GBRAP:
     case AV_PIX_FMT_GBRAP10:
     case AV_PIX_FMT_GBRAP12:
     case AV_PIX_FMT_GBRAP14:
@@ -1605,11 +1654,15 @@ const char *ff_vk_shader_rep_fmt(enum AVPixelFormat pix_fmt,
         };
         return rep_tab[rep_fmt];
     }
+    case AV_PIX_FMT_GBRP:
     case AV_PIX_FMT_GRAY8:
     case AV_PIX_FMT_GBRAP:
     case AV_PIX_FMT_YUV420P:
     case AV_PIX_FMT_YUV422P:
-    case AV_PIX_FMT_YUV444P: {
+    case AV_PIX_FMT_YUV444P:
+    case AV_PIX_FMT_YUVA420P:
+    case AV_PIX_FMT_YUVA422P:
+    case AV_PIX_FMT_YUVA444P: {
         const char *rep_tab[] = {
             [FF_VK_REP_NATIVE] = "r8ui",
             [FF_VK_REP_FLOAT] = "r8",
@@ -1638,7 +1691,15 @@ const char *ff_vk_shader_rep_fmt(enum AVPixelFormat pix_fmt,
     case AV_PIX_FMT_YUV422P16:
     case AV_PIX_FMT_YUV444P10:
     case AV_PIX_FMT_YUV444P12:
-    case AV_PIX_FMT_YUV444P16: {
+    case AV_PIX_FMT_YUV444P16:
+    case AV_PIX_FMT_YUVA420P10:
+    case AV_PIX_FMT_YUVA420P16:
+    case AV_PIX_FMT_YUVA422P10:
+    case AV_PIX_FMT_YUVA422P12:
+    case AV_PIX_FMT_YUVA422P16:
+    case AV_PIX_FMT_YUVA444P10:
+    case AV_PIX_FMT_YUVA444P12:
+    case AV_PIX_FMT_YUVA444P16: {
         const char *rep_tab[] = {
             [FF_VK_REP_NATIVE] = "r16ui",
             [FF_VK_REP_FLOAT] = "r16f",
@@ -2904,6 +2965,7 @@ void ff_vk_uninit(FFVulkanContext *s)
     av_freep(&s->qf_props);
     av_freep(&s->video_props);
     av_freep(&s->coop_mat_props);
+    av_freep(&s->host_image_copy_layouts);
 
     av_buffer_unref(&s->device_ref);
     av_buffer_unref(&s->frames_ref);

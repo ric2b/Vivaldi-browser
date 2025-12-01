@@ -378,15 +378,6 @@ public class StatusMediator
     }
 
     /**
-     * Sets the visibility of the status icon background.
-     *
-     * @param show True to make it visible.
-     */
-    void setStatusIconBackgroundVisibility(boolean show) {
-        mModel.set(StatusProperties.SHOW_STATUS_ICON_BACKGROUND, show);
-    }
-
-    /**
      * Set the url focus change percent.
      *
      * @param percent The current focus percent.
@@ -747,6 +738,10 @@ public class StatusMediator
         // Set the timer to switch the icon back afterwards.
         mPermissionTaskHandler.removeCallbacksAndMessages(null);
         mModel.set(StatusProperties.STATUS_ICON_RESOURCE, permissionIconResource);
+        mModel.set(
+                StatusProperties.STATUS_ICON_DESCRIPTION_RES,
+                ContentSettingsResources.getPermissionResultAnnouncementForScreenReader(
+                        mLastPermission, result));
         Runnable finishIconAnimation = () -> updateLocationBarIcon(IconTransitionType.ROTATE);
         mPermissionTaskHandler.postDelayed(
                 finishIconAnimation, PERMISSION_ICON_DEFAULT_DISPLAY_TIMEOUT_MS);
@@ -926,7 +921,7 @@ public class StatusMediator
                 mModel.get(StatusProperties.VERBOSE_STATUS_TEXT_VISIBLE));
     }
 
-    public void onUrlChanged() {
+    public void onUrlChanged(boolean isTabChanging) {
         var currentTab = mLocationBarDataProvider.getTab();
         if (mProfileSupplier.hasValue() && currentTab != null) {
             WebContents webContents = currentTab.getWebContents();

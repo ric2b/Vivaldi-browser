@@ -27,58 +27,16 @@ export class MockFlameChartDelegate implements PerfUI.FlameChart.FlameChartDeleg
   }
 }
 
-/**
- * @deprecated this will be removed once we have migrated from interaction tests for screenshots. Please use `renderFlameChartIntoDOM`.
- *
- * Draws a set of tracks track in the flame chart using the new system.
- * For this to work, every track that will be rendered must have a
- * corresponding track appender registered in the
- * CompatibilityTracksAppender.
- *
- * @param context The unit test context.
- * @param traceFileName The name of the trace file to be loaded into the
- * flame chart.
- * @param trackAppenderNames A Set with the names of the tracks to be
- * rendered. For example, Set("Timings").
- * @param expanded whether the track should be expanded
- * @param trackName optional param to filter tracks by their name.
- * @returns a flame chart element and its corresponding data provider.
- */
-export async function getMainFlameChartWithTracks(
-    context: Mocha.Context|null, traceFileName: string,
-    trackAppenderNames: Set<Timeline.CompatibilityTracksAppender.TrackAppenderName>, expanded: boolean,
-    trackName?: string): Promise<{
-  flameChart: PerfUI.FlameChart.FlameChart,
-  dataProvider: Timeline.TimelineFlameChartDataProvider.TimelineFlameChartDataProvider,
-}> {
-  await initializeGlobalVars();
-
-  // This function is used to load a component example.
-  const {parsedTrace} = await TraceLoader.traceEngine(context, traceFileName);
-  const entityMapper = new Timeline.Utils.EntityMapper.EntityMapper(parsedTrace);
-
-  const dataProvider = new Timeline.TimelineFlameChartDataProvider.TimelineFlameChartDataProvider();
-  dataProvider.setModel(parsedTrace, entityMapper);
-  const tracksAppender = dataProvider.compatibilityTracksAppenderInstance();
-  tracksAppender.setVisibleTracks(trackAppenderNames);
-  dataProvider.buildWithCustomTracksForTest(
-      {filterTracks: name => trackName ? name.includes(trackName) : true, expandTracks: _ => expanded});
-
-  const delegate = new MockFlameChartDelegate();
-  const flameChart = new PerfUI.FlameChart.FlameChart(dataProvider, delegate);
-  const minTime = Trace.Helpers.Timing.microToMilli(parsedTrace.Meta.traceBounds.min);
-  const maxTime = Trace.Helpers.Timing.microToMilli(parsedTrace.Meta.traceBounds.max);
-  flameChart.setWindowTimes(minTime, maxTime);
-  flameChart.markAsRoot();
-  flameChart.update();
-  return {flameChart, dataProvider};
-}
-
 export interface RenderFlameChartOptions {
+  dataProvider: 'MAIN'|'NETWORK';
   /**
    * The trace file to import. You must include `.json.gz` at the end of the file name.
+   * Alternatively, you can provide the actual file. This is useful only if you
+   * are providing a mocked file; generally you should prefer to pass the file
+   * name so that the TraceLoader can take care of loading and caching the
+   * trace.
    */
-  traceFile: string;
+  traceFile: string|Trace.Handlers.Types.ParsedTrace;
   /**
    * Filter the tracks that will be rendered by their name. The name here is
    * the user visible name that is drawn onto the flame chart.
@@ -91,6 +49,20 @@ export interface RenderFlameChartOptions {
   expandTracks?: (trackName: string, trackIndex: number) => boolean;
   customStartTime?: Trace.Types.Timing.Milli;
   customEndTime?: Trace.Types.Timing.Milli;
+  /**
+   * A custom height in pixels. By default a height is chosen that will
+   * vertically fit the entire FlameChart.
+   * (calculated based on the pixel offset of the last visible track.)
+   */
+  customHeight?: number;
+  /**
+   * When the frames track renders screenshots, we do so async, as we have to
+   * fetch screenshots first to draw them. If this flag is `true`, we block and
+   * preload all the screenshots before rendering, thus making it faster in a
+   * test to expand the frames track as it can be done with no async calls to
+   * fetch images.
+   */
+  preloadScreenshots?: boolean;
 }
 
 /**
@@ -100,30 +72,48 @@ export interface RenderFlameChartOptions {
  */
 export async function renderFlameChartIntoDOM(context: Mocha.Context|null, options: RenderFlameChartOptions): Promise<{
   flameChart: PerfUI.FlameChart.FlameChart,
-  dataProvider: Timeline.TimelineFlameChartDataProvider.TimelineFlameChartDataProvider,
+  dataProvider: Timeline.TimelineFlameChartDataProvider.TimelineFlameChartDataProvider |
+      Timeline.TimelineFlameChartNetworkDataProvider.TimelineFlameChartNetworkDataProvider,
   target: HTMLElement,
+  parsedTrace: Trace.Handlers.Types.ParsedTrace,
 }> {
   const targetManager = SDK.TargetManager.TargetManager.instance({forceNew: true});
   const workspace = Workspace.Workspace.WorkspaceImpl.instance({forceNew: true});
   const resourceMapping = new Bindings.ResourceMapping.ResourceMapping(targetManager, workspace);
-  const debuggerWorkspaceBinding = Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding.instance({
+  const ignoreListManager = Workspace.IgnoreListManager.IgnoreListManager.instance({forceNew: true});
+  Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding.instance({
     forceNew: true,
     resourceMapping,
     targetManager,
-  });
-  Bindings.IgnoreListManager.IgnoreListManager.instance({
-    forceNew: true,
-    debuggerWorkspaceBinding,
+    ignoreListManager,
   });
 
-  const {parsedTrace} = await TraceLoader.traceEngine(context, options.traceFile);
+  let parsedTrace: Trace.Handlers.Types.ParsedTrace|null = null;
+
+  if (typeof options.traceFile === 'string') {
+    parsedTrace = (await TraceLoader.traceEngine(context, options.traceFile)).parsedTrace;
+  } else {
+    parsedTrace = options.traceFile;
+  }
+
+  if (options.preloadScreenshots) {
+    await Timeline.Utils.ImageCache.preload(parsedTrace.Screenshots.screenshots ?? []);
+  }
   const entityMapper = new Timeline.Utils.EntityMapper.EntityMapper(parsedTrace);
-  const dataProvider = new Timeline.TimelineFlameChartDataProvider.TimelineFlameChartDataProvider();
+  const dataProvider = options.dataProvider === 'MAIN' ?
+      new Timeline.TimelineFlameChartDataProvider.TimelineFlameChartDataProvider() :
+      new Timeline.TimelineFlameChartNetworkDataProvider.TimelineFlameChartNetworkDataProvider();
+
   dataProvider.setModel(parsedTrace, entityMapper);
-  dataProvider.buildWithCustomTracksForTest({
-    filterTracks: options.filterTracks,
-    expandTracks: options.expandTracks,
-  });
+  if (dataProvider instanceof Timeline.TimelineFlameChartDataProvider.TimelineFlameChartDataProvider) {
+    dataProvider.buildWithCustomTracksForTest({
+      filterTracks: options.filterTracks,
+      expandTracks: options.expandTracks,
+    });
+  } else {
+    // Calling this method triggers the data being generated & the Network appender being created + drawn.
+    dataProvider.timelineData();
+  }
   const delegate = new MockFlameChartDelegate();
   const flameChart = new PerfUI.FlameChart.FlameChart(dataProvider, delegate);
   const minTime = options.customStartTime ?? Trace.Helpers.Timing.microToMilli(parsedTrace.Meta.traceBounds.min);
@@ -134,9 +124,13 @@ export async function renderFlameChartIntoDOM(context: Mocha.Context|null, optio
 
   const target = document.createElement('div');
   target.innerHTML = `<style>${UI.inspectorCommonStyles}</style>`;
+
   const timingsTrackOffset = flameChart.levelToOffset(dataProvider.maxStackDepth());
-  // Allow an extra 10px so no scrollbar is shown.
-  target.style.height = `${timingsTrackOffset + 10}px`;
+
+  // Allow an extra 10px so no scrollbar is shown if using the default height
+  // that fits everything inside.
+  const heightPixels = options.customHeight ?? timingsTrackOffset + 10;
+  target.style.height = `${heightPixels}px`;
   target.style.display = 'flex';
   target.style.width = '800px';
   renderElementIntoDOM(target);
@@ -144,19 +138,15 @@ export async function renderFlameChartIntoDOM(context: Mocha.Context|null, optio
   flameChart.update();
   await raf();
 
-  return {
-    flameChart,
-    dataProvider,
-    target,
-  };
+  return {flameChart, dataProvider, target, parsedTrace};
 }
 
 /**
  * Draws the network track in the flame chart using the legacy system.
  *
- * @param traceFileName The name of the trace file to be loaded to the flame
+ * @param traceFileName - The name of the trace file to be loaded to the flame
  * chart.
- * @param expanded if the track is expanded
+ * @param expanded - if the track is expanded
  * @returns a flame chart element and its corresponding data provider.
  */
 export async function getNetworkFlameChart(traceFileName: string, expanded: boolean): Promise<{
@@ -238,34 +228,6 @@ export function getAllNodes(roots: Set<Trace.Helpers.TreeHelpers.TraceEntryNode>
     }
   }
   return allNodes;
-}
-
-/**
- * Gets the node with an id from a tree in a thread.
- * @see RendererHandler.ts
- */
-export function getNodeFor(
-    thread: Trace.Handlers.ModelHandlers.Renderer.RendererThread,
-    nodeId: Trace.Helpers.TreeHelpers.TraceEntryNodeId): Trace.Helpers.TreeHelpers.TraceEntryNode {
-  const tree = getTree(thread);
-
-  function findNode(
-      nodes: Set<Trace.Helpers.TreeHelpers.TraceEntryNode>|Trace.Helpers.TreeHelpers.TraceEntryNode[],
-      nodeId: Trace.Helpers.TreeHelpers.TraceEntryNodeId): Trace.Helpers.TreeHelpers.TraceEntryNode|undefined {
-    for (const node of nodes) {
-      const event = node.entry;
-      if (Trace.Types.Events.isProfileCall(event) && event.nodeId === nodeId) {
-        return node;
-      }
-      return findNode(node.children, nodeId);
-    }
-    return undefined;
-  }
-  const node = findNode(tree.roots, nodeId);
-  if (!node) {
-    assert(false, `Couldn't get the node with id ${nodeId} in thread ${thread.name}`);
-  }
-  return node;
 }
 
 /**
@@ -565,27 +527,6 @@ export function makeMockSamplesHandlerData(profileCalls: Trace.Types.Events.Synt
   };
 }
 
-export function makeMockEntityData(events: Trace.Types.Events.Event[]): Trace.Handlers.Helpers.EntityMappings {
-  const eventsByEntity = new Map<Trace.Handlers.Helpers.Entity, Trace.Types.Events.Event[]>();
-  const entityByEvent = new Map<Trace.Types.Events.Event, Trace.Handlers.Helpers.Entity>();
-  const createdEntityCache = new Map<string, Trace.Handlers.Helpers.Entity>();
-
-  events.forEach(event => {
-    const entity = Trace.Handlers.Helpers.getEntityForEvent(event, createdEntityCache);
-    if (!entity) {
-      return;
-    }
-    if (eventsByEntity.has(entity)) {
-      const events = eventsByEntity.get(entity) ?? [];
-      events?.push(event);
-    } else {
-      eventsByEntity.set(entity, [event]);
-    }
-    entityByEvent.set(event, entity);
-  });
-  return {eventsByEntity, entityByEvent, createdEntityCache};
-}
-
 export class FakeFlameChartProvider implements PerfUI.FlameChart.FlameChartDataProvider {
   minimumBoundary(): number {
     return 0;
@@ -684,6 +625,28 @@ export async function renderFlameChartWithFakeProvider(
   flameChart.show(target);
   flameChart.update();
   await raf();
+}
+
+/**
+ * Renders a widget into an element that has the right styling to be a VBox.
+ * Useful as many of the Performance Panel elements are rendered like this and
+ * need a parent that is flex + has a height & width in order to render
+ * correctly for screenshot tests.
+ */
+export function renderWidgetInVbox(widget: UI.Widget.Widget, opts: {
+  width?: number,
+  height?: number,
+  flexAuto?: boolean,
+} = {}): void {
+  const target = document.createElement('div');
+  target.innerHTML = `<style>${UI.inspectorCommonStyles}</style>`;
+  target.classList.add('vbox');
+  target.classList.toggle('flex-auto', Boolean(opts.flexAuto));
+  target.style.width = (opts.width ?? 800) + 'px';
+  target.style.height = (opts.height ?? 600) + 'px';
+  widget.markAsRoot();
+  widget.show(target);
+  renderElementIntoDOM(target);
 }
 
 export function getMainThread(data: Trace.Handlers.ModelHandlers.Renderer.RendererHandlerData):
@@ -787,7 +750,6 @@ export function getBaseTraceParseModelData(overrides: Partial<ParsedTrace> = {})
     NetworkRequests: {
       byId: new Map(),
       eventToInitiator: new Map(),
-      byOrigin: new Map(),
       byTime: [],
       webSocket: [],
       entityMappings: {
@@ -807,7 +769,9 @@ export function getBaseTraceParseModelData(overrides: Partial<ParsedTrace> = {})
       timestampEvents: [],
       measureTraceByTraceId: new Map(),
     },
-    LargestImagePaint: {lcpRequestByNavigationId: new Map()},
+    LargestImagePaint: {
+      lcpRequestByNavigationId: new Map(),
+    },
     LargestTextPaint: new Map(),
     AuctionWorklets: {
       worklets: new Map(),
@@ -826,6 +790,8 @@ export function getBaseTraceParseModelData(overrides: Partial<ParsedTrace> = {})
       paintImageByDrawLazyPixelRef: new Map(),
       paintImageForEvent: new Map(),
       paintImageEventForUrl: new Map(),
+      paintEventToCorrectedDisplaySize: new Map(),
+      didCorrectForHostDpr: false,
     },
     Initiators: {
       eventToInitiator: new Map(),
@@ -848,6 +814,7 @@ export function getBaseTraceParseModelData(overrides: Partial<ParsedTrace> = {})
     },
     SelectorStats: {
       dataForUpdateLayoutEvent: new Map(),
+      invalidatedNodeList: [],
     },
     Warnings: {
       perEvent: new Map(),
@@ -893,21 +860,17 @@ export function getEventOfType<T extends Trace.Types.Events.Event>(
  * errors.
  */
 export function setupIgnoreListManagerEnvironment(): {
-  ignoreListManager: Bindings.IgnoreListManager.IgnoreListManager,
+  ignoreListManager: Workspace.IgnoreListManager.IgnoreListManager,
 } {
   const targetManager = SDK.TargetManager.TargetManager.instance({forceNew: true});
   const workspace = Workspace.Workspace.WorkspaceImpl.instance({forceNew: true});
   const resourceMapping = new Bindings.ResourceMapping.ResourceMapping(targetManager, workspace);
-
-  const debuggerWorkspaceBinding = Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding.instance({
+  const ignoreListManager = Workspace.IgnoreListManager.IgnoreListManager.instance({forceNew: true});
+  Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding.instance({
     forceNew: true,
     resourceMapping,
     targetManager,
-  });
-
-  const ignoreListManager = Bindings.IgnoreListManager.IgnoreListManager.instance({
-    forceNew: true,
-    debuggerWorkspaceBinding,
+    ignoreListManager,
   });
 
   return {ignoreListManager};
@@ -926,4 +889,15 @@ export function microseconds(x: number): Trace.Types.Timing.Micro {
 
 export function milliseconds(x: number): Trace.Types.Timing.Milli {
   return Trace.Types.Timing.Milli(x);
+}
+
+export function getAllNetworkRequestsByHost(
+    networkRequests: Trace.Types.Events.SyntheticNetworkRequest[],
+    host: string): Trace.Types.Events.SyntheticNetworkRequest[] {
+  const reqs = networkRequests.filter(r => {
+    const parsedUrl = new URL(r.args.data.url);
+    return parsedUrl.host === host;
+  });
+
+  return reqs;
 }

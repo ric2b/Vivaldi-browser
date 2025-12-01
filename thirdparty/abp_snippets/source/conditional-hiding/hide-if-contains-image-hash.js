@@ -19,6 +19,7 @@ import $ from "../$.js";
 
 import {raceWinner} from "../introspection/race.js";
 import {hideElement} from "../utils/dom.js";
+import {profile} from "../introspection/profile.js";
 
 let {
   isNaN,
@@ -62,6 +63,7 @@ export function hideIfContainsImageHash(hashes,
                                         maxDistance,
                                         blockBits,
                                         selection) {
+  const {mark, end} = profile("hide-if-contains-image-hash");
   if (selector == null || selector === "")
     selector = "img";
 
@@ -84,6 +86,7 @@ export function hideIfContainsImageHash(hashes,
   let seenImages = new Set();
 
   let callback = images => {
+    mark();
     for (let image of images) {
       let $image = $(image, "HTMLImageElement");
       seenImages.add($image.src);
@@ -151,6 +154,7 @@ export function hideIfContainsImageHash(hashes,
         }
       };
       imageElement.src = $image.src;
+      end();
     }
   };
 

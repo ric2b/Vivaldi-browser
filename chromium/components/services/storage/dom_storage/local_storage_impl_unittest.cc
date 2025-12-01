@@ -29,9 +29,11 @@
 #include "components/services/storage/dom_storage/storage_area_test_util.h"
 #include "components/services/storage/public/cpp/constants.h"
 #include "components/services/storage/public/cpp/filesystem/filesystem_proxy.h"
+#include "components/services/storage/public/mojom/storage_service.mojom.h"
 #include "components/services/storage/public/mojom/storage_usage_info.mojom.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "net/base/features.h"
+#include "storage/common/database/db_status.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
 #include "third_party/leveldatabase/env_chromium.h"
@@ -139,6 +141,7 @@ class LocalStorageImplTest : public testing::Test {
     DCHECK(!storage_);
     storage_ = std::make_unique<LocalStorageImpl>(
         path, base::SingleThreadTaskRunner::GetCurrentDefault(),
+        base::NullCallback(),
         /*receiver=*/mojo::NullReceiver());
   }
 
@@ -167,7 +170,7 @@ class LocalStorageImplTest : public testing::Test {
     base::RunLoop loop;
     context()->GetDatabaseForTesting().PostTaskWithThisObject(
         base::BindLambdaForTesting([&](const DomStorageDatabase& db) {
-          leveldb::Status status =
+          DbStatus status =
               db.Put(base::as_byte_span(key), base::as_byte_span(value));
           ASSERT_TRUE(status.ok());
           loop.Quit();
@@ -179,12 +182,11 @@ class LocalStorageImplTest : public testing::Test {
     WaitForDatabaseOpen();
     base::RunLoop loop;
     context()->GetDatabaseForTesting().PostTaskWithThisObject(
-        base::BindLambdaForTesting([&](const DomStorageDatabase& db) {
-          leveldb::WriteBatch batch;
-          leveldb::Status status = db.DeletePrefixed({}, &batch);
-          ASSERT_TRUE(status.ok());
-          status = db.Commit(&batch);
-          ASSERT_TRUE(status.ok());
+        base::BindLambdaForTesting([&](DomStorageDatabase* db) {
+          std::unique_ptr<DomStorageBatchOperation> batch =
+              db->CreateBatchOperation();
+          ASSERT_TRUE(batch->DeletePrefixed({}).ok());
+          ASSERT_TRUE(batch->Commit().ok());
           loop.Quit();
         }));
     loop.Run();
@@ -196,7 +198,7 @@ class LocalStorageImplTest : public testing::Test {
     base::RunLoop loop;
     context()->GetDatabaseForTesting().PostTaskWithThisObject(
         base::BindLambdaForTesting([&](const DomStorageDatabase& db) {
-          leveldb::Status status = db.GetPrefixed({}, &entries);
+          DbStatus status = db.GetPrefixed({}, &entries);
           ASSERT_TRUE(status.ok());
           loop.Quit();
         }));

@@ -81,8 +81,8 @@ const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
  *                  to `false`.
  * @attr wrappable - If present the toolbar items will wrap to a new row and the
  *                   toolbar height increases.
- * @prop {boolean} floating - The `"floating"` attribute is reflected as property.
- * @prop {boolean} wrappable - The `"wrappable"` attribute is reflected as property.
+ * @property floating - The `"floating"` attribute is reflected as property.
+ * @property wrappable - The `"wrappable"` attribute is reflected as property.
  */
 export class Toolbar extends HTMLElement {
   #shadowRoot = this.attachShadow({mode: 'open'});
@@ -142,7 +142,7 @@ export class Toolbar extends HTMLElement {
   /**
    * Returns whether this toolbar is floating.
    *
-   * @return `true` if the `"floating"` attribute is present on this toolbar,
+   * @returns `true` if the `"floating"` attribute is present on this toolbar,
    *         otherwise `false`.
    */
   get floating(): boolean {
@@ -152,7 +152,7 @@ export class Toolbar extends HTMLElement {
   /**
    * Changes the value of the `"floating"` attribute on this toolbar.
    *
-   * @param floating `true` to make the toolbar floating.
+   * @param floating - `true` to make the toolbar floating.
    */
   set floating(floating: boolean) {
     this.toggleAttribute('floating', floating);
@@ -161,7 +161,7 @@ export class Toolbar extends HTMLElement {
   /**
    * Returns whether this toolbar is wrappable.
    *
-   * @return `true` if the `"wrappable"` attribute is present on this toolbar,
+   * @returns `true` if the `"wrappable"` attribute is present on this toolbar,
    *         otherwise `false`.
    */
   get wrappable(): boolean {
@@ -171,7 +171,7 @@ export class Toolbar extends HTMLElement {
   /**
    * Changes the value of the `"wrappable"` attribute on this toolbar.
    *
-   * @param wrappable `true` to make the toolbar items wrap to a new row and
+   * @param wrappable - `true` to make the toolbar items wrap to a new row and
    *                  have the toolbar height adjust.
    */
   set wrappable(wrappable: boolean) {
@@ -1111,7 +1111,7 @@ export class ToolbarSettingToggle extends ToolbarToggle {
     this.setToggled(toggled);
     const toggleAnnouncement = toggled ? i18nString(UIStrings.pressed) : i18nString(UIStrings.notPressed);
     if (this.willAnnounceState) {
-      ARIAUtils.alert(toggleAnnouncement);
+      ARIAUtils.LiveAnnouncer.alert(toggleAnnouncement);
     }
     this.willAnnounceState = false;
     this.setTitle(this.defaultTitle);
@@ -1284,6 +1284,9 @@ export class ToolbarSettingComboBox extends ToolbarComboBox {
    * 2. When the value of the select is changed, triggering a change to the setting.
    */
 
+  /**
+   * Runs when the DevTools setting is changed
+   */
   private onDevToolsSettingChanged(): void {
     if (this.muteSettingListener) {
       return;
@@ -1306,20 +1309,27 @@ export class ToolbarSettingComboBox extends ToolbarComboBox {
     this.muteSettingListener = true;
     this.setting.set(option.value);
     this.muteSettingListener = false;
+    // Because we mute the DevTools setting change listener, we need to
+    // manually update the title here.
+    this.setTitle(option.label);
   }
 }
 
 export class ToolbarCheckbox extends ToolbarItem<void> {
+  #checkboxLabel: CheckboxLabel;
   constructor(
       text: Common.UIString.LocalizedString, tooltip?: Common.UIString.LocalizedString,
       listener?: ((arg0: MouseEvent) => void), jslogContext?: string) {
-    super(CheckboxLabel.create(text, undefined, undefined, jslogContext));
+    const checkboxLabel = CheckboxLabel.create(text, undefined, undefined, jslogContext);
+    super(checkboxLabel);
     if (tooltip) {
       Tooltip.install(this.element, tooltip);
     }
     if (listener) {
       this.element.addEventListener('click', listener, false);
     }
+
+    this.#checkboxLabel = checkboxLabel;
   }
 
   checked(): boolean {
@@ -1337,6 +1347,14 @@ export class ToolbarCheckbox extends ToolbarItem<void> {
 
   setIndeterminate(indeterminate: boolean): void {
     (this.element as CheckboxLabel).indeterminate = indeterminate;
+  }
+
+  /**
+   * Sets the user visible text shown alongside the checkbox.
+   * If you want to update the title/aria-label, use setTitle.
+   */
+  setLabelText(content: Common.UIString.LocalizedString): void {
+    this.#checkboxLabel.setLabelText(content);
   }
 }
 
@@ -1382,5 +1400,6 @@ export const enum ToolbarItemLocation {
 declare global {
   interface HTMLElementTagNameMap {
     'devtools-toolbar': Toolbar;
+    'devtools-toolbar-input': ToolbarInputElement;
   }
 }

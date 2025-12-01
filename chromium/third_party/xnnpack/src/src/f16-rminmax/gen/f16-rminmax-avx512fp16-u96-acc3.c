@@ -9,10 +9,14 @@
 // LICENSE file in the root directory of this source tree.
 
 #include <assert.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #include <immintrin.h>
 
 #include "src/xnnpack/common.h"
+#include "src/xnnpack/math.h"
+#include "src/xnnpack/microparams.h"
 #include "src/xnnpack/reduce.h"
 
 
@@ -20,7 +24,7 @@ void xnn_f16_rminmax_ukernel__avx512fp16_u96_acc3(
     size_t batch,
     const xnn_float16* input,
     xnn_float16* output,
-    const struct xnn_f16_default_params params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f16_default_params* restrict params)
 {
   assert(batch != 0);
   assert(batch % sizeof(uint16_t) == 0);

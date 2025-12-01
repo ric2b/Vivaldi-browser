@@ -12,21 +12,23 @@ IF(XNNPACK_BUILD_LIBRARY)
     fp32-attention.cc
     fp32-depthwise-separable.cc
     fp32-elementwise.cc
-    fp32-layer-norm.cc
     fp32-l2-norm.cc
+    fp32-layer-norm.cc
     fp32-mobilenet-v1.cc
     fp32-mobilenet-v2.cc
     fp32-mobilenet-v3-large.cc
     fp32-mobilenet-v3-small.cc
     fp32-softmax.cc
+    fp32-transformer.cc
     qd8-attention.cc
+    qd8-transformer.cc
     qs8-mobilenet-v2.cc)
   SET_TARGET_PROPERTIES(models PROPERTIES CXX_EXTENSIONS YES)
   TARGET_LINK_LIBRARIES(models PRIVATE XNNPACK)
 
   ADD_EXECUTABLE(bench-models benchmark.cc)
   TARGET_LINK_LIBRARIES(bench-models PRIVATE
-    bench-utils
+    xnnpack-bench-utils
     benchmark::benchmark
     models
     XNNPACK)

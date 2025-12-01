@@ -19,4 +19,16 @@ bool IsVivaldiWebPanel(content::WebContents* web_contents) {
   return web_view_guest && web_view_guest->IsVivaldiWebPanel();
 }
 
+bool IsVivaldiReader(content::WebContents* web_contents) {
+  extensions::WebViewGuest* web_view_guest =
+      extensions::WebViewGuest::FromWebContents(web_contents);
+  return web_view_guest && web_view_guest->IsVivaldiReader();
+}
+
+bool IsVivaldiRichTextEditor(content::WebContents* web_contents) {
+  extensions::WebViewGuest* web_view_guest =
+      extensions::WebViewGuest::FromWebContents(web_contents);
+  return web_view_guest && web_view_guest->IsVivaldiRichTextEditor();
+}
+
 }  // namespace vivaldi

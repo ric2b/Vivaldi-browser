@@ -54,6 +54,7 @@ template("ts_library") {
                              "deps",
                              "public_deps",
                              "inputs",
+                             "data_deps",
                            ])
 
     inputs += [
@@ -244,7 +245,7 @@ template("ts_library") {
                              ])
     }
 
-    if (is_debug) {
+    if (!devtools_bundle) {
       metadata.grd_files = _javascript_implementation_files
     }
   }

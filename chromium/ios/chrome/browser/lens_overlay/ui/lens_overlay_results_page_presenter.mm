@@ -37,6 +37,9 @@ const CGFloat kVisibleAreaMediumDetentThreshold = 100.0f;
 // The duration of the opacity transition in the results page.
 const CGFloat kOpacityAnimationDuration = 0.4;
 
+// The horizontal occlusion inset to apply when the side panel is displayed.
+const CGFloat kSidePanelHorizontalOcclusionInset = 24.0f;
+
 }  // namespace
 
 // Animator responsible for handling the hiding and showing fading transition of
@@ -90,6 +93,9 @@ const CGFloat kOpacityAnimationDuration = 0.4;
   // and the informational messages.
   UINavigationController* _presentationNavigationController;
 }
+
+@synthesize delegate = _delegate;
+@synthesize presentedResultsPageHeight = _presentedResultsPageHeight;
 
 - (instancetype)initWithBaseViewController:
                     (LensOverlayContainerViewController*)baseViewController
@@ -295,21 +301,6 @@ const CGFloat kOpacityAnimationDuration = 0.4;
                         }];
 }
 
-- (void)revealBottomSheetIfHidden {
-  BOOL resultsPageExists = _resultViewController != nil;
-  BOOL isPresentingResultsPage =
-      _baseViewController.presentedViewController != nil;
-  BOOL isHidden = resultsPageExists && !isPresentingResultsPage;
-  if (isHidden) {
-    BOOL startInTranslate = _detentsManager.presentationStrategy ==
-                            SheetDetentPresentationStategyTranslate;
-    [self presentResultsPageAnimated:YES
-                       maximizeSheet:NO
-                    startInTranslate:startInTranslate
-                          completion:nil];
-  }
-}
-
 - (void)showInfoMessage:(LensOverlayBottomSheetInfoMessageType)infoMessageType {
   UIViewController* infoMessageViewController;
   switch (infoMessageType) {
@@ -439,6 +430,14 @@ const CGFloat kOpacityAnimationDuration = 0.4;
 }
 
 - (void)adjustSelectionOcclusionInsets {
+  // Update the horizontal padding for side panel display.
+  if (_baseViewController.sidePanelPresented) {
+    [_delegate
+        lensOverlayResultsPagePresenter:self
+        updateHorizontalOcclusionOffset:kSidePanelHorizontalOcclusionInset];
+    return;
+  }
+
   // Pad the offset by a small ammount to avoid having the bottom edge of the
   // selection overlapped over the sheet.
   CGFloat estimatedMediumDetentHeight =

@@ -1,8 +1,8 @@
 //
 // fragment_main
 //
-RWByteAddressBuffer prevent_dce : register(u0);
 
+RWByteAddressBuffer prevent_dce : register(u0);
 float2 quadSwapX_879738() {
   float2 res = QuadReadAcrossX((1.0f).xx);
   return res;
@@ -10,13 +10,13 @@ float2 quadSwapX_879738() {
 
 void fragment_main() {
   prevent_dce.Store2(0u, asuint(quadSwapX_879738()));
-  return;
 }
+
 //
 // compute_main
 //
-RWByteAddressBuffer prevent_dce : register(u0);
 
+RWByteAddressBuffer prevent_dce : register(u0);
 float2 quadSwapX_879738() {
   float2 res = QuadReadAcrossX((1.0f).xx);
   return res;
@@ -25,5 +25,5 @@ float2 quadSwapX_879738() {
 [numthreads(1, 1, 1)]
 void compute_main() {
   prevent_dce.Store2(0u, asuint(quadSwapX_879738()));
-  return;
 }
+

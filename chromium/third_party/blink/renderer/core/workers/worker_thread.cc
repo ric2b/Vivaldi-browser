@@ -37,6 +37,7 @@
 #include "base/synchronization/waitable_event.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_restrictions.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/loader/worker_main_script_load_parameters.h"
 #include "third_party/blink/public/mojom/frame/lifecycle.mojom-shared.h"
 #include "third_party/blink/public/platform/platform.h"
@@ -102,7 +103,7 @@ static int GetNextWorkerThreadId() {
 // thread and the worker thread with this wrapper. See
 // WorkerThread::PerformShutdownOnWorkerThread() for details.
 class WorkerThread::RefCountedWaitableEvent
-    : public WTF::ThreadSafeRefCounted<RefCountedWaitableEvent> {
+    : public ThreadSafeRefCounted<RefCountedWaitableEvent> {
  public:
   static scoped_refptr<RefCountedWaitableEvent> Create() {
     return base::AdoptRef<RefCountedWaitableEvent>(new RefCountedWaitableEvent);
@@ -616,6 +617,7 @@ void WorkerThread::InitializeOnWorkerThread(
   // We only capture task types that are actually used. When you want to use a
   // new task type, add it here.
   static constexpr TaskType kAvailableTaskTypes[] = {
+      TaskType::kBackForwardCachePostedMessage,
       TaskType::kBackgroundFetch,
       TaskType::kCanvasBlobSerialization,
       TaskType::kDatabaseAccess,

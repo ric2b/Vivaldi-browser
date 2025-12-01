@@ -225,9 +225,15 @@ scoped_refptr<VideoFrame> CreateOutputFrame(const VideoDecoderConfig& config,
   scoped_refptr<VideoFrame> frame = VideoFrame::WrapExternalYuvData(
       VideoPixelFormat::PIXEL_FORMAT_YV12, config.coded_size(),
       config.visible_rect(), config.natural_size(), stride, stride / 2,
-      stride / 2, buffer.data(),
-      buffer.data() + (rows * stride + rows * stride / 4),
-      buffer.data() + (rows * stride), timestamp);
+      stride / 2,
+      UNSAFE_BUFFERS(
+          base::span(buffer.data(), static_cast<size_t>(rows * stride))),
+      UNSAFE_BUFFERS(
+          base::span(buffer.data() + (rows * stride + rows * stride / 4),
+                     static_cast<size_t>(rows * stride / 4))),
+      UNSAFE_BUFFERS(base::span(buffer.data() + (rows * stride),
+                                static_cast<size_t>(rows * stride / 4))),
+      timestamp);
 
   frame->AddDestructionObserver(
       base::BindOnce(&BufferHolder, std::move(buffer)));

@@ -7,11 +7,16 @@ $assert BATCH_TILE >= 1
 $assert IDATATYPE in ["F16", "F32"]
 $assert ODATATYPE in ["QS8", "QU8"]
 #include <assert.h>
+
 $if IDATATYPE == "F16":
   #include <float.h>
+#include <stddef.h>
+#include <stdint.h>
 
-#include "src/xnnpack/common.h"
+$if BATCH_TILE > 1:
+  #include "src/xnnpack/common.h"
 #include "src/xnnpack/math.h"
+#include "src/xnnpack/microparams.h"
 #include "src/xnnpack/vcvt.h"
 
 $INPUT_T = {"F16": "xnn_float16", "F32": "float"}[IDATATYPE]
@@ -22,7 +27,7 @@ void xnn_${IDATATYPE.lower()}_${ODATATYPE.lower()}_vcvt_ukernel__${"wasm" if WAS
     size_t batch,
     const ${INPUT_T}* input,
     ${XINT8_T}* output,
-    const struct xnn_${IDATATYPE.lower()}_${ODATATYPE.lower()}_cvt_params params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_${IDATATYPE.lower()}_${ODATATYPE.lower()}_cvt_params* restrict params)
 {
   assert(batch != 0);
   assert(batch % sizeof(${INPUT_T}) == 0);

@@ -71,10 +71,8 @@ constexpr CGFloat kColoredDotSize = 20;
       [NSLayoutConstraint activateConstraints:_compactWidthConstraints];
     }
 
-    if (@available(iOS 17, *)) {
-      [self registerForTraitChanges:@[ UITraitHorizontalSizeClass.class ]
-                         withAction:@selector(horizontalSizeClassDidChange)];
-    }
+    [self registerForTraitChanges:@[ UITraitHorizontalSizeClass.class ]
+                       withAction:@selector(horizontalSizeClassDidChange)];
   }
   return self;
 }
@@ -123,7 +121,14 @@ constexpr CGFloat kColoredDotSize = 20;
 // Returns the title label view.
 - (UILabel*)titleView {
   UILabel* titleLabel = [[UILabel alloc] init];
+
+#if defined(VIVALDI_BUILD)
+  // To support both light and dark mode.
+  titleLabel.textColor = UIColor.labelColor;
+#else
   titleLabel.textColor = UIColor.whiteColor;
+#endif // End Vivaldi
+
   titleLabel.numberOfLines = 1;
   titleLabel.adjustsFontForContentSizeCategory = YES;
   titleLabel.translatesAutoresizingMaskIntoConstraints = NO;

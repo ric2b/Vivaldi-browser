@@ -445,7 +445,7 @@ static int encode_q_branch(SnowEncContext *enc, int level, int x, int y)
     c->penalty_factor    = get_penalty_factor(enc->lambda, enc->lambda2, c->avctx->me_cmp);
     c->sub_penalty_factor= get_penalty_factor(enc->lambda, enc->lambda2, c->avctx->me_sub_cmp);
     c->mb_penalty_factor = get_penalty_factor(enc->lambda, enc->lambda2, c->avctx->mb_cmp);
-    c->current_mv_penalty = c->mv_penalty[enc->m.s.c.f_code=1] + MAX_DMV;
+    c->current_mv_penalty = c->mv_penalty[enc->m.s.f_code=1] + MAX_DMV;
 
     c->xmin = - x*block_w - 16+3;
     c->ymin = - y*block_w - 16+3;
@@ -1792,7 +1792,7 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
     pic->pict_type = pict->pict_type;
     pic->quality = pict->quality;
 
-    mpv->c.picture_number = avctx->frame_num;
+    mpv->picture_number = avctx->frame_num;
     if(avctx->flags&AV_CODEC_FLAG_PASS2){
         mpv->c.pict_type = pic->pict_type = enc->m.rc_context.entry[avctx->frame_num].new_pict_type;
         s->keyframe = pic->pict_type == AV_PICTURE_TYPE_I;
@@ -1863,13 +1863,13 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
         mpv->c.mb_height  = block_height;
         mpv->c.mb_stride  =     mpv->c.mb_width + 1;
         mpv->c.b8_stride  = 2 * mpv->c.mb_width + 1;
-        mpv->c.f_code     = 1;
+        mpv->f_code       = 1;
         mpv->c.pict_type  = pic->pict_type;
         mpv->me.motion_est = enc->motion_est;
         mpv->me.dia_size = avctx->dia_size;
         mpv->c.quarter_sample  = (s->avctx->flags & AV_CODEC_FLAG_QPEL)!=0;
         mpv->c.out_format      = FMT_H263;
-        mpv->c.unrestricted_mv = 1;
+        mpv->me.unrestricted_mv = 1;
 
         mpv->lambda   = enc->lambda;
         mpv->c.qscale = (mpv->lambda*139 + FF_LAMBDA_SCALE*64) >> (FF_LAMBDA_SHIFT + 7);

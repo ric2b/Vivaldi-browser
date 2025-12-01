@@ -36,22 +36,22 @@ describe('Element has violating properties', function() {
     const violatingElementOrAttr = elements[0];
     await violatingElementOrAttr.hover();
     const popupParent = await devToolsPage.waitFor('div.vbox.flex-auto.no-pointer-events');
-    const popupText = await popupParent.evaluate(async (node: Element) => {
+    const popupText = await popupParent.evaluate(async node => {
       if (!node.shadowRoot) {
-        assert.fail('Node shadow root not found.');
+        throw new Error('Node shadow root not found.');
       }
-      const popup = node.shadowRoot.querySelector('div.widget');
+      const popup = node.shadowRoot.querySelector('div.widget') as HTMLElement | null;
       if (!popup) {
-        assert.fail('Popup not found.');
+        throw new Error('Popup not found.');
       }
-      return (popup as HTMLElement).innerText;
+      return popup.innerText;
     });
 
     assert.strictEqual(popupText, 'View Issue:\nA form field element should have an id or name attribute');
     // Open the issue panel and look for the title;
     await devToolsPage.click('div.widget x-link');
     const highlitedIssue = await devToolsPage.waitFor('.issue .header .title');
-    const issueTitle = await highlitedIssue.evaluate(async (node: Element) => node.textContent);
+    const issueTitle = await highlitedIssue.evaluate(async node => node.textContent);
     assert.strictEqual(issueTitle, 'A form field element should have an id or name attribute');
   });
 });
@@ -77,7 +77,7 @@ describe('The elements panel', function() {
     const violatingElement = elements[1];
     await violatingElement.hover();
     const popupParent = await devToolsPage.waitFor('div.vbox.flex-auto.no-pointer-events');
-    const popupText = await popupParent.evaluate(async (node: Element) => {
+    const popupText = await popupParent.evaluate(async node => {
       if (!node.shadowRoot) {
         throw new Error('Node shadow root not found.');
       }
@@ -98,7 +98,7 @@ describe('The elements panel', function() {
     const violatingElement = elements[0];
     await violatingElement.hover();
     const popupParent = await devToolsPage.waitFor('div.vbox.flex-auto.no-pointer-events');
-    const popupText = await popupParent.evaluate(async (node: Element) => {
+    const popupText = await popupParent.evaluate(async node => {
       if (!node.shadowRoot) {
         throw new Error('Node shadow root not found.');
       }
@@ -116,7 +116,7 @@ describe('The elements panel', function() {
     assert.strictEqual(popupText, 'Interactive element inside of a <legend> element');
     await devToolsPage.click('div.widget x-link');
     const highlitedIssue = await devToolsPage.waitFor('.issue .header .title');
-    const issueTitle = await highlitedIssue.evaluate(async (node: Element) => node.textContent);
+    const issueTitle = await highlitedIssue.evaluate(async node => node.textContent);
     assert.strictEqual(issueTitle, 'Interactive element inside of a <legend> element');
   });
 });

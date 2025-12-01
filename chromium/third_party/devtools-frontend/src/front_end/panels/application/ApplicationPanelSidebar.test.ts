@@ -6,7 +6,7 @@ import type * as Common from '../../core/common/common.js';
 import * as Platform from '../../core/platform/platform.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as Protocol from '../../generated/protocol.js';
-import {createTarget, stubNoopSettings} from '../../testing/EnvironmentHelpers.js';
+import {createTarget, expectConsoleLogs, stubNoopSettings} from '../../testing/EnvironmentHelpers.js';
 import {
   describeWithMockConnection,
   setMockConnectionResponseHandler,
@@ -63,7 +63,7 @@ describeWithMockConnection('ApplicationPanelSidebar', () => {
 
   const TEST_EXTENSION_NAME = 'Test Extension';
 
-  const ID = 'AA' as Protocol.Page.FrameId;
+  const ID = 'main' as Protocol.Page.FrameId;
 
   const EVENTS = [
     {
@@ -164,8 +164,7 @@ describeWithMockConnection('ApplicationPanelSidebar', () => {
         ['http://www.example.com', 'http://www.example.org']);
   });
 
-  // Flaking on windows + subsequence test failing
-  it.skip('[crbug.com/40278680] shows shared storages and events for origins using shared storage', async () => {
+  it('shows shared storages and events for origins using shared storage', async () => {
     const securityOriginManager = target.model(SDK.SecurityOriginManager.SecurityOriginManager);
     assert.exists(securityOriginManager);
     sinon.stub(securityOriginManager, 'securityOrigins').returns([
@@ -184,7 +183,7 @@ describeWithMockConnection('ApplicationPanelSidebar', () => {
     const sidebar = await Application.ResourcesPanel.ResourcesPanel.showAndGetSidebar();
 
     const listener = new SharedStorageTreeElementListener(sidebar);
-    const addedPromise = listener.waitForElementsAdded(3);
+    const addedPromise = listener.waitForElementsAdded(4);
 
     const resourceTreeModel = target.model(SDK.ResourceTreeModel.ResourceTreeModel);
     assert.exists(resourceTreeModel);
@@ -193,8 +192,9 @@ describeWithMockConnection('ApplicationPanelSidebar', () => {
 
     sinon.assert.calledOnceWithExactly(setTrackingSpy, {enable: true});
 
-    assert.strictEqual(sidebar.sharedStorageListTreeElement.childCount(), 3);
+    assert.strictEqual(sidebar.sharedStorageListTreeElement.childCount(), 4);
     assert.deepEqual(sidebar.sharedStorageListTreeElement.children().map(e => e.title), [
+      'https://example.com',  // frame origin
       TEST_ORIGIN_A,
       TEST_ORIGIN_B,
       TEST_ORIGIN_C,
@@ -415,6 +415,9 @@ describeWithMockConnection('IDBDatabaseTreeElement', () => {
   beforeEach(() => {
     stubNoopSettings();
   });
+  expectConsoleLogs({
+    error: ['Error: No LanguageSelector instance exists yet.'],
+  });
 
   it('only becomes selectable after database is updated', () => {
     const target = createTarget();
@@ -437,6 +440,10 @@ describeWithMockConnection('ResourcesSection', () => {
       stubNoopSettings();
       SDK.FrameManager.FrameManager.instance({forceNew: true});
       target = createTarget();
+    });
+
+    expectConsoleLogs({
+      error: ['Error: No LanguageSelector instance exists yet.'],
     });
 
     it('adds tree elements for a frame and resource', () => {

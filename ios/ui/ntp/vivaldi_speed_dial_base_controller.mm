@@ -5,12 +5,12 @@
 #import <UIKit/UIKit.h>
 
 #import "base/strings/sys_string_conversions.h"
+#import "browser/features/vivaldi_features.h"
 #import "components/bookmarks/vivaldi_bookmark_kit.h"
 #import "components/direct_match/direct_match_service.h"
 #import "ios/chrome/browser/bookmarks/model/bookmarks_utils.h"
 #import "ios/chrome/browser/bookmarks/ui_bundled/bookmark_utils_ios.h"
 #import "ios/chrome/browser/favicon/model/ios_chrome_favicon_loader_factory.h"
-#import "ios/chrome/browser/features/vivaldi_features.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
@@ -43,8 +43,8 @@
 #import "ios/ui/ntp/vivaldi_speed_dial_sorting_mode.h"
 #import "ios/ui/ntp/vivaldi_speed_dial_view_controller.h"
 #import "ios/ui/settings/start_page/quick_settings/vivaldi_start_page_quick_settings_coordinator.h"
-#import "ios/ui/settings/start_page/vivaldi_start_page_prefs_helper.h"
 #import "ios/ui/settings/start_page/vivaldi_start_page_prefs.h"
+#import "ios/ui/settings/start_page/vivaldi_start_page_prefs_helper.h"
 #import "ios/ui/thumbnail/thumbnail_capturer_swift.h"
 #import "ios/ui/thumbnail/vivaldi_thumbnail_service.h"
 #import "ios/ui/toolbar/vivaldi_toolbar_constants.h"
@@ -612,7 +612,7 @@ NSUInteger toolbarVisibleThreshold = 2;
           constraintEqualToAnchor:self.view.safeTopAnchor];
   self.cvTopConstraint.active = YES;
 
-  if (IsTopSitesEnabled()) {
+  if (vivaldi_features::IsTopSitesEnabled()) {
     self.collectionView.hidden = ![self showSpeedDials]
           && (![self showFrequentlyVisited]);
   } else {
@@ -1063,11 +1063,11 @@ NSUInteger toolbarVisibleThreshold = 2;
   BOOL belowThreshold = (self.toolbarItems.count <= toolbarVisibleThreshold);
 
   BOOL shouldHideToolbar;
-  if (IsTopSitesEnabled()) {
-      shouldHideToolbar =
-          ((speedDialsHidden && topSitesHidden) || belowThreshold);
+  if (vivaldi_features::IsTopSitesEnabled()) {
+    shouldHideToolbar =
+        ((speedDialsHidden && topSitesHidden) || belowThreshold);
   } else {
-      shouldHideToolbar = (speedDialsHidden || belowThreshold);
+    shouldHideToolbar = (speedDialsHidden || belowThreshold);
   }
   return shouldHideToolbar;
 }
@@ -1084,8 +1084,7 @@ NSUInteger toolbarVisibleThreshold = 2;
                             parent:(VivaldiSpeedDialItem*)parent
                         entryPoint:(VivaldiBookmarksEditorEntryPoint)entryPoint
                          isEditing:(BOOL)isEditing {
-
-  if (IsNewSpeedDialDialogEnabled()) {
+  if (vivaldi_features::IsNewSpeedDialDialogEnabled()) {
     if (entryPoint == VivaldiBookmarksEditorEntryPointSpeedDial) {
       VivaldiNSDCoordinator* newSpeedDialCoordinator =
           [[VivaldiNSDCoordinator alloc]
@@ -1248,7 +1247,7 @@ NSUInteger toolbarVisibleThreshold = 2;
 - (void)hideCollectionViewIfNeeded {
   BOOL shouldHideCollectionView;
 
-  if (IsTopSitesEnabled()) {
+  if (vivaldi_features::IsTopSitesEnabled()) {
     shouldHideCollectionView =
         !self.showSpeedDials && !self.showFrequentlyVisited;
   } else {
@@ -1263,7 +1262,7 @@ NSUInteger toolbarVisibleThreshold = 2;
 - (void)showCollectionViewIfNeeded {
   BOOL shouldShowCollectionView;
 
-  if (IsTopSitesEnabled()) {
+  if (vivaldi_features::IsTopSitesEnabled()) {
     shouldShowCollectionView =
         self.showSpeedDials || self.showFrequentlyVisited;
   } else {
@@ -1338,7 +1337,7 @@ NSUInteger toolbarVisibleThreshold = 2;
     return;
   }
 
-  if (IsTopSitesEnabled() && [self showFrequentlyVisited] &&
+  if (vivaldi_features::IsTopSitesEnabled() && [self showFrequentlyVisited] &&
       [self showSpeedDials]) {
     VivaldiNTPTopToolbarItem *fromItem =
         self.toolbarItems[self.lastSelectedToolbarItemIndex];
@@ -1585,14 +1584,13 @@ targetContentOffsetForProposedContentOffset:(CGPoint)proposedContentOffset {
     // Otherwise, blur view is hidden since no `Add Group` page available for that
     // state.
 
-    if (([self showSpeedDials] ||
-         (IsTopSitesEnabled() && [self showFrequentlyVisited]))) {
-
+    if (([self showSpeedDials] || (vivaldi_features::IsTopSitesEnabled() &&
+                                   [self showFrequentlyVisited]))) {
       // Update `Add` button visibility only if both `Top Sites` and `Speed Dial`
       // enabled. Otherwise `Add` button is not transition between visible or
       // hidden state.
-      if (IsTopSitesEnabled() && [self showFrequentlyVisited] &&
-          [self showSpeedDials]) {
+      if (vivaldi_features::IsTopSitesEnabled() &&
+          [self showFrequentlyVisited] && [self showSpeedDials]) {
         [self updateAddButtonVisibilityProgressWithCurrentPage:currentPage
                                                  numberOfPages:numberOfPages];
       }
@@ -1930,11 +1928,11 @@ targetContentOffsetForProposedContentOffset:(CGPoint)proposedContentOffset {
 
 - (void)didSelectEditItem:(VivaldiSpeedDialItem*)item
                    parent:(VivaldiSpeedDialItem*)parent {
-  VivaldiBookmarksEditorEntryPoint entryPoint = item.isFolder ?
-      VivaldiBookmarksEditorEntryPointFolder :
-        (IsNewSpeedDialDialogEnabled() ?
-            VivaldiBookmarksEditorEntryPointBookmark :
-            VivaldiBookmarksEditorEntryPointSpeedDial);
+  VivaldiBookmarksEditorEntryPoint entryPoint =
+      item.isFolder ? VivaldiBookmarksEditorEntryPointFolder
+                    : (vivaldi_features::IsNewSpeedDialDialogEnabled()
+                           ? VivaldiBookmarksEditorEntryPointBookmark
+                           : VivaldiBookmarksEditorEntryPointSpeedDial);
 
   [self presentBookmarkEditorWithItem:item
                                parent:parent

@@ -24,6 +24,9 @@ import metadata.validation_result as vr
 _PATTERN_URL_CANONICAL_REPO = re.compile(
     r"^This is the canonical (public )?repo(sitory)?\.?$", re.IGNORECASE)
 
+_PATTERN_URL_INTERNAL = re.compile(
+    r"^(Google )?internal\.?$", re.IGNORECASE)
+
 _SUPPORTED_SCHEMES = {
     'http',
     'https',
@@ -75,12 +78,16 @@ class URLField(field_types.MetadataField):
         """Returns if `raw_value` indicates this repository is the canonical repository."""
         return util.matches(_PATTERN_URL_CANONICAL_REPO, value.strip())
 
+    def repo_is_internal(self, value: str):
+        """Returns if `raw_value` indicates this repository is internal."""
+        return util.matches(_PATTERN_URL_INTERNAL, value.strip())
+
     def validate(self, value: str) -> Optional[vr.ValidationResult]:
         """Checks the given value has acceptable URL values only.
 
         Note: this field supports multiple values.
         """
-        if self.repo_is_canonical(value):
+        if self.repo_is_canonical(value) or self.repo_is_internal(value):
             return None
 
         urls = _split_urls(value)
@@ -116,7 +123,7 @@ class URLField(field_types.MetadataField):
         if not value:
             return None
 
-        if self.repo_is_canonical(value):
+        if self.repo_is_canonical(value) or self.repo_is_internal(value):
             return None
 
         # Filter out invalid URLs, and canonicalize the URLs.

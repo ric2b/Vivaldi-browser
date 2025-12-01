@@ -163,8 +163,8 @@ avifResult PartialRead(struct avifIO* io, uint32_t read_flags,
 }
 
 avifResult DecodeIncrementally(const avifRWData& encoded_avif,
-                               avifDecoder* decoder, bool is_persistent,
-                               bool give_size_hint, bool use_nth_image_api,
+                               bool is_persistent, bool give_size_hint,
+                               bool use_nth_image_api,
                                const avifImage& reference, uint32_t cell_height,
                                bool enable_fine_incremental_check,
                                bool expect_whole_file_read) {
@@ -181,12 +181,17 @@ avifResult DecodeIncrementally(const avifRWData& encoded_avif,
       /*destroy=*/nullptr, PartialRead,
       /*write=*/nullptr,   give_size_hint ? encoded_avif.size : 0,
       is_persistent,       &data};
-  avifDecoderSetIO(decoder, &io);
+
+  // |io| must outlive the decoder.
+  DecoderPtr decoder(avifDecoderCreate());
+  EXPECT_NE(decoder, nullptr);
+
+  avifDecoderSetIO(decoder.get(), &io);
   decoder->allowIncremental = AVIF_TRUE;
   const size_t step = std::max<size_t>(1, data.full_size / 10000);
 
   // Parsing is not incremental.
-  avifResult parse_result = avifDecoderParse(decoder);
+  avifResult parse_result = avifDecoderParse(decoder.get());
   while (parse_result == AVIF_RESULT_WAITING_ON_IO) {
     if (data.available.size >= data.full_size) {
       std::cerr << "avifDecoderParse() returned WAITING_ON_IO instead of OK"
@@ -194,15 +199,15 @@ avifResult DecodeIncrementally(const avifRWData& encoded_avif,
       return AVIF_RESULT_TRUNCATED_DATA;
     }
     data.available.size = std::min(data.available.size + step, data.full_size);
-    parse_result = avifDecoderParse(decoder);
+    parse_result = avifDecoderParse(decoder.get());
   }
   EXPECT_EQ(parse_result, AVIF_RESULT_OK);
 
   // Decoding is incremental.
   uint32_t previously_decoded_row_count = 0;
   avifResult next_image_result = use_nth_image_api
-                                     ? avifDecoderNextImage(decoder)
-                                     : avifDecoderNextImage(decoder);
+                                     ? avifDecoderNextImage(decoder.get())
+                                     : avifDecoderNextImage(decoder.get());
   while (next_image_result == AVIF_RESULT_WAITING_ON_IO) {
     if (data.available.size >= data.full_size) {
       std::cerr << (use_nth_image_api ? "avifDecoderNthImage(0)"
@@ -210,7 +215,8 @@ avifResult DecodeIncrementally(const avifRWData& encoded_avif,
                 << " returned WAITING_ON_IO instead of OK";
       return AVIF_RESULT_INVALID_ARGUMENT;
     }
-    const uint32_t decoded_row_count = avifDecoderDecodedRowCount(decoder);
+    const uint32_t decoded_row_count =
+        avifDecoderDecodedRowCount(decoder.get());
     EXPECT_GE(decoded_row_count, previously_decoded_row_count);
     const uint32_t min_decoded_row_count = GetMinDecodedRowCount(
         reference.height, cell_height, reference.alphaPlane != nullptr,
@@ -222,14 +228,14 @@ avifResult DecodeIncrementally(const avifRWData& encoded_avif,
 
     previously_decoded_row_count = decoded_row_count;
     data.available.size = std::min(data.available.size + step, data.full_size);
-    next_image_result = use_nth_image_api ? avifDecoderNextImage(decoder)
-                                          : avifDecoderNextImage(decoder);
+    next_image_result = use_nth_image_api ? avifDecoderNextImage(decoder.get())
+                                          : avifDecoderNextImage(decoder.get());
   }
   EXPECT_EQ(next_image_result, AVIF_RESULT_OK);
   if (expect_whole_file_read) {
     EXPECT_EQ(data.available.size, data.full_size);
   }
-  EXPECT_EQ(avifDecoderDecodedRowCount(decoder), decoder->image->height);
+  EXPECT_EQ(avifDecoderDecodedRowCount(decoder.get()), decoder->image->height);
 
   ComparePartialYuva(reference, *decoder->image, reference.height);
   return AVIF_RESULT_OK;
@@ -255,12 +261,9 @@ TEST(IncrementalTest, Decode) {
                                   encoded_avif.data, encoded_avif.size),
             AVIF_RESULT_OK);
 
-  DecoderPtr decoder2(avifDecoderCreate());
-  ASSERT_NE(decoder2, nullptr);
-
   // Cell height is hardcoded because there is no API to extract it from an
   // encoded payload.
-  ASSERT_EQ(DecodeIncrementally(encoded_avif, decoder2.get(),
+  ASSERT_EQ(DecodeIncrementally(encoded_avif,
                                 /*is_persistent=*/true, /*give_size_hint=*/true,
                                 /*use_nth_image_api=*/false, *reference,
                                 /*cell_height=*/154,

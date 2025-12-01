@@ -39,7 +39,7 @@ ORIGDIR=`pwd`
 cd $srcdir
 PROJECT=Fontconfig
 TEST_TYPE=-f
-FILE=fontconfig/fontconfig.h
+FILE=fontconfig/fontconfig.h.in
 LIBTOOLIZE=${LIBTOOLIZE-libtoolize}
 AUTOPOINT=${AUTOPOINT-autopoint}
 AUTORECONF=${AUTORECONF-autoreconf}

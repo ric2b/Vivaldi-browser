@@ -5,7 +5,6 @@ import * as Common from '../../core/common/common.js';
 import * as Host from '../../core/host/host.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import * as Platform from '../../core/platform/platform.js';
-import {assertNotNullOrUndefined} from '../../core/platform/platform.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as Protocol from '../../generated/protocol.js';
 import * as HAR from '../../models/har/har.js';
@@ -21,7 +20,8 @@ import {
   createTarget,
   describeWithEnvironment,
   registerNoopActions,
-  stubNoopSettings
+  stubNoopSettings,
+  updateHostConfig
 } from '../../testing/EnvironmentHelpers.js';
 import {expectCalled} from '../../testing/ExpectStubCall.js';
 import {stubFileManager} from '../../testing/FileManagerHelpers.js';
@@ -125,7 +125,7 @@ describeWithMockConnection('NetworkLogView', () => {
   });
 
   // Note this isn't an ideal test as the internal headers are generated rather than explicitly added,
-  // are only added on HTTP/2 and HTTP/3, have a preceeding colon like `:authority` but it still tests
+  // are only added on HTTP/2 and HTTP/3, have a preceding colon like `:authority` but it still tests
   // the stripping function.
   it('generates a valid curl command while stripping internal headers', async () => {
     const request = createNetworkRequest(urlString`http://localhost`, {
@@ -584,10 +584,10 @@ describeWithMockConnection('NetworkLogView', () => {
 
     // set up overrides
     r2.originalResponseHeaders = [{name: 'content-type', value: 'x'}];
-    r2.responseHeaders = [{name: 'content-type', value: 'overriden'}];
+    r2.responseHeaders = [{name: 'content-type', value: 'overridden'}];
     r3.hasOverriddenContent = true;
     r4.originalResponseHeaders = [{name: 'age', value: 'x'}];
-    r4.responseHeaders = [{name: 'age', value: 'overriden'}];
+    r4.responseHeaders = [{name: 'age', value: 'overridden'}];
     r4.hasOverriddenContent = true;
 
     return {urlNotOverridden, urlHeaderOverridden, urlContentOverridden, urlHeaderAndContentOverridden};
@@ -782,10 +782,10 @@ describeWithMockConnection('NetworkLogView', () => {
 url-header-und-content-overridden`]);
     copyText.resetHistory();
 
-    const copyAllCurlComnmands = findMenuItemWithLabel(
+    const copyAllCurlCommands = findMenuItemWithLabel(
         footerSection, Host.Platform.isWin() ? 'Copy all listed as cURL (bash)' : 'Copy all listed as cURL');
-    assert.isDefined(copyAllCurlComnmands);
-    contextMenu.invokeHandler(copyAllCurlComnmands.id());
+    assert.isDefined(copyAllCurlCommands);
+    contextMenu.invokeHandler(copyAllCurlCommands.id());
     await expectCalled(copyText);
     sinon.assert.callCount(copyText, 1);
     assert.deepEqual(copyText.lastCall.args, [`curl 'url-header-overridden' ;
@@ -831,7 +831,7 @@ url-content-overridden
 url-header-und-content-overridden`]);
     copyText.resetHistory();
 
-    contextMenu.invokeHandler(copyAllCurlComnmands.id());
+    contextMenu.invokeHandler(copyAllCurlCommands.id());
     await expectCalled(copyText);
     sinon.assert.callCount(copyText, 1);
     assert.deepEqual(copyText.lastCall.args, [`curl 'url-not-overridden' ;
@@ -889,30 +889,51 @@ Invoke-WebRequest -UseBasicParsing -Uri "url-header-und-content-overridden"`]);
     assert.notExists(columns['--this-does-not-exist-for-sure']);
   });
 
-  it('treats unknown columns with title in persistence setting as custom header', async () => {
+  it('treats unknown columns with title and prefix in persistence setting as custom header', async () => {
     const columnSettings = Common.Settings.Settings.instance().createSetting('network-log-columns', {});
+    // Custom request and response headers are prefixed with 'request-header-' and 'response-header-'
+    // respectively, so this column should be treated as a custom header.
+    const requestHeaderId = 'request-header-custom-request-header';
+    const responseHeaderId = 'response-header-custom-response-header';
+    const customRequestTitle = 'Custom-Request-Header';
+    const customResponseTitle = 'Custom-Response-Header';
     columnSettings.set({
-      'custom-header-for-test': {visible: false, title: 'Custom-Header'},
+      [requestHeaderId]: {visible: false, title: customRequestTitle},
+      [responseHeaderId]: {visible: false, title: customResponseTitle},
     });
+
     networkLogView = createNetworkLogView();
     const dataGrid = networkLogView.columns().dataGrid();
     const columns = dataGrid.columns;
-    assert.exists(columns['custom-header-for-test']);
+
+    assert.exists(columns[requestHeaderId], 'Custom request header column should exist');
+    assert.exists(columns[responseHeaderId], 'Custom response header column should exist');
 
     const contextMenuShow = sinon.stub(UI.ContextMenu.ContextMenu.prototype, 'show').resolves();
     const header = dataGrid.element.querySelector('thead');
+    assert.exists(header);
     const event = new MouseEvent('contextmenu');
     sinon.stub(event, 'target').value(header);
     dataGrid.element.dispatchEvent(event);
 
     sinon.assert.calledOnce(contextMenuShow);
-    const responseHeadersSubMenu = contextMenuShow.thisValues[0].footerSection().items.find(
+    const contextMenu = contextMenuShow.thisValues[0];
+
+    const requestHeadersSubMenu = contextMenu.footerSection().items.find(
+        (item: UI.ContextMenu.Item) => item.buildDescriptor().label === 'Request Headers');
+    assert.exists(requestHeadersSubMenu, '"Request Headers" submenu should exist');
+    assert.instanceOf(requestHeadersSubMenu, UI.ContextMenu.SubMenu);
+    const customRequestHeaderItem = requestHeadersSubMenu.defaultSection().items.find(
+        (item: UI.ContextMenu.Item) => item.buildDescriptor().label === customRequestTitle);
+    assert.exists(customRequestHeaderItem, 'Custom request header item should be in the "Request Headers" submenu');
+
+    const responseHeadersSubMenu = contextMenu.footerSection().items.find(
         (item: UI.ContextMenu.Item) => item.buildDescriptor().label === 'Response Headers');
-    assert.exists(responseHeadersSubMenu);
+    assert.exists(responseHeadersSubMenu, '"Response Headers" submenu should exist');
     assert.instanceOf(responseHeadersSubMenu, UI.ContextMenu.SubMenu);
-    const customHeaderItem = responseHeadersSubMenu.defaultSection().items.find(
-        (item: UI.ContextMenu.Item) => item.buildDescriptor().label === 'Custom-Header');
-    assert.exists(customHeaderItem);
+    const customResponseHeaderItem = responseHeadersSubMenu.defaultSection().items.find(
+        (item: UI.ContextMenu.Item) => item.buildDescriptor().label === customResponseTitle);
+    assert.exists(customResponseHeaderItem, 'Custom response header item should be in the "Response Headers" submenu');
   });
 });
 
@@ -971,8 +992,48 @@ describeWithEnvironment('NetworkLogView', () => {
     try {
       createNetworkLogView();
     } catch {
-      assert.fail('Creating the network view without registring the actions shouldn\'t fail.');
+      assert.fail('Creating the network view without registering the actions shouldn\'t fail.');
     }
+  });
+
+  it('shows Debug with AI menu and submenu items when the flag is on', () => {
+    updateHostConfig({
+      devToolsAiSubmenuPrompts: {
+        enabled: true,
+      },
+    });
+    stubNoopSettings();
+    UI.ActionRegistration.registerActionExtension({
+      actionId: 'drjones.network-panel-context',
+      title: () => 'Debug with AI' as Platform.UIString.LocalizedString,
+      category: UI.ActionRegistration.ActionCategory.GLOBAL,
+    });
+    const actionRegistryInstance = UI.ActionRegistry.ActionRegistry.instance({forceNew: true});
+    UI.ShortcutRegistry.ShortcutRegistry.instance({forceNew: true, actionRegistry: actionRegistryInstance});
+
+    const filterBar = new UI.FilterBar.FilterBar('network-test');
+    const progressBarContainer = document.createElement('div');
+    const setting = Common.Settings.Settings.instance().createSetting('network-log-large-rows', false);
+    const networkLogView = new Network.NetworkLogView.NetworkLogView(filterBar, progressBarContainer, setting);
+    const request = SDK.NetworkRequest.NetworkRequest.create(
+        'requestId' as Protocol.Network.RequestId, Platform.DevToolsPath.urlString`https://www.example.com/script.js`,
+        Platform.DevToolsPath.urlString``, null, null, null);
+
+    const event = new Event('contextmenu');
+    sinon.stub(event, 'target').value(document);
+    const contextMenu = new UI.ContextMenu.ContextMenu(event);
+
+    networkLogView.handleContextMenuForRequest(contextMenu, request);
+
+    const debugWithAiItem = contextMenu.buildDescriptor().subItems?.find(item => item.label === 'Debug with AI');
+    assert.exists(debugWithAiItem);
+    assert.deepEqual(
+        debugWithAiItem?.subItems?.map(item => item.label),
+        ['Start a chat', 'Explain purpose', 'Explain slowness', 'Explain failures', 'Assess security headers']);
+
+    // Cleanup
+    UI.ActionRegistry.ActionRegistry.reset();
+    UI.ShortcutRegistry.ShortcutRegistry.removeInstance();
   });
 });
 
@@ -1021,7 +1082,7 @@ function getMoreFiltersActiveCount(filterBar: UI.FilterBar.FilterBar): string {
 
 function getDropdownItem(softMenu: UI.ContextMenu.ContextMenu, label: string) {
   const item = findMenuItemWithLabel(softMenu.defaultSection(), label);
-  assertNotNullOrUndefined(item);
+  assert.isOk(item);
   return item;
 }
 

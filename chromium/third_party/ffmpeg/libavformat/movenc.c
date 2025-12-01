@@ -393,6 +393,8 @@ struct eac3_info {
         uint16_t chan_loc;
         /* if there is no dependent substream, then one bit reserved instead */
     } substream[1]; /* TODO: support 8 independent substreams */
+    /* indicates the decoding complexity, 8 bits */
+    uint8_t complexity_index_type_a;
 };
 
 static int mov_write_ac3_tag(AVFormatContext *s, AVIOContext *pb, MOVTrack *track)
@@ -474,6 +476,8 @@ static int handle_eac3(MOVMuxContext *mov, AVPacket *pkt, MOVTrack *track)
     info->data_rate = FFMAX(info->data_rate, hdr->bit_rate / 1000);
     info->ac3_bit_rate_code = FFMAX(info->ac3_bit_rate_code,
                                     hdr->ac3_bit_rate_code);
+    info->complexity_index_type_a = hdr->complexity_index_type_a;
+
     num_blocks = hdr->num_blocks;
 
     if (!info->ec3_done) {
@@ -532,8 +536,6 @@ static int handle_eac3(MOVMuxContext *mov, AVPacket *pkt, MOVTrack *track)
             int parent = hdr->substreamid;
 
             while (cumul_size != pkt->size) {
-                GetBitContext gbc;
-                int i;
                 ret = avpriv_ac3_parse_header(&hdr, pkt->data + cumul_size, pkt->size - cumul_size);
                 if (ret < 0)
                     goto end;
@@ -544,20 +546,9 @@ static int handle_eac3(MOVMuxContext *mov, AVPacket *pkt, MOVTrack *track)
                 info->substream[parent].num_dep_sub++;
                 ret /= 8;
 
-                /* header is parsed up to lfeon, but custom channel map may be needed */
-                init_get_bits8(&gbc, pkt->data + cumul_size + ret, pkt->size - cumul_size - ret);
-                /* skip bsid */
-                skip_bits(&gbc, 5);
-                /* skip volume control params */
-                for (i = 0; i < (hdr->channel_mode ? 1 : 2); i++) {
-                    skip_bits(&gbc, 5); // skip dialog normalization
-                    if (get_bits1(&gbc)) {
-                        skip_bits(&gbc, 8); // skip compression gain word
-                    }
-                }
                 /* get the dependent stream channel map, if exists */
-                if (get_bits1(&gbc))
-                    info->substream[parent].chan_loc |= (get_bits(&gbc, 16) >> 5) & 0x1f;
+                if (hdr->channel_map_present)
+                    info->substream[parent].chan_loc |= (hdr->channel_map >> 5) & 0x1f;
                 else
                     info->substream[parent].chan_loc |= hdr->channel_mode;
                 cumul_size += hdr->frame_size;
@@ -614,7 +605,7 @@ static int mov_write_eac3_tag(AVFormatContext *s, AVIOContext *pb, MOVTrack *tra
     }
 
     info = track->eac3_priv;
-    size = 2 + ((34 * (info->num_ind_sub + 1) + 7) >> 3);
+    size = 2 + (4 * (info->num_ind_sub + 1)) + (2 * !!info->complexity_index_type_a);
     buf = av_malloc(size);
     if (!buf) {
         return AVERROR(ENOMEM);
@@ -631,13 +622,18 @@ static int mov_write_eac3_tag(AVFormatContext *s, AVIOContext *pb, MOVTrack *tra
         put_bits(&pbc, 3, info->substream[i].bsmod);
         put_bits(&pbc, 3, info->substream[i].acmod);
         put_bits(&pbc, 1, info->substream[i].lfeon);
-        put_bits(&pbc, 5, 0); /* reserved */
+        put_bits(&pbc, 3, 0); /* reserved */
         put_bits(&pbc, 4, info->substream[i].num_dep_sub);
         if (!info->substream[i].num_dep_sub) {
             put_bits(&pbc, 1, 0); /* reserved */
         } else {
             put_bits(&pbc, 9, info->substream[i].chan_loc);
         }
+    }
+    if (info->complexity_index_type_a) {
+        put_bits(&pbc, 7, 0); /* reserved */
+        put_bits(&pbc, 1, 1); // flag_eac3_extension_type_a
+        put_bits(&pbc, 8, info->complexity_index_type_a);
     }
     flush_put_bits(&pbc);
     size = put_bytes_output(&pbc);
@@ -3966,7 +3962,7 @@ static int mov_write_edts_tag(AVIOContext *pb, MOVMuxContext *mov,
     int flags = 0;
 
     if (track->entry) {
-        if (start_dts != track->cluster[0].dts || start_ct != track->cluster[0].cts) {
+        if (start_dts != track->cluster[0].dts || (start_ct != track->cluster[0].cts && track->cluster[0].dts >= 0)) {
 
             av_log(mov->fc, AV_LOG_DEBUG,
                    "EDTS using dts:%"PRId64" cts:%d instead of dts:%"PRId64" cts:%"PRId64" tid:%d\n",
@@ -4040,8 +4036,13 @@ static int mov_write_edts_tag(AVIOContext *pb, MOVMuxContext *mov,
     /* For fragmented files, we don't know the full length yet. Setting
      * duration to 0 allows us to only specify the offset, including
      * the rest of the content (from all future fragments) without specifying
-     * an explicit duration. */
-    if (mov->flags & FF_MOV_FLAG_FRAGMENT)
+     * an explicit duration.
+     *
+     * For hybrid_fragmented during mov_write_trailer (mov->moov_written != 0),
+     * don't reset duration to zero.
+     */
+    if (mov->flags & FF_MOV_FLAG_FRAGMENT &&
+        !(mov->flags & FF_MOV_FLAG_HYBRID_FRAGMENTED && mov->moov_written))
         duration = 0;
 
     /* duration */
@@ -6504,14 +6505,14 @@ static int mov_flush_fragment(AVFormatContext *s, int force)
                       av_rescale(mov->tracks[first_track].cluster[0].dts, AV_TIME_BASE, mov->tracks[first_track].timescale),
                       (has_video ? starts_with_key : mov->tracks[first_track].cluster[0].flags & MOV_SYNC_SAMPLE) ? AVIO_DATA_MARKER_SYNC_POINT : AVIO_DATA_MARKER_BOUNDARY_POINT);
 
-    for (i = 0; i < mov->nb_tracks; i++) {
+    for (i = first_track; i < mov->nb_tracks; i++) {
         MOVTrack *track = &mov->tracks[i];
         int buf_size, write_moof = 1, moof_tracks = -1;
         uint8_t *buf;
 
+        if (!track->entry)
+            continue;
         if (mov->flags & FF_MOV_FLAG_SEPARATE_MOOF) {
-            if (!track->entry)
-                continue;
             mdat_size = avio_tell(track->mdat_buf);
             moof_tracks = i;
         } else {
@@ -6928,7 +6929,7 @@ int ff_mov_write_packet(AVFormatContext *s, AVPacket *pkt)
         trk->flags |= MOV_TRACK_CTTS;
     trk->cluster[trk->entry].cts   = pkt->pts - pkt->dts;
     trk->cluster[trk->entry].flags = 0;
-    if (trk->start_cts == AV_NOPTS_VALUE)
+    if (trk->start_cts == AV_NOPTS_VALUE || (pkt->dts <= 0 && trk->start_cts > pkt->pts - pkt->dts))
         trk->start_cts = pkt->pts - pkt->dts;
     if (trk->end_pts == AV_NOPTS_VALUE)
         trk->end_pts = trk->cluster[trk->entry].dts +
@@ -7730,6 +7731,12 @@ static int mov_init(AVFormatContext *s)
                       FF_MOV_FLAG_FRAG_CUSTOM |
                       FF_MOV_FLAG_FRAG_EVERY_FRAME))
         mov->flags |= FF_MOV_FLAG_FRAGMENT;
+
+    if (mov->flags & FF_MOV_FLAG_HYBRID_FRAGMENTED &&
+        mov->flags & FF_MOV_FLAG_FASTSTART) {
+        av_log(s, AV_LOG_ERROR, "Setting both hybrid_fragmented and faststart is not supported.\n");
+        return AVERROR(EINVAL);
+    }
 
     /* Set other implicit flags immediately */
     if (mov->flags & FF_MOV_FLAG_HYBRID_FRAGMENTED)

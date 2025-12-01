@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import * as Common from '../core/common/common.js';
 import * as SDK from '../core/sdk/sdk.js';
 import type * as Protocol from '../generated/protocol.js';
 import * as Trace from '../models/trace/trace.js';
@@ -79,9 +80,16 @@ export class TraceLoader {
     // Required URLs differ across the component server and the unit tests, so try both.
     const urlForTest = new URL(`../panels/timeline/fixtures/traces/${name}`, import.meta.url);
 
-    const contents = await loadTraceFileFromURL(urlForTest);
+    const contents = await TraceLoader.loadTraceFileFromURL(urlForTest);
     fileContentsCache.set(name, contents);
     return contents;
+  }
+
+  static async traceFile(context: Mocha.Context|Mocha.Suite|null, name: string): Promise<Trace.Types.File.TraceFile> {
+    const contents = await TraceLoader.fixtureContents(context, name);
+    const traceEvents = 'traceEvents' in contents ? contents.traceEvents : contents;
+    const metadata = 'metadata' in contents ? contents.metadata : {};
+    return {traceEvents, metadata} as Trace.Types.File.TraceFile;
   }
 
   /**
@@ -123,20 +131,20 @@ export class TraceLoader {
   /**
    * Executes only the new trace engine on the fixture and returns the resulting parsed data.
    *
-   * @param context The Mocha test context. Processing a trace can easily
+   * @param context - The Mocha test context. Processing a trace can easily
    * takes up longer than the default Mocha timeout, which is 2s. So we have to
    * increase this test's timeout. It might be null when we only render a
    * component example. See TraceLoader.setTestTimeout.
    *
-   * @param file The name of the trace file to be loaded.
+   * @param file - The name of the trace file to be loaded.
    * The trace file should be in ../panels/timeline/fixtures/traces folder.
    *
-   * @param options Additional trace options.
-   * @param options.initTraceBounds (defaults to `true`) after the trace is
+   * @param options - Additional trace options.
+   * @param options.initTraceBounds - (defaults to `true`) after the trace is
    * loaded, the TraceBounds manager will automatically be initialised using
    * the bounds from the trace.
    *
-   * @param config The config the new trace engine should run with. Optional,
+   * @param config - The config the new trace engine should run with. Optional,
    * will fall back to the Default config if not provided.
    */
   static async traceEngine(
@@ -146,6 +154,9 @@ export class TraceLoader {
     insights: Trace.Insights.Types.TraceInsightSets|null,
     metadata: Trace.Types.File.MetaData|null,
   }> {
+    if (context) {
+      TraceLoader.setTestTimeout(context);
+    }
     // Force the TraceBounds to be reset to empty. This ensures that in
     // tests where we are using the new engine data we don't accidentally
     // rely on the fact that a previous test has set the BoundsManager.
@@ -158,20 +169,27 @@ export class TraceLoader {
     // If we have results from the cache, we use those to ensure we keep the
     // tests speedy and don't re-parse trace files over and over again.
     if (fromCache) {
-      const syntheticEventsManager = fromCache.model.syntheticTraceEventsManager(0);
-      if (!syntheticEventsManager) {
-        throw new Error('Cached trace engine result did not have a synthetic events manager instance');
-      }
-      Trace.Helpers.SyntheticEvents.SyntheticEventsManager.activate(syntheticEventsManager);
-      TraceLoader.initTraceBoundsManager(fromCache.parsedTrace);
-      Timeline.ModificationsManager.ModificationsManager.reset();
-      Timeline.ModificationsManager.ModificationsManager.initAndActivateModificationsManager(fromCache.model, 0);
+      await wrapInTimeout(context, () => {
+        const syntheticEventsManager = fromCache.model.syntheticTraceEventsManager(0);
+        if (!syntheticEventsManager) {
+          throw new Error('Cached trace engine result did not have a synthetic events manager instance');
+        }
+        Trace.Helpers.SyntheticEvents.SyntheticEventsManager.activate(syntheticEventsManager);
+        TraceLoader.initTraceBoundsManager(fromCache.parsedTrace);
+        Timeline.ModificationsManager.ModificationsManager.reset();
+        Timeline.ModificationsManager.ModificationsManager.initAndActivateModificationsManager(fromCache.model, 0);
+      }, 4_000, 'Initializing state for cached trace');
       return {parsedTrace: fromCache.parsedTrace, insights: fromCache.insights, metadata: fromCache.metadata};
     }
 
-    const fileContents = await TraceLoader.fixtureContents(context, name);
-    const parsedTraceData =
-        await TraceLoader.executeTraceEngineOnFileContents(fileContents, /* emulate fresh recording */ false, config);
+    const fileContents = await wrapInTimeout(context, async () => {
+      return await TraceLoader.fixtureContents(context, name);
+    }, 15_000, `Loading fixtureContents for ${name}`);
+
+    const parsedTraceData = await wrapInTimeout(context, async () => {
+      return await TraceLoader.executeTraceEngineOnFileContents(
+          fileContents, /* emulate fresh recording */ false, config);
+    }, 15_000, `Executing traceEngine for ${name}`);
 
     const cacheByName = traceEngineCache.get(name) ?? new Map<string, {
                           parsedTrace: Trace.Handlers.Types.ParsedTrace,
@@ -183,8 +201,10 @@ export class TraceLoader {
     traceEngineCache.set(name, cacheByName);
 
     TraceLoader.initTraceBoundsManager(parsedTraceData.parsedTrace);
-    Timeline.ModificationsManager.ModificationsManager.reset();
-    Timeline.ModificationsManager.ModificationsManager.initAndActivateModificationsManager(parsedTraceData.model, 0);
+    await wrapInTimeout(context, () => {
+      Timeline.ModificationsManager.ModificationsManager.reset();
+      Timeline.ModificationsManager.ModificationsManager.initAndActivateModificationsManager(parsedTraceData.model, 0);
+    }, 5_000, `Creating modification manager for ${name}`);
     return {
       parsedTrace: parsedTraceData.parsedTrace,
       insights: parsedTraceData.insights,
@@ -262,71 +282,67 @@ export class TraceLoader {
           .catch(e => console.error(e));
     });
   }
+
+  static async loadTraceFileFromURL(url: URL): Promise<Trace.Types.File.TraceFile> {
+    const contents = await fetchFileAsText(url);
+    const traceContents = JSON.parse(contents) as Trace.Types.File.TraceFile;
+    return traceContents;
+  }
+}
+
+export async function fetchFileAsText(url: URL): Promise<string> {
+  const response = await fetch(url);
+  if (response.status !== 200) {
+    throw new Error(`Unable to load ${url}`);
+  }
+
+  const buffer = await response.arrayBuffer();
+  const contents = await Common.Gzip.arrayBufferToString(buffer);
+  return contents;
 }
 
 // Below this point are private methods used in the TraceLoader class. These
 // are purposefully not exported, you should use one of the static methods
 // defined above.
 
-async function loadTraceFileFromURL(url: URL): Promise<Trace.Types.File.Contents> {
-  const response = await fetch(url);
-  if (response.status !== 200) {
-    throw new Error(`Unable to load ${url}`);
-  }
+/**
+ * Wraps an async Promise with a timeout. We use this to break down and
+ * instrument `TraceLoader` to understand on CQ where timeouts occur.
+ *
+ * @param asyncPromise - The Promise representing the async operation to be timed.
+ * @param timeoutMs - The timeout in milliseconds.
+ * @param stepName - An identifier for the step (for logging).
+ * @returns A promise that resolves with the operation's result, or rejects if it times out.
+ */
+async function wrapInTimeout<T>(
+    mochaContext: Mocha.Context|Mocha.Suite|null, callback: () => Promise<T>| T, timeoutMs: number,
+    stepName: string): Promise<T> {
+  const timeout = Promise.withResolvers<void>();
+  const timeoutId = setTimeout(() => {
+    let testTitle = '(unknown test)';
+    if (mochaContext) {
+      if (isMochaContext(mochaContext)) {
+        testTitle = mochaContext.currentTest?.fullTitle() ?? testTitle;
+      } else {
+        testTitle = mochaContext.fullTitle();
+      }
+    }
+    console.error(`TraceLoader: [${stepName}]: took longer than ${timeoutMs}ms in test "${testTitle}"`);
+    timeout.reject(new Error(`Timeout for TraceLoader: '${stepName}' after ${timeoutMs}ms.`));
+  }, timeoutMs);
 
-  const contentType = response.headers.get('content-type');
-  const isGzipEncoded = contentType?.includes('gzip');
-  let buffer = await response.arrayBuffer();
-  if (isGzipEncoded) {
-    buffer = await decodeGzipBuffer(buffer);
+  // Race the original promise against the timeout promise
+  try {
+    const cbResult = await Promise.race([callback(), timeout.promise]);
+    timeout.resolve();
+    return cbResult as T;
+  } finally {
+    // Clear the timeout if the original promise resolves/rejects,
+    // or if the timeout promise wins the race.
+    clearTimeout(timeoutId);
   }
-  const decoder = new TextDecoder('utf-8');
-  const contents = JSON.parse(decoder.decode(buffer)) as Trace.Types.File.Contents;
-  return contents;
 }
 
-interface CompressionStream extends ReadableWritablePair<Uint8Array, Uint8Array> {}
-interface DecompressionStream extends ReadableWritablePair<Uint8Array, Uint8Array> {}
-declare const CompressionStream: {
-  prototype: CompressionStream,
-  new (type: string): CompressionStream,
-};
-
-declare const DecompressionStream: {
-  prototype: DecompressionStream,
-  new (type: string): DecompressionStream,
-};
-
-function codec(buffer: ArrayBuffer, codecStream: CompressionStream|DecompressionStream): Promise<ArrayBuffer> {
-  const {readable, writable} = new TransformStream();
-  const codecReadable = readable.pipeThrough(codecStream);
-
-  const writer = writable.getWriter();
-  void writer.write(buffer);
-  void writer.close();
-
-  // Wrap in a response for convenience.
-  const response = new Response(codecReadable);
-  return response.arrayBuffer();
-}
-
-function decodeGzipBuffer(buffer: ArrayBuffer): Promise<ArrayBuffer> {
-  return codec(buffer, new DecompressionStream('gzip'));
-}
-
-export async function fetchFixture(url: URL): Promise<string> {
-  const response = await fetch(url);
-  if (response.status !== 200) {
-    throw new Error(`Unable to load ${url}`);
-  }
-
-  const contentType = response.headers.get('content-type');
-  const isGzipEncoded = contentType?.includes('gzip');
-  let buffer = await response.arrayBuffer();
-  if (isGzipEncoded) {
-    buffer = await decodeGzipBuffer(buffer);
-  }
-  const decoder = new TextDecoder('utf-8');
-  const contents = decoder.decode(buffer);
-  return contents;
+function isMochaContext(arg: unknown): arg is Mocha.Context {
+  return typeof arg === 'object' && arg !== null && 'currentTest' in arg;
 }

@@ -24,15 +24,15 @@ namespace webnn::coreml {
 namespace {
 
 uint32_t GetDataTypeByteSize(MLMultiArrayDataType data_type) {
-  switch (data_type) {
-    case MLMultiArrayDataTypeDouble:
-      return 8;
-    case MLMultiArrayDataTypeFloat32:
-    case MLMultiArrayDataTypeInt32:
-      return 4;
-    case MLMultiArrayDataTypeFloat16:
-      return 2;
-  }
+  // MLMultiArrayDataType values encode a format in the high bits (float =
+  // 0x10000, int = 0x20000) and the size (in bits) in the lower 16 bits.
+  //
+  // To determine the byte size of the type, mask off the format and divide. For
+  // example:
+  //
+  // MLMultiArrayDataTypeFloat64 (0x10040) -> 0x40 (64 bits) / 8 = 8 bytes.
+  // MLMultiArrayDataTypeInt32 (0x20020) -> 0x20 (32 bits) / 8 = 4 bytes.
+  return (data_type & 0xFFFF) / 8;
 }
 
 std::vector<uint32_t> ToStdVector(NSArray<NSNumber*>* ns_array) {
@@ -130,6 +130,8 @@ void ReadFromMLMultiArray(
     base::OnceCallback<void(mojo_base::BigBuffer)> result_callback) {
   __block auto wrapped_callback =
       base::BindPostTaskToCurrentDefault(std::move(result_callback));
+  __block size_t packed_size = static_cast<size_t>(multi_array.count) *
+                               GetDataTypeByteSize(multi_array.dataType);
 
   [multi_array getBytesWithHandler:^(const void* bytes, NSInteger size) {
     std::vector<uint32_t> shape = ToStdVector(multi_array.shape);
@@ -141,7 +143,7 @@ void ReadFromMLMultiArray(
     auto multi_array_data = UNSAFE_BUFFERS(base::span(
         static_cast<const uint8_t*>(bytes), base::checked_cast<size_t>(size)));
 
-    mojo_base::BigBuffer output_buffer(multi_array_data.size());
+    mojo_base::BigBuffer output_buffer(packed_size);
 
     RecursivelyReadFromMLMultiArray(multi_array_data,
                                     GetDataTypeByteSize(multi_array.dataType),

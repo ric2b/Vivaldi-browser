@@ -9,12 +9,6 @@
 
 #import "ios/chrome/browser/browser_container/model/edit_menu_builder.h"
 
-// TODO(crbug.com/408229821): Reverse dependencies.
-@protocol ExplainWithGeminiDelegate;
-@protocol LinkToTextDelegate;
-@protocol PartialTranslateDelegate;
-@protocol SearchWithDelegate;
-
 #if defined(VIVALDI_BUILD)
 @protocol CopyToNoteDelegate;
 #endif // End Vivaldi
@@ -24,21 +18,16 @@
 @interface BrowserEditMenuHandler : NSObject <EditMenuBuilder>
 
 // The delegate to handle Explain With Gemini button selection.
-@property(nonatomic, weak) id<ExplainWithGeminiDelegate>
-    explainWithGeminiDelegate;
+@property(nonatomic, weak) id<EditMenuBuilder> explainWithGeminiDelegate;
 
 // The delegate to handle link to text button selection.
-@property(nonatomic, weak) id<LinkToTextDelegate> linkToTextDelegate;
+@property(nonatomic, weak) id<EditMenuBuilder> linkToTextDelegate;
 
 // The delegate to handle Partial Translate button selection.
-@property(nonatomic, weak) id<PartialTranslateDelegate>
-    partialTranslateDelegate;
+@property(nonatomic, weak) id<EditMenuBuilder> partialTranslateDelegate;
 
 // The delegate to handle Search With button selection.
-@property(nonatomic, weak) id<SearchWithDelegate> searchWithDelegate;
-
-// Will be called to customize edit menus.
-- (void)buildEditMenuWithBuilder:(id<UIMenuBuilder>)builder;
+@property(nonatomic, weak) id<EditMenuBuilder> searchWithDelegate;
 
 #if defined(VIVALDI_BUILD)
 @property(nonatomic, weak) id<CopyToNoteDelegate> vivaldiCopyToNoteDelegate;

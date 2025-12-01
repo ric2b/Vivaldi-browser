@@ -4,11 +4,6 @@
 
 #import "ios/chrome/browser/browser_container/ui_bundled/browser_edit_menu_handler.h"
 
-#import "ios/chrome/browser/explain_with_gemini/coordinator/explain_with_gemini_delegate.h"
-#import "ios/chrome/browser/link_to_text/ui_bundled/link_to_text_delegate.h"
-#import "ios/chrome/browser/partial_translate/ui_bundled/partial_translate_delegate.h"
-#import "ios/chrome/browser/search_with/ui_bundled/search_with_delegate.h"
-
 #if defined(VIVALDI_BUILD)
 #import "app/vivaldi_apptools.h"
 #import "ios/ui/copy_to_note/copy_to_note_delegate.h"
@@ -16,21 +11,21 @@
 
 @implementation BrowserEditMenuHandler
 
-- (void)buildEditMenuWithBuilder:(id<UIMenuBuilder>)builder {
+- (void)buildEditMenuWithBuilder:(id<UIMenuBuilder>)builder
+                      inWebState:(web::WebState*)webState {
 
-  // Vivaldi
-#if defined(__IPHONE_16_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_16_0
-  if (@available(iOS 16, *)) {
-    if (vivaldi::IsVivaldiRunning()) {
-      [self.vivaldiCopyToNoteDelegate buildMenuWithBuilder:builder];
-    }
-  }
-#endif // End Vivaldi
+  if (vivaldi::IsVivaldiRunning()) {
+    [self.vivaldiCopyToNoteDelegate buildMenuWithBuilder:builder];
+  } // End Vivaldi
 
-  [self.linkToTextDelegate buildMenuWithBuilder:builder];
-  [self.searchWithDelegate buildMenuWithBuilder:builder];
-  [self.explainWithGeminiDelegate buildMenuWithBuilder:builder];
-  [self.partialTranslateDelegate buildMenuWithBuilder:builder];
+  [self.linkToTextDelegate buildEditMenuWithBuilder:builder
+                                         inWebState:webState];
+  [self.searchWithDelegate buildEditMenuWithBuilder:builder
+                                         inWebState:webState];
+  [self.explainWithGeminiDelegate buildEditMenuWithBuilder:builder
+                                                inWebState:webState];
+  [self.partialTranslateDelegate buildEditMenuWithBuilder:builder
+                                               inWebState:webState];
 }
 
 @end

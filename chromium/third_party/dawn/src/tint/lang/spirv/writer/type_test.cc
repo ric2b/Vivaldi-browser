@@ -318,7 +318,7 @@ TEST_F(SpirvWriterTest, Type_Atomic) {
 
 TEST_F(SpirvWriterTest, Type_Sampler) {
     b.Append(b.ir.root_block, [&] {  //
-        auto* v = b.Var("v", ty.ptr<handle, read_write>(ty.sampler()));
+        auto* v = b.Var("v", ty.ptr<handle, core::Access::kRead>(ty.sampler()));
         v->SetBindingPoint(0, 0);
     });
 
@@ -328,7 +328,7 @@ TEST_F(SpirvWriterTest, Type_Sampler) {
 
 TEST_F(SpirvWriterTest, Type_SamplerComparison) {
     b.Append(b.ir.root_block, [&] {  //
-        auto* v = b.Var("v", ty.ptr<handle, read_write>(ty.comparison_sampler()));
+        auto* v = b.Var("v", ty.ptr<handle, core::Access::kRead>(ty.comparison_sampler()));
         v->SetBindingPoint(0, 0);
     });
 
@@ -338,8 +338,8 @@ TEST_F(SpirvWriterTest, Type_SamplerComparison) {
 
 TEST_F(SpirvWriterTest, Type_Samplers_Dedup) {
     b.Append(b.ir.root_block, [&] {
-        auto* v1 = b.Var("v1", ty.ptr<handle, read_write>(ty.sampler()));
-        auto* v2 = b.Var("v2", ty.ptr<handle, read_write>(ty.comparison_sampler()));
+        auto* v1 = b.Var("v1", ty.ptr<handle, core::Access::kRead>(ty.sampler()));
+        auto* v2 = b.Var("v2", ty.ptr<handle, core::Access::kRead>(ty.comparison_sampler()));
         v1->SetBindingPoint(0, 1);
         v2->SetBindingPoint(0, 2);
     });
@@ -354,10 +354,10 @@ TEST_F(SpirvWriterTest, Type_Samplers_Dedup) {
 
 TEST_F(SpirvWriterTest, Type_StorageTexture_Dedup) {
     b.Append(b.ir.root_block, [&] {
-        auto* v1 = b.Var("v1", ty.ptr<handle, read_write>(ty.storage_texture(
+        auto* v1 = b.Var("v1", ty.ptr<handle, core::Access::kRead>(ty.storage_texture(
                                    core::type::TextureDimension::k2dArray,
                                    core::TexelFormat::kR32Uint, core::Access::kRead)));
-        auto* v2 = b.Var("v2", ty.ptr<handle, read_write>(ty.storage_texture(
+        auto* v2 = b.Var("v2", ty.ptr<handle, core::Access::kRead>(ty.storage_texture(
                                    core::type::TextureDimension::k2dArray,
                                    core::TexelFormat::kR32Uint, core::Access::kWrite)));
         v1->SetBindingPoint(0, 1);
@@ -383,7 +383,7 @@ using Type_SampledTexture = SpirvWriterTestWithParam<TextureCase>;
 TEST_P(Type_SampledTexture, Emit) {
     auto params = GetParam();
     b.Append(b.ir.root_block, [&] {
-        auto* v = b.Var("v", ty.ptr<handle, read_write>(
+        auto* v = b.Var("v", ty.ptr<handle, core::Access::kRead>(
                                  ty.sampled_texture(params.dim, MakeScalarType(params.format))));
         v->SetBindingPoint(0, 0);
     });
@@ -418,7 +418,7 @@ using Type_MultisampledTexture = SpirvWriterTestWithParam<TextureCase>;
 TEST_P(Type_MultisampledTexture, Emit) {
     auto params = GetParam();
     b.Append(b.ir.root_block, [&] {
-        auto* v = b.Var("v", ty.ptr<handle, read_write>(ty.multisampled_texture(
+        auto* v = b.Var("v", ty.ptr<handle, core::Access::kRead>(ty.multisampled_texture(
                                  params.dim, MakeScalarType(params.format))));
         v->SetBindingPoint(0, 0);
     });
@@ -437,7 +437,7 @@ using Type_DepthTexture = SpirvWriterTestWithParam<TextureCase>;
 TEST_P(Type_DepthTexture, Emit) {
     auto params = GetParam();
     b.Append(b.ir.root_block, [&] {  //
-        auto* v = b.Var("v", ty.ptr<handle, read_write>(ty.depth_texture(params.dim)));
+        auto* v = b.Var("v", ty.ptr<handle, core::Access::kRead>(ty.depth_texture(params.dim)));
         v->SetBindingPoint(0, 0);
     });
 
@@ -454,8 +454,9 @@ INSTANTIATE_TEST_SUITE_P(
 
 TEST_F(SpirvWriterTest, Type_DepthTexture_DedupWithSampledTexture) {
     b.Append(b.ir.root_block, [&] {
-        auto* v1 = b.Var("v1", ty.ptr<handle, read_write>(ty.sampled_texture(Dim::k2d, ty.f32())));
-        auto* v2 = b.Var("v2", ty.ptr<handle, read_write>(ty.depth_texture(Dim::k2d)));
+        auto* v1 = b.Var(
+            "v1", ty.ptr<handle, core::Access::kRead>(ty.sampled_texture(Dim::k2d, ty.f32())));
+        auto* v2 = b.Var("v2", ty.ptr<handle, core::Access::kRead>(ty.depth_texture(Dim::k2d)));
         v1->SetBindingPoint(0, 1);
         v2->SetBindingPoint(0, 2);
     });
@@ -464,9 +465,9 @@ TEST_F(SpirvWriterTest, Type_DepthTexture_DedupWithSampledTexture) {
     EXPECT_INST(R"(      %float = OpTypeFloat 32
           %3 = OpTypeImage %float 2D 0 0 0 1 Unknown
 %_ptr_UniformConstant_3 = OpTypePointer UniformConstant %3
-         %v1 = OpVariable %_ptr_UniformConstant_3 UniformConstant   ; DescriptorSet 0, Binding 1, Coherent
+         %v1 = OpVariable %_ptr_UniformConstant_3 UniformConstant   ; DescriptorSet 0, Binding 1
 %_ptr_UniformConstant_3_0 = OpTypePointer UniformConstant %3
-         %v2 = OpVariable %_ptr_UniformConstant_3_0 UniformConstant     ; DescriptorSet 0, Binding 2, Coherent
+         %v2 = OpVariable %_ptr_UniformConstant_3_0 UniformConstant     ; DescriptorSet 0, Binding 2
        %void = OpTypeVoid
           %9 = OpTypeFunction %void
 )");
@@ -474,7 +475,8 @@ TEST_F(SpirvWriterTest, Type_DepthTexture_DedupWithSampledTexture) {
 
 TEST_F(SpirvWriterTest, Type_DepthMultiSampledTexture) {
     b.Append(b.ir.root_block, [&] {
-        auto* v = b.Var("v", ty.ptr<handle, read_write>(ty.depth_multisampled_texture(Dim::k2d)));
+        auto* v = b.Var(
+            "v", ty.ptr<handle, core::Access::kRead>(ty.depth_multisampled_texture(Dim::k2d)));
         v->SetBindingPoint(0, 0);
     });
 
@@ -484,9 +486,10 @@ TEST_F(SpirvWriterTest, Type_DepthMultiSampledTexture) {
 
 TEST_F(SpirvWriterTest, Type_DepthMultisampledTexture_DedupWithMultisampledTexture) {
     b.Append(b.ir.root_block, [&] {
-        auto* v1 =
-            b.Var("v1", ty.ptr<handle, read_write>(ty.multisampled_texture(Dim::k2d, ty.f32())));
-        auto* v2 = b.Var("v2", ty.ptr<handle, read_write>(ty.depth_multisampled_texture(Dim::k2d)));
+        auto* v1 = b.Var(
+            "v1", ty.ptr<handle, core::Access::kRead>(ty.multisampled_texture(Dim::k2d, ty.f32())));
+        auto* v2 = b.Var(
+            "v2", ty.ptr<handle, core::Access::kRead>(ty.depth_multisampled_texture(Dim::k2d)));
         v1->SetBindingPoint(0, 1);
         v2->SetBindingPoint(0, 2);
     });
@@ -495,9 +498,9 @@ TEST_F(SpirvWriterTest, Type_DepthMultisampledTexture_DedupWithMultisampledTextu
     EXPECT_INST(R"(      %float = OpTypeFloat 32
           %3 = OpTypeImage %float 2D 0 0 1 1 Unknown
 %_ptr_UniformConstant_3 = OpTypePointer UniformConstant %3
-         %v1 = OpVariable %_ptr_UniformConstant_3 UniformConstant   ; DescriptorSet 0, Binding 1, Coherent
+         %v1 = OpVariable %_ptr_UniformConstant_3 UniformConstant   ; DescriptorSet 0, Binding 1
 %_ptr_UniformConstant_3_0 = OpTypePointer UniformConstant %3
-         %v2 = OpVariable %_ptr_UniformConstant_3_0 UniformConstant     ; DescriptorSet 0, Binding 2, Coherent
+         %v2 = OpVariable %_ptr_UniformConstant_3_0 UniformConstant     ; DescriptorSet 0, Binding 2
        %void = OpTypeVoid
           %9 = OpTypeFunction %void
 )");
@@ -513,7 +516,7 @@ using Type_StorageTexture = SpirvWriterTestWithParam<StorageTextureCase>;
 TEST_P(Type_StorageTexture, Emit) {
     auto params = GetParam();
     b.Append(b.ir.root_block, [&] {
-        auto* v = b.Var("v", ty.ptr<handle, read_write>(ty.storage_texture(
+        auto* v = b.Var("v", ty.ptr<handle, core::Access::kRead>(ty.storage_texture(
                                  params.dim, params.format, core::Access::kWrite)));
         v->SetBindingPoint(0, 0);
     });
@@ -570,6 +573,61 @@ INSTANTIATE_TEST_SUITE_P(SpirvWriterTest,
                                                 Dim::k2d, Format::kRgba8Uint},
                              StorageTextureCase{" = OpTypeImage %float 2D 0 0 0 2 Rgba8",  //
                                                 Dim::k2d, Format::kRgba8Unorm}));
+
+struct TexelBufferCase {
+    std::string result;
+    Format format;
+};
+
+using Type_TexelBuffer = SpirvWriterTestWithParam<TexelBufferCase>;
+TEST_P(Type_TexelBuffer, Emit) {
+    auto params = GetParam();
+    b.Append(b.ir.root_block, [&] {
+        auto* v = b.Var("v", ty.ptr<handle, core::Access::kRead>(
+                                 ty.texel_buffer(params.format, core::Access::kReadWrite)));
+        v->SetBindingPoint(0, 0);
+    });
+
+    ASSERT_TRUE(Generate()) << Error() << output_;
+    EXPECT_INST(params.result);
+    EXPECT_INST("OpCapability ImageBuffer");
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    SpirvWriterTest,
+    Type_TexelBuffer,
+    testing::Values(TexelBufferCase{" = OpTypeImage %float Buffer 0 0 0 2 R32f",  //
+                                    Format::kR32Float},
+                    TexelBufferCase{" = OpTypeImage %int Buffer 0 0 0 2 R32i",  //
+                                    Format::kR32Sint},
+                    TexelBufferCase{" = OpTypeImage %uint Buffer 0 0 0 2 R32u",  //
+                                    Format::kR32Uint},
+                    TexelBufferCase{" = OpTypeImage %float Buffer 0 0 0 2 Rg32f",  //
+                                    Format::kRg32Float},
+                    TexelBufferCase{" = OpTypeImage %int Buffer 0 0 0 2 Rg32i",  //
+                                    Format::kRg32Sint},
+                    TexelBufferCase{" = OpTypeImage %uint Buffer 0 0 0 2 Rg32ui",  //
+                                    Format::kRg32Uint},
+                    TexelBufferCase{" = OpTypeImage %float Buffer 0 0 0 2 Rgba16f",  //
+                                    Format::kRgba16Float},
+                    TexelBufferCase{" = OpTypeImage %int Buffer 0 0 0 2 Rgba16i",  //
+                                    Format::kRgba16Sint},
+                    TexelBufferCase{" = OpTypeImage %uint Buffer 0 0 0 2 Rgba16ui",  //
+                                    Format::kRgba16Uint},
+                    TexelBufferCase{" = OpTypeImage %float Buffer 0 0 0 2 Rgba32f",  //
+                                    Format::kRgba32Float},
+                    TexelBufferCase{" = OpTypeImage %int Buffer 0 0 0 2 Rgba32i",  //
+                                    Format::kRgba32Sint},
+                    TexelBufferCase{" = OpTypeImage %uint Buffer 0 0 0 2 Rgba32ui",  //
+                                    Format::kRgba32Uint},
+                    TexelBufferCase{" = OpTypeImage %int Buffer 0 0 0 2 Rgba8i",  //
+                                    Format::kRgba8Sint},
+                    TexelBufferCase{" = OpTypeImage %float Buffer 0 0 0 2 Rgba8Snorm",  //
+                                    Format::kRgba8Snorm},
+                    TexelBufferCase{" = OpTypeImage %uint Buffer 0 0 0 2 Rgba8ui",  //
+                                    Format::kRgba8Uint},
+                    TexelBufferCase{" = OpTypeImage %float Buffer 0 0 0 2 Rgba8",  //
+                                    Format::kRgba8Unorm}));
 
 TEST_F(SpirvWriterTest, Type_SubgroupMatrix) {
     b.Append(b.ir.root_block, [&] {  //

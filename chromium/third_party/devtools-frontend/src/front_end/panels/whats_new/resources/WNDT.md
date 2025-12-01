@@ -1,6 +1,8 @@
-### [Preconnected origins in 'Network dependency tree' insight](preconnect)
-The 'Network dependency tree' insight now shows you a list of used or unused preconnected origins and preconnect candidates, if any.
-### [Server response and redirection times in 'Document request latency' insight](doc-req-latency-times)
-The 'Document request latency' insight now shows you server response time and, if any, redirection time.
-### [Geolocation accuracy parameter in Sensors](geo-accuracy)
-The Sensors panel now lets you set accuracy in geolocation emulation, so you can test the handling of different levels of GPS accuracy.
+### [Ask AI about more insights](ai-insights)
+You can now ask Gemini about more performance insights: image delivery, legacy JavaScript, duplicate JavaScript, and modern HTTP.
+
+### [Emulate the 'Save-Data' header](save-data)
+In 'Network conditions', you can now emulate the 'Save-Data' request header that indicates the client's preference for reduced data usage.
+
+### [Debug complex CSS values easier](debug-css)
+See also, from version 138: The Elements > Styles tab can now show you a tooltip with a breakdown of the definition chain and step-by-step evaluations of complex CSS variables, so you can find bugs quicker and gain a deeper understanding of how a value is computed.

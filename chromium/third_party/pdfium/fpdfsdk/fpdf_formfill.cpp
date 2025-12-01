@@ -881,13 +881,13 @@ FPDF_EXPORT void FPDF_CALLCONV FORM_DoDocumentAAction(FPDF_FORMHANDLE hHandle,
     return;
   }
 
-  CPDF_Document* pDoc = pFormFillEnv->GetPDFDocument();
-  const CPDF_Dictionary* pDict = pDoc->GetRoot();
-  if (!pDict) {
+  CPDF_Document* doc = pFormFillEnv->GetPDFDocument();
+  const CPDF_Dictionary* dict = doc->GetRoot();
+  if (!dict) {
     return;
   }
 
-  CPDF_AAction aa(pDict->GetDictFor(pdfium::form_fields::kAA));
+  CPDF_AAction aa(dict->GetDictFor(pdfium::form_fields::kAA));
   auto type = static_cast<CPDF_AAction::AActionType>(aaType);
   if (aa.ActionExist(type)) {
     pFormFillEnv->DoActionDocument(aa.GetAction(type), type);

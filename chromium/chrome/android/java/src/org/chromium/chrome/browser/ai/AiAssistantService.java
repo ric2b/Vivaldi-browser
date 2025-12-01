@@ -272,7 +272,7 @@ public class AiAssistantService {
                 mSystemAiProvider.isAvailable(context, availabilityRequestBuilder.build());
         Futures.addCallback(
                 availabilityFuture,
-                new FutureCallback<AvailabilityResponse>() {
+                new FutureCallback<>() {
                     @Override
                     public void onSuccess(@Nullable AvailabilityResponse result) {
                         onAvailabilityResponse(result);
@@ -481,7 +481,7 @@ public class AiAssistantService {
                                             != Tribool.FALSE) {
                                 enabled = false;
                             } else if (shouldDisableForEnterprise()
-                                    && capabilities.isSubjectToEnterprisePolicies()
+                                    && capabilities.isSubjectToEnterpriseFeatures()
                                             != Tribool.FALSE) {
                                 enabled = false;
                             }

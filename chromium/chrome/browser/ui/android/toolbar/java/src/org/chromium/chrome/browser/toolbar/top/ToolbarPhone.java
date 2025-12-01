@@ -33,8 +33,6 @@ import android.view.ViewDebug;
 import android.view.ViewGroup;
 import android.view.ViewStub;
 import android.widget.FrameLayout;
-import android.widget.ImageButton;
-import android.widget.ImageView;
 
 import androidx.annotation.ColorInt;
 import androidx.annotation.DrawableRes;
@@ -43,7 +41,6 @@ import androidx.annotation.VisibleForTesting;
 import androidx.appcompat.content.res.AppCompatResources;
 import androidx.core.content.ContextCompat;
 import androidx.core.content.res.ResourcesCompat;
-import androidx.core.widget.ImageViewCompat;
 
 import org.chromium.base.MathUtils;
 import org.chromium.base.TimeUtils;
@@ -55,6 +52,7 @@ import org.chromium.build.annotations.MonotonicNonNull;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.NullUnmarked;
 import org.chromium.build.annotations.Nullable;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.omnibox.LocationBar;
 import org.chromium.chrome.browser.omnibox.LocationBarCoordinator;
 import org.chromium.chrome.browser.omnibox.NewTabPageDelegate;
@@ -64,13 +62,16 @@ import org.chromium.chrome.browser.omnibox.status.StatusCoordinator;
 import org.chromium.chrome.browser.omnibox.styles.OmniboxResourceProvider;
 import org.chromium.chrome.browser.omnibox.suggestions.OmniboxSuggestionsDropdownScrollListener;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tabmodel.IncognitoStateProvider;
 import org.chromium.chrome.browser.theme.SurfaceColorUpdateUtils;
+import org.chromium.chrome.browser.theme.ThemeColorProvider;
 import org.chromium.chrome.browser.theme.ThemeUtils;
 import org.chromium.chrome.browser.toolbar.R;
 import org.chromium.chrome.browser.toolbar.ToolbarDataProvider;
 import org.chromium.chrome.browser.toolbar.ToolbarProgressBar;
 import org.chromium.chrome.browser.toolbar.ToolbarTabController;
 import org.chromium.chrome.browser.toolbar.back_button.BackButtonCoordinator;
+import org.chromium.chrome.browser.toolbar.extensions.ExtensionToolbarCoordinator;
 import org.chromium.chrome.browser.toolbar.menu_button.MenuButtonCoordinator;
 import org.chromium.chrome.browser.toolbar.optional_button.ButtonData;
 import org.chromium.chrome.browser.toolbar.optional_button.OptionalButtonCoordinator;
@@ -79,7 +80,6 @@ import org.chromium.chrome.browser.toolbar.reload_button.ReloadButtonCoordinator
 import org.chromium.chrome.browser.toolbar.top.CaptureReadinessResult.TopToolbarBlockCaptureReason;
 import org.chromium.chrome.browser.toolbar.top.NavigationPopup.HistoryDelegate;
 import org.chromium.chrome.browser.toolbar.top.TopToolbarCoordinator.ToolbarColorObserver;
-import org.chromium.chrome.browser.toolbar.top.TopToolbarCoordinator.UrlExpansionObserver;
 import org.chromium.chrome.browser.ui.theme.BrandedColorScheme;
 import org.chromium.chrome.browser.user_education.UserEducationHelper;
 import org.chromium.components.browser_ui.styles.SemanticColorUtils;
@@ -102,10 +102,11 @@ import java.util.function.BooleanSupplier;
 // Vivaldi
 import android.app.Activity;
 import android.content.res.Configuration;
-import android.os.Build;
+import android.widget.ImageView;
+
+import androidx.core.widget.ImageViewCompat;
 
 import org.chromium.build.BuildConfig;
-import org.chromium.chrome.browser.toolbar.top.NavigationPopup.HistoryDelegate;
 import org.chromium.ui.widget.ChromeImageButton;
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 
@@ -146,10 +147,9 @@ public class ToolbarPhone extends ToolbarLayout
     private ObservableSupplier<Tracker> mTrackerSupplier;
 
     private ViewGroup mToolbarButtonsContainer;
-    // Non-null after inflation occurs.
-    private ImageView mHomeButton;
     protected View mUrlActionContainer;
     private @MonotonicNonNull OptionalButtonCoordinator mOptionalButtonCoordinator;
+    private HomeButtonDisplay mHomeButtonDisplay;
 
     @ViewDebug.ExportedProperty(category = "chrome")
     protected int mTabSwitcherState;
@@ -233,6 +233,7 @@ public class ToolbarPhone extends ToolbarLayout
     private boolean mBrandColorTransitionActive;
 
     private boolean mIsHomeButtonEnabled;
+    private boolean mIsHomepageNonNtp;
 
     private @Nullable Runnable mLayoutUpdater;
 
@@ -280,8 +281,6 @@ public class ToolbarPhone extends ToolbarLayout
     private ChromeImageButton mForwardButton;
     private @Nullable NavigationPopup mNavigationPopup;
     private HistoryDelegate mHistoryDelegate;
-    private ChromeImageButton mReloadButton;
-    private ToolbarTabController mTabController;
     /** End Vivaldi **/
 
     private boolean mDropdownListScrolled;
@@ -347,7 +346,16 @@ public class ToolbarPhone extends ToolbarLayout
             super.onFinishInflate();
 
             mToolbarButtonsContainer = findViewById(R.id.toolbar_buttons);
-            mHomeButton = findViewById(R.id.home_button);
+
+            if (ChromeFeatureList.sNewTabPageCustomization.isEnabled()
+                    && ChromeFeatureList.sNewTabPageCustomizationToolbarButton.isEnabled()) {
+                ViewStub homePageButtonsStub = findViewById(R.id.home_page_buttons_stub);
+
+                if (homePageButtonsStub != null) {
+                    homePageButtonsStub.inflate();
+                }
+            }
+
             mUrlActionContainer = findViewById(R.id.url_action_container);
             mToolbarBackground =
                     new ColorDrawable(getToolbarColorForVisualState(VisualState.NORMAL));
@@ -360,12 +368,7 @@ public class ToolbarPhone extends ToolbarLayout
                     getResources().getDrawable(R.drawable.vivaldi_bottom_nav_back_56dp));
             mForwardButton.setImageDrawable(
                     getResources().getDrawable(R.drawable.vivaldi_bottom_nav_forward_56dp));
-            mReloadButton = findViewById(R.id.reload_button);
-            mReloadButton.setOnClickListener(view -> {
-                if (mTabController != null) mTabController.stopOrReloadCurrentTab(false);
-            });
             // End Vivaldi
-
             setLayoutTransition(null);
 
             if (getMenuButtonCoordinator() != null) {
@@ -375,17 +378,6 @@ public class ToolbarPhone extends ToolbarLayout
             setWillNotDraw(false);
             mUrlFocusTranslationX =
                     getResources().getDimensionPixelSize(R.dimen.toolbar_url_focus_translation_x);
-
-            // Vivaldi Ref. VAB-8862 Start
-            int dimensionOffset = (int) getResources().getDimension(
-                    R.dimen.toolbar_buttons_offset_padding);
-            mHomeButton.setPadding(0, 0, dimensionOffset,0);
-
-            View myView = findViewById(R.id.menu_button_wrapper);
-            if (BuildConfig.IS_VIVALDI && myView != null) {
-                myView.setLayoutParams(
-                        MenuButtonCoordinator.updateLayoutParamsMenuButtonWrapper(myView));
-            } // Vivaldi Ref. VAB-8862 END
         }
     }
 
@@ -401,7 +393,11 @@ public class ToolbarPhone extends ToolbarLayout
             ObservableSupplier<Tracker> trackerSupplier,
             ToolbarProgressBar progressBar,
             @Nullable ReloadButtonCoordinator reloadButtonCoordinator,
-            @Nullable BackButtonCoordinator backButtonCoordinator) {
+            @Nullable BackButtonCoordinator backButtonCoordinator,
+            @Nullable HomeButtonDisplay homeButtonDisplay,
+            @Nullable ExtensionToolbarCoordinator extensionToolbarCoordinator,
+            ThemeColorProvider themeColorProvider,
+            IncognitoStateProvider incognitoStateProvider) {
         super.initialize(
                 toolbarDataProvider,
                 tabController,
@@ -412,15 +408,32 @@ public class ToolbarPhone extends ToolbarLayout
                 trackerSupplier,
                 progressBar,
                 reloadButtonCoordinator,
-                backButtonCoordinator);
+                backButtonCoordinator,
+                homeButtonDisplay,
+                extensionToolbarCoordinator,
+                themeColorProvider,
+                incognitoStateProvider);
         mUserEducationHelper = userEducationHelper;
         mTrackerSupplier = trackerSupplier;
+        mHomeButtonDisplay = assumeNonNull(homeButtonDisplay);
 
         getToolbarDataProvider().addToolbarDataProviderObserver(this);
 
+        mHomeButtonDisplay.updateState(
+                mVisualState, mIsHomeButtonEnabled, mIsHomepageNonNtp, urlHasFocus());
+
+        // Vivaldi Ref. VAB-8862
+        float offsetPadding = getResources().getDimension(
+                R.dimen.toolbar_buttons_offset_padding);
+        mHomeButtonDisplay.getView().setPadding(0, 0, (int) offsetPadding, 0);
+
+        View wrapperView = findViewById(R.id.menu_button_wrapper);
+        if (wrapperView != null) {
+            wrapperView.setLayoutParams(
+                    MenuButtonCoordinator.updateLayoutParamsMenuButtonWrapper(wrapperView));
+        }
         // Vivaldi
         mHistoryDelegate = historyDelegate;
-        mTabController = tabController;
     }
 
     @Override
@@ -454,8 +467,7 @@ public class ToolbarPhone extends ToolbarLayout
     public static GradientDrawable createModernLocationBarBackground(Context context) {
         GradientDrawable drawable =
                 (GradientDrawable)
-                        context.getDrawable(
-                                R.drawable.modern_toolbar_text_box_background_with_primary_color);
+                        context.getDrawable(R.drawable.modern_toolbar_text_box_background);
         assumeNonNull(drawable);
         drawable.mutate();
         drawable.setColor(
@@ -630,7 +642,7 @@ public class ToolbarPhone extends ToolbarLayout
             // setTabSwitcherMode()/onTabSwitcherTransitionFinished() ->
             // updateVisualsForLocationBarState()
             if (!isInTabSwitcherMode()) {
-                invokeTransition(false);
+                invokeTransition();
             }
             if (!changed) return;
         } else {
@@ -779,15 +791,12 @@ public class ToolbarPhone extends ToolbarLayout
     private int getBoundsAfterAccountingForLeftButton() {
         int padding = mToolbarSidePaddingForNtp;
 
-        // If home button is visible, mHomeButton.getMeasuredWidth() should be returned as the left
+        // If home button is visible, homeButton.getMeasuredWidth() should be returned as the left
         // bound.
-        if (mHomeButton.getVisibility() != GONE) {
-            padding = mHomeButton.getMeasuredWidth() + // Vivaldi Ref. VAB-8862
-                    (int) getResources().getDimension(R.dimen.toolbar_buttons_offset_padding);
-        } else {
-            padding += (int) getResources().getDimension(
-                    R.dimen.toolbar_buttons_offset_padding);
+        if (mHomeButtonDisplay.getVisibility() != GONE) {
+            padding = mHomeButtonDisplay.getMeasuredWidth();
         }
+
         // Vivaldi
         if (mPanelButton != null && mPanelButton.getVisibility() != GONE) {
             padding += mPanelButton.getMeasuredWidth();
@@ -938,7 +947,7 @@ public class ToolbarPhone extends ToolbarLayout
             updateLocationBarForNtp(mVisualState, urlHasFocus());
         }
         updateUrlExpansionFraction();
-        invokeTransition(false);
+        invokeTransition();
     }
 
     /**
@@ -1049,14 +1058,11 @@ public class ToolbarPhone extends ToolbarLayout
     private void setUrlFocusChangeFraction(float fraction) {
         mUrlFocusChangeFraction = fraction;
         updateUrlExpansionFraction();
-        invokeTransition(false);
+        invokeTransition();
     }
 
     private void updateUrlExpansionFraction() {
         mUrlExpansionFraction = Math.max(mNtpSearchBoxScrollFraction, mUrlFocusChangeFraction);
-        for (UrlExpansionObserver observer : mUrlExpansionObservers) {
-            observer.onUrlExpansionProgressChanged();
-        }
         assert mUrlExpansionFraction >= 0;
         assert mUrlExpansionFraction <= 1;
     }
@@ -1073,8 +1079,8 @@ public class ToolbarPhone extends ToolbarLayout
         int toolbarButtonVisibility = getToolbarButtonVisibility();
         mToolbarButtonsContainer.setVisibility(toolbarButtonVisibility);
         if (!BuildConfig.IS_VIVALDI) {
-        if (mHomeButton.getVisibility() != GONE) {
-            mHomeButton.setVisibility(toolbarButtonVisibility);
+        if (mHomeButtonDisplay.getVisibility() != GONE) {
+            mHomeButtonDisplay.setVisibility(toolbarButtonVisibility);
         }
         } // Vivaldi
 
@@ -1306,7 +1312,7 @@ public class ToolbarPhone extends ToolbarLayout
         mLocationBar.getPhoneCoordinator().setTranslationX(0);
         if (!mUrlFocusChangeInProgress) {
             mToolbarButtonsContainer.setTranslationY(0);
-            mHomeButton.setTranslationY(0);
+            mHomeButtonDisplay.setTranslationY(0);
         }
 
         if (!mUrlFocusChangeInProgress && getToolbarShadow() != null) {
@@ -1430,7 +1436,7 @@ public class ToolbarPhone extends ToolbarLayout
         int transY = mTabSwitcherState == STATIC_TAB ? Math.min(mNtpSearchBoxTranslation.y, 0) : 0;
 
         mToolbarButtonsContainer.setTranslationY(transY);
-        mHomeButton.setTranslationY(transY);
+        mHomeButtonDisplay.setTranslationY(transY);
     }
 
     private void setAncestorsShouldClipChildren(boolean clip) {
@@ -1449,8 +1455,8 @@ public class ToolbarPhone extends ToolbarLayout
         canvas.save();
         canvas.clipRect(mBackgroundOverlayBounds);
 
-        if (mHomeButton.getVisibility() != View.GONE) {
-            drawChild(canvas, mHomeButton, SystemClock.uptimeMillis());
+        if (mHomeButtonDisplay.getVisibility() != GONE) {
+            drawChild(canvas, mHomeButtonDisplay.getView(), SystemClock.uptimeMillis());
         }
 
         // Note(david@vivaldi.com): List all buttons here which are to the left of the address-bar.
@@ -1551,7 +1557,7 @@ public class ToolbarPhone extends ToolbarLayout
     }
 
     private boolean isChildLeft(View child) {
-        return child == mHomeButton ^ LocalizationUtils.isLayoutRtl();
+        return (child == mHomeButtonDisplay.getView()) ^ LocalizationUtils.isLayoutRtl();
     }
 
     /**
@@ -1696,7 +1702,9 @@ public class ToolbarPhone extends ToolbarLayout
     }
 
     private CaptureReadinessResult getReadinessStateWithSuppression() {
-        if (urlHasFocus()) {
+        if (isLayoutRequested() || isInLayout()) {
+            return CaptureReadinessResult.notReady(TopToolbarBlockCaptureReason.LAYOUT_REQUESTED);
+        } else if (urlHasFocus()) {
             return CaptureReadinessResult.notReady(TopToolbarBlockCaptureReason.URL_BAR_HAS_FOCUS);
         } else if (mUrlFocusChangeInProgress) {
             return CaptureReadinessResult.notReady(
@@ -1765,12 +1773,13 @@ public class ToolbarPhone extends ToolbarLayout
                 mVisualState,
                 visibleUrlText,
                 securityIconResource,
-                assumeNonNull(ImageViewCompat.getImageTintList(mHomeButton)),
-                mHomeButton.getVisibility() == View.VISIBLE,
+                assumeNonNull(mHomeButtonDisplay.getForegroundColor()),
+                mHomeButtonDisplay.getVisibility() == View.VISIBLE,
                 getMenuButtonCoordinator().isShowingUpdateBadge(),
                 getToolbarDataProvider().isPaintPreview(),
                 getProgressBar().getProgress(),
-                mUnfocusedLocationBarLayoutWidth);
+                mUnfocusedLocationBarLayoutWidth,
+                mBrowserControlsStateProvider.getControlsPosition());
     }
 
     @Override
@@ -1798,6 +1807,12 @@ public class ToolbarPhone extends ToolbarLayout
     }
 
     @Override
+    public void onHomepageIsNonNtpUpdate(boolean isHomepageNonNtp) {
+        mIsHomepageNonNtp = isHomepageNonNtp;
+        updateButtonVisibility();
+    }
+
+    @Override
     public void onWindowVisibilityChanged(int visibility) {
         super.onWindowVisibilityChanged(visibility);
         updateButtonVisibility();
@@ -1805,16 +1820,14 @@ public class ToolbarPhone extends ToolbarLayout
 
     @Override
     public void updateButtonVisibility() {
-        boolean hideHomeButton = !mIsHomeButtonEnabled;
         // Note(david@vivaldi.com): Home button visibility will be handled in
         // onBottomToolbarVisibilityChanged().
         if (!BuildConfig.IS_VIVALDI) {
-            if (hideHomeButton) {
-                mHomeButton.setVisibility(View.GONE);
-            } else {
-                mHomeButton.setVisibility(urlHasFocus() ? INVISIBLE : VISIBLE);
-            }
+        if (mHomeButtonDisplay != null) {
+            mHomeButtonDisplay.updateState(
+                    mVisualState, mIsHomeButtonEnabled, mIsHomepageNonNtp, urlHasFocus());
         }
+        } // End Vivaldi
     }
 
     @Override
@@ -1822,18 +1835,17 @@ public class ToolbarPhone extends ToolbarLayout
             @Nullable ColorStateList tint,
             @Nullable ColorStateList activityFocusTint,
             @BrandedColorScheme int brandedColorScheme) {
-        ImageViewCompat.setImageTintList(mHomeButton, tint);
+        mHomeButtonDisplay.setForegroundColor(tint);
 
         if (mOptionalButtonCoordinator != null) {
             mOptionalButtonCoordinator.setIconForegroundColor(tint);
         }
 
         // Vivaldi
-        ImageViewCompat.setImageTintList(mHomeButton, tint);
+        ImageViewCompat.setImageTintList((ImageView) mHomeButtonDisplay.getView(), tint);
         ImageViewCompat.setImageTintList(mBackButton, tint);
         ImageViewCompat.setImageTintList(mForwardButton, tint);
         ImageViewCompat.setImageTintList(mPanelButton, tint);
-        ImageViewCompat.setImageTintList(mReloadButton, tint);
 
         // TODO(amaralp): Have the LocationBar listen to tint changes.
         if (mLocationBar != null) mLocationBar.updateVisualsForState();
@@ -1995,11 +2007,12 @@ public class ToolbarPhone extends ToolbarLayout
         animator.setInterpolator(Interpolators.FAST_OUT_LINEAR_IN_INTERPOLATOR);
         animators.add(animator);
 
+        View homeButton = mHomeButtonDisplay.getView();
         animator =
                 ObjectAnimator.ofFloat(
-                        mHomeButton,
+                        homeButton,
                         TRANSLATION_X,
-                        MathUtils.flipSignIf(-mHomeButton.getWidth() * density, isRtl));
+                        MathUtils.flipSignIf(-homeButton.getWidth() * density, isRtl));
         animator.setDuration(toolbarButtonFadeDuration);
         animator.setInterpolator(Interpolators.FAST_OUT_LINEAR_IN_INTERPOLATOR);
         animators.add(animator);
@@ -2042,7 +2055,7 @@ public class ToolbarPhone extends ToolbarLayout
         animator.setInterpolator(Interpolators.FAST_OUT_LINEAR_IN_INTERPOLATOR);
         animators.add(animator);
 
-        animator = ObjectAnimator.ofFloat(mHomeButton, TRANSLATION_X, 0);
+        animator = ObjectAnimator.ofFloat(mHomeButtonDisplay.getView(), TRANSLATION_X, 0);
         animator.setDuration(URL_FOCUS_TOOLBAR_BUTTONS_DURATION_MS);
         animator.setInterpolator(Interpolators.FAST_OUT_LINEAR_IN_INTERPOLATOR);
         animators.add(animator);
@@ -2087,10 +2100,30 @@ public class ToolbarPhone extends ToolbarLayout
     public void onUrlFocusChange(final boolean hasFocus) {
         super.onUrlFocusChange(hasFocus);
 
+        // Unblock toolbar height when in focused mode, allowing the Omnibox to expand.
+        // TODO(crbug.com/432311666): address following open questions
+        // - this may overdraw the toolbar hairline, which has a fixed margin equal to
+        //   toolbarHeight.
+        // - need to notify TopControlStacker of toolbar height changes, so that other top controls
+        //   are repositioned accordingly. Currently this would be bookmark bar (AL only) progress
+        //   bar, and hairline.
+        // - investigate what else needs to be done to make the WRAP_CONTENT work well as the
+        //   default / static setting (likely leading to elimination of `toolbar_height_no_shadow`
+        //   dimension).
+        if (OmniboxFeatures.allowMultilineEditField()) {
+            var params = getLayoutParams();
+            params.height =
+                    hasFocus
+                            ? LayoutParams.WRAP_CONTENT
+                            : getResources()
+                                    .getDimensionPixelSize(R.dimen.toolbar_height_no_shadow);
+            setLayoutParams(params);
+        }
+
         updateBackground(hasFocus);
         updateLocationBarForNtp(mVisualState, urlHasFocus());
         getTabSwitcherButtonCoordinator().getContainerView().setClickable(!hasFocus);
-        mHomeButton.setClickable(!hasFocus);
+        mHomeButtonDisplay.setClickable(!hasFocus);
 
         // For Vivaldi, hide menu (V) button so it doesn't mix with the location bar buttons.
         if (BuildConfig.IS_VIVALDI)
@@ -2238,7 +2271,7 @@ public class ToolbarPhone extends ToolbarLayout
                 isIncognitoBranded()
                         ? R.drawable.search_box_icon_background_baseline
                         : R.drawable.search_box_icon_background;
-        mHomeButton.setBackgroundResource(toolbarIconRippleId);
+        mHomeButtonDisplay.setBackgroundResource(toolbarIconRippleId);
         getMenuButtonCoordinator().updateButtonBackground(toolbarIconRippleId);
         mLocationBar.updateButtonBackground(omniboxIconRippleId);
     }
@@ -2316,7 +2349,7 @@ public class ToolbarPhone extends ToolbarLayout
         boolean wasShowingNtp = ntpDelegate.wasShowingNtp();
         float previousNtpScrollFraction = mNtpSearchBoxScrollFraction;
 
-        invokeTransition(true);
+        invokeTransition(/* resetNtpTransition= */ true, /* skipUrlExpansion= */ false);
         ntpDelegate.setSearchBoxScrollListener(this::onNtpScrollChanged);
         if (ntpDelegate.isLocationBarShown()) {
             updateToNtpBackground();
@@ -2391,6 +2424,23 @@ public class ToolbarPhone extends ToolbarLayout
                 && getVisibility() == View.VISIBLE;
     }
 
+    @Override
+    public void onToEdgeChange(int newTopPadding) {
+        // The status bar hides when the newTopInset value is greater than zero. When the New Tab
+        // Page (NTP) transitions to an edge-to-edge display at the top, we add the original status
+        // bar height as the top padding to the toolbar. This ensures the toolbar stays in its
+        // original screen position, and the entire top area (status bar and toolbar) is rendered
+        // with the toolbar's color.
+        ViewGroup.MarginLayoutParams marginLayoutParams =
+                (ViewGroup.MarginLayoutParams) getLayoutParams();
+        int height =
+                getResources().getDimensionPixelSize(R.dimen.toolbar_height_no_shadow)
+                        + newTopPadding;
+        marginLayoutParams.height = height;
+
+        setPaddingRelative(getPaddingStart(), newTopPadding, getPaddingEnd(), getPaddingBottom());
+    }
+
     private boolean hideShadowForIncognitoNtp() {
         return isIncognitoBranded()
                 && UrlUtilities.isNtpUrl(getToolbarDataProvider().getCurrentGurl());
@@ -2449,13 +2499,11 @@ public class ToolbarPhone extends ToolbarLayout
 
         if (mIsNtpWithUnfocusedRealOmnibox) {
             updateLocationBarForNtpImpl(
-                    !ColorUtils.inNightMode(getContext()),
                     /* useDefaultUrlBarAndUrlActionContainerAppearance= */ false);
         } else {
             // Restore the appearance of the real search box when transitioning from NTP to other
             // pages.
             updateLocationBarForNtpImpl(
-                    /* statusIconBackgroundVisibility= */ false,
                     /* useDefaultUrlBarAndUrlActionContainerAppearance= */ true);
         }
     }
@@ -2464,16 +2512,13 @@ public class ToolbarPhone extends ToolbarLayout
      * Update the appearance (logo background, search text's color and style) of the location bar
      * based on the value provided.
      *
-     * @param statusIconBackgroundVisibility The visibility of the status icon background.
      * @param useDefaultUrlBarAndUrlActionContainerAppearance Whether to use the default typeface
      *     and color for the search text in the search box and use the default end margin for the
      *     url action container in the search box. If not we will use specific settings for NTP's
      *     un-focus state.
      */
     private void updateLocationBarForNtpImpl(
-            boolean statusIconBackgroundVisibility,
             boolean useDefaultUrlBarAndUrlActionContainerAppearance) {
-        mLocationBar.setStatusIconBackgroundVisibility(statusIconBackgroundVisibility);
         mLocationBar.updateUrlBarHintTextColor(useDefaultUrlBarAndUrlActionContainerAppearance);
         mLocationBar.updateUrlActionContainerEndMargin(
                 useDefaultUrlBarAndUrlActionContainerAppearance);
@@ -2485,10 +2530,10 @@ public class ToolbarPhone extends ToolbarLayout
         @VisualState int newVisualState = computeVisualState();
         updateLocationBarForNtp(newVisualState, urlHasFocus());
 
-        if (newVisualState == VisualState.NEW_TAB_NORMAL && mHomeButton != null) {
-            mHomeButton.setAccessibilityTraversalBefore(R.id.toolbar_buttons);
+        if (newVisualState == VisualState.NEW_TAB_NORMAL) {
+            mHomeButtonDisplay.setAccessibilityTraversalBefore(R.id.toolbar_buttons);
         } else {
-            mHomeButton.setAccessibilityTraversalBefore(View.NO_ID);
+            mHomeButtonDisplay.setAccessibilityTraversalBefore(View.NO_ID);
         }
 
         // If we are navigating to or from a brand color, allow the transition animation
@@ -2539,13 +2584,20 @@ public class ToolbarPhone extends ToolbarLayout
 
         mVisualState = newVisualState;
 
+        if (!BuildConfig.IS_VIVALDI)
+        mHomeButtonDisplay.updateState(
+                mVisualState, mIsHomeButtonEnabled, mIsHomepageNonNtp, urlHasFocus());
+
         // Refresh the toolbar texture.
         if ((mVisualState == VisualState.BRAND_COLOR || visualStateChanged)
                 && mLayoutUpdater != null) {
             mLayoutUpdater.run();
         }
         updateShadowVisibility();
-        invokeTransition(false);
+        invokeTransition(
+                /* resetNtpTransition= */ false,
+                /* skipUrlExpansion= */ ChromeFeatureList.sToolbarPhoneAnimationRefactor
+                        .isEnabled());
 
         // This exception is to prevent early change of theme color when exiting the tab switcher
         // since currently visual state does not map correctly to tab switcher state. See
@@ -2692,7 +2744,7 @@ public class ToolbarPhone extends ToolbarLayout
                                 "ToolbarPhone.initializeOptionalButton.mOptionalButton.setTransitionFinishedCallback");
                     });
 
-            mHomeButton.setOnKeyListener(
+            mHomeButtonDisplay.setOnKeyListener(
                     new KeyboardNavigationListener() {
                         @Override
                         public @Nullable View getNextFocusForward() {
@@ -2724,8 +2776,8 @@ public class ToolbarPhone extends ToolbarLayout
                                     // url_bar when navigating backward.
                                     if (isLocationBarShownInNtp()
                                             && mUrlFocusChangeFraction < 1.0f
-                                            && mHomeButton.getVisibility() != View.GONE) {
-                                        return mHomeButton;
+                                            && mHomeButtonDisplay.getVisibility() != View.GONE) {
+                                        return mHomeButtonDisplay.getView();
                                     }
                                     // If the url_bar is within the toolbar or the home button is
                                     // not visible in the normal new tab page, the default behavior
@@ -2756,7 +2808,7 @@ public class ToolbarPhone extends ToolbarLayout
     }
 
     @Override
-    void hideOptionalButton() {
+    protected void hideOptionalButton() {
         mButtonData = null;
         if (mOptionalButtonCoordinator == null
                 || mOptionalButtonCoordinator.getViewVisibility() == View.GONE
@@ -2905,13 +2957,20 @@ public class ToolbarPhone extends ToolbarLayout
         mNtpSearchBoxScrollFraction = ntpSearchBoxScrollFraction;
     }
 
+    private void invokeTransition() {
+        invokeTransition(/* resetNtpTransition= */ false, /* skipUrlExpansion= */ false);
+    }
+
     /**
      * Triggers NTP transition animation (if toolbar is shown on NTP) and URL expansion animation.
      *
      * @param resetNtpTransition if the transition is to reset NTP animation.
+     * @param skipUrlExpansion if the URL expansion animation should be skipped.
      */
-    private void invokeTransition(boolean resetNtpTransition) {
+    private void invokeTransition(boolean resetNtpTransition, boolean skipUrlExpansion) {
         if (resetNtpTransition) {
+            // skipUrlExpansion should not be set when resetNtpTransition is true.
+            assert !skipUrlExpansion;
             resetNtpAnimationValues();
             return;
         }
@@ -2930,7 +2989,10 @@ public class ToolbarPhone extends ToolbarLayout
         } else {
             resetNtpAnimationValues();
         }
-        updateUrlExpansionAnimation();
+
+        if (!skipUrlExpansion) {
+            updateUrlExpansionAnimation();
+        }
     }
 
     private boolean inOrEnteringTabSwitcher() {
@@ -3006,7 +3068,7 @@ public class ToolbarPhone extends ToolbarLayout
         if (orientation == Configuration.ORIENTATION_PORTRAIT && isTopToolbarOn())
             visibility = GONE;
         mPanelButton.setVisibility(visibility);
-        mHomeButton.setVisibility(shouldShowStartPageIcon(orientation) ? VISIBLE: GONE);
+        mHomeButtonDisplay.setVisibility(shouldShowStartPageIcon(orientation) ? VISIBLE: GONE);
         // For all other buttons we apply |GONE| when in portrait mode with toolbar at the bottom.
         if (orientation == Configuration.ORIENTATION_PORTRAIT && !isTopToolbarOn())
             visibility = GONE;

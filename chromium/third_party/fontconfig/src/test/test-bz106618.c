@@ -28,7 +28,7 @@
 int
 main (int argc, char **argv)
 {
-    FcFontSet *fs = FcConfigGetFonts (NULL, FcSetSystem);
+    const FcFontSet *fs = FcConfigGetFonts (NULL, FcSetSystem);
     int        i;
 
     if (!fs)
@@ -41,7 +41,7 @@ main (int argc, char **argv)
 	    return 1;
 	printf ("%s\n", file);
     }
-    FcFontSetDestroy (fs);
+    FcFini();
 
     return 0;
 }

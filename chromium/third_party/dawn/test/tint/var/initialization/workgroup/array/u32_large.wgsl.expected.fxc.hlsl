@@ -1,26 +1,31 @@
-groupshared int zero[23];
+struct main_inputs {
+  uint tint_local_index : SV_GroupIndex;
+};
 
-void tint_zero_workgroup_memory(uint local_idx) {
+
+groupshared int zero[23];
+void main_inner(uint tint_local_index) {
   {
-    for(uint idx = local_idx; (idx < 23u); idx = (idx + 13u)) {
-      uint i = idx;
-      zero[i] = 0;
+    uint v_1 = 0u;
+    v_1 = tint_local_index;
+    while(true) {
+      uint v_2 = v_1;
+      if ((v_2 >= 23u)) {
+        break;
+      }
+      zero[v_2] = int(0);
+      {
+        v_1 = (v_2 + 13u);
+      }
+      continue;
     }
   }
   GroupMemoryBarrierWithGroupSync();
-}
-
-struct tint_symbol_1 {
-  uint local_invocation_index : SV_GroupIndex;
-};
-
-void main_inner(uint local_invocation_index) {
-  tint_zero_workgroup_memory(local_invocation_index);
   int v[23] = zero;
 }
 
 [numthreads(13, 1, 1)]
-void main(tint_symbol_1 tint_symbol) {
-  main_inner(tint_symbol.local_invocation_index);
-  return;
+void main(main_inputs inputs) {
+  main_inner(inputs.tint_local_index);
 }
+

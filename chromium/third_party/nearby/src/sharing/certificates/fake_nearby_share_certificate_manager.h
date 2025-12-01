@@ -24,7 +24,7 @@
 #include <string>
 #include <vector>
 
-#include "absl/strings/string_view.h"
+#include "internal/base/file_path.h"
 #include "sharing/certificates/nearby_share_certificate_manager.h"
 #include "sharing/certificates/nearby_share_certificate_manager_impl.h"
 #include "sharing/certificates/nearby_share_encrypted_metadata_key.h"
@@ -62,7 +62,7 @@ class FakeNearbyShareCertificateManager : public NearbyShareCertificateManager {
         Context* context,
         NearbyShareLocalDeviceDataManager* local_device_data_manager,
         NearbyShareContactManager* contact_manager,
-        absl::string_view profile_path,
+        const FilePath& profile_path,
         nearby::sharing::api::SharingRpcClientFactory* client_factory) override;
 
     std::vector<FakeNearbyShareCertificateManager*> instances_;
@@ -102,7 +102,6 @@ class FakeNearbyShareCertificateManager : public NearbyShareCertificateManager {
   void ClearPublicCertificates(std::function<void(bool)> callback) override;
   void SetVendorId(int32_t vendor_id) override {}
   std::string Dump() const override { return ""; }
-  bool UsingIdentityRpc() override { return true; }
 
   // Make protected methods from base class public in this fake class.
   using NearbyShareCertificateManager::NotifyPrivateCertificatesChanged;

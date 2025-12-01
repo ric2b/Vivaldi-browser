@@ -48,7 +48,7 @@ test_match (int thr_num, int test_num)
     pat = FcNameParse ((const FcChar8 *)"New Century Schoolbook");
 
     FcConfigSubstitute (0, pat, FcMatchPattern);
-    FcDefaultSubstitute (pat);
+    FcConfigSetDefaultSubstitute (0, pat);
 
     match = FcFontMatch (0, pat, &result);
 

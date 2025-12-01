@@ -25,13 +25,13 @@
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include <unordered_set>
 #include <vector>
 
 #include "dawn/native/Features.h"
 #include "dawn/native/Instance.h"
 #include "dawn/native/Toggles.h"
 #include "dawn/native/null/DeviceNull.h"
+#include "dawn/utils/WGPUHelpers.h"
 #include "gtest/gtest.h"
 
 namespace dawn {
@@ -41,7 +41,15 @@ class FeatureTests : public testing::Test {
   public:
     FeatureTests()
         : testing::Test(),
-          mInstanceBase(native::APICreateInstance(nullptr)),
+          mInstanceBase([]() -> Ref<dawn::native::InstanceBase> {
+              static constexpr auto kMultipleDevicesPerAdapter =
+                  wgpu::InstanceFeatureName::MultipleDevicesPerAdapter;
+              dawn::native::InstanceDescriptor instanceDesc = {
+                  .requiredFeatureCount = 1,
+                  .requiredFeatures = &kMultipleDevicesPerAdapter,
+              };
+              return dawn::native::APICreateInstance(&instanceDesc);
+          }()),
           mPhysicalDevice(native::null::PhysicalDevice::Create()),
           mUnsafePhysicalDevice(native::null::PhysicalDevice::Create()),
           mAdapterBase(mInstanceBase.Get(),
@@ -120,12 +128,6 @@ TEST_F(FeatureTests, AdapterWithRequiredFeatureDisabled) {
     }
 }
 
-// For a given feature, returns a set containing the feature and its depending features if any to
-// ensure creating device with these features can success
-std::unordered_set<wgpu::FeatureName> FeatureAndDependenciesSet(wgpu::FeatureName feature) {
-    return {feature};
-}
-
 bool IsExperimental(wgpu::FeatureName feature) {
     return native::kFeatureNameAndInfoList[native::FromAPI(feature)].featureState ==
            native::FeatureInfo::FeatureState::Experimental;
@@ -142,8 +144,10 @@ TEST_F(FeatureTests, RequireAndGetEnabledFeatures) {
         native::Feature feature = static_cast<native::Feature>(i);
         wgpu::FeatureName featureName = ToAPI(feature);
 
-        std::unordered_set<wgpu::FeatureName> requiredFeaturesSet =
-            FeatureAndDependenciesSet(featureName);
+        // Enable features that are implicitly enabled by other features.
+        absl::flat_hash_set<wgpu::FeatureName> requiredFeaturesSet =
+            utils::FeatureAndImplicitlyEnabled(featureName);
+
         std::vector<wgpu::FeatureName> features(requiredFeaturesSet.cbegin(),
                                                 requiredFeaturesSet.cend());
         bool requiredExperimentalFeature = false;

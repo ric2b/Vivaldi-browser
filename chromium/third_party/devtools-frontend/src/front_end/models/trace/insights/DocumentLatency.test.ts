@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {describeWithEnvironment} from '../../../testing/EnvironmentHelpers.js';
+import {describeWithEnvironment, expectConsoleLogs} from '../../../testing/EnvironmentHelpers.js';
 import {
   createContextForNavigation,
   getFirstOrError,
@@ -14,6 +14,10 @@ import * as Trace from '../trace.js';
 import * as Types from '../types/types.js';
 
 describeWithEnvironment('DocumentLatency', function() {
+  expectConsoleLogs({
+    error: ['Error: missing metric scores for specified navigation'],
+  });
+
   it('reports savings for main document with redirects', async () => {
     const {data, insights} = await processTrace(this, 'lantern/redirect/trace.json.gz');
     const insight =
@@ -93,8 +97,7 @@ describeWithEnvironment('DocumentLatency', function() {
     assert.deepEqual(insight.metricSavings, {FCP: 0, LCP: 0} as Trace.Insights.Types.MetricSavings);
   });
 
-  // Flaky
-  it.skip('[crbug.com/404184366] reports savings for main document with many issues, many redirects', async () => {
+  it('reports savings for main document with many issues, many redirects', async () => {
     const {data, insights} = await processTrace(this, 'many-redirects.json.gz');
     const insight =
         getInsightOrError('DocumentLatency', insights, getFirstOrError(data.Meta.navigationsByNavigationId.values()));

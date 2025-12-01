@@ -116,7 +116,7 @@ export function generateInsight(
     return finalize({warnings: [InsightWarning.NO_LCP]});
   }
 
-  const docRequest = networkRequests.byTime.find(req => req.args.data.requestId === context.navigationId);
+  const docRequest = networkRequests.byId.get(context.navigationId);
   if (!docRequest) {
     return finalize({warnings: [InsightWarning.NO_DOCUMENT_REQUEST]});
   }
@@ -157,4 +157,82 @@ export function generateInsight(
       eagerlyLoaded: {label: i18nString(UIStrings.lazyLoadNotApplied), value: imageLoadingAttr !== 'lazy'},
     },
   });
+}
+
+interface LCPImageDiscoveryData {
+  checklist: Exclude<LCPDiscoveryInsightModel['checklist'], undefined>;
+  request: Types.Events.SyntheticNetworkRequest;
+  discoveryDelay: Types.Timing.Micro|null;
+  estimatedSavings: Types.Timing.Milli|null;
+}
+
+/**
+ * TODO: this extra transformation (getImageData) should not be necessary.
+ */
+export function getImageData(model: LCPDiscoveryInsightModel): LCPImageDiscoveryData|null {
+  if (!model.lcpRequest || !model.checklist) {
+    return null;
+  }
+
+  const shouldIncreasePriorityHint = !model.checklist.priorityHinted.value;
+  const shouldPreloadImage = !model.checklist.requestDiscoverable.value;
+  const shouldRemoveLazyLoading = !model.checklist.eagerlyLoaded.value;
+
+  const imageLCP = shouldIncreasePriorityHint !== undefined && shouldPreloadImage !== undefined &&
+      shouldRemoveLazyLoading !== undefined;
+
+  // Shouldn't render anything if lcp insight is null or lcp is text.
+  if (!imageLCP) {
+    return null;
+  }
+
+  const data: LCPImageDiscoveryData = {
+    checklist: model.checklist,
+    request: model.lcpRequest,
+    discoveryDelay: null,
+    estimatedSavings: model.metricSavings?.LCP ?? null,
+  };
+
+  if (model.earliestDiscoveryTimeTs && model.lcpRequest) {
+    const discoveryDelay = model.lcpRequest.ts - model.earliestDiscoveryTimeTs;
+    data.discoveryDelay = Types.Timing.Micro(discoveryDelay);
+  }
+
+  return data;
+}
+
+export function createOverlays(model: LCPDiscoveryInsightModel): Types.Overlays.Overlay[] {
+  const imageResults = getImageData(model);
+  if (!imageResults || !imageResults.discoveryDelay) {
+    return [];
+  }
+
+  const delay = Helpers.Timing.traceWindowFromMicroSeconds(
+      Types.Timing.Micro(imageResults.request.ts - imageResults.discoveryDelay),
+      imageResults.request.ts,
+  );
+
+  return [
+    {
+      type: 'ENTRY_OUTLINE',
+      entry: imageResults.request,
+      outlineReason: 'ERROR',
+    },
+    {
+      type: 'CANDY_STRIPED_TIME_RANGE',
+      bounds: delay,
+      entry: imageResults.request,
+    },
+    {
+      type: 'TIMESPAN_BREAKDOWN',
+      sections: [{
+        bounds: delay,
+        // This is overridden in the component.
+        label: `${imageResults.discoveryDelay} microseconds`,
+        showDuration: false,
+      }],
+      entry: imageResults.request,
+      renderLocation: 'ABOVE_EVENT',
+    },
+  ];
 }

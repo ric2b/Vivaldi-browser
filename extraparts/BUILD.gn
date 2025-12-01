@@ -55,7 +55,6 @@ source_set("extraparts") {
     "//vivaldi/browser:stats_reporter",
     "//vivaldi/calendar",
     "//vivaldi/components/db/mail_client",
-    "//vivaldi/components/request_filter/adblock_filter/interstitial",
     "//vivaldi/contact",
     "//vivaldi/components:adverse_adblocking",
     "//vivaldi/prefs",

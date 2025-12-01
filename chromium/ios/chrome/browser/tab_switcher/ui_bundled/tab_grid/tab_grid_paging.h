@@ -9,22 +9,20 @@
 // Page enumerates the kinds of grouped tabs.
 // Note(prio@vivaldi.com) - Closed tabs should be after remote tab in the enum
 // since this also controls the tab switcher slider position, and scrollview
-// insets based on the index. Tab groups do not have any UI as of now from
-// upstream, so shift closed tabs one stpe up.
+// insets based on the index.
 typedef NS_ENUM(NSUInteger, TabGridPage) {
   TabGridPageIncognitoTabs = 0,
   TabGridPageRegularTabs = 1,
-  TabGridPageRemoteTabs = 2,
-  TabGridPageClosedTabs = 3,
-  TabGridPageTabGroups = 4
+  TabGridPageTabGroups = 2,
+  TabGridPageRemoteTabs = 3,
+  TabGridPageClosedTabs = 4,
 };
 #else
 // Page enumerates the kinds of grouped tabs.
 typedef NS_ENUM(NSUInteger, TabGridPage) {
   TabGridPageIncognitoTabs = 0,
   TabGridPageRegularTabs = 1,
-  TabGridPageRemoteTabs = 2,
-  TabGridPageTabGroups = 3,
+  TabGridPageTabGroups = 2,
 };
 #endif // End Vivaldi
 

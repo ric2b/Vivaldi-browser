@@ -318,7 +318,7 @@
 <translation id="2215920961700443347">Nessuna connessione a internet. Connettiti a internet e riprova.</translation>
 <translation id="2217935453350629363">Velocità attuale</translation>
 <translation id="221994303562837085">Interrompi registrazione</translation>
-<translation id="2224337661447660594">Nessuna connessione a Internet</translation>
+<translation id="2224337661447660594">Nessuna connessione a internet</translation>
 <translation id="222447520299472966">Deve essere selezionato almeno un album Galleria d'arte</translation>
 <translation id="2230005943220647148">Celsius</translation>
 <translation id="2230051135190148440">CHAP</translation>
@@ -327,6 +327,7 @@
 <translation id="2240366984605217732">Cambio di layout</translation>
 <translation id="224421911978987610">esposizione lunga</translation>
 <translation id="2244834438220057800">verde</translation>
+<translation id="2248689665683494517">Natura morta minimal di alcuni fiori di papavero comune in un vaso di vetro su sfondo nero.</translation>
 <translation id="225692081236532131">Stato attivazione</translation>
 <translation id="2267285889943769271">Aggiungi screenshot</translation>
 <translation id="2268044343513325586">Perfeziona</translation>
@@ -334,7 +335,7 @@
 <translation id="2276999893457278469">Contenuti Help principali</translation>
 <translation id="2277631741861284101">Registra e condividi facilmente il tuo audio</translation>
 <translation id="2279051792571591988">Ripristina predefinite</translation>
-<translation id="2286454467119466181">Semplice</translation>
+<translation id="2286454467119466181">Simple</translation>
 <translation id="2287186687001756809">Nessuna immagine disponibile. Per aggiungere foto, visita la pagina <ph name="LINK" />.</translation>
 <translation id="2294577623958216786">La programmazione corrente è impostata su <ph name="SUNRISE" />-<ph name="SUNSET" />. Per aggiornare automaticamente la programmazione del tramonto e dell'alba, attiva l'accesso alla posizione del sistema.</translation>
 <translation id="2305172810646967500">nero</translation>
@@ -757,6 +758,7 @@
 <translation id="430786093962686457">chiffon</translation>
 <translation id="4310735698903592804">Sfondi recenti IA di Google integrata</translation>
 <translation id="4320904097188876154">rosa neon</translation>
+<translation id="432961742358282111">Fai clic con il tasto destro del mouse o tieni premuto per ottenere definizioni, traduzioni o conversioni di unità. Utilizza i tasti Freccia destra o Freccia sinistra per gestire la funzionalità.</translation>
 <translation id="4333390807948134856">Tasto <ph name="KEY_NAME" /> premuto</translation>
 <translation id="4334293042716981313">Puoi anche <ph name="BEGIN_LINK_FREEFORM_SUBPAGE" />scrivere il tuo prompt<ph name="END_LINK_FREEFORM_SUBPAGE" /></translation>
 <translation id="4354430579665871434">chiave</translation>
@@ -1436,7 +1438,6 @@
 <translation id="7302860742311162920">ICCID</translation>
 <translation id="7305884605064981971">EDGE</translation>
 <translation id="7308203371573257315">Fai domande agli esperti nel forum di assistenza di Chromebook</translation>
-<translation id="7309823890857024809">Natura morta minimal di alcuni steli di papavero comune in un vaso di vetro su sfondo nero.</translation>
 <translation id="7311368985037279727">colore tastiera</translation>
 <translation id="7317831949569936035">Registrazione per uso scolastico</translation>
 <translation id="7319430975418800333">A3</translation>

@@ -552,7 +552,11 @@ public class BookmarkUtils {
                             parent, bookmarkModel.getChildCount(parent), title, url);
         }
 
-        if (bookmarkId != null) {
+        if (bookmarkId == null) {
+            // Adding bookmark failed, so clear cache for parent bookmark folder
+            RecordUserAction.record("BookmarkAdded.Failure");
+            BookmarkBridge.clearLastUsedParent();
+        } else {
             BookmarkMetrics.recordBookmarkAdded(profile, bookmarkId);
             if (bookmarkType != BookmarkType.READING_LIST)  // Vivaldi Ref. VAB-9205
             setLastUsedParent(parent);

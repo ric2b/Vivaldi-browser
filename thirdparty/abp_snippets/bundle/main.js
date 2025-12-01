@@ -25,16 +25,26 @@ import {abortOnPropertyRead} from
   "../source/behavioral/abort-on-property-read.js";
 import {abortOnPropertyWrite} from
   "../source/behavioral/abort-on-property-write.js";
+import {arrayOverride} from "../source/behavioral/array-override.js";
+import {blobOverride} from "../source/behavioral/blob-override.js";
 import {cookieRemover} from "../source/behavioral/cookie-remover.js";
 import {setDebug as debug} from "../source/introspection/debug.js";
+import {eventOverride} from "../source/behavioral/event-override.js";
 import {freezeElement} from "../source/behavioral/freeze-element.js";
+import {hideIfCanvasContains} from
+  "../source/conditional-hiding/hide-if-canvas-contains.js";
 import {hideIfShadowContains} from
   "../source/conditional-hiding/hide-if-shadow-contains.js";
 import {jsonOverride} from "../source/behavioral/json-override.js";
 import {jsonPrune} from "../source/behavioral/json-prune.js";
+import {mapOverride} from "../source/behavioral/map-override.js";
 import {overridePropertyRead} from
   "../source/behavioral/override-property-read.js";
 import {preventListener} from "../source/behavioral/prevent-listener.js";
+import {replaceFetchResponse} from "../source/behavioral/replace-fetch-response.js";
+import {replaceOutboundValue} from "../source/behavioral/replace-outbound-value.js";
+import {replaceXhrResponse} from "../source/behavioral/replace-xhr-response.js";
+import {setProfile} from "../source/introspection/profile.js";
 import {stripFetchQueryParameter} from
   "../source/behavioral/strip-fetch-query-parameter.js";
 import {trace} from "../source/introspection/trace.js";
@@ -45,14 +55,23 @@ export const snippets = {
   "abort-on-iframe-property-write": abortOnIframePropertyWrite,
   "abort-on-property-read": abortOnPropertyRead,
   "abort-on-property-write": abortOnPropertyWrite,
+  "array-override": arrayOverride,
+  "blob-override": blobOverride,
   "cookie-remover": cookieRemover,
+  "profile": setProfile,
   "debug": debug,
+  "event-override": eventOverride,
   "freeze-element": freezeElement,
+  "hide-if-canvas-contains": hideIfCanvasContains,
   "hide-if-shadow-contains": hideIfShadowContains,
   "json-override": jsonOverride,
   "json-prune": jsonPrune,
+  "map-override": mapOverride,
   "override-property-read": overridePropertyRead,
   "prevent-listener": preventListener,
+  "replace-fetch-response": replaceFetchResponse,
+  "replace-outbound-value": replaceOutboundValue,
+  "replace-xhr-response": replaceXhrResponse,
   "strip-fetch-query-parameter": stripFetchQueryParameter,
   "trace": trace
 };

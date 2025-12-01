@@ -11,6 +11,9 @@
 
 // Vivaldi
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/grid/grid_empty_view.h"
+
+@protocol RecentTabsTableViewControllerDelegate;
+@protocol RecentTabsTableViewControllerUIDelegate;
 // End Vivaldi
 
 class Browser;
@@ -24,8 +27,6 @@ struct DistantSession;
 @protocol SettingsCommands;
 @protocol RecentTabsMenuProvider;
 @protocol RecentTabsPresentationDelegate;
-@protocol RecentTabsTableViewControllerDelegate;
-@protocol RecentTabsTableViewControllerUIDelegate;
 @protocol TableViewFaviconDataSource;
 
 @interface RecentTabsTableViewController
@@ -40,17 +41,9 @@ struct DistantSession;
 
 // Opaque instructions on how to open urls.
 @property(nonatomic) UrlLoadStrategy loadStrategy;
-// RecentTabsTableViewControllerDelegate delegate.
-@property(nonatomic, weak) id<RecentTabsTableViewControllerDelegate> delegate;
-// Delegate for UI-related events.
-@property(nonatomic, weak) id<RecentTabsTableViewControllerUIDelegate>
-    UIDelegate;
 // Whether the updates of the RecentTabs should be ignored. Setting this to NO
 // would trigger a reload of the TableView.
 @property(nonatomic, assign) BOOL preventUpdates;
-// Search term for filtering displayed items to those which match `searchTerm`.
-// Setting as null clears any search results and resets to showing all tabs.
-@property(nonatomic, copy) NSString* searchTerms;
 
 // Delegate to present the tab UI.
 @property(nonatomic, weak) id<RecentTabsPresentationDelegate>
@@ -66,11 +59,6 @@ struct DistantSession;
 // Multi-window session for this vc's recent tabs.
 @property(nonatomic, weak) UISceneSession* session;
 
-// Whether the grid is scrolled to the top.
-@property(nonatomic, readonly, getter=isScrolledToTop) BOOL scrolledToTop;
-// Whether the grid is scrolled to the bottom.
-@property(nonatomic, readonly, getter=isScrolledToBottom) BOOL scrolledToBottom;
-
 // Initializers.
 - (instancetype)init NS_DESIGNATED_INITIALIZER;
 - (instancetype)initWithStyle:(UITableViewStyle)style NS_UNAVAILABLE;
@@ -84,6 +72,18 @@ struct DistantSession;
 - (void)removeSessionAtTableSectionWithIdentifier:(NSInteger)sectionIdentifier;
 
 // Vivaldi
+// RecentTabsTableViewControllerDelegate delegate.
+@property(nonatomic, weak) id<RecentTabsTableViewControllerDelegate> delegate;
+// Delegate for UI-related events.
+@property(nonatomic, weak) id<RecentTabsTableViewControllerUIDelegate>
+    UIDelegate;
+// Search term for filtering displayed items to those which match `searchTerm`.
+// Setting as null clears any search results and resets to showing all tabs.
+@property(nonatomic, copy) NSString* searchTerms;
+// Whether the grid is scrolled to the top.
+@property(nonatomic, readonly, getter=isScrolledToTop) BOOL scrolledToTop;
+// Whether the grid is scrolled to the bottom.
+@property(nonatomic, readonly, getter=isScrolledToBottom) BOOL scrolledToBottom;
 // The view that is shown when there are no items.
 @property(nonatomic, strong) UIView<GridEmptyView>* emptyStateView;
 // The view that is shown when there are no items.

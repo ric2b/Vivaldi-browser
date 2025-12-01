@@ -491,7 +491,7 @@ FcFontSetList (FcConfig    *config,
 		FcChar8 *lang;
 
 		if (FcPatternObjectGetString (p, FC_NAMELANG_OBJECT, 0, &lang) != FcResultMatch) {
-		    lang = FcGetDefaultLang();
+		    lang = FcConfigGetDefaultLang (config);
 		}
 		if (!FcListAppend (&table, s->fonts[f], os, lang))
 		    goto bail1;

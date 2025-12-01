@@ -16,7 +16,6 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <filesystem>  // NOLINT
 #include <memory>
 #include <string>
 
@@ -25,6 +24,7 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
+#include "internal/base/file_path.h"
 #include "internal/base/files.h"
 #include "internal/platform/implementation/atomic_boolean.h"
 #include "internal/platform/implementation/atomic_reference.h"
@@ -164,12 +164,12 @@ std::unique_ptr<OutputFile> ImplementationPlatform::CreateOutputFile(
 
 std::unique_ptr<OutputFile> ImplementationPlatform::CreateOutputFile(
     const std::string& file_path) {
-  std::filesystem::path path = std::filesystem::u8path(file_path);
-  std::filesystem::path folder_path = path.parent_path();
+  FilePath path(file_path);
+  FilePath folder_path = path.GetParentPath();
   // Verifies that a path is a valid directory.
-  if (!sharing::DirectoryExists(folder_path)) {
-    if (!sharing::CreateDirectories(folder_path)) {
-      LOG(ERROR) << "Failed to create directory: " << folder_path.string();
+  if (!Files::DirectoryExists(folder_path)) {
+    if (!Files::CreateDirectories(folder_path)) {
+      LOG(ERROR) << "Failed to create directory: " << folder_path.ToString();
       return nullptr;
     }
   }
@@ -194,7 +194,8 @@ std::unique_ptr<BleMedium> ImplementationPlatform::CreateBleMedium(
 
 std::unique_ptr<api::ble_v2::BleMedium>
 ImplementationPlatform::CreateBleV2Medium(api::BluetoothAdapter& adapter) {
-  return std::make_unique<g3::BleV2Medium>(adapter);
+  return std::make_unique<g3::BleV2Medium>(
+      dynamic_cast<g3::BluetoothAdapter&>(adapter));
 }
 
 std::unique_ptr<api::CredentialStorage>
@@ -268,7 +269,7 @@ ImplementationPlatform::CreateDeviceInfo() {
 
 std::unique_ptr<nearby::api::PreferencesManager>
 ImplementationPlatform::CreatePreferencesManager(absl::string_view path) {
-  return std::make_unique<g3::PreferencesManager>(path);
+  return std::make_unique<g3::PreferencesManager>();
 }
 
 }  // namespace api

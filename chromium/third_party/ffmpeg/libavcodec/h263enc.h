@@ -27,6 +27,7 @@
 const uint8_t (*ff_h263_get_mv_penalty(void))[MAX_DMV*2+1];
 
 void ff_h263_encode_init(MPVMainEncContext *m);
+void ff_h263_mpeg4_reset_dc(MPVEncContext *s);
 void ff_h263_encode_gob_header(MPVEncContext *s, int mb_line);
 void ff_h263_encode_mba(MPVEncContext *s);
 
@@ -86,7 +87,7 @@ static inline int get_p_cbp(MPVEncContext *const s,
         for (int i = 0; i < 6; i++) {
             if (s->c.block_last_index[i] >= 0 && !((cbp >> (5 - i)) & 1)) {
                 s->c.block_last_index[i] = -1;
-                s->c.bdsp.clear_block(s->c.block[i]);
+                s->c.bdsp.clear_block(s->block[i]);
             }
         }
     } else {

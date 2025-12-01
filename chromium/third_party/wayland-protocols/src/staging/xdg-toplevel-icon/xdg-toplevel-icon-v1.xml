@@ -136,6 +136,9 @@
       <entry name="immutable"
              summary="the icon has already been assigned to a toplevel and must not be changed"
 	     value="2"/>
+      <entry name="no_buffer"
+             summary="the provided buffer has been destroyed before the toplevel icon"
+             value="3"/>
     </enum>
 
     <request name="destroy" type="destructor">
@@ -185,8 +188,11 @@
         overrides the preexisting pixel data.
 
         The wl_buffer must be kept alive for as long as the xdg_toplevel_icon
-        it is associated with is not destroyed. The buffer contents must not be
-        modified after it was assigned to the icon.
+        it is associated with is not destroyed, otherwise a 'no_buffer' error
+        is raised. The buffer contents must not be modified after it was
+        assigned to the icon. As a result, the region of the wl_shm_pool's
+        backing storage used for the wl_buffer must not be modified after this
+        request is sent. The wl_buffer.release event is unused.
 
         If this request is made after the icon has been assigned to a toplevel
         via 'set_icon', a 'immutable' error must be raised.

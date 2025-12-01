@@ -12,7 +12,7 @@ layout(location = 0) in float tint_interstage_location0;
 layout(location = 1) in vec2 tint_interstage_location1;
 layout(location = 0) out int foo_loc0_Output;
 int tint_f32_to_i32(float value) {
-  return mix(2147483647, mix((-2147483647 - 1), int(value), (value >= -2147483648.0f)), (value <= 2147483520.0f));
+  return int(clamp(value, -2147483648.0f, 2147483520.0f));
 }
 int foo_inner(float v_1, vec2 coord) {
   if ((v_1 == 0.0f)) {
@@ -30,17 +30,19 @@ int foo_inner(float v_1, vec2 coord) {
       } else {
         break;
       }
-      result = (result + i);
+      int v_2 = i;
+      uint v_3 = uint(result);
+      result = int((v_3 + uint(v_2)));
       {
         uint tint_low_inc = (tint_loop_idx.x - 1u);
         tint_loop_idx.x = tint_low_inc;
         uint tint_carry = uint((tint_low_inc == 4294967295u));
         tint_loop_idx.y = (tint_loop_idx.y - tint_carry);
-        int v_2 = 0;
+        int v_4 = 0;
         if (continue_execution) {
-          v_2 = atomicAdd(v.inner, 1);
+          v_4 = atomicAdd(v.inner, 1);
         }
-        i = v_2;
+        i = v_4;
       }
       continue;
     }

@@ -157,6 +157,9 @@ void SetNodeNickname(BookmarkModel* model,
 void SetNodeDescription(BookmarkModel* model,
                         const BookmarkNode* node,
                         const std::string& description);
+void SetNodeDisplayURL(BookmarkModel* model,
+                        const BookmarkNode* node,
+                        const std::string& description);
 void SetNodeSpeeddial(BookmarkModel* model,
                       const BookmarkNode* node,
                       bool speeddial);

@@ -8,6 +8,7 @@ import * as Platform from '../../core/platform/platform.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as Protocol from '../../generated/protocol.js';
 import {createTarget, expectConsoleLogs} from '../../testing/EnvironmentHelpers.js';
+import {spyCall} from '../../testing/ExpectStubCall.js';
 import {
   describeWithDevtoolsExtension,
   getExtensionOrigin,
@@ -15,6 +16,7 @@ import {
 import {MockProtocolBackend} from '../../testing/MockScopeChain.js';
 import {addChildFrame, FRAME_URL, getMainFrame} from '../../testing/ResourceTreeHelpers.js';
 import {encodeSourceMap} from '../../testing/SourceMapEncoder.js';
+import * as Components from '../../ui/legacy/components/utils/utils.js';
 import * as UI from '../../ui/legacy/legacy.js';
 import * as Bindings from '../bindings/bindings.js';
 import * as Extensions from '../extensions/extensions.js';
@@ -95,11 +97,23 @@ describeWithDevtoolsExtension('Extensions', {}, context => {
       const targetManager = target.targetManager();
       const resourceMapping =
           new Bindings.ResourceMapping.ResourceMapping(targetManager, Workspace.Workspace.WorkspaceImpl.instance());
-      Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding.instance(
-          {forceNew: true, resourceMapping, targetManager});
+      const ignoreListManager = Workspace.IgnoreListManager.IgnoreListManager.instance({forceNew: true});
+      Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding.instance({
+        forceNew: true,
+        resourceMapping,
+        targetManager,
+        ignoreListManager,
+      });
     });
 
     describe('setFunctionRangesForScript', () => {
+      expectConsoleLogs({
+        error: [
+          'Extension server error: Invalid argument command: expected a source map script resource for url: https://example.com/',
+          'Extension server error: Invalid argument command: expected valid scriptUrl and non-empty NamedFunctionRanges'
+        ],
+      });
+
       const validFunctionRanges = [{start: {line: 0, column: 0}, end: {line: 10, column: 1}, name: 'foo'}];
       it('correctly calls DebuggerWorkspaceBindings.setFunctionRanges via Resource.setFunctionRangesForScript API',
          async () => {
@@ -170,9 +184,63 @@ describeWithDevtoolsExtension('Extensions', {}, context => {
 });
 
 describeWithDevtoolsExtension('Extensions', {}, context => {
+  beforeEach(() => {
+    createTarget().setInspectedURL(urlString`http://example.com`);
+  });
+
+  it('can register and unregister a global open resource handler', async () => {
+    const registerLinkHandlerSpy = spyCall(Components.Linkifier.Linkifier, 'registerLinkHandler');
+    const unregisterLinkHandlerSpy = spyCall(Components.Linkifier.Linkifier, 'unregisterLinkHandler');
+
+    // Register without a specific scheme (global handler).
+    context.chrome.devtools?.panels.setOpenResourceHandler(() => {});
+
+    const registration = await (await registerLinkHandlerSpy).args[0];
+    assert.strictEqual(registration.title, 'TestExtension');
+    assert.isUndefined(registration.scheme);
+    assert.isFunction(registration.handler);
+    assert.isFunction(registration.shouldHandleOpenResource);
+
+    // Now unregister the extension.
+    context.chrome.devtools?.panels.setOpenResourceHandler();
+
+    const unregistration = await (await unregisterLinkHandlerSpy).args[0];
+    assert.strictEqual(unregistration.title, 'TestExtension');
+    assert.isUndefined(unregistration.scheme);
+    assert.isFunction(unregistration.handler);
+    assert.isFunction(unregistration.shouldHandleOpenResource);
+  });
+
+  it('can register and unregister a scheme specific open resource handler', async () => {
+    const registerLinkHandlerSpy = spyCall(Components.Linkifier.Linkifier, 'registerLinkHandler');
+    const unregisterLinkHandlerSpy = spyCall(Components.Linkifier.Linkifier, 'unregisterLinkHandler');
+
+    context.chrome.devtools?.panels.setOpenResourceHandler(() => {}, 'foo-extension:');
+
+    const registration = await (await registerLinkHandlerSpy).args[0];
+    assert.strictEqual(registration.title, 'TestExtension');
+    assert.strictEqual(registration.scheme, 'foo-extension:');
+    assert.isFunction(registration.handler);
+    assert.isFunction(registration.shouldHandleOpenResource);
+
+    // Now unregister the extension.
+    context.chrome.devtools?.panels.setOpenResourceHandler();
+
+    const unregistration = await (await unregisterLinkHandlerSpy).args[0];
+    assert.strictEqual(unregistration.title, 'TestExtension');
+    assert.isUndefined(unregistration.scheme);
+    assert.isFunction(unregistration.handler);
+    assert.isFunction(unregistration.shouldHandleOpenResource);
+  });
+});
+
+describeWithDevtoolsExtension('Extensions', {}, context => {
   expectConsoleLogs({
     warn: ['evaluate: the main frame is not yet available'],
-    error: ['Extension server error: Object not found: <top>'],
+    error: [
+      'Extension server error: Object not found: <top>',
+      'Extension server error: Operation failed: https://example.com/ has no execution context'
+    ],
   });
   beforeEach(() => {
     createTarget().setInspectedURL(urlString`http://example.com`);
@@ -831,8 +899,13 @@ describeWithDevtoolsExtension('Wasm extension API', {}, context => {
     const targetManager = target.targetManager();
     const resourceMapping =
         new Bindings.ResourceMapping.ResourceMapping(targetManager, Workspace.Workspace.WorkspaceImpl.instance());
-    Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding.instance(
-        {forceNew: true, resourceMapping, targetManager});
+    const ignoreListManager = Workspace.IgnoreListManager.IgnoreListManager.instance({forceNew: true});
+    Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding.instance({
+      forceNew: true,
+      resourceMapping,
+      targetManager,
+      ignoreListManager,
+    });
 
     const callFrame = sinon.createStubInstance(SDK.DebuggerModel.CallFrame);
     callFrame.debuggerModel = new SDK.DebuggerModel.DebuggerModel(target);
@@ -960,9 +1033,13 @@ for (const allowFileAccess of [true, false]) {
           const workspace = Workspace.Workspace.WorkspaceImpl.instance();
           const resourceMapping = new Bindings.ResourceMapping.ResourceMapping(targetManager, workspace);
           target.setInspectedURL(urlString`http://example.com`);
-          const debuggerWorkspaceBinding = Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding.instance(
-              {forceNew: true, targetManager, resourceMapping});
-          Bindings.IgnoreListManager.IgnoreListManager.instance({forceNew: true, debuggerWorkspaceBinding});
+          const ignoreListManager = Workspace.IgnoreListManager.IgnoreListManager.instance({forceNew: true});
+          Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding.instance({
+            forceNew: true,
+            resourceMapping,
+            targetManager,
+            ignoreListManager,
+          });
         });
 
         it('passes allowFileAccess to the LanguageExtensionEndpoint', async () => {
@@ -1023,10 +1100,14 @@ describeWithDevtoolsExtension('validate attachSourceMapURL ', {}, context => {
     const targetManager = target.targetManager();
     const workspace = Workspace.Workspace.WorkspaceImpl.instance();
     const resourceMapping = new Bindings.ResourceMapping.ResourceMapping(targetManager, workspace);
-    const debuggerWorkspaceBinding = Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding.instance(
-        {forceNew: false, resourceMapping, targetManager});
+    const ignoreListManager = Workspace.IgnoreListManager.IgnoreListManager.instance({forceNew: true});
+    const debuggerWorkspaceBinding = Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding.instance({
+      forceNew: true,
+      resourceMapping,
+      targetManager,
+      ignoreListManager,
+    });
     const backend = new MockProtocolBackend();
-    Bindings.IgnoreListManager.IgnoreListManager.instance({forceNew: false, debuggerWorkspaceBinding});
 
     // Before any script is registered, there shouldn't be any uiSourceCodes.
     assert.isNull(Workspace.Workspace.WorkspaceImpl.instance().uiSourceCodeForURL(scriptInfo.url));

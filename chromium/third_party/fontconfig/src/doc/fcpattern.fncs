@@ -521,6 +521,31 @@ Patterns without a specified pixel size are given one computed from any
 specified point size (default 12), dpi (default 75) and scale (default 1).
 </para></listitem>
 </itemizedlist>
+  </para><para>
+This function has been replaced by <function>FcConfigSetDefaultSubstitute</function>
+and will be deprecated.
+@@
+
+@RET@           void
+@FUNC@          FcConfigSetDefaultSubstitute
+@TYPE1@         FcConfig *                      @ARG1@          config
+@TYPE2@         FcPattern *                     @ARG2@          pattern
+@PURPOSE@       Perform default substitutions in a pattern
+@DESC@
+Supplies default values for underspecified font patterns:
+<itemizedlist>
+<listitem><para>
+Patterns without a specified style or weight are set to Medium
+</para></listitem>
+<listitem><para>
+Patterns without a specified style or slant are set to Roman
+</para></listitem>
+<listitem><para>
+Patterns without a specified pixel size are given one computed from any
+specified point size (default 12), dpi (default 75) and scale (default 1).
+</para></listitem>
+</itemizedlist>
+@SINCE@         2.17.0
 @@
 
 @RET@           FcPattern *

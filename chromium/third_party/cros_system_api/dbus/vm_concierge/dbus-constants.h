@@ -28,7 +28,6 @@ const char kDetachUsbDeviceMethod[] = "DetachUsbDevice";
 const char kDiskImageStatusMethod[] = "DiskImageStatus";
 const char kExportDiskImageMethod[] = "ExportDiskImage";
 const char kGetBaguetteImageUrlMethod[] = "GetBaguetteImageUrl";
-const char kGetContainerSshKeysMethod[] = "GetContainerSshKeys";
 const char kGetDnsSettingsMethod[] = "GetDnsSettings";
 const char kGetVmEnterpriseReportingInfoMethod[] =
     "GetVmEnterpriseReportingInfo";
@@ -66,6 +65,7 @@ const char kSyncVmTimesMethod[] = "SyncVmTimes";
 const char kDiskImageProgressSignal[] = "DiskImageProgress";
 const char kDnsSettingsChangedSignal[] = "DnsSettingsChanged";
 const char kVmGuestUserlandReadySignal[] = "VmGuestUserlandReadySignal";
+const char kVmInstallStateSignal[] = "VmInstallStateSignal";
 const char kVmStartedSignal[] = "VmStartedSignal";
 const char kVmStartingUpSignal[] = "VmStartingUpSignal";
 const char kVmStoppedSignal[] = "VmStoppedSignal";

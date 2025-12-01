@@ -357,6 +357,25 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_TOOLBAR_SHOW_TAB_GROUP" desc="The accessibility label for the toolbar show tab group button [iOS only].">
         Show all tabs in tab stack
       </message>
+      <message name="IDS_IOS_TAB_GRID_SAVED_TAB_GROUPS" desc="Explanation text letting the user know that even if they close a tab group, it would still be saved on their device.">
+        Your tab stacks are saved here
+      </message>
+      <message name="IDS_IOS_SWIPE_LEFT_TO_INCOGNITO_IPH" desc="The text for the full screen in-product help for swipe right to see incognito tabs on regular tabs grid for RTL devices.">
+        You can swipe left to browse in Private.
+      </message>
+      <message name="IDS_IOS_SWIPE_LEFT_TO_INCOGNITO_IPH_VOICEOVER" desc="The voice over announcement for the full screen in-product help for swipe right to see incognito tabs on regular tabs grid for RTL devices.">
+        You can scroll right to browse in Private.
+      </message>
+      <message name="IDS_IOS_SWIPE_RIGHT_TO_INCOGNITO_IPH" desc="The text for the full screen in-product help for swipe right to see incognito tabs on regular tabs grid.">
+        You can swipe right to browse in Private.
+      </message>
+      <message name="IDS_IOS_SWIPE_RIGHT_TO_INCOGNITO_IPH_VOICEOVER" desc="The voice over announcement for the full screen in-product help for swipe right to see incognito tabs on regular tabs grid.">
+        You can scroll left to browse in Private.
+      </message>
+      <message name="IDS_IOS_TAB_GRID_TAB_GROUPS_UNAVAILABLE_MESSAGE" desc="Message shown in the Tab Groups page of the tab grid when the IncognitoModeAvailability enterprise policy is set to forced. [iOS only]">
+        Your organization requires you to browse privately.
+<ph name="BEGIN_LINK">BEGIN_LINK</ph>Learn more<ph name="END_LINK">END_LINK</ph>
+      </message>
       <!-- End Tab Group -> Stack -->
     </messages>
   </release>

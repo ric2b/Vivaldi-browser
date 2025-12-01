@@ -113,4 +113,8 @@ ExtensionFunction::ResponseAction AutoUpdateNeedsCodecRestartFunction::Run() {
   return RespondNow(ArgumentList(Results::Create(false)));
 }
 
+ExtensionFunction::ResponseAction AutoUpdateRunStartupChecksFunction::Run() {
+  return RespondNow(NoArguments());
+}
+
 }  // namespace extensions

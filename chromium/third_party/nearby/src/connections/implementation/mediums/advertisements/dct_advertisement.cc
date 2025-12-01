@@ -79,7 +79,7 @@ std::optional<DctAdvertisement> DctAdvertisement::Create(
 std::optional<DctAdvertisement> DctAdvertisement::Parse(
     const std::string& advertisement) {
   ByteArray data(advertisement);
-  StreamReader reader(data);
+  StreamReader reader(&data);
   DctAdvertisement dct_advertisement;
 
   std::optional<uint8_t> header = reader.ReadUint8();
@@ -117,9 +117,10 @@ std::optional<DctAdvertisement> DctAdvertisement::Parse(
     LOG(WARNING) << "Invalid PSM.";
     return std::nullopt;
   }
-  std::string psm_str = psm->value().data();
-  dct_advertisement.psm_ =
-      (static_cast<uint16_t>(psm_str[0]) << 8) | psm_str[1];
+
+  ByteArray psm_bytes(psm->value());
+  StreamReader psm_reader(&psm_bytes);
+  dct_advertisement.psm_ = psm_reader.ReadUint16().value_or(0);
 
   // Read device information
   std::optional<DataElement> device_information =

@@ -5,14 +5,22 @@
 #include "chrome/browser/renderer_host/chrome_navigation_ui_data.h"
 
 #include "chrome/browser/preloading/prefetch/no_state_prefetch/chrome_no_state_prefetch_contents_delegate.h"
+#include "chrome/browser/profiles/profile.h"
 #include "components/no_state_prefetch/browser/no_state_prefetch_contents.h"
 #include "content/public/browser/navigation_handle.h"
+#include "content/public/browser/web_contents.h"
 #include "extensions/buildflags/buildflags.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "extensions/browser/extensions_browser_client.h"
 #include "extensions/common/constants.h"
 #endif
+
+#if !BUILDFLAG(IS_ANDROID)
+#include "chrome/browser/actor/actor_keyed_service.h"
+#endif
+
+#include "app/vivaldi_apptools.h"
 
 ChromeNavigationUIData::ChromeNavigationUIData() = default;
 
@@ -66,6 +74,22 @@ ChromeNavigationUIData::CreateForMainFrameNavigation(
           web_contents, tab_id, window_id);
 #endif
 
+#if !BUILDFLAG(IS_ANDROID)
+  if (!vivaldi::IsVivaldiRunning()) {
+    // In vivaldi we haev not yet added the content to the tabstrip, and this
+    // feature will most likely not be enabled for us. If this is the case and
+    // we need to add support adding the content to the tabstrip prior to
+    // navigation is needed. Was cr140 intake bug VB-119172.
+  if (auto* actor_keyed_service =
+          actor::ActorKeyedService::Get(web_contents->GetBrowserContext())) {
+    if (auto* task = actor_keyed_service->GetActingActorTaskForWebContents(
+            web_contents)) {
+      navigation_ui_data->actor_task_id_ = task->id();
+    }
+  }
+  } // !isvivaldirunning
+#endif  // !BUILDFLAG(IS_ANDROID)
+
   return navigation_ui_data;
 }
 
@@ -87,6 +111,7 @@ std::unique_ptr<content::NavigationUIData> ChromeNavigationUIData::Clone() {
 
   copy->is_no_state_prefetching_ = is_no_state_prefetching_;
   copy->bookmark_id_ = bookmark_id_;
+  copy->actor_task_id_ = actor_task_id_;
   copy->navigation_initiated_from_sync_ = navigation_initiated_from_sync_;
 
   return std::move(copy);

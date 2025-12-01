@@ -17,6 +17,7 @@ use crabby_avif::reformat::rgb;
 use crabby_avif::reformat::rgb::ChromaDownsampling;
 use crabby_avif::*;
 
+use test_case::test_case;
 use test_case::test_matrix;
 
 #[derive(Default)]
@@ -27,7 +28,6 @@ struct RgbToYuvParam {
     yuv_format: PixelFormat,
     yuv_range: YuvRange,
     matrix_coefficients: MatrixCoefficients,
-    #[allow(unused)]
     chroma_downsampling: ChromaDownsampling,
     add_noise: bool,
     rgb_step: u32,
@@ -154,6 +154,7 @@ fn rgb_to_yuv_whole_range(p: &RgbToYuvParam) -> AvifResult<()> {
         height,
         depth: p.rgb_depth,
         format: p.rgb_format,
+        chroma_downsampling: p.chroma_downsampling,
         ..Default::default()
     };
     src_rgb.allocate()?;
@@ -452,5 +453,95 @@ fn all_same_bitdepths(
         rgb_step: params.1,
         max_average_abs_diff: params.2,
         min_psnr: params.3,
+    })
+}
+
+#[test_matrix([8, 10, 12])]
+fn sharpyuv_8bit(yuv_depth: u8) -> AvifResult<()> {
+    rgb_to_yuv_whole_range(&RgbToYuvParam {
+        rgb_depth: 8,
+        yuv_depth,
+        rgb_format: rgb::Format::Rgba,
+        yuv_format: PixelFormat::Yuv420,
+        yuv_range: YuvRange::Full,
+        matrix_coefficients: MatrixCoefficients::Bt601,
+        chroma_downsampling: ChromaDownsampling::SharpYuv,
+        add_noise: true,
+        rgb_step: 17,
+        max_average_abs_diff: 2.97,
+        min_psnr: 34.0,
+    })
+}
+
+#[test_case(YuvRange::Full, MatrixCoefficients::Bt601)]
+#[test_case(YuvRange::Limited, MatrixCoefficients::Bt601)]
+#[test_case(YuvRange::Full, MatrixCoefficients::Bt709)]
+fn sharpyuv_8bit_range_mc(
+    yuv_range: YuvRange,
+    matrix_coefficients: MatrixCoefficients,
+) -> AvifResult<()> {
+    rgb_to_yuv_whole_range(&RgbToYuvParam {
+        rgb_depth: 8,
+        yuv_depth: 8,
+        rgb_format: rgb::Format::Rgba,
+        yuv_format: PixelFormat::Yuv420,
+        yuv_range,
+        matrix_coefficients,
+        chroma_downsampling: ChromaDownsampling::SharpYuv,
+        add_noise: true,
+        rgb_step: 17,
+        max_average_abs_diff: 2.94,
+        min_psnr: 34.0,
+    })
+}
+
+#[test]
+fn sharpyuv_10bit() -> AvifResult<()> {
+    rgb_to_yuv_whole_range(&RgbToYuvParam {
+        rgb_depth: 10,
+        yuv_depth: 10,
+        rgb_format: rgb::Format::Rgba,
+        yuv_format: PixelFormat::Yuv420,
+        yuv_range: YuvRange::Full,
+        matrix_coefficients: MatrixCoefficients::Bt601,
+        chroma_downsampling: ChromaDownsampling::SharpYuv,
+        add_noise: true,
+        rgb_step: 211,
+        max_average_abs_diff: 2.94,
+        min_psnr: 34.0,
+    })
+}
+
+#[test_matrix([8, 10, 12])]
+fn sharpyuv_12bit(yuv_depth: u8) -> AvifResult<()> {
+    rgb_to_yuv_whole_range(&RgbToYuvParam {
+        rgb_depth: 12,
+        yuv_depth,
+        rgb_format: rgb::Format::Rgba,
+        yuv_format: PixelFormat::Yuv420,
+        yuv_range: YuvRange::Full,
+        matrix_coefficients: MatrixCoefficients::Bt601,
+        chroma_downsampling: ChromaDownsampling::SharpYuv,
+        add_noise: true,
+        rgb_step: 840,
+        max_average_abs_diff: 6.57,
+        min_psnr: 34.0,
+    })
+}
+
+#[test_matrix([8, 10, 12])]
+fn sharpyuv_16bit(yuv_depth: u8) -> AvifResult<()> {
+    rgb_to_yuv_whole_range(&RgbToYuvParam {
+        rgb_depth: 12,
+        yuv_depth,
+        rgb_format: rgb::Format::Rgba,
+        yuv_format: PixelFormat::Yuv420,
+        yuv_range: YuvRange::Full,
+        matrix_coefficients: MatrixCoefficients::Bt601,
+        chroma_downsampling: ChromaDownsampling::SharpYuv,
+        add_noise: true,
+        rgb_step: 4567,
+        max_average_abs_diff: 111.7,
+        min_psnr: 49.0,
     })
 }

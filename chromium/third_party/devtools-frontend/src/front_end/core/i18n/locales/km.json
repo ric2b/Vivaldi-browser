@@ -617,6 +617,9 @@
   "core/sdk/sdk-meta.ts | doNotEmulateCssMediaType": {
     "message": "កុំត្រាប់តាម​ប្រភេទមេឌៀ CSS"
   },
+  "core/sdk/sdk-meta.ts | doNotEmulateOsTextScale": {
+    "message": "កុំត្រាប់តាម​សមាមាត្រ​អក្សរ​របស់​ប្រព័ន្ធ​ប្រតិបត្តិការ"
+  },
   "core/sdk/sdk-meta.ts | doNotExtendGridLines": {
     "message": "កុំពង្រីក​បន្ទាត់​ក្រឡា"
   },
@@ -667,6 +670,9 @@
   },
   "core/sdk/sdk-meta.ts | emulateDeuteranopia": {
     "message": "ត្រាប់តាមការមើលមិនឃើញពណ៌បៃតង (គ្មានពណ៌បៃតង)"
+  },
+  "core/sdk/sdk-meta.ts | emulateOsTextScale": {
+    "message": "ត្រាប់តាម​សមាមាត្រ​អក្សរ​របស់​ប្រព័ន្ធ​ប្រតិបត្តិការ"
   },
   "core/sdk/sdk-meta.ts | emulateProtanopia": {
     "message": "ត្រាប់តាមការមើល​មិនឃើញ​ពណ៌ក្រហម (គ្មានពណ៌ក្រហម)"
@@ -732,6 +738,30 @@
     "message": "ការទប់ស្កាត់សំណើសុំភ្ជាប់បណ្ដាញ"
   },
   "core/sdk/sdk-meta.ts | noEmulation": {
+    "message": "គ្មាន​ការត្រាប់តាម​ទេ"
+  },
+  "core/sdk/sdk-meta.ts | osTextScaleEmulation100": {
+    "message": "100% (លំនាំដើម)"
+  },
+  "core/sdk/sdk-meta.ts | osTextScaleEmulation115": {
+    "message": "115%"
+  },
+  "core/sdk/sdk-meta.ts | osTextScaleEmulation130": {
+    "message": "130%"
+  },
+  "core/sdk/sdk-meta.ts | osTextScaleEmulation150": {
+    "message": "150%"
+  },
+  "core/sdk/sdk-meta.ts | osTextScaleEmulation180": {
+    "message": "180%"
+  },
+  "core/sdk/sdk-meta.ts | osTextScaleEmulation200": {
+    "message": "200%"
+  },
+  "core/sdk/sdk-meta.ts | osTextScaleEmulation85": {
+    "message": "85%"
+  },
+  "core/sdk/sdk-meta.ts | osTextScaleEmulationNone": {
     "message": "គ្មាន​ការត្រាប់តាម​ទេ"
   },
   "core/sdk/sdk-meta.ts | pauseOnExceptions": {
@@ -862,6 +892,9 @@
   },
   "entrypoints/inspector_main/RenderingOptions.ts | forcesMediaTypeForTestingPrint": {
     "message": "បង្ខំ​ប្រភេទ​មេឌៀ​សម្រាប់​ធ្វើតេស្ត​រចនាប័ទ្ម​អេក្រង់ និង​ការបោះពុម្ព"
+  },
+  "entrypoints/inspector_main/RenderingOptions.ts | forcesOsTextScaleEmulation": {
+    "message": "បង្ខំ​ការត្រាប់តាម​សមាមាត្រ​អក្សរ​របស់​ប្រព័ន្ធ​ប្រតិបត្តិការ"
   },
   "entrypoints/inspector_main/RenderingOptions.ts | forcesVisionDeficiencyEmulation": {
     "message": "បង្ខំ​ការត្រាប់តាម​ការមើល​មិនច្បាស់"
@@ -1133,6 +1166,9 @@
   "entrypoints/main/main-meta.ts | toggleDrawer": {
     "message": "បិទ/បើក​ថត"
   },
+  "entrypoints/main/main-meta.ts | toggleDrawerOrientation": {
+    "message": "បិទ/បើក​ទិស​ថត"
+  },
   "entrypoints/main/main-meta.ts | undockIntoSeparateWindow": {
     "message": "ផ្ដាច់​ទៅជា​វិនដូ​ដាច់ដោយឡែក"
   },
@@ -1211,9 +1247,6 @@
   "generated/Deprecation.ts | CanRequestURLHTTPContainingNewline": {
     "message": "សំណើធនធានដែល URL របស់​ពួកវា​មាន​តួ​អក្សរ \\(n|r|t) ​ចន្លោះ​ទទេ​ដែល​បាន​ដក​ចេញ និងតួ​អក្សរ​តូចជាង (<) ត្រូវបានទប់ស្កាត់។ សូមដកជួរថ្មី​ចេញ និង​បំប្លែងកូដ​នៃ​តួ​អក្សរ​តូចជាង​ពីកន្លែងដូចជាតម្លៃលក្ខណៈធាតុ ដើម្បីផ្ទុកធនធានទាំងនេះ។"
   },
-  "generated/Deprecation.ts | CharsetAutoDetectionISO2022JP": {
-    "message": "ការរកឃើញ​សំណុំ​តួអក្សរ ISO-2022-JP ដោយ​ស្វ័យប្រវត្តិ​ត្រូវបាន​បញ្ឈប់ ហើយវា​នឹងត្រូវបានបិទ​នាពេល​ខាងមុខ​ឆាប់ៗនេះ។ សូម​បញ្ជាក់​សំណុំ​តួអក្សរ​នៅក្នុង​ផ្នែកក្បាល​ប្រភេទ​ខ្លឹមសារ ឬ​ដោយប្រើ​ស្លាក​មេតា (https://developer.mozilla.org/en-US/docs/Glossary/Character_encoding)។"
-  },
   "generated/Deprecation.ts | ChromeLoadTimesConnectionInfo": {
     "message": "chrome.loadTimes() ត្រូវបានបញ្ឈប់ ហើយ​ប្រើ API ស្តង់ដារ​ជំនួស​វិញ៖ Navigation Timing 2។"
   },
@@ -1247,14 +1280,8 @@
   "generated/Deprecation.ts | GetUserMediaInsecureOrigin": {
     "message": "getUserMedia() លែងដំណើរការនៅលើប្រភពដើមដែលមិនមានសុវត្ថិភាពទៀតហើយ។ ដើម្បីប្រើមុខងារនេះ អ្នកគួរតែពិចារណាប្ដូរកម្មវិធីរបស់អ្នកទៅប្រភពដើមដែលមានសុវត្ថិភាព ដូចជា HTTPS ជាដើម។ សូមមើល https://goo.gle/chrome-insecure-origins ដើម្បីទទួលបាន​ព័ត៌មានលម្អិតបន្ថែម។"
   },
-  "generated/Deprecation.ts | H1UserAgentFontSizeInSection": {
-    "message": "បាន​រកឃើញ​ស្លាក <h1> នៅក្នុង <article>, <aside>, <nav> ឬ <section> ដែល​មិនមាន​ទំហំ​ពុម្ពអក្សរ​ដែលបាន​បញ្ជាក់ទេ។ ទំហំ​អក្សរ​ចំណងជើងនេះ​នឹងផ្លាស់ប្ដូរ​នៅក្នុង​កម្មវិធីរុករក​តាមអ៊ីនធឺណិតនេះ​នាពេល​ខាងមុខឆាប់ៗនេះ។ សូមមើល https://developer.mozilla.org/en-US/docs/Web/HTML/Element/Heading_Elements#specifying_a_uniform_font_size_for_h1 ដើម្បី​ទទួលបាន​ព័ត៌មាន​បន្ថែម។"
-  },
   "generated/Deprecation.ts | HostCandidateAttributeGetter": {
     "message": "RTCPeerConnectionIceErrorEvent.hostCandidate ត្រូវបាន​បញ្ឈប់។ សូមប្រើ RTCPeerConnectionIceErrorEvent.address ឬ RTCPeerConnectionIceErrorEvent.port ជំនួសវិញ។"
-  },
-  "generated/Deprecation.ts | IdentityDigitalCredentials": {
-    "message": "ទម្រង់នេះ​សម្រាប់​សំណើ navigator.credentials.get() សម្រាប់​ព័ត៌មាន​ផ្ទៀងផ្ទាត់​ឌីជីថល​ត្រូវបាន​បញ្ឈប់ សូម​ធ្វើបច្ចុប្បន្នភាព​ការហៅ​របស់អ្នក ដើម្បីប្រើ​ទម្រង់ថ្មី។"
   },
   "generated/Deprecation.ts | IdentityInCanMakePaymentEvent": {
     "message": "ទិន្នន័យ​ប្រភពដើម និង​មិនច្បាស់លាស់​នៃឈ្មួញ​ពី​ព្រឹត្តិការណ៍​អ្នកធ្វើការ​បម្រើសេវា canmakepayment ត្រូវបាន​បញ្ឈប់ ហើយនឹង​ត្រូវបាន​លុបចេញ៖ topOrigin, paymentRequestOrigin, methodData, modifiers។"
@@ -1294,6 +1321,9 @@
   },
   "generated/Deprecation.ts | OverflowVisibleOnReplacedElement": {
     "message": "ការ​បញ្ជាក់ overflow: visible នៅលើស្លាក img, video និង canvas អាច​ធ្វើ​ឱ្យ​ពួកវា​​បង្កើត​បាន​ខ្លឹមសារ​ដែលមើល​ឃើញ​នៅ​ខាងក្រៅ​ព្រំដែនធាតុ។ សូមមើល https://github.com/WICG/shared-element-transitions/blob/main/debugging_overflow_on_images.md។"
+  },
+  "generated/Deprecation.ts | OverrideFlashEmbedwithHTML": {
+    "message": "ការបង្កប់​វីដេអូ flash ចាស់​ត្រូវបាន​សរសេរ​ឡើងវិញ​ទៅជា HTML iframe។ លែងមាន Flash យូរ​មកហើយ គន្លឹះ​ក្នុងការសរសេរ​ឡើងវិញនេះ​ត្រូវបាន​បញ្ឈប់ និង​អាចត្រូវបាន​ដកចេញ​នាពេល​អនាគត។"
   },
   "generated/Deprecation.ts | PaymentInstruments": {
     "message": "paymentManager.instruments ត្រូវបានបញ្ឈប់។ សូម​ប្រើប្រាស់​ការ​ដំឡើង​ទាន់ពេលវេលា​​សម្រាប់​ឧបករណ៍ដោះស្រាយ​ការ​ទូទាត់​ជំនួស​វិញ។"
@@ -1364,9 +1394,6 @@
   "generated/Deprecation.ts | V8SharedArrayBufferConstructedInExtensionWithoutIsolation": {
     "message": "កម្មវិធីបន្ថែម​គួរតែភ្ជាប់ការដាក់ប្រភពដើមផ្សេងឱ្យនៅដោយឡែក ដើម្បីបន្តប្រើប្រាស់ SharedArrayBuffer។ សូមមើល https://developer.chrome.com/docs/extensions/mv3/cross-origin-isolation/។"
   },
-  "generated/Deprecation.ts | WebGPUAdapterIsFallbackAdapter": {
-    "message": "លក្ខណៈ GPUAdapter isFallbackAdapter ត្រូវបាន​បញ្ឈប់ សូមប្រើ​លក្ខណៈ GPUAdapterInfo isFallbackAdapter ជំនួសវិញ។"
-  },
   "generated/Deprecation.ts | XHRJSONEncodingDetection": {
     "message": "UTF-16 មិន​អាច​ប្រើ​ដោយ json ឆ្លើយតបនៅក្នុង XMLHttpRequest បាន​ទេ"
   },
@@ -1412,24 +1439,6 @@
   "models/bindings/DebuggerLanguagePlugins.ts | loadingDebugSymbolsForVia": {
     "message": "[{PH1}] កំពុងផ្ទុក​និមិត្តសញ្ញា​ជួសជុល​សម្រាប់ {PH2} (តាមរយៈ {PH3})…"
   },
-  "models/bindings/IgnoreListManager.ts | addAllAnonymousScriptsToIgnoreList": {
-    "message": "បញ្ចូល​ស្គ្រីបអនាមិក​ទាំងអស់​ទៅក្នុង​បញ្ជី​មិនអើពើ"
-  },
-  "models/bindings/IgnoreListManager.ts | addAllContentScriptsToIgnoreList": {
-    "message": "បញ្ចូល​ស្គ្រីប​កម្មវិធីបន្ថែម​ទាំងអស់​ទៅក្នុង​បញ្ជីមិនអើពើ"
-  },
-  "models/bindings/IgnoreListManager.ts | addAllThirdPartyScriptsToIgnoreList": {
-    "message": "បញ្ចូលគ្រប់​ស្គ្រីប​ភាគីទីបី​ទៅ​ក្នុង​បញ្ជី​មិនអើពើ"
-  },
-  "models/bindings/IgnoreListManager.ts | addDirectoryToIgnoreList": {
-    "message": "បញ្ចូលបញ្ជី​ទៅក្នុង​បញ្ជីមិនអើពើ"
-  },
-  "models/bindings/IgnoreListManager.ts | addScriptToIgnoreList": {
-    "message": "បញ្ចូល​ស្គ្រីបទៅ​បញ្ជីមិនអើពើ"
-  },
-  "models/bindings/IgnoreListManager.ts | removeFromIgnoreList": {
-    "message": "ដកចេញពី​បញ្ជីមិនអើពើ"
-  },
   "models/bindings/ResourceScriptMapping.ts | liveEditCompileFailed": {
     "message": "ការចងក្រង LiveEdit មិនបាន​សម្រេច​ទេ៖ {PH1}"
   },
@@ -1437,7 +1446,7 @@
     "message": "LiveEdit មិនបាន​សម្រេច៖ {PH1}"
   },
   "models/crux-manager/CrUXManager.ts | fieldOverrideWarning": {
-    "message": "ទិន្នន័យ​ពីអ្នក​ប្រើប្រាស់ពិត​ត្រូវបាន​កំណត់​រចនាសម្ព័ន្ធ​សម្រាប់ URL ផ្សេងពី​ទំព័រ​បច្ចុប្បន្ន។"
+    "message": "មេទ្រិក​ពីអ្នក​ប្រើប្រាស់ពិត​ត្រូវបាន​កំណត់​រចនាសម្ព័ន្ធ​សម្រាប់ URL ផ្សេងពី​ទំព័រ​បច្ចុប្បន្ន។"
   },
   "models/emulation/DeviceModeModel.ts | devicePixelRatioMustBeANumberOr": {
     "message": "សមាមាត្រ​ភីកសែល​ឧបករណ៍​ត្រូវតែជា​លេខ ឬទទេ​។"
@@ -1667,6 +1676,12 @@
   "models/persistence/IsolatedFileSystem.ts | cantReadFileSS": {
     "message": "មិនអាចអាន​ឯកសារបានទេ៖ {PH1}៖ {PH2}"
   },
+  "models/persistence/IsolatedFileSystem.ts | createDirFailed": {
+    "message": "ការលុប​ពីលើ៖ មិនអាច​បង្កើត​បញ្ជី {PH1} បានទេ។ តើ​ការលុបពីលើ ឬ​លំហការងារ​ត្រូវបាន​កំណត់​រចនាសម្ព័ន្ធ​ត្រឹមត្រូវទេ?"
+  },
+  "models/persistence/IsolatedFileSystem.ts | createDirFailedBecausePathIsFile": {
+    "message": "ការលុប​ពីលើ៖ មិនអាច​បង្កើត​បញ្ជី {PH1} បានទេ ដោយសារ​មានច្រកនេះរួចហើយ និងនាំទៅរក​ឯកសារ។"
+  },
   "models/persistence/IsolatedFileSystem.ts | fileSystemErrorS": {
     "message": "បញ្ហា​ប្រព័ន្ធ​ឯកសារ៖ {PH1}"
   },
@@ -1690,6 +1705,9 @@
   },
   "models/persistence/PersistenceActions.ts | saveAs": {
     "message": "រក្សាទុក​ជា…"
+  },
+  "models/persistence/PersistenceActions.ts | saveFailed": {
+    "message": "មិនអាច​រក្សាទុក​ឯកសារទៅ​ថាស​បានទេ។"
   },
   "models/persistence/PersistenceActions.ts | saveImage": {
     "message": "រក្សាទុករូបភាព"
@@ -1760,9 +1778,6 @@
   "models/trace/insights/CLSCulprits.ts | description": {
     "message": "ការប្ដូរ​ប្លង់​កើតឡើង នៅពេល​ធាតុផ្លាស់ទី​ដោយគ្មាន​អន្តរកម្ម​អ្នកប្រើប្រាស់។ [ស៊ើបអង្កេត​អំពី​ដើមហេតុ​នៃ​ការប្ដូរប្លង់](https://web.dev/articles/optimize-cls) ដូចជា​ធាតុ​ដែលត្រូវបាន​បញ្ចូល ដកចេញ ឬ​ពុម្ពអក្សរ​របស់ធាតុ​ទាំងនោះ​ដែលផ្លាស់ប្ដូរ នៅពេល​ទំព័រផ្ទុក។"
   },
-  "models/trace/insights/CLSCulprits.ts | fontRequest": {
-    "message": "សំណើពុម្ពអក្សរ"
-  },
   "models/trace/insights/CLSCulprits.ts | injectedIframe": {
     "message": "iframe ដែលបានបញ្ចូល"
   },
@@ -1781,8 +1796,11 @@
   "models/trace/insights/CLSCulprits.ts | topCulprits": {
     "message": "ដើមហេតុ​ចម្បង​នៃការប្ដូរ​ប្លង់"
   },
-  "models/trace/insights/CLSCulprits.ts | unsizedImages": {
-    "message": "រូបភាព​ដែលមិនបាន​កំណត់ទំហំ"
+  "models/trace/insights/CLSCulprits.ts | unsizedImage": {
+    "message": "ធាតុ​រូបភាព​ដែលមិនបាន​កំណត់ទំហំ"
+  },
+  "models/trace/insights/CLSCulprits.ts | webFont": {
+    "message": "ពុម្ព​អក្សរ​បណ្ដាញ"
   },
   "models/trace/insights/CLSCulprits.ts | worstCluster": {
     "message": "បណ្ដុំ​អន់បំផុត"
@@ -1811,8 +1829,17 @@
   "models/trace/insights/DOMSize.ts | description": {
     "message": "DOM ធំអាចបង្កើនរយៈពេលគណនារចនាបថ និងលំហូរជាថ្មីនៃប្លង់ ដែលប៉ះពាល់ដល់ការឆ្លើយតបរបស់ទំព័រ។ DOM ធំក៏នឹងបង្កើនការប្រើប្រាស់អង្គចងចាំផងដែរ។ [ស្វែងយល់​អំពី​របៀប​ជៀសវាង​ទំហំ DOM លើសលុប](https://developer.chrome.com/docs/lighthouse/performance/dom-size/)។"
   },
+  "models/trace/insights/DOMSize.ts | duration": {
+    "message": "រយៈពេល"
+  },
   "models/trace/insights/DOMSize.ts | element": {
     "message": "ធាតុ"
+  },
+  "models/trace/insights/DOMSize.ts | largeLayout": {
+    "message": "ប្លង់ (វត្ថុ {PH1})"
+  },
+  "models/trace/insights/DOMSize.ts | largeStyleRecalc": {
+    "message": "ការគណនា​រចនាបថ​ឡើងវិញ (ធាតុ {PH1})"
   },
   "models/trace/insights/DOMSize.ts | maxChildren": {
     "message": "កូនច្រើនបំផុត"
@@ -1825,6 +1852,9 @@
   },
   "models/trace/insights/DOMSize.ts | title": {
     "message": "បង្កើន​ប្រសិទ្ធភាព​ទំហំ DOM"
+  },
+  "models/trace/insights/DOMSize.ts | topUpdatesDescription": {
+    "message": "ទាំងនេះ​គឺជា​ព្រឹត្តិការណ៍​គណនា​រចនាបថ និង​ប្លង់​ឡើងវិញ​ដ៏ធំបំផុត។ ផលប៉ះពាល់របស់​ព្រឹត្តិការណ៍ទាំងនេះចំពោះប្រតិបត្តិការ​អាចត្រូវបាន​កាត់បន្ថយ​តាមរយៈ​ការធ្វើឱ្យ DOM កាន់តែ​សាមញ្ញ។"
   },
   "models/trace/insights/DOMSize.ts | totalElements": {
     "message": "ធាតុសរុប"
@@ -1839,7 +1869,7 @@
     "message": "មាន​ការបញ្ជូន​បន្ត (ការបញ្ជូន​បន្ត {PH1}, +{PH2})"
   },
   "models/trace/insights/DocumentLatency.ts | failedServerResponseTime": {
-    "message": "ម៉ាស៊ីនមេ​បាន​ឆ្លើយតប​យឺត (បាន​សង្កេត​មើល {PH1}) "
+    "message": "ម៉ាស៊ីនមេ​បាន​ឆ្លើយតប​យ៉ាងយឺត (បើតាមការ​សង្កេត {PH1})"
   },
   "models/trace/insights/DocumentLatency.ts | failedTextCompression": {
     "message": "មិនបានធ្វើការបង្ហាប់ទេ"
@@ -1848,7 +1878,7 @@
     "message": "ជៀសវាងការបញ្ជូនបន្ត"
   },
   "models/trace/insights/DocumentLatency.ts | passingServerResponseTime": {
-    "message": "ម៉ាស៊ីនមេ​ឆ្លើយតប​យ៉ាងរហ័ស (បានសង្កេត​មើល {PH1}) "
+    "message": "ម៉ាស៊ីនមេ​ឆ្លើយតប​យ៉ាងរហ័ស (បើតាមការសង្កេត {PH1})"
   },
   "models/trace/insights/DocumentLatency.ts | passingTextCompression": {
     "message": "អនុវត្តការបង្ហាប់អក្សរ"
@@ -1893,7 +1923,7 @@
     "message": "(អនាមិក)"
   },
   "models/trace/insights/ForcedReflow.ts | description": {
-    "message": "ជាធម្មតា API ជាច្រើនដែលអានធរណីមាត្រប្លង់ បង្ខំឱ្យម៉ាស៊ីនបំប្លែងផ្អាកការធ្វើប្រតិបត្តិការស្គ្រីប ដើម្បីគណនារចនាបថ និងប្លង់។ ស្វែងយល់បន្ថែមអំពី[លំហូរជាថ្មីដែលបានបង្ខំ](https://developers.google.com/web/fundamentals/performance/rendering/avoid-large-complex-layouts-and-layout-thrashing#avoid-forced-synchronous-layouts) និងការផ្ទេររបស់វា។"
+    "message": "លំហូរជាថ្មី​ដែលបាន​បង្ខំ​កើតឡើង នៅពេលដែល JavaScript សួរអំពី​លក្ខណៈ​ធរណីមាត្រ (ដូចជា offsetWidth) បន្ទាប់ពី​រចនាបថ​ត្រូវបាន​បញ្ឈប់​សុពលភាព​ដោយ​ការផ្លាស់ប្ដូរ​ចំពោះ​ស្ថានភាព DOM។ ករណីនេះ​អាចបណ្ដាលឱ្យ​មាន​ប្រតិបត្តិការ​មិនល្អ។ ស្វែងយល់​បន្ថែម​អំពី[លំហូរជាថ្មី​ដែល​បានបង្ខំ](https://developers.google.com/web/fundamentals/performance/rendering/avoid-large-complex-layouts-and-layout-thrashing#avoid-forced-synchronous-layouts) និង​ការផ្ទេរ​ដែលអាចមាន។"
   },
   "models/trace/insights/ForcedReflow.ts | relatedStackTrace": {
     "message": "ដានបង្គរ"
@@ -1909,6 +1939,30 @@
   },
   "models/trace/insights/ForcedReflow.ts | unattributed": {
     "message": "[គ្មានលក្ខណៈ]"
+  },
+  "models/trace/insights/INPBreakdown.ts | description": {
+    "message": "ចាប់ផ្ដើម​ការស៊ើបអង្កេត​ពីផ្នែករង​ដែលវែងបំផុត។ [ការពន្យារពេលអាចត្រូវបានកាត់បន្ថយ​ឱ្យនៅតិចបំផុត](https://web.dev/articles/optimize-inp#optimize_interactions)។ ដើម្បីកាត់បន្ថយរយៈពេលដំណើរការ សូម[បង្កើនប្រសិទ្ធភាពចំណាយលើ thread ចម្បង](https://web.dev/articles/optimize-long-tasks) ជារឿយៗ JS។"
+  },
+  "models/trace/insights/INPBreakdown.ts | duration": {
+    "message": "រយៈពេល"
+  },
+  "models/trace/insights/INPBreakdown.ts | inputDelay": {
+    "message": "ការពន្យារការបញ្ចូល"
+  },
+  "models/trace/insights/INPBreakdown.ts | noInteractions": {
+    "message": "រកមិនឃើញ​អន្តរកម្ម​ទេ"
+  },
+  "models/trace/insights/INPBreakdown.ts | presentationDelay": {
+    "message": "ការពន្យារពេលធ្វើបទបង្ហាញ"
+  },
+  "models/trace/insights/INPBreakdown.ts | processingDuration": {
+    "message": "រយៈ​ពេលដំណើរការ"
+  },
+  "models/trace/insights/INPBreakdown.ts | subpart": {
+    "message": "ផ្នែករង"
+  },
+  "models/trace/insights/INPBreakdown.ts | title": {
+    "message": "ព័ត៌មាន​លម្អិត​អំពី INP"
   },
   "models/trace/insights/ImageDelivery.ts | description": {
     "message": "ការបន្ថយ​រយៈពេល​ទាញយក​រូបភាព​អាចកែលម្អ​រយៈពេល​ផ្ទុកទំព័រ និង LCP ដែល​កត់សម្គាល់។ [ស្វែងយល់​បន្ថែម​អំពី​ការបង្កើន​ប្រសិទ្ធភាព​ទំហំ​រូបភាព](https://developer.chrome.com/docs/lighthouse/performance/uses-optimized-images/)"
@@ -1940,29 +1994,35 @@
   "models/trace/insights/ImageDelivery.ts | useVideoFormat": {
     "message": "ការប្រើប្រាស់​ទម្រង់​វីដេអូ​ជំនួសឱ្យ GIF អាច​កែលម្អ​ទំហំ​ទាញយក​ខ្លឹមសារ​ដែលមាន​ចលនា។"
   },
-  "models/trace/insights/InteractionToNextPaint.ts | description": {
-    "message": "ចាប់ផ្ដើមការស៊ើបអង្កេតជាមួយនឹងដំណាក់កាលវែងបំផុត។ [ការពន្យារពេលអាចត្រូវបានកាត់បន្ថយ​ឱ្យនៅតិចបំផុត](https://web.dev/articles/optimize-inp#optimize_interactions)។ ដើម្បីកាត់បន្ថយរយៈពេលដំណើរការ សូម[បង្កើនប្រសិទ្ធភាពចំណាយលើ thread ចម្បង](https://web.dev/articles/optimize-long-tasks) ជារឿយៗ JS។"
+  "models/trace/insights/LCPBreakdown.ts | description": {
+    "message": "[ផ្នែករង​នីមួយៗ​មានយុទ្ធសាស្ត្រ​កែលម្អ​ជាក់លាក់](https://web.dev/articles/optimize-lcp#lcp-breakdown)។ ក្នុងស្ថានភាពល្អបំផុត ពេលវេលា LCP ភាគច្រើនគួរតែចំណាយលើការផ្ទុកធនធាន មិនមែនលើការពន្យារពេលនោះទេ។"
   },
-  "models/trace/insights/InteractionToNextPaint.ts | duration": {
+  "models/trace/insights/LCPBreakdown.ts | duration": {
     "message": "រយៈពេល"
   },
-  "models/trace/insights/InteractionToNextPaint.ts | inputDelay": {
-    "message": "ការពន្យារការបញ្ចូល"
+  "models/trace/insights/LCPBreakdown.ts | elementRenderDelay": {
+    "message": "ការពន្យារពេលបំប្លែងធាតុ"
   },
-  "models/trace/insights/InteractionToNextPaint.ts | noInteractions": {
-    "message": "រកមិនឃើញ​អន្តរកម្ម​ទេ"
+  "models/trace/insights/LCPBreakdown.ts | fieldDuration": {
+    "message": "ចំណុចសតភាគទី 75 នៃអ្នកប្រើប្រាស់ពិត"
   },
-  "models/trace/insights/InteractionToNextPaint.ts | phase": {
-    "message": "ដំណាក់កាល"
+  "models/trace/insights/LCPBreakdown.ts | noLcp": {
+    "message": "រកមិន​ឃើញ LCP ទេ"
   },
-  "models/trace/insights/InteractionToNextPaint.ts | presentationDelay": {
-    "message": "ការពន្យារពេលធ្វើបទបង្ហាញ"
+  "models/trace/insights/LCPBreakdown.ts | resourceLoadDelay": {
+    "message": "ការពន្យារពេលផ្ទុកធនធាន"
   },
-  "models/trace/insights/InteractionToNextPaint.ts | processingDuration": {
-    "message": "រយៈ​ពេលដំណើរការ"
+  "models/trace/insights/LCPBreakdown.ts | resourceLoadDuration": {
+    "message": "រយៈពេល​ផ្ទុក​ធនធាន"
   },
-  "models/trace/insights/InteractionToNextPaint.ts | title": {
-    "message": "INP តាមដំណាក់កាល"
+  "models/trace/insights/LCPBreakdown.ts | subpart": {
+    "message": "ផ្នែករង"
+  },
+  "models/trace/insights/LCPBreakdown.ts | timeToFirstByte": {
+    "message": "រយៈពេលមុនទទួលបានបៃដំបូង"
+  },
+  "models/trace/insights/LCPBreakdown.ts | title": {
+    "message": "ព័ត៌មាន​លម្អិត​អំពី LCP"
   },
   "models/trace/insights/LCPDiscovery.ts | description": {
     "message": "បង្កើនប្រសិទ្ធភាព LCP ដោយធ្វើឱ្យរូបភាព LCP [អាចរកឃើញ](https://web.dev/articles/optimize-lcp#1_eliminate_resource_load_delay)ពី HTML ភ្លាមៗ ហើយ[ជៀសវាងការផ្ទុកផ្នែកមើលឃើញ](https://web.dev/articles/lcp-lazy-loading)"
@@ -1991,36 +2051,6 @@
   "models/trace/insights/LCPDiscovery.ts | title": {
     "message": "ការរកឃើញ​សំណើ LCP"
   },
-  "models/trace/insights/LCPPhases.ts | description": {
-    "message": "[ដំណាក់កាលនីមួយៗមានយុទ្ធសាស្ត្រកែលម្អជាក់លាក់](https://web.dev/articles/optimize-lcp#lcp-breakdown)។ ជាការល្អ ភាគច្រើននៃពេលវេលា LCP គួរតែចំណាយលើការផ្ទុកធនធាន មិនមែននៅក្នុងការពន្យារពេលនោះទេ។"
-  },
-  "models/trace/insights/LCPPhases.ts | duration": {
-    "message": "រយៈពេល"
-  },
-  "models/trace/insights/LCPPhases.ts | elementRenderDelay": {
-    "message": "ការពន្យារពេលបំប្លែងធាតុ"
-  },
-  "models/trace/insights/LCPPhases.ts | fieldDuration": {
-    "message": "ចំណុចសតភាគទី 75 នៃអ្នកប្រើប្រាស់ពិត"
-  },
-  "models/trace/insights/LCPPhases.ts | noLcp": {
-    "message": "រកមិន​ឃើញ LCP ទេ"
-  },
-  "models/trace/insights/LCPPhases.ts | phase": {
-    "message": "ដំណាក់កាល"
-  },
-  "models/trace/insights/LCPPhases.ts | resourceLoadDelay": {
-    "message": "ការពន្យារពេលផ្ទុកធនធាន"
-  },
-  "models/trace/insights/LCPPhases.ts | resourceLoadDuration": {
-    "message": "រយៈពេល​ផ្ទុក​ធនធាន"
-  },
-  "models/trace/insights/LCPPhases.ts | timeToFirstByte": {
-    "message": "រយៈពេលមុនទទួលបានបៃដំបូង"
-  },
-  "models/trace/insights/LCPPhases.ts | title": {
-    "message": "LCP តាម​ដំណាក់កាល"
-  },
   "models/trace/insights/LegacyJavaScript.ts | columnScript": {
     "message": "ស្គ្រីប"
   },
@@ -2037,7 +2067,7 @@
     "message": "HTTP/2 និង HTTP/3 ផ្ដល់​អត្ថប្រយោជន៍​ជាច្រើន​លើស HTTP/1.1 ដូចជា​ការចងជាសំណុំ​ជាដើម។ [ស្វែងយល់​បន្ថែម​អំពី​ការប្រើប្រាស់ HTTP ទាន់សម័យ](https://developer.chrome.com/docs/lighthouse/best-practices/uses-http2/)។"
   },
   "models/trace/insights/ModernHTTP.ts | noOldProtocolRequests": {
-    "message": "គ្មាន​សំណើ​ដែលបានប្រើ HTTP/1.1 ទេ"
+    "message": "គ្មាន​សំណើ​ដែលបានប្រើ HTTP/1.1 ទេ ឬ​ការប្រើប្រាស់ HTTP/1.1 បច្ចុប្បន្ន​របស់វា​មិនបង្ហាញ​ឱកាស​បង្កើន​ប្រសិទ្ធភាព​បានច្រើនទេ។ សំណើ HTTP/1.1 ត្រូវបាន​សម្គាល់ លុះត្រាតែ​ទ្រព្យថេរ​ចំនួនប្រាំមួយ ឬ​ច្រើនជាងនេះ​មាន​ប្រភពដើម​ដូចគ្នា ហើយ​ពួកវា​មិនត្រូវបានផ្ដល់​ពីមជ្ឈដ្ឋាន​អភិវឌ្ឍន៍​មូលដ្ឋាន ឬ​ប្រភព​ភាគីទីបី​នោះទេ។"
   },
   "models/trace/insights/ModernHTTP.ts | protocol": {
     "message": "ប្រូតូកូល"
@@ -2070,7 +2100,7 @@
     "message": "[ជៀសវាងភ្ជាប់សំណើសំខាន់ៗ](https://developer.chrome.com/docs/lighthouse/performance/critical-request-chains)ដោយកាត់បន្ថយប្រវែងតំណភ្ជាប់ កាត់បន្ថយទំហំទាញយកនៃធនធាន ឬពន្យារពេលទាញយកធនធានដែលមិនចាំបាច់ ដើម្បីធ្វើឱ្យការផ្ទុកទំព័រប្រសើរឡើង។"
   },
   "models/trace/insights/NetworkDependencyTree.ts | estSavingTableDescription": {
-    "message": "បញ្ចូល​តម្រុយ[ភ្ជាប់​ជាមុន](https://developer.chrome.com/docs/lighthouse/performance/uses-rel-preconnect/)ទៅ​ប្រភពដើម​សំខាន់ៗ​បំផុត​របស់អ្នក ប៉ុន្តែ​សូមព្យាយាម​ប្រើតិចជាង 4។"
+    "message": "បញ្ចូល​តម្រុយ[ភ្ជាប់​ជាមុន](https://developer.chrome.com/docs/lighthouse/performance/uses-rel-preconnect/)ទៅ​ប្រភពដើម​សំខាន់ៗ​បំផុត​របស់អ្នក ប៉ុន្តែ​សូមព្យាយាម​ប្រើកុំឱ្យ​លើសពី 4។"
   },
   "models/trace/insights/NetworkDependencyTree.ts | estSavingTableTitle": {
     "message": "ជម្រើស​ភ្ជាប់​ជាមុន"
@@ -2138,6 +2168,12 @@
   "models/trace/insights/SlowCSSSelector.ts | title": {
     "message": "ចំណាយលើផ្ទាំងជ្រើសរើស CSS"
   },
+  "models/trace/insights/SlowCSSSelector.ts | topSelectorElapsedTime": {
+    "message": "រយៈពេល​ដែលបាន​ចំណាយ​ច្រើនបំផុតសម្រាប់សេឡិកទ័រ"
+  },
+  "models/trace/insights/SlowCSSSelector.ts | topSelectorMatchAttempt": {
+    "message": "ការព្យាយាម​ផ្គូផ្គង​សេឡិកទ័រ​ច្រើនដងបំផុត"
+  },
   "models/trace/insights/SlowCSSSelector.ts | topSelectors": {
     "message": "ផ្ទាំង​ជ្រើសរើស​ដែល​ចំណាយពេល​យូរជាងគេ"
   },
@@ -2165,8 +2201,29 @@
   "models/trace/insights/Viewport.ts | description": {
     "message": "អន្តរកម្ម​ដោយ​ការចុច​អាចត្រូវបាន[ពន្យារពេល​រហូតដល់ 300 មិល្លីវិនាទី](https://developer.chrome.com/blog/300ms-tap-delay-gone-away/) ប្រសិនបើ​ផ្ទាំងមើលឃើញ​មិនត្រូវបាន​បង្កើន​ប្រសិទ្ធភាព​សម្រាប់​ឧបករណ៍​ចល័តទេ។"
   },
+  "models/trace/insights/Viewport.ts | mobileTapDelayLabel": {
+    "message": "ការពន្យារ​ពេលចុចលើ​ឧបករណ៍​ចល័ត"
+  },
   "models/trace/insights/Viewport.ts | title": {
     "message": "បង្កើន​ប្រសិទ្ធភាព​ផ្ទាំងមើលឃើញ​សម្រាប់​ឧបករណ៍​ចល័ត"
+  },
+  "models/workspace/IgnoreListManager.ts | addAllAnonymousScriptsToIgnoreList": {
+    "message": "បញ្ចូល​ស្គ្រីបអនាមិក​ទាំងអស់​ទៅក្នុង​បញ្ជី​មិនអើពើ"
+  },
+  "models/workspace/IgnoreListManager.ts | addAllContentScriptsToIgnoreList": {
+    "message": "បញ្ចូល​ស្គ្រីប​កម្មវិធីបន្ថែម​ទាំងអស់​ទៅក្នុង​បញ្ជីមិនអើពើ"
+  },
+  "models/workspace/IgnoreListManager.ts | addAllThirdPartyScriptsToIgnoreList": {
+    "message": "បញ្ចូលគ្រប់​ស្គ្រីប​ភាគីទីបី​ទៅ​ក្នុង​បញ្ជី​មិនអើពើ"
+  },
+  "models/workspace/IgnoreListManager.ts | addDirectoryToIgnoreList": {
+    "message": "បញ្ចូលបញ្ជី​ទៅក្នុង​បញ្ជីមិនអើពើ"
+  },
+  "models/workspace/IgnoreListManager.ts | addScriptToIgnoreList": {
+    "message": "បញ្ចូល​ស្គ្រីបទៅ​បញ្ជីមិនអើពើ"
+  },
+  "models/workspace/IgnoreListManager.ts | removeFromIgnoreList": {
+    "message": "ដកចេញពី​បញ្ជីមិនអើពើ"
   },
   "models/workspace/UISourceCode.ts | index": {
     "message": "(សន្ទស្សន៍)"
@@ -2600,9 +2657,6 @@
   "panels/ai_assistance/AiAssistancePanel.ts | deleteChat": {
     "message": "លុប​ការជជែក​ក្នុង​មូលដ្ឋាន"
   },
-  "panels/ai_assistance/AiAssistancePanel.ts | externalRequestReceived": {
-    "message": "DevToolsបានទទួល​សំណើ​ខាងក្រៅ"
-  },
   "panels/ai_assistance/AiAssistancePanel.ts | followTheSteps": {
     "message": "ធ្វើតាម​ជំហាន​ខាងលើ ដើម្បី​សួរសំណួរ"
   },
@@ -2636,6 +2690,9 @@
   "panels/ai_assistance/ai_assistance-meta.ts | askAi": {
     "message": "សួរ AI"
   },
+  "panels/ai_assistance/ai_assistance-meta.ts | debugWithAi": {
+    "message": "ជួសជុល​ដោយប្រើ AI"
+  },
   "panels/ai_assistance/ai_assistance-meta.ts | enableAiAssistance": {
     "message": "បើក​ជំនួយ AI"
   },
@@ -2650,6 +2707,9 @@
   },
   "panels/ai_assistance/ai_assistance-meta.ts | wrongLocale": {
     "message": "ដើម្បីប្រើ​មុខងារនេះ សូម​កំណត់​ចំណូលចិត្ត​ភាសា​របស់អ្នក​ទៅភាសា​អង់គ្លេស​នៅក្នុងការកំណត់​ឧបករណ៍អ្នកអភិវឌ្ឍន៍។"
+  },
+  "panels/ai_assistance/components/ChatView.ts | inputTextAriaDescription": {
+    "message": "អ្នក​ក៏អាចប្រើ​សារតម្រុយ​មួយ​ដែលបាន​ណែនាំ​ខាងលើ ដើម្បី​ចាប់ផ្ដើម​ការសន្ទនា​របស់អ្នក​ផងដែរ"
   },
   "panels/ai_assistance/components/ChatView.ts | learnAbout": {
     "message": "ស្វែងយល់​អំពី AI នៅក្នុង​ឧបករណ៍អ្នកអភិវឌ្ឍន៍"
@@ -3275,6 +3335,9 @@
   "panels/application/IndexedDBViews.ts | collapse": {
     "message": "បង្រួម"
   },
+  "panels/application/IndexedDBViews.ts | confirmClearObjectStore": {
+    "message": "សម្អាត​កន្លែង​ផ្ទុកវត្ថុ \"{PH1}\" ឬ?"
+  },
   "panels/application/IndexedDBViews.ts | confirmDeleteDatabase": {
     "message": "លុប​មូលដ្ឋាន​ទិន្នន័យ \"{PH1}\" ឬ?"
   },
@@ -3310,6 +3373,9 @@
   },
   "panels/application/IndexedDBViews.ts | keyString": {
     "message": "សោ"
+  },
+  "panels/application/IndexedDBViews.ts | objectStoreWillBeCleared": {
+    "message": "ទិន្នន័យ​ដែលមាន​នៅក្នុង​កន្លែង​ផ្ទុកវត្ថុ​ដែលបាន​ជ្រើសរើស នឹងត្រូវបាន​ដកចេញ។"
   },
   "panels/application/IndexedDBViews.ts | objectStores": {
     "message": "កន្លែងផ្ទុកវត្ថុ"
@@ -3532,9 +3598,6 @@
   },
   "panels/application/ServiceWorkersView.ts | focus": {
     "message": "ផ្ដោត"
-  },
-  "panels/application/ServiceWorkersView.ts | inspect": {
-    "message": "ត្រួតពិនិត្យ"
   },
   "panels/application/ServiceWorkersView.ts | networkRequests": {
     "message": "សំណើ​បណ្ដាញ"
@@ -4070,6 +4133,9 @@
   "panels/application/components/BackForwardCacheStrings.ts | sharedWorker": {
     "message": "បច្ចុប្បន្ន មិនអាចទុកទំព័រដែលប្រើ SharedWorker នៅក្នុងឃ្លាំងបម្រុងទុកទំព័រក្នុងសភាពដើមទាំងស្រុងបានទេ។"
   },
+  "panels/application/components/BackForwardCacheStrings.ts | sharedWorkerMessage": {
+    "message": "ទំព័រ​ត្រូវបាន​ដកចេញពី​ឃ្លាំងបម្រុង ដោយសារ​វាបានទទួល​សារពី SharedWorker"
+  },
   "panels/application/components/BackForwardCacheStrings.ts | speechRecognizer": {
     "message": "បច្ចុប្បន្ន មិនអាចទុកទំព័រដែលប្រើ SpeechRecognizer នៅក្នុងឃ្លាំងបម្រុងទុកទំព័រក្នុងសភាពដើមទាំងស្រុងបានទេ។"
   },
@@ -4351,6 +4417,9 @@
   },
   "panels/application/components/FrameDetailsView.ts | rootDescription": {
     "message": "ស៊ុមនេះត្រូវបានសម្គាល់ថាជាស៊ុមដើមនៃការផ្សាយពាណិជ្ជកម្ម"
+  },
+  "panels/application/components/FrameDetailsView.ts | rootScriptFilterlistRule": {
+    "message": "វិធាន​បញ្ជីតម្រង​ស្គ្រីប​គោល"
   },
   "panels/application/components/FrameDetailsView.ts | secureContext": {
     "message": "បរិបទដែលមានសុវត្ថិភាព"
@@ -5118,7 +5187,7 @@
     "message": "ទំព័រ​ចាប់ផ្ដើម​ត្រូវបាន​ផ្លាស់ទីទៅ​ផ្ទៃខាងក្រោយ ដូច្នេះ​ទំព័រ​ដែលបាន​បំប្លែង​ជាមុន​ត្រូវបាន​លុបចោល។"
   },
   "panels/application/preloading/components/PreloadingString.ts | prerenderFinalStatusUaChangeRequiresReload": {
-    "message": "ការប្ដូរ​ភ្នាក់ងារ​អ្នកប្រើប្រាស់​បានកើតឡើង​នៅក្នុង​ការរុករក​ដែលបំប្លែង​ជាមុន។"
+    "message": "ការប្ដូរ​ភ្នាក់ងារ​អ្នក​ប្រើប្រាស់​បានកើតឡើង​នៅក្នុង​ការរុករក​ដែលបំប្លែង​ជាមុន។"
   },
   "panels/application/preloading/components/PreloadingString.ts | prerenderFinalStatusWindowClosed": {
     "message": "បាន​ឈប់ផ្ទុក​ទំព័រ​ដែលបាន​បំប្លែង​ជាមុន ដោយសារ​វាបានហៅ window.close()។"
@@ -5507,26 +5576,11 @@
   "panels/changes/ChangesSidebar.ts | sFromSourceMap": {
     "message": "{PH1} (ពីផែនទី​ប្រភព)"
   },
-  "panels/changes/ChangesView.ts | binaryDataDescription": {
-    "message": "ផ្ទាំង​នៃការផ្លាស់ប្ដូរ​មិនបង្ហាញ​ការផ្លាស់ប្ដូរ​ទិន្នន័យ​គោលពីរទេ"
-  },
   "panels/changes/ChangesView.ts | changesViewDescription": {
     "message": "នៅលើ​ទំព័រនេះ អ្នកអាច​តាមដាន​ការផ្លាស់ប្ដូរកូដ​ដែលបាន​ធ្វើឡើង​នៅក្នុង​ឧបករណ៍អ្នកអភិវឌ្ឍន៍។"
   },
-  "panels/changes/ChangesView.ts | copy": {
-    "message": "ចម្លង"
-  },
   "panels/changes/ChangesView.ts | noChanges": {
     "message": "មិនទាន់មាន​ការផ្លាស់ប្ដូរទេ"
-  },
-  "panels/changes/ChangesView.ts | noTextualDiff": {
-    "message": "គ្មាន​ភាពខុសគ្នា​នៃអក្សរទេ"
-  },
-  "panels/changes/ChangesView.ts | sDeletions": {
-    "message": "{n,plural, =1{ការលុប # (-)}other{ការលុប # (-)}}"
-  },
-  "panels/changes/ChangesView.ts | sInsertions": {
-    "message": "{n,plural, =1{ការ​បញ្ចូល # (+)}other{ការ​បញ្ចូល # (+)}}"
   },
   "panels/changes/CombinedDiffView.ts | copied": {
     "message": "បាន​ចម្លង​ទៅ​ឃ្លីបបត"
@@ -5537,29 +5591,26 @@
   "panels/changes/changes-meta.ts | changes": {
     "message": "ការផ្លាស់ប្ដូរ"
   },
-  "panels/changes/changes-meta.ts | copyAllChangesFromCurrentFile": {
-    "message": "ចម្លង​ការផ្លាស់ប្ដូរទាំងអស់​ពីឯកសារបច្ចុប្បន្ន"
-  },
-  "panels/changes/changes-meta.ts | revertAllChangesToCurrentFile": {
-    "message": "ត្រឡប់​ការផ្លាស់ប្ដូរ​ទាំងអស់​ទៅ​ឯកសារ​បច្ចុប្បន្នវិញ"
-  },
   "panels/changes/changes-meta.ts | showChanges": {
     "message": "បង្ហាញ​ការផ្លាស់ប្ដូរ"
+  },
+  "panels/common/FreDialog.ts | cancel": {
+    "message": "បោះបង់"
+  },
+  "panels/common/FreDialog.ts | gotIt": {
+    "message": "យល់ហើយ"
+  },
+  "panels/common/FreDialog.ts | learnMore": {
+    "message": "ស្វែងយល់បន្ថែម"
+  },
+  "panels/common/FreDialog.ts | thingsToConsider": {
+    "message": "ចំណុច​ដែលត្រូវ​ពិចារណា"
   },
   "panels/common/common.ts | allow": {
     "message": "អនុញ្ញាត"
   },
   "panels/common/common.ts | cancel": {
     "message": "បោះបង់"
-  },
-  "panels/common/common.ts | gotIt": {
-    "message": "យល់ហើយ"
-  },
-  "panels/common/common.ts | learnMore": {
-    "message": "ស្វែងយល់បន្ថែម"
-  },
-  "panels/common/common.ts | thingsToConsider": {
-    "message": "ចំណុច​ដែលត្រូវ​ពិចារណា"
   },
   "panels/console/ConsoleContextSelector.ts | extension": {
     "message": "កម្មវិធីបន្ថែម"
@@ -5715,7 +5766,7 @@
     "message": "បង្ហាញសារពី​បរិបទបច្ចុប្បន្ន​តែប៉ុណ្ណោះ (top, iframe, worker, កម្មវិធីបន្ថែម)"
   },
   "panels/console/ConsoleView.ts | overriddenByFilterSidebar": {
-    "message": "បានលុបពីលើដោយរបារចំហៀងរបស់តម្រង"
+    "message": "កម្រិត​កំណត់​ហេតុ​ត្រូវបាន​គ្រប់គ្រងដោយ​របារចំហៀង​នៃកុងសូល។"
   },
   "panels/console/ConsoleView.ts | preserveLog": {
     "message": "រក្សាទុក​កំណត់ហេតុ"
@@ -6440,6 +6491,9 @@
   "panels/elements/ElementIssueUtils.ts | interactiveContentOptionChild": {
     "message": "ធាតុ​អន្តរកម្ម​នៅក្នុង​ធាតុ <option>"
   },
+  "panels/elements/ElementIssueUtils.ts | interactiveContentSummaryDescendant": {
+    "message": "ធាតុ​អន្តរកម្ម​នៅក្នុង​ធាតុ <summary>"
+  },
   "panels/elements/ElementIssueUtils.ts | nonPhrasingContentOptionChild": {
     "message": "ខ្លឹមសារ​ដែលមិនមែនជាឃ្លា​ដែលប្រើ​នៅក្នុង​ធាតុ <option>"
   },
@@ -6518,8 +6572,23 @@
   "panels/elements/ElementsTreeElement.ts | addAttribute": {
     "message": "បញ្ចូល​លក្ខណៈ"
   },
+  "panels/elements/ElementsTreeElement.ts | addPadding": {
+    "message": "បញ្ចូល​ចន្លោះ"
+  },
+  "panels/elements/ElementsTreeElement.ts | alignItems": {
+    "message": "តម្រឹម​ធាតុ"
+  },
+  "panels/elements/ElementsTreeElement.ts | assessVisibility": {
+    "message": "វាយតម្លៃ​លទ្ធភាពមើលឃើញ"
+  },
   "panels/elements/ElementsTreeElement.ts | captureNodeScreenshot": {
     "message": "ថត​រូបអេក្រង់​អំពីណូត"
+  },
+  "panels/elements/ElementsTreeElement.ts | centerElement": {
+    "message": "ធាតុ​មជ្ឈមណ្ឌល"
+  },
+  "panels/elements/ElementsTreeElement.ts | changeParentProperties": {
+    "message": "ប្ដូរ​លក្ខណៈ​មេ"
   },
   "panels/elements/ElementsTreeElement.ts | children": {
     "message": "ផ្នែកកូន៖"
@@ -6566,6 +6635,9 @@
   "panels/elements/ElementsTreeElement.ts | disableScrollSnap": {
     "message": "បិទការ​ត្រួត​គ្នានៃគម្លាតរំកិល"
   },
+  "panels/elements/ElementsTreeElement.ts | distributeItemsEvenly": {
+    "message": "ចែកចាយ​ធាតុ​ស្មើគ្នា"
+  },
   "panels/elements/ElementsTreeElement.ts | duplicateElement": {
     "message": "បង្កើត​ធាតុ​ស្ទួន"
   },
@@ -6593,8 +6665,35 @@
   "panels/elements/ElementsTreeElement.ts | expandRecursively": {
     "message": "ពង្រីកហើយ​ពង្រីក​ទៀត"
   },
+  "panels/elements/ElementsTreeElement.ts | explainContainerContext": {
+    "message": "ពន្យល់​អំពី​បរិបទ​ទម្រង់ផ្ទុក"
+  },
+  "panels/elements/ElementsTreeElement.ts | explainContainerQueries": {
+    "message": "ពន្យល់​អំពី​សំណួរ​ពាក់ព័ន្ធនឹង​ទម្រង់ផ្ទុក"
+  },
+  "panels/elements/ElementsTreeElement.ts | explainContainerTypes": {
+    "message": "ពន្យល់អំពី​ប្រភេទ​ទម្រង់ផ្ទុក"
+  },
+  "panels/elements/ElementsTreeElement.ts | explainFlexbox": {
+    "message": "ពន្យល់​អំពី flexbox"
+  },
+  "panels/elements/ElementsTreeElement.ts | explainGridLayout": {
+    "message": "ពន្យល់​អំពី​ប្លង់​ក្រឡា"
+  },
+  "panels/elements/ElementsTreeElement.ts | explainScrollbars": {
+    "message": "ពន្យល់​អំពី​របាររំកិល"
+  },
+  "panels/elements/ElementsTreeElement.ts | explainSubgrids": {
+    "message": "ពន្យល់​អំពី​ក្រឡារង"
+  },
+  "panels/elements/ElementsTreeElement.ts | findGridDefinition": {
+    "message": "រក​និយមន័យ​នៃក្រឡា"
+  },
   "panels/elements/ElementsTreeElement.ts | focus": {
     "message": "ផ្ដោត"
+  },
+  "panels/elements/ElementsTreeElement.ts | forceOpenPopover": {
+    "message": "បន្តបើក​ផ្ទាំងផុស​ពីលើនេះ"
   },
   "panels/elements/ElementsTreeElement.ts | forceState": {
     "message": "បង្ខំ​ស្ថានភាព"
@@ -6608,20 +6707,32 @@
   "panels/elements/ElementsTreeElement.ts | paste": {
     "message": "ដាក់ចូល"
   },
+  "panels/elements/ElementsTreeElement.ts | removeScrollbars": {
+    "message": "ដក​របាររំកិលចេញ"
+  },
   "panels/elements/ElementsTreeElement.ts | scrollIntoView": {
     "message": "រំកិល​រហូតដល់​មើលឃើញ"
   },
   "panels/elements/ElementsTreeElement.ts | showCommandForTarget": {
-    "message": "បង្ហាញ​ឃ្លាបញ្ជា​សម្រាប់​គោលដៅ"
+    "message": "បង្ហាញ​ធាតុ​ដែលបានភ្ជាប់​ជាមួយ​លក្ខណៈ commandfor"
   },
   "panels/elements/ElementsTreeElement.ts | showFrameDetails": {
     "message": "បង្ហាញ​ព័ត៌មាន​លម្អិតអំពី iframe"
   },
   "panels/elements/ElementsTreeElement.ts | showInterestTarget": {
-    "message": "បង្ហាញ​គោលដៅ​ចំណាប់​អារម្មណ៍"
+    "message": "បង្ហាញ​ធាតុ​ដែលបានភ្ជាប់​ជាមួយ​លក្ខណៈ interesttarget"
   },
   "panels/elements/ElementsTreeElement.ts | showPopoverTarget": {
-    "message": "បង្ហាញគោលដៅផ្ទាំងផុសពីលើ"
+    "message": "បង្ហាញ​ធាតុ​ដែលបានភ្ជាប់​ជាមួយ​លក្ខណៈ popovertarget"
+  },
+  "panels/elements/ElementsTreeElement.ts | startAChat": {
+    "message": "ចាប់ផ្ដើម​ការជជែក"
+  },
+  "panels/elements/ElementsTreeElement.ts | stopForceOpenPopover": {
+    "message": "លែងបន្ត​បើក​ផ្ទាំងផុស​ពីលើនេះ"
+  },
+  "panels/elements/ElementsTreeElement.ts | styleScrollbars": {
+    "message": "កំណត់​រចនាបថ​របាររំកិល"
   },
   "panels/elements/ElementsTreeElement.ts | thisFrameWasIdentifiedAsAnAd": {
     "message": "ស៊ុមនេះ​ត្រូវបានសម្គាល់ថាជា​ស៊ុម​នៃការផ្សាយ​ពាណិជ្ជកម្ម"
@@ -6632,11 +6743,11 @@
   "panels/elements/ElementsTreeElement.ts | valueIsTooLargeToEdit": {
     "message": "<តម្លៃ​ធំពេក មិនអាចកែ​បានទេ>"
   },
+  "panels/elements/ElementsTreeElement.ts | wrapTheseItems": {
+    "message": "កាត់តម្រឹម​ធាតុ​ទាំងនេះ"
+  },
   "panels/elements/ElementsTreeOutline.ts | pageDom": {
     "message": "DOM ទំព័រ"
-  },
-  "panels/elements/ElementsTreeOutline.ts | reveal": {
-    "message": "បង្ហាញ"
   },
   "panels/elements/ElementsTreeOutline.ts | showAllNodesDMore": {
     "message": "បង្ហាញ​ណត​ទាំងអស់ ({PH1} ទៀត)"
@@ -6676,6 +6787,27 @@
   },
   "panels/elements/LayersWidget.ts | toggleCSSLayers": {
     "message": "ប៊ូតុងបិទ/បើក​ទិដ្ឋភាព​ស្រទាប់ CSS"
+  },
+  "panels/elements/LayoutPane.ts | chooseElementOverlayColor": {
+    "message": "ជ្រើសរើសពណ៌ត្រួត​គ្នាសម្រាប់ធាតុនេះ"
+  },
+  "panels/elements/LayoutPane.ts | colorPickerOpened": {
+    "message": "បានបើកផ្ទាំងជ្រើសរើសពណ៌។"
+  },
+  "panels/elements/LayoutPane.ts | flexbox": {
+    "message": "Flexbox"
+  },
+  "panels/elements/LayoutPane.ts | flexboxOverlays": {
+    "message": "ការដាក់ Flexbox ត្រួតគ្នា"
+  },
+  "panels/elements/LayoutPane.ts | noFlexboxLayoutsFoundOnThisPage": {
+    "message": "រកមិនឃើញ​ប្លង់ flexbox នៅលើ​ទំព័រនេះ​ទេ"
+  },
+  "panels/elements/LayoutPane.ts | overlayDisplaySettings": {
+    "message": "ការកំណត់​ការបង្ហាញ​ត្រួតគ្នា"
+  },
+  "panels/elements/LayoutPane.ts | showElementInTheElementsPanel": {
+    "message": "បង្ហាញធាតុ​នៅក្នុង​ផ្ទាំងធាតុ"
   },
   "panels/elements/MarkerDecorator.ts | domBreakpoint": {
     "message": "ចំណុចឈប់​ដំណើរការ DOM"
@@ -6722,11 +6854,11 @@
   "panels/elements/PropertyRenderer.ts | cssPropertyValue": {
     "message": "តម្លៃ​លក្ខណសម្បត្តិ CSS៖ {PH1}"
   },
+  "panels/elements/ShortcutTreeElement.ts | reveal": {
+    "message": "បង្ហាញ"
+  },
   "panels/elements/StylePropertiesSection.ts | constructedStylesheet": {
     "message": "បញ្ជី​រចនាប័ទ្ម​ដែលបាន​បង្កើត"
-  },
-  "panels/elements/StylePropertiesSection.ts | copyAllCSSChanges": {
-    "message": "ចម្លងការផ្លាស់ប្ដូរ CSS ទាំងអស់"
   },
   "panels/elements/StylePropertiesSection.ts | copyAllDeclarations": {
     "message": "ចម្លង​សេចក្ដី​ប្រកាស​ទាំងអស់"
@@ -6763,9 +6895,6 @@
   },
   "panels/elements/StylePropertiesSection.ts | viaInspector": {
     "message": "តាមរយៈ​កម្មវិធី​ត្រួតពិនិត្យ"
-  },
-  "panels/elements/StylePropertyTreeElement.ts | copyAllCSSChanges": {
-    "message": "ចម្លងការផ្លាស់ប្ដូរ CSS ទាំងអស់"
   },
   "panels/elements/StylePropertyTreeElement.ts | copyAllCssDeclarationsAsJs": {
     "message": "ចម្លង​សេចក្ដីប្រកាស​ទាំងអស់ជា JS"
@@ -6869,11 +6998,29 @@
   "panels/elements/components/CSSHintDetailsView.ts | learnMore": {
     "message": "ស្វែងយល់បន្ថែម"
   },
+  "panels/elements/components/CSSPropertyDocsView.ts | browserOnPlatform": {
+    "message": "{PH1} នៅលើ {PH2}"
+  },
   "panels/elements/components/CSSPropertyDocsView.ts | dontShow": {
     "message": "កុំ​បង្ហាញ"
   },
   "panels/elements/components/CSSPropertyDocsView.ts | learnMore": {
     "message": "ស្វែងយល់បន្ថែម"
+  },
+  "panels/elements/components/CSSPropertyDocsView.ts | limitedAvailability": {
+    "message": "លទ្ធភាព​ដែលអាច​ប្រើបាន​មានកំណត់​នៅលើ​កម្មវិធីរុករកតាម​អ៊ីនធឺណិត​ចម្បងៗ"
+  },
+  "panels/elements/components/CSSPropertyDocsView.ts | limitedAvailabilityInBrowsers": {
+    "message": "លទ្ធភាព​ប្រើប្រាស់​មានកំណត់​នៅលើ​កម្មវិធីរុករកតាមអ៊ីនធឺណិត​ចម្បងៗ (មិនត្រូវបាន​បានអនុវត្ត​ពេញលេញ​នៅក្នុង {PH1} ទេ)"
+  },
+  "panels/elements/components/CSSPropertyDocsView.ts | newlyAvailableSince": {
+    "message": "ទើបអាច​ប្រើបាន​នៅលើ​កម្មវិធីរុករកតាមអ៊ីនធឺណិត​ចម្បងៗ (Baseline តាំងពីខែ{PH1})"
+  },
+  "panels/elements/components/CSSPropertyDocsView.ts | unknownDate": {
+    "message": "កាលបរិច្ឆេទ​ដែល​មិនស្គាល់"
+  },
+  "panels/elements/components/CSSPropertyDocsView.ts | widelyAvailableSince": {
+    "message": "អាចប្រើបាន​យ៉ាងទូលំទូលាយ​នៅលើ​កម្មវិធីរុករកតាមអ៊ីនធឺណិត​ចម្បងៗ (Baseline តាំងពី {PH1})"
   },
   "panels/elements/components/CSSVariableValueView.ts | invalidPropertyValue": {
     "message": "តម្លៃ​លក្ខណៈ​មិន​ត្រឹមត្រូវ ប្រភេទ​ដែលបានរំពឹងទុក {type}"
@@ -6898,36 +7045,6 @@
   },
   "panels/elements/components/ElementsTreeExpandButton.ts | expand": {
     "message": "ពង្រីក"
-  },
-  "panels/elements/components/LayoutPane.ts | chooseElementOverlayColor": {
-    "message": "ជ្រើសរើសពណ៌ត្រួត​គ្នាសម្រាប់ធាតុនេះ"
-  },
-  "panels/elements/components/LayoutPane.ts | colorPickerOpened": {
-    "message": "បានបើកផ្ទាំងជ្រើសរើសពណ៌។"
-  },
-  "panels/elements/components/LayoutPane.ts | flexbox": {
-    "message": "Flexbox"
-  },
-  "panels/elements/components/LayoutPane.ts | flexboxOverlays": {
-    "message": "ការដាក់ Flexbox ត្រួតគ្នា"
-  },
-  "panels/elements/components/LayoutPane.ts | grid": {
-    "message": "ក្រឡា"
-  },
-  "panels/elements/components/LayoutPane.ts | gridOverlays": {
-    "message": "ការដាក់​ក្រឡា​ត្រួតគ្នា"
-  },
-  "panels/elements/components/LayoutPane.ts | noFlexboxLayoutsFoundOnThisPage": {
-    "message": "រកមិនឃើញ​ប្លង់ flexbox នៅលើ​ទំព័រនេះ​ទេ"
-  },
-  "panels/elements/components/LayoutPane.ts | noGridLayoutsFoundOnThisPage": {
-    "message": "រកមិនឃើញ​ប្លង់ក្រឡា​នៅលើ​ទំព័រនេះ​ទេ"
-  },
-  "panels/elements/components/LayoutPane.ts | overlayDisplaySettings": {
-    "message": "ការកំណត់​ការបង្ហាញ​ត្រួតគ្នា"
-  },
-  "panels/elements/components/LayoutPane.ts | showElementInTheElementsPanel": {
-    "message": "បង្ហាញធាតុ​នៅក្នុង​ផ្ទាំងធាតុ"
   },
   "panels/elements/components/StylePropertyEditor.ts | deselectButton": {
     "message": "លុប {propertyName}៖ {propertyValue}"
@@ -7060,12 +7177,6 @@
   },
   "panels/emulation/DeviceModeToolbar.ts | edit": {
     "message": "កែ…"
-  },
-  "panels/emulation/DeviceModeToolbar.ts | experimentalWebPlatformFeature": {
-    "message": "ទង់ \"Experimental Web Platform Feature\" ត្រូវបាន​បើក។ សូមចុច ដើម្បីបិទវា។"
-  },
-  "panels/emulation/DeviceModeToolbar.ts | experimentalWebPlatformFeatureFlag": {
-    "message": "ទង់ \"Experimental Web Platform Feature\" ត្រូវបាន​បិទ។ សូម​ចុច ដើម្បី​បើកវា​។"
   },
   "panels/emulation/DeviceModeToolbar.ts | fitToWindowF": {
     "message": "ប៉ុន​វិនដូ ({PH1}%)"
@@ -7781,7 +7892,7 @@
   "panels/layer_viewer/LayerDetailsView.ts | slowScrollRegions": {
     "message": "តំបន់​ដែលរំកិលយឺត"
   },
-  "panels/layer_viewer/LayerDetailsView.ts | stickyAncenstorLayersS": {
+  "panels/layer_viewer/LayerDetailsView.ts | stickyAncestorLayersS": {
     "message": "{PH1}៖ {PH2} ({PH3})"
   },
   "panels/layer_viewer/LayerDetailsView.ts | stickyBoxRectangleDimensions": {
@@ -7918,6 +8029,9 @@
   },
   "panels/lighthouse/LighthouseController.ts | accessibility": {
     "message": "ភាពងាយស្រួល"
+  },
+  "panels/lighthouse/LighthouseController.ts | applyDesktopEmulationDuring": {
+    "message": "ប្រើ​ការត្រាប់តាម​កុំព្យូទ័រ ក្នុងអំឡុងពេល​ត្រួតពិនិត្យ"
   },
   "panels/lighthouse/LighthouseController.ts | applyMobileEmulation": {
     "message": "ប្រើ​ការត្រាប់តាម​ឧបករណ៍ចល័ត"
@@ -8399,6 +8513,9 @@
   "panels/media/PlayerPropertiesView.ts | hardwareEncoder": {
     "message": "កម្មវិធីបំប្លែងកូដ​ហាតវែរ"
   },
+  "panels/media/PlayerPropertiesView.ts | hlsBufferedRanges": {
+    "message": "កម្រិត​មេឌៀ​ផ្ទុកជាមុន"
+  },
   "panels/media/PlayerPropertiesView.ts | noDecoder": {
     "message": "គ្មាន​កម្មវិធីឌិកូដ​ទេ"
   },
@@ -8492,12 +8609,6 @@
   "panels/mobile_throttling/NetworkThrottlingSelector.ts | presets": {
     "message": "ការកំណត់ជាមុន"
   },
-  "panels/mobile_throttling/ThrottlingManager.ts | add": {
-    "message": "បញ្ចូល…"
-  },
-  "panels/mobile_throttling/ThrottlingManager.ts | addS": {
-    "message": "បញ្ចូល {PH1}"
-  },
   "panels/mobile_throttling/ThrottlingManager.ts | calibrate": {
     "message": "កែតម្រូវ…"
   },
@@ -8519,6 +8630,9 @@
   "panels/mobile_throttling/ThrottlingManager.ts | hardwareConcurrencySettingLabel": {
     "message": "លុបពីលើ​តម្លៃ​ដែលបានរាយការណ៍​ដោយ navigator.hardwareConcurrency"
   },
+  "panels/mobile_throttling/ThrottlingManager.ts | noSaveDataOverride": {
+    "message": "'សន្សំសំចៃ​ទិន្នន័យ'៖ លំនាំដើម"
+  },
   "panels/mobile_throttling/ThrottlingManager.ts | offline": {
     "message": "គ្មានអ៊ីនធឺណិត"
   },
@@ -8531,8 +8645,14 @@
   "panels/mobile_throttling/ThrottlingManager.ts | resetConcurrency": {
     "message": "កំណត់​តម្លៃ​លំនាំដើម​ឡើងវិញ"
   },
-  "panels/mobile_throttling/ThrottlingManager.ts | sS": {
-    "message": "{PH1}៖ {PH2}"
+  "panels/mobile_throttling/ThrottlingManager.ts | saveDataOff": {
+    "message": "'សន្សំសំចៃ​ទិន្នន័យ'៖ បង្ខំឱ្យបិទ"
+  },
+  "panels/mobile_throttling/ThrottlingManager.ts | saveDataOn": {
+    "message": "'សន្សំសំចៃ​ទិន្នន័យ'៖ បង្ខំឱ្យបើក"
+  },
+  "panels/mobile_throttling/ThrottlingManager.ts | saveDataSettingTooltip": {
+    "message": "លុបពីលើ​តម្លៃ​ដែលបាន​រាយការណ៍​ដោយ navigator.connection.saveData នៅលើ​ទំព័រ"
   },
   "panels/mobile_throttling/ThrottlingManager.ts | throttling": {
     "message": "កំពុងពន្យឺត"
@@ -8653,9 +8773,6 @@
   },
   "panels/mobile_throttling/ThrottlingSettingsTab.ts | packetReordering": {
     "message": "ការតម្រៀប​កញ្ចប់​ឡើងវិញ"
-  },
-  "panels/mobile_throttling/ThrottlingSettingsTab.ts | percent": {
-    "message": "ភាគរយ"
   },
   "panels/mobile_throttling/ThrottlingSettingsTab.ts | profileName": {
     "message": "ឈ្មោះកម្រងព័ត៌មាន"
@@ -8802,10 +8919,10 @@
     "message": "បញ្ចូលភ្នាក់ងារ​អ្នកប្រើប្រាស់​ផ្ទាល់ខ្លួន"
   },
   "panels/network/NetworkConfigView.ts | networkConditionsPanelShown": {
-    "message": "លក្ខខណ្ឌបណ្ដាញដែលបង្ហាញ"
+    "message": "បានបង្ហាញ​លក្ខខណ្ឌ​បណ្ដាញ។"
   },
   "panels/network/NetworkConfigView.ts | networkThrottling": {
-    "message": "ការពន្យឺត​បណ្ដាញ"
+    "message": "បណ្ដាញ"
   },
   "panels/network/NetworkConfigView.ts | selectAutomatically": {
     "message": "ប្រើលំនាំដើមនៃកម្មវិធីរុករកតាមអ៊ីនធឺណិត"
@@ -8830,6 +8947,21 @@
   },
   "panels/network/NetworkDataGridNode.ts | canceled": {
     "message": "(បានបោះបង់)"
+  },
+  "panels/network/NetworkDataGridNode.ts | coepFrameResourceNeedsCoepHeader": {
+    "message": "ធនធាន​ដែលបាន​ដាក់ក្នុងស៊ុម COEP ត្រូវការ​ក្បាល COEP"
+  },
+  "panels/network/NetworkDataGridNode.ts | coopSandboxedIframeCannotNavigateToCoopPage": {
+    "message": "ផ្ទាំងលោតឡើង​របស់ iframe ដែលបាន​ដាក់កំហិតក្នុងប្រអប់សុវត្ថិភាព​មិនអាច​ទៅកាន់​ទំព័រ COOP បានទេ"
+  },
+  "panels/network/NetworkDataGridNode.ts | corpNotSameOrigin": {
+    "message": "CORP មិនមែន \"ប្រភព​ដើមតែមួយ\" ទេ"
+  },
+  "panels/network/NetworkDataGridNode.ts | corpNotSameOriginAfterDefaultedToSameOriginByCoep": {
+    "message": "CORP មិនមែន \"ប្រភព​ដើមតែមួយ\" ទេ បន្ទាប់ពី​ត្រូវបាន​កំណត់​តាមលំនាំដើម​ទៅ \"ប្រភព​ដើមតែមួយ\" ដោយ COEP"
+  },
+  "panels/network/NetworkDataGridNode.ts | corpNotSameSite": {
+    "message": "CORP មិនមែន \"គេហទំព័រ​តែមួយ\" ទេ"
   },
   "panels/network/NetworkDataGridNode.ts | corsError": {
     "message": "បញ្ហា CORS"
@@ -8920,6 +9052,9 @@
   },
   "panels/network/NetworkDataGridNode.ts | redirect": {
     "message": "បញ្ជូន​បន្ត"
+  },
+  "panels/network/NetworkDataGridNode.ts | responseIsIpProtectedToolTip": {
+    "message": "សំណើនេះ​ត្រូវបានផ្ញើ​តាមរយៈ​ប្រូកស៊ីការពារ IP។"
   },
   "panels/network/NetworkDataGridNode.ts | sPreflight": {
     "message": "{PH1} + មុនការហោះហើរ"
@@ -9056,6 +9191,9 @@
   "panels/network/NetworkLogView.ts | areYouSureYouWantToClearBrowserCookies": {
     "message": "តើអ្នកពិតជាចង់​សម្អាត​ខូគីកម្មវិធីរុករកតាមអ៊ីនធឺណិត​មែនឬ?"
   },
+  "panels/network/NetworkLogView.ts | assessSecurityHeaders": {
+    "message": "វាយតម្លៃ​ក្បាលសុវត្ថិភាព"
+  },
   "panels/network/NetworkLogView.ts | blockRequestDomain": {
     "message": "ទប់ស្កាត់​ដែនសំណើ"
   },
@@ -9170,6 +9308,15 @@
   "panels/network/NetworkLogView.ts | dropHarFilesHere": {
     "message": "ទម្លាក់ឯកសារ HAR នៅទីនេះ"
   },
+  "panels/network/NetworkLogView.ts | explainFailures": {
+    "message": "ពន្យល់​អំពី​ការដំណើរការ​មិនបាន​សម្រេច"
+  },
+  "panels/network/NetworkLogView.ts | explainPurpose": {
+    "message": "ពន្យល់អំពី​គោលបំណង"
+  },
+  "panels/network/NetworkLogView.ts | explainSlowness": {
+    "message": "ពន្យល់​អំពី​ភាពយឺត"
+  },
   "panels/network/NetworkLogView.ts | finishS": {
     "message": "បញ្ចប់៖ {PH1}"
   },
@@ -9191,6 +9338,9 @@
   "panels/network/NetworkLogView.ts | invertsFilter": {
     "message": "បញ្ច្រាសតម្រងស្វែងរក"
   },
+  "panels/network/NetworkLogView.ts | ippRequests": {
+    "message": "សំណើ​ដែលមាន​ការការពារ IP"
+  },
   "panels/network/NetworkLogView.ts | loadS": {
     "message": "ផ្ទុក៖ {PH1}"
   },
@@ -9205,6 +9355,9 @@
   },
   "panels/network/NetworkLogView.ts | onlyShowBlockedRequests": {
     "message": "បង្ហាញតែ​សំណើ​ដែលបានទប់ស្កាត់​ប៉ុណ្ណោះ"
+  },
+  "panels/network/NetworkLogView.ts | onlyShowIPProtectedRequests": {
+    "message": "(ឯកជន​តែប៉ុណ្ណោះ) បង្ហាញ​សំណើ​ដែលផ្ញើទៅ​ប្រូកស៊ីការពារ IP តែ​ប៉ុណ្ណោះ"
   },
   "panels/network/NetworkLogView.ts | onlyShowRequestsWithBlockedCookies": {
     "message": "បង្ហាញ​តែសំណើ​ដែលមានខូគី​នៃការឆ្លើយតប​ដែលបាន​ទប់ស្កាត់ប៉ុណ្ណោះ"
@@ -9265,6 +9418,9 @@
   },
   "panels/network/NetworkLogView.ts | showOnlyHideRequests": {
     "message": "បង្ហាញ​តែ/លាក់​សំណើ"
+  },
+  "panels/network/NetworkLogView.ts | startAChat": {
+    "message": "ចាប់ផ្ដើម​ការជជែក"
   },
   "panels/network/NetworkLogView.ts | startRecording": {
     "message": "ចាប់ផ្តើមថត"
@@ -9328,6 +9484,9 @@
   },
   "panels/network/NetworkLogViewColumns.ts | remoteAddressSpace": {
     "message": "ចន្លោះអាសយដ្ឋានពីចម្ងាយ"
+  },
+  "panels/network/NetworkLogViewColumns.ts | requestHeaders": {
+    "message": "ផ្នែកក្បាល​សំណើ"
   },
   "panels/network/NetworkLogViewColumns.ts | responseHeaders": {
     "message": "ផ្នែកក្បាលនៃការឆ្លើយតប"
@@ -9978,7 +10137,7 @@
     "message": "អាសយដ្ឋាន​ពីចម្ងាយ"
   },
   "panels/network/components/RequestHeadersView.ts | requestHeaders": {
-    "message": "ស្នើ​ផ្នែកក្បាល"
+    "message": "ផ្នែក​ក្បាល​នៃ​សំណើ"
   },
   "panels/network/components/RequestHeadersView.ts | requestMethod": {
     "message": "វិធី​ស្នើ"
@@ -11516,23 +11675,14 @@
   "panels/security/CookieReportView.ts | gitHubResource": {
     "message": "ពិនិត្យមើល{PH1}ពីគេហទំព័រ​ភាគីទីបី"
   },
-  "panels/security/CookieReportView.ts | gitHubResourceInsightTypeString": {
-    "message": "Github"
-  },
   "panels/security/CookieReportView.ts | gracePeriod": {
     "message": "ពិនិត្យមើល{PH1}។ ការ​លើក​លែង​នៃរយៈពេលលើកលែង​កំពុង​ដំណើរការ។"
-  },
-  "panels/security/CookieReportView.ts | gracePeriodInsightTypeString": {
-    "message": "រយៈពេល​លើកលែង"
   },
   "panels/security/CookieReportView.ts | guidance": {
     "message": "ការណែនាំ"
   },
   "panels/security/CookieReportView.ts | heuristics": {
     "message": "សកម្មភាព​ដែលត្រូវធ្វើ​នៅពេល​ក្រោយ។ ការ​លើក​លែង​ដោយផ្អែកលើ​ការពិសោធ​រកដំណោះ​ស្រាយ​គឺសកម្ម។"
-  },
-  "panels/security/CookieReportView.ts | heuristicsInisightTypeString": {
-    "message": "ការពិសោធ​រក​ដំណោះស្រាយ"
   },
   "panels/security/CookieReportView.ts | hostingCookieTypeString": {
     "message": "ការ​បង្ហោះ"
@@ -11550,9 +11700,6 @@
     "message": "ទាក់ទង​ទៅគេហទំព័រ​ភាគីទីបី ដើម្បី​ទទួលបាន​ព័ត៌មាន​បន្ថែម"
   },
   "panels/security/CookieReportView.ts | otherCookieTypeString": {
-    "message": "ផ្សេងៗ"
-  },
-  "panels/security/CookieReportView.ts | otherInsightTypeString": {
     "message": "ផ្សេងៗ"
   },
   "panels/security/CookieReportView.ts | platform": {
@@ -12182,8 +12329,17 @@
   "panels/sensors/sensors-meta.ts | userIdleScreenUnlocked": {
     "message": "អ្នកប្រើប្រាស់​អសកម្ម អេក្រង់​បានដោះសោ"
   },
+  "panels/settings/AISettingsTab.ts | asYouTypeCodeSuggestions": {
+    "message": "នៅពេល​អ្នកវាយបញ្ចូល​នៅក្នុង​ផ្ទាំង​ប្រភព ឬ​កុងសូល អ្នកនឹង​ទទួលបាន​ការណែនាំ​កូដ។ សូមចុច Tab ដើម្បី​ទទួលយក​ការណែនាំណាមួយ។"
+  },
   "panels/settings/AISettingsTab.ts | boostYourProductivity": {
     "message": "បង្កើន​ផលិតភាព​របស់អ្នក​តាមរយៈ AI"
+  },
+  "panels/settings/AISettingsTab.ts | codeSuggestionsSendData": {
+    "message": "ដើម្បីបង្កើត​ការណែនាំ​កូដ អ្វីដែលអ្នកបញ្ចូលលើ​កុងសូល ប្រវត្តិនៃ​វគ្គកុងសូល​បច្ចុប្បន្ន​របស់អ្នក និង​ខ្លឹមសារនៃ​ឯកសារ​ដែលកំពុងបើកនាពេលបច្ចុប្បន្ន ត្រូវបាន​ចែករំលែក​ជាមួយ Google។ ទិន្នន័យនេះ​ប្រហែល​ត្រូវអ្នក​ត្រួតពិនិត្យ​ជាមនុស្ស​មើលឃើញ​ក្នុងការ​កែលម្អ​មុខងារនេះ។"
+  },
+  "panels/settings/AISettingsTab.ts | codeSuggestionsSendDataNoLogging": {
+    "message": "ដើម្បីបង្កើត​ការណែនាំ​កូដ អ្វីដែលអ្នកបញ្ចូលលើ​កុងសូល ប្រវត្តិនៃ​វគ្គកុងសូល​បច្ចុប្បន្ន​របស់អ្នក និង​ខ្លឹមសារនៃ​ឯកសារ​ដែលកំពុងបើកនាពេលបច្ចុប្បន្ន ត្រូវបាន​ចែករំលែក​ជាមួយ Google។ ទិន្នន័យនេះ​នឹងមិន​ត្រូវបានប្រើ ដើម្បី​កែលម្អ​គំរូ AI របស់ Google ឡើយ។"
   },
   "panels/settings/AISettingsTab.ts | consoleInsightsSendsData": {
     "message": "សារកុងសូល ដានបង្គរ​ដែលបានភ្ជាប់ កូដប្រភព​ដែលពាក់ព័ន្ធ និងផ្នែកក្បាល​បណ្ដាញ​ដែលបានភ្ជាប់​ត្រូវបាន​បញ្ជូនទៅ Google ដើម្បី​បង្កើត​ការពន្យល់។ ទិន្នន័យនេះ​ប្រហែល​ត្រូវអ្នក​ត្រួតពិនិត្យ​ជាមនុស្ស​មើលឃើញ​ក្នុងការ​កែលម្អ​មុខងារនេះ។"
@@ -12238,6 +12394,9 @@
   },
   "panels/settings/AISettingsTab.ts | getAIAnnotationsSuggestions": {
     "message": "យក​ការណែនាំ AI សម្រាប់​ចំណារ​ផ្ទាំង​ប្រតិបត្តិការ"
+  },
+  "panels/settings/AISettingsTab.ts | helpUnderstandCodeSuggestions": {
+    "message": "ទទួលបាន​ជំនួយ​ក្នុងការ​បំពេញ​កូដ​របស់អ្នក"
   },
   "panels/settings/AISettingsTab.ts | helpUnderstandConsole": {
     "message": "ជួយអ្នក​ឱ្យយល់ និង​ដោះស្រាយ​បញ្ហា និង​ការព្រមាន​លើ​កុងសូល"
@@ -12377,7 +12536,7 @@
   "panels/settings/KeybindsSettingsTab.ts | shortcutChangesApplied": {
     "message": "បានអនុវត្ត​ការផ្លាស់ប្ដូរ​ចំពោះ​ផ្លូវកាត់"
   },
-  "panels/settings/KeybindsSettingsTab.ts | shortcutChangesDiscared": {
+  "panels/settings/KeybindsSettingsTab.ts | shortcutChangesDiscarded": {
     "message": "បានលុបចោល​ការផ្លាស់ប្ដូរ​ចំពោះ​ផ្លូវកាត់"
   },
   "panels/settings/KeybindsSettingsTab.ts | shortcutChangesRestored": {
@@ -12527,8 +12686,35 @@
   "panels/settings/emulation/components/UserAgentClientHintsForm.ts | deviceProperties": {
     "message": "លក្ខណសម្បត្តិ​ឧបករណ៍"
   },
+  "panels/settings/emulation/components/UserAgentClientHintsForm.ts | formFactorAutomotive": {
+    "message": "យានយន្ត"
+  },
+  "panels/settings/emulation/components/UserAgentClientHintsForm.ts | formFactorDesktop": {
+    "message": "កុំព្យូទ័រ"
+  },
+  "panels/settings/emulation/components/UserAgentClientHintsForm.ts | formFactorEInk": {
+    "message": "EInk"
+  },
+  "panels/settings/emulation/components/UserAgentClientHintsForm.ts | formFactorMobile": {
+    "message": "ឧបករណ៍​ចល័ត"
+  },
+  "panels/settings/emulation/components/UserAgentClientHintsForm.ts | formFactorTablet": {
+    "message": "ថេប្លេត"
+  },
+  "panels/settings/emulation/components/UserAgentClientHintsForm.ts | formFactorWatch": {
+    "message": "នាឡិកា"
+  },
+  "panels/settings/emulation/components/UserAgentClientHintsForm.ts | formFactorXR": {
+    "message": "XR"
+  },
+  "panels/settings/emulation/components/UserAgentClientHintsForm.ts | formFactorsGroupAriaLabel": {
+    "message": "ទម្រង់រូប​ដែលអាច​ប្រើបាន"
+  },
+  "panels/settings/emulation/components/UserAgentClientHintsForm.ts | formFactorsTitle": {
+    "message": "ទម្រង់រូប (Sec-CH-UA-Form-Factors)"
+  },
   "panels/settings/emulation/components/UserAgentClientHintsForm.ts | fullBrowserVersion": {
-    "message": "កំណែកម្មវិធីរុករកតាមអ៊ីនធឺណិត​ពេញលេញ (Sec-CH-UA-Full-Browser-Version)"
+    "message": "កំណែ​កម្មវិធីរុករកតាមអ៊ីនធឺណិត​ពេញលេញ (Sec-CH-UA-Full-Version)"
   },
   "panels/settings/emulation/components/UserAgentClientHintsForm.ts | fullBrowserVersionPlaceholder": {
     "message": "កំណែ​កម្មវិធីរុករក​តាមអ៊ីនធឺណិត​ពេញលេញ (ឧ. 87.0.4280.88)"
@@ -12673,6 +12859,63 @@
   },
   "panels/sources/BreakpointEditDialog.ts | pauseOnlyWhenTheConditionIsTrue": {
     "message": "ផ្អាក​តែនៅពេល​ដែលស្ថានភាព​គឺពិត​ប៉ុណ្ណោះ"
+  },
+  "panels/sources/BreakpointsView.ts | breakpointHit": {
+    "message": "ការឈានដល់ចំណុចផ្អាក {PH1}"
+  },
+  "panels/sources/BreakpointsView.ts | checked": {
+    "message": "បានធីក​"
+  },
+  "panels/sources/BreakpointsView.ts | conditionCode": {
+    "message": "លក្ខខណ្ឌ៖ {PH1}"
+  },
+  "panels/sources/BreakpointsView.ts | disableAllBreakpoints": {
+    "message": "បិទ​ចំណុចផ្អាក​ទាំងអស់"
+  },
+  "panels/sources/BreakpointsView.ts | disableAllBreakpointsInFile": {
+    "message": "បិទ​ចំណុចផ្អាក​ទាំងអស់​នៅក្នុង​ឯកសារ"
+  },
+  "panels/sources/BreakpointsView.ts | editCondition": {
+    "message": "កែស្ថានភាព"
+  },
+  "panels/sources/BreakpointsView.ts | editLogpoint": {
+    "message": "កែចំណុច​កំណត់ហេតុ"
+  },
+  "panels/sources/BreakpointsView.ts | enableAllBreakpoints": {
+    "message": "បើក​ចំណុចផ្អាក​ទាំងអស់"
+  },
+  "panels/sources/BreakpointsView.ts | enableAllBreakpointsInFile": {
+    "message": "បើក​ចំណុច​ផ្អាក​ទាំងអស់​នៅ​ក្នុង​ឯកសារ"
+  },
+  "panels/sources/BreakpointsView.ts | indeterminate": {
+    "message": "ចម្រុះ"
+  },
+  "panels/sources/BreakpointsView.ts | logpointCode": {
+    "message": "ចំណុច​កំណត់ហេតុ៖ {PH1}"
+  },
+  "panels/sources/BreakpointsView.ts | pauseOnCaughtExceptions": {
+    "message": "ផ្អាក​ពេលមាន​ការលើកលែង​ដែលចាប់បាន"
+  },
+  "panels/sources/BreakpointsView.ts | pauseOnUncaughtExceptions": {
+    "message": "ផ្អាក ពេលមាន​លើក​លែងដែលមិនបានចាប់"
+  },
+  "panels/sources/BreakpointsView.ts | removeAllBreakpoints": {
+    "message": "លុប​ចំណុចផ្អាក​ទាំងអស់"
+  },
+  "panels/sources/BreakpointsView.ts | removeAllBreakpointsInFile": {
+    "message": "លុប​ចំណុចផ្អាក​ទាំងអស់​ចេញ​នៅ​ក្នុង​ឯកសារ"
+  },
+  "panels/sources/BreakpointsView.ts | removeBreakpoint": {
+    "message": "លុប​ចំណុចផ្អាកចេញ"
+  },
+  "panels/sources/BreakpointsView.ts | removeOtherBreakpoints": {
+    "message": "លុប​ចំណុចផ្អាក​ផ្សេងទៀត"
+  },
+  "panels/sources/BreakpointsView.ts | revealLocation": {
+    "message": "បង្ហាញ​ទីតាំង"
+  },
+  "panels/sources/BreakpointsView.ts | unchecked": {
+    "message": "បានដោះធីក"
   },
   "panels/sources/CSSPlugin.ts | addSourceMap": {
     "message": "បញ្ចូល​ផែនទី​ប្រភព…"
@@ -13130,8 +13373,14 @@
   "panels/sources/SourcesNavigator.ts | saveAs": {
     "message": "រក្សាទុក​ជា…"
   },
+  "panels/sources/SourcesNavigator.ts | saveAsFailed": {
+    "message": "មិនអាច​រក្សាទុក​ឯកសារទៅ​ថាស​បានទេ។"
+  },
   "panels/sources/SourcesNavigator.ts | selectFolderForOverrides": {
     "message": "ជ្រើសរើស​ថត​សម្រាប់​ការលុបពីលើ"
+  },
+  "panels/sources/SourcesPanel.ts | assessPerformance": {
+    "message": "វាយតម្លៃ​ប្រតិបត្តិការ"
   },
   "panels/sources/SourcesPanel.ts | continueToHere": {
     "message": "បន្ត​មក​ទីនេះ"
@@ -13156,6 +13405,12 @@
   },
   "panels/sources/SourcesPanel.ts | dropWorkspaceFolderHere": {
     "message": "ទម្លាក់​ថត​លំហការងារ​នៅទីនេះ"
+  },
+  "panels/sources/SourcesPanel.ts | explainInputHandling": {
+    "message": "ពន្យល់​អំពី​ការចាត់ចែង​ធាតុចូល"
+  },
+  "panels/sources/SourcesPanel.ts | explainThisScript": {
+    "message": "ពន្យល់អំពី​ស្គ្រីបនេះ"
   },
   "panels/sources/SourcesPanel.ts | groupByAuthored": {
     "message": "ដាក់ជាក្រុម​តាម \"បានសរសេរ\"/\"បានដាក់ឱ្យប្រើ\""
@@ -13201,6 +13456,9 @@
   },
   "panels/sources/SourcesPanel.ts | showNavigator": {
     "message": "បង្ហាញ​ឧបករណ៍​រុករក"
+  },
+  "panels/sources/SourcesPanel.ts | startAChat": {
+    "message": "ចាប់ផ្ដើម​ការជជែក"
   },
   "panels/sources/SourcesPanel.ts | storeAsGlobalVariable": {
     "message": "រក្សាទុកជាអថេរ​សកល"
@@ -13262,62 +13520,8 @@
   "panels/sources/WatchExpressionsSidebarPane.ts | refreshWatchExpressions": {
     "message": "ផ្ទុក​កន្សោម​នៃការមើល​ឡើងវិញ"
   },
-  "panels/sources/components/BreakpointsView.ts | breakpointHit": {
-    "message": "ការឈានដល់ចំណុចផ្អាក {PH1}"
-  },
-  "panels/sources/components/BreakpointsView.ts | checked": {
-    "message": "បានធីក​"
-  },
-  "panels/sources/components/BreakpointsView.ts | conditionCode": {
-    "message": "លក្ខខណ្ឌ៖ {PH1}"
-  },
-  "panels/sources/components/BreakpointsView.ts | disableAllBreakpoints": {
-    "message": "បិទ​ចំណុចផ្អាក​ទាំងអស់"
-  },
-  "panels/sources/components/BreakpointsView.ts | disableAllBreakpointsInFile": {
-    "message": "បិទ​ចំណុចផ្អាក​ទាំងអស់​នៅក្នុង​ឯកសារ"
-  },
-  "panels/sources/components/BreakpointsView.ts | editCondition": {
-    "message": "កែស្ថានភាព"
-  },
-  "panels/sources/components/BreakpointsView.ts | editLogpoint": {
-    "message": "កែចំណុច​កំណត់ហេតុ"
-  },
-  "panels/sources/components/BreakpointsView.ts | enableAllBreakpoints": {
-    "message": "បើក​ចំណុចផ្អាក​ទាំងអស់"
-  },
-  "panels/sources/components/BreakpointsView.ts | enableAllBreakpointsInFile": {
-    "message": "បើក​ចំណុច​ផ្អាក​ទាំងអស់​នៅ​ក្នុង​ឯកសារ"
-  },
-  "panels/sources/components/BreakpointsView.ts | indeterminate": {
-    "message": "ចម្រុះ"
-  },
-  "panels/sources/components/BreakpointsView.ts | logpointCode": {
-    "message": "ចំណុច​កំណត់ហេតុ៖ {PH1}"
-  },
-  "panels/sources/components/BreakpointsView.ts | pauseOnCaughtExceptions": {
-    "message": "ផ្អាក​ពេលមាន​ការលើកលែង​ដែលចាប់បាន"
-  },
-  "panels/sources/components/BreakpointsView.ts | pauseOnUncaughtExceptions": {
-    "message": "ផ្អាក ពេលមាន​លើក​លែងដែលមិនបានចាប់"
-  },
-  "panels/sources/components/BreakpointsView.ts | removeAllBreakpoints": {
-    "message": "លុប​ចំណុចផ្អាក​ទាំងអស់"
-  },
-  "panels/sources/components/BreakpointsView.ts | removeAllBreakpointsInFile": {
-    "message": "លុប​ចំណុចផ្អាក​ទាំងអស់​ចេញ​នៅ​ក្នុង​ឯកសារ"
-  },
-  "panels/sources/components/BreakpointsView.ts | removeBreakpoint": {
-    "message": "លុប​ចំណុចផ្អាកចេញ"
-  },
-  "panels/sources/components/BreakpointsView.ts | removeOtherBreakpoints": {
-    "message": "លុប​ចំណុចផ្អាក​ផ្សេងទៀត"
-  },
-  "panels/sources/components/BreakpointsView.ts | revealLocation": {
-    "message": "បង្ហាញ​ទីតាំង"
-  },
-  "panels/sources/components/BreakpointsView.ts | unchecked": {
-    "message": "បានដោះធីក"
+  "panels/sources/WatchExpressionsSidebarPane.ts | watchExpressionDeleted": {
+    "message": "បានលុបកន្សោម​ដែលមើល"
   },
   "panels/sources/components/HeadersView.ts | addHeader": {
     "message": "បញ្ចូលផ្នែកក្បាល"
@@ -13656,7 +13860,7 @@
     "message": "ប្រសិនបើ​អាច នៅ​ពេល​ជួសជុល Wasm ដោយប្រើ​ព័ត៌មានអំពី​ការជួសជុល សូម​កុំ​ផ្អាកលើកូដ​បៃ wasm"
   },
   "panels/sources/sources-meta.ts | watch": {
-    "message": "ការមើល"
+    "message": "នាឡិកា"
   },
   "panels/sources/sources-meta.ts | wordWrap": {
     "message": "ការកាត់តម្រឹម​ពាក្យ"
@@ -13727,11 +13931,8 @@
   "panels/timeline/EventsTimelineTreeView.ts | startTime": {
     "message": "ពេល​ចាប់ផ្ដើម"
   },
-  "panels/timeline/ExtensionTrackAppender.ts | customTrackDescription": {
-    "message": "នេះគឺជា​គន្លង​ផ្ទាល់ខ្លួន​ដែលបាន​បញ្ចូល​ដោយ​ភាគីទីបី។"
-  },
-  "panels/timeline/ExtensionTrackAppender.ts | customTrackName": {
-    "message": "{PH1} — ដាន​ផ្ទាល់ខ្លួន"
+  "panels/timeline/ExtensionTrackAppender.ts | customTrackSubtitle": {
+    "message": "— ផ្ទាល់ខ្លួន"
   },
   "panels/timeline/GPUTrackAppender.ts | gpu": {
     "message": "GPU"
@@ -13883,8 +14084,14 @@
   "panels/timeline/TimelineFlameChartDataProvider.ts | addScriptToIgnoreList": {
     "message": "បញ្ចូល​ស្គ្រីបទៅបញ្ជី​មិនអើពើ"
   },
+  "panels/timeline/TimelineFlameChartDataProvider.ts | assessThePurpose": {
+    "message": "វាយតម្លៃ​គោលបំណង"
+  },
   "panels/timeline/TimelineFlameChartDataProvider.ts | droppedFrame": {
     "message": "ហ្វ្រេមដែលបាន​បោះបង់"
+  },
+  "panels/timeline/TimelineFlameChartDataProvider.ts | findImprovements": {
+    "message": "រកមើល​ការកែលម្អ"
   },
   "panels/timeline/TimelineFlameChartDataProvider.ts | frame": {
     "message": "ស៊ុម"
@@ -13901,8 +14108,14 @@
   "panels/timeline/TimelineFlameChartDataProvider.ts | hideRepeatingChildren": {
     "message": "លាក់​កូនស្ទួន"
   },
+  "panels/timeline/TimelineFlameChartDataProvider.ts | identifyTimeSpent": {
+    "message": "កំណត់​រយៈពេល​ដែលបាន​ចំណាយ"
+  },
   "panels/timeline/TimelineFlameChartDataProvider.ts | idleFrame": {
     "message": "ហ្វ្រេមដែល​អសកម្ម"
+  },
+  "panels/timeline/TimelineFlameChartDataProvider.ts | labelEntry": {
+    "message": "ធាតុ​ស្លាក"
   },
   "panels/timeline/TimelineFlameChartDataProvider.ts | partiallyPresentedFrame": {
     "message": "ហ្វ្រេម​ដែលបានបង្ហាញ​ដោយផ្នែក"
@@ -13915,6 +14128,9 @@
   },
   "panels/timeline/TimelineFlameChartDataProvider.ts | resetTrace": {
     "message": "កំណត់​ដាន​ឡើងវិញ"
+  },
+  "panels/timeline/TimelineFlameChartDataProvider.ts | startAChat": {
+    "message": "ចាប់ផ្ដើម​ការជជែក"
   },
   "panels/timeline/TimelineFlameChartView.ts | sAtS": {
     "message": "{PH1} នៅ {PH2}"
@@ -13986,7 +14202,7 @@
     "message": "បន្ថយពន្លឺ​សម្រាប់​ភាគីទី 3"
   },
   "panels/timeline/TimelinePanel.ts | dropTimelineFileOrUrlHere": {
-    "message": "ទម្លាក់ URL ឬ​ឯកសារ​បន្ទាត់ពេលវេលា​នៅទីនេះ"
+    "message": "ទម្លាក់ URL ឬ​ឯកសារដាន​នៅទីនេះ"
   },
   "panels/timeline/TimelinePanel.ts | enableAdvancedPaint": {
     "message": "បើក​ការវាស់ស្ទង់ការ​គូរកម្រិត​ខ្ពស់ (យឺត)"
@@ -13997,14 +14213,11 @@
   "panels/timeline/TimelinePanel.ts | eventSelected": {
     "message": "បាន​ជ្រើសរើស​ព្រឹត្តិការណ៍ {PH1}"
   },
-  "panels/timeline/TimelinePanel.ts | exportEnhancedTraces": {
-    "message": "ដានប្រតិបត្តិការដែលបានធ្វើឱ្យប្រសើរឡើង"
-  },
-  "panels/timeline/TimelinePanel.ts | exportNormalTraces": {
-    "message": "ដានប្រតិបត្តិការជាមូលដ្ឋាន"
-  },
   "panels/timeline/TimelinePanel.ts | exportingFailed": {
     "message": "ការនាំចេញ​ដាន​មិនបាន​សម្រេចទេ"
+  },
+  "panels/timeline/TimelinePanel.ts | externalRequestReceived": {
+    "message": "DevToolsបានទទួល​សំណើ​ខាងក្រៅ"
   },
   "panels/timeline/TimelinePanel.ts | fixMe": {
     "message": "កែ​ខ្ញុំ"
@@ -14015,17 +14228,17 @@
   "panels/timeline/TimelinePanel.ts | hideSidebar": {
     "message": "លាក់​របារចំហៀង"
   },
-  "panels/timeline/TimelinePanel.ts | initializingProfiler": {
-    "message": "កំពុង​ចាប់ផ្ដើម​កម្មវិធី​ចងក្រង​ព័ត៌មាន…"
+  "panels/timeline/TimelinePanel.ts | initializingTracing": {
+    "message": "កំពុង​ចាប់ផ្ដើម​តាមដាន…"
   },
   "panels/timeline/TimelinePanel.ts | learnMore": {
     "message": "ស្វែងយល់បន្ថែម"
   },
-  "panels/timeline/TimelinePanel.ts | loadProfile": {
-    "message": "ផ្ទុកកម្រងព័ត៌មាន…"
+  "panels/timeline/TimelinePanel.ts | loadTrace": {
+    "message": "ផ្ទុក​ដាន…"
   },
-  "panels/timeline/TimelinePanel.ts | loadingProfile": {
-    "message": "កំពុងផ្ទុក​កម្រងព័ត៌មាន…"
+  "panels/timeline/TimelinePanel.ts | loadingTrace": {
+    "message": "កំពុងផ្ទុក​ដាន…"
   },
   "panels/timeline/TimelinePanel.ts | memory": {
     "message": "អង្គចងចាំ"
@@ -14039,26 +14252,14 @@
   "panels/timeline/TimelinePanel.ts | processed": {
     "message": "បានដំណើរការ"
   },
-  "panels/timeline/TimelinePanel.ts | processingProfile": {
-    "message": "កំពុង​ដំណើរការ​កម្រងព័ត៌មាន…"
-  },
-  "panels/timeline/TimelinePanel.ts | profiling": {
-    "message": "កំពុងពិនិត្យកម្រងព័ត៌មាន…"
+  "panels/timeline/TimelinePanel.ts | processingTrace": {
+    "message": "កំពុង​ដំណើរការ​ដាន…"
   },
   "panels/timeline/TimelinePanel.ts | received": {
     "message": "បាន​ទទួល"
   },
   "panels/timeline/TimelinePanel.ts | recordingFailed": {
     "message": "ការថត​មិនបាន​សម្រេចទេ"
-  },
-  "panels/timeline/TimelinePanel.ts | saveProfile": {
-    "message": "រក្សាទុកកម្រងព័ត៌មាន…"
-  },
-  "panels/timeline/TimelinePanel.ts | saveTraceWithAnnotationsMenuOption": {
-    "message": "រក្សាទុកដាន"
-  },
-  "panels/timeline/TimelinePanel.ts | saveTraceWithoutAnnotationsMenuOption": {
-    "message": "រក្សាទុកដានដោយគ្មានចំណារពន្យល់"
   },
   "panels/timeline/TimelinePanel.ts | screenshots": {
     "message": "រូបថត​អេក្រង់"
@@ -14099,11 +14300,23 @@
   "panels/timeline/TimelinePanel.ts | timelineZoom": {
     "message": "ពង្រីកបង្រួម"
   },
+  "panels/timeline/TimelinePanel.ts | tracing": {
+    "message": "កំពុង​តាមដាន…"
+  },
   "panels/timeline/TimelineSelectorStatsView.ts | copyTable": {
     "message": "ចម្លងតារាង"
   },
   "panels/timeline/TimelineSelectorStatsView.ts | elapsed": {
     "message": "បានកន្លងផុត (មិល្លីវិនាទី)"
+  },
+  "panels/timeline/TimelineSelectorStatsView.ts | elapsedExplanation": {
+    "message": "រយៈពេល​ដែលបាន​ចំណាយ​ក្នុងការ​ផ្គូផ្គង​សេឡិកទ័រជាមួយ DOM គិតជា​មិល្លីវិនាទី។"
+  },
+  "panels/timeline/TimelineSelectorStatsView.ts | invalidationCount": {
+    "message": "ចំនួន​នៃការបញ្ឈប់​សុពលភាព"
+  },
+  "panels/timeline/TimelineSelectorStatsView.ts | invalidationCountExplanation": {
+    "message": "បានច្របាច់​បញ្ចូលគ្នា​នូវចំនួន​នៃការបញ្ឈប់​សុពលភាព​នៅលើណត បន្ទាប់មក​បានគណនា​រចនាបថ​ឡើងវិញ ដែល​ទាំងអស់នេះ​ត្រូវបាន​ផ្គូផ្គង​ដោយ​សេឡិកទ័រ​នេះ។ សូម​ចំណាំថា ណត​អាចត្រូវបាន​បញ្ឈប់​សុពលភាព​ច្រើនដង និង​ដោយ​សេឡិកទ័រ​ច្រើន។"
   },
   "panels/timeline/TimelineSelectorStatsView.ts | lineNumber": {
     "message": "ជួរទី {PH1}:{PH2}"
@@ -14111,23 +14324,35 @@
   "panels/timeline/TimelineSelectorStatsView.ts | matchAttempts": {
     "message": "ការព្យាយាមផ្គូផ្គង"
   },
+  "panels/timeline/TimelineSelectorStatsView.ts | matchAttemptsExplanation": {
+    "message": "ចំនួន​ណត​ដែលម៉ាស៊ីន​បានព្យាយាម​ផ្គូផ្គង​តាមវិធាន​រចនាបថ។"
+  },
   "panels/timeline/TimelineSelectorStatsView.ts | matchCount": {
     "message": "ចំនួនធាតុដែលត្រូវគ្នា"
   },
-  "panels/timeline/TimelineSelectorStatsView.ts | rejectPercentage": {
-    "message": "% នៃការផ្គូផ្គងមិនត្រូវគ្នានៃផ្លូវយឺត"
-  },
-  "panels/timeline/TimelineSelectorStatsView.ts | rejectPercentageExplanation": {
-    "message": "ភាគរយនៃណតដែលមិនត្រូវគ្នា (ចំនួនព្យាយាមផ្គូផ្គង - ចំនួននៃការផ្គូផ្គង) ដែលមិនអាចដកចេញបានលឿនដោយតម្រងប៊្លូម ដោយសារតែភាពស្មុគស្មាញខ្ពស់នៃផ្ទាំងជ្រើសរើស។ កាន់តែទាបកាន់តែល្អ។"
+  "panels/timeline/TimelineSelectorStatsView.ts | matchCountExplanation": {
+    "message": "ចំនួន​ណត​ដែលត្រូវគ្នានឹង​វិធាន​រចនាបថ។"
   },
   "panels/timeline/TimelineSelectorStatsView.ts | selector": {
     "message": "ផ្ទាំងជ្រើសរើស"
   },
+  "panels/timeline/TimelineSelectorStatsView.ts | selectorExplanation": {
+    "message": "អក្សរក្នុង​សេឡិកទ័រ CSS នៃវិធាន​រចនាបថ។"
+  },
   "panels/timeline/TimelineSelectorStatsView.ts | selectorStats": {
     "message": "ស្ថិតិផ្ទាំងជ្រើសរើស"
   },
+  "panels/timeline/TimelineSelectorStatsView.ts | slowPathNonMatches": {
+    "message": "% នៃការផ្គូផ្គងមិនត្រូវគ្នានៃផ្លូវយឺត"
+  },
+  "panels/timeline/TimelineSelectorStatsView.ts | slowPathNonMatchesExplanation": {
+    "message": "ភាគរយនៃណតដែលមិនត្រូវគ្នា (ចំនួនព្យាយាមផ្គូផ្គង - ចំនួននៃការផ្គូផ្គង) ដែលមិនអាចដកចេញបានលឿនដោយតម្រងប៊្លូម ដោយសារតែភាពស្មុគស្មាញខ្ពស់នៃផ្ទាំងជ្រើសរើស។ កាន់តែទាបកាន់តែល្អ។"
+  },
   "panels/timeline/TimelineSelectorStatsView.ts | styleSheetId": {
     "message": "សន្លឹករចនាប័ទ្ម"
+  },
+  "panels/timeline/TimelineSelectorStatsView.ts | styleSheetIdExplanation": {
+    "message": "តំណ​ទៅកាន់​និយមន័យនៃ​វិធាន​សេឡិកទ័រ​នៅក្នុង​សន្លឹក​រចនាបថ។ សូម​ចំណាំថា អាច​កំណត់​វិធាន​សេឡិកទ័រ​ក្នុង​កន្លែងជាច្រើន​នៅក្នុង​សន្លឹករចនាបថ ឬ​កំណត់​នៅក្នុង​សន្លឹករចនាបថ​ច្រើនបាន។ វិធាន​សេឡិកទ័រ​ពី​សន្លឹករចនាបថ​ឌីណាមិក ឬ​សន្លឹករចនាបថ​នៃភ្នាក់ងារ​អ្នក​ប្រើប្រាស់​កម្មវិធីរុករកតាមអ៊ីនធឺណិត​មិនមាន​តំណទេ។"
   },
   "panels/timeline/TimelineSelectorStatsView.ts | tableCopiedToClipboard": {
     "message": "បានចម្លងតារាងទៅឃ្លីបបត"
@@ -14342,9 +14567,6 @@
   "panels/timeline/TimelineUIUtils.ts | details": {
     "message": "ព័ត៌មាន​លម្អិត"
   },
-  "panels/timeline/TimelineUIUtils.ts | dimensions": {
-    "message": "វិមាត្រ"
-  },
   "panels/timeline/TimelineUIUtils.ts | duration": {
     "message": "រយៈពេល"
   },
@@ -14417,9 +14639,6 @@
   "panels/timeline/TimelineUIUtils.ts | learnMore": {
     "message": "ស្វែងយល់បន្ថែម"
   },
-  "panels/timeline/TimelineUIUtils.ts | location": {
-    "message": "ទីតាំង"
-  },
   "panels/timeline/TimelineUIUtils.ts | message": {
     "message": "សារ"
   },
@@ -14483,32 +14702,17 @@
   "panels/timeline/TimelineUIUtils.ts | sChildren": {
     "message": "{PH1} (ផ្នែកកូន)"
   },
-  "panels/timeline/TimelineUIUtils.ts | sCollected": {
-    "message": "បានប្រមូល {PH1}"
-  },
   "panels/timeline/TimelineUIUtils.ts | sOfS": {
     "message": "{PH1} នៃ {PH2}"
   },
   "panels/timeline/TimelineUIUtils.ts | sS": {
     "message": "{PH1}៖ {PH2}"
   },
-  "panels/timeline/TimelineUIUtils.ts | sSCurlyBrackets": {
-    "message": "({PH1}, {PH2})"
-  },
-  "panels/timeline/TimelineUIUtils.ts | sSDimensions": {
-    "message": "{PH1} × {PH2}"
-  },
-  "panels/timeline/TimelineUIUtils.ts | sSSquareBrackets": {
-    "message": "{PH1} [{PH2}…]"
-  },
   "panels/timeline/TimelineUIUtils.ts | sSelectorStatsInfo": {
     "message": "ជ្រើសរើស \"{PH1}\" ដើម្បីប្រមូលស្ថិតិលម្អិតអំពីការផ្គូផ្គងផ្ទាំងជ្រើសរើស CSS។"
   },
   "panels/timeline/TimelineUIUtils.ts | sSelf": {
     "message": "{PH1} (ផ្ទាល់ខ្លួន)"
-  },
-  "panels/timeline/TimelineUIUtils.ts | sSs": {
-    "message": "{PH1} [{PH2}…{PH3}]"
   },
   "panels/timeline/TimelineUIUtils.ts | script": {
     "message": "ស្គ្រីប"
@@ -14682,19 +14886,19 @@
     "message": "កំណត់រចនាសម្ព័ន្ធ"
   },
   "panels/timeline/components/FieldSettingsDialog.ts | configureFieldData": {
-    "message": "កំណត់រចនាសម្ព័ន្ធនៃការទាញយកទិន្នន័យពីអ្នកប្រើប្រាស់ពិត"
+    "message": "កំណត់​រចនាសម្ព័ន្ធ​ការទាញយក​មេទ្រិក​ពីអ្នកប្រើប្រាស់​ពិត"
   },
   "panels/timeline/components/FieldSettingsDialog.ts | doesNotHaveSufficientData": {
     "message": "Chrome UX Report មិនមានទិន្នន័យល្បឿនពិតជាក់ស្ដែងគ្រប់គ្រាន់សម្រាប់ទំព័រនេះទេ។"
   },
   "panels/timeline/components/FieldSettingsDialog.ts | fetchAggregated": {
-    "message": "ទាញយក​ទិន្នន័យពី​អ្នកប្រើប្រាស់​ពិតដែលបាន​ច្របាច់​បញ្ចូលគ្នាពី {PH1} ដើម្បីជួយអ្នក​ក្នុងការសិក្សាបរិបទនៃ​ការវាស់វែង​ក្នុងមូលដ្ឋាន​ដោយផ្សារ​ភ្ជាប់ជាមួយនឹង​បទពិសោធដែល​អ្នកប្រើប្រាស់​ពិត​ទទួលបាន​នៅលើ​គេហទំព័រ។"
+    "message": "ទាញយក​មេទ្រិកពី​អ្នកប្រើប្រាស់​ពិតដែលបាន​ច្របាច់​បញ្ចូលគ្នាពី {PH1} ដើម្បីជួយអ្នក​ក្នុងការសិក្សាបរិបទនៃ​ការវាស់វែង​ក្នុងមូលដ្ឋាន​ដោយផ្សារ​ភ្ជាប់ជាមួយនឹង​បទពិសោធដែល​អ្នកប្រើប្រាស់​ពិត​ទទួលបាន​នៅលើ​គេហទំព័រ។"
   },
   "panels/timeline/components/FieldSettingsDialog.ts | invalidOrigin": {
     "message": "\"{PH1}\" មិនមែនជា​ប្រភពដើម ឬ URL ដែល​ត្រឹមត្រូវទេ។"
   },
   "panels/timeline/components/FieldSettingsDialog.ts | mapDevelopmentOrigins": {
-    "message": "កំណត់​ប្រភពដើម​នៃការអភិវឌ្ឍ ដើម្បី​ទទួលបាន​ទិន្នន័យ​ពីអ្នក​ប្រើប្រាស់ពិត​ដែលពាក់ព័ន្ធ​ដោយស្វ័យប្រវត្តិ​សម្រាប់​ប្រភពដើម​នៃផលិតកម្ម​របស់វា។"
+    "message": "កំណត់​ប្រភពដើម​នៃការអភិវឌ្ឍ ដើម្បី​ទទួលបាន​មេទ្រិក​ពីអ្នក​ប្រើប្រាស់ពិត​ដែលពាក់ព័ន្ធ​ដោយស្វ័យប្រវត្តិ​សម្រាប់​ប្រភពដើម​នៃផលិតកម្ម​របស់វា។"
   },
   "panels/timeline/components/FieldSettingsDialog.ts | new": {
     "message": "ថ្មី"
@@ -14703,7 +14907,7 @@
     "message": "យល់ព្រម"
   },
   "panels/timeline/components/FieldSettingsDialog.ts | onlyFetchFieldData": {
-    "message": "បង្ហាញ​ទិន្នន័យពី​អ្នកប្រើប្រាស់​ពិតសម្រាប់ URL ខាងក្រោម​ជានិច្ច"
+    "message": "បង្ហាញ​មេទ្រិកពី​អ្នកប្រើប្រាស់​ពិតសម្រាប់ URL ខាងក្រោម​ជានិច្ច"
   },
   "panels/timeline/components/FieldSettingsDialog.ts | optOut": {
     "message": "ផ្ដាច់ចេញ"
@@ -14718,7 +14922,7 @@
     "message": "URL"
   },
   "panels/timeline/components/FieldSettingsDialog.ts | whenPerformanceIsShown": {
-    "message": "នៅពេលបើកឧបករណ៍អ្នកអភិវឌ្ឍន៍ URL ដែលអ្នកចូលមើលនឹងត្រូវបានបញ្ជូនទៅ Google ដើម្បីសួររកទិន្នន័យពីអ្នកប្រើប្រាស់ពិត។ សំណើទាំងនេះមិនត្រូវបានភ្ជាប់ជាមួយគណនី Google របស់អ្នកទេ។"
+    "message": "នៅពេលបើក​ឧបករណ៍អ្នកអភិវឌ្ឍន៍ URL ដែលអ្នក​ចូលមើល​នឹងត្រូវបាន​បញ្ជូនទៅ Google ដើម្បី​សួររក​មេទ្រិកពី​អ្នកប្រើប្រាស់​ពិត។ សំណើទាំងនេះមិនត្រូវបានភ្ជាប់ជាមួយគណនី Google របស់អ្នកទេ។"
   },
   "panels/timeline/components/IgnoreListSetting.ts | addNewRegex": {
     "message": "បញ្ចូល​វិធាន​កន្សោម​ធម្មតា​សម្រាប់ URL របស់​ស្គ្រីប"
@@ -14825,8 +15029,8 @@
   "panels/timeline/components/LiveMetricsView.ts | eventLogs": {
     "message": "ផ្នែកកំណត់ហេតុនៃការប្ដូរប្លង់ និងអន្តរកម្ម"
   },
-  "panels/timeline/components/LiveMetricsView.ts | fieldData": {
-    "message": "ទិន្នន័យ​ពីអ្នក​ប្រើប្រាស់ពិត"
+  "panels/timeline/components/LiveMetricsView.ts | fieldMetricsTitle": {
+    "message": "មេទ្រិក​ពីអ្នកប្រើប្រាស់​ពិត"
   },
   "panels/timeline/components/LiveMetricsView.ts | inpInteraction": {
     "message": "អន្តរកម្ម INP គឺជា​ចំណុច​សតភាគទី 98 នៃ​ការពន្យារពេល​អន្តរកម្ម។"
@@ -14856,10 +15060,10 @@
     "message": "មេទ្រិក​មូលដ្ឋាន និង​ពីអ្នកប្រើប្រាស់​ពិត"
   },
   "panels/timeline/components/LiveMetricsView.ts | localFieldLearnMoreLink": {
-    "message": "ស្វែងយល់​បន្ថែម​អំពី​ទិន្នន័យ​ពីអ្នកប្រើ​ប្រាស់ពិត និង​ទិន្នន័យ​មូលដ្ឋាន"
+    "message": "ស្វែងយល់​បន្ថែម​អំពី​មេទ្រិក​មូលដ្ឋាន និង​មេទ្រិកពីអ្នកប្រើប្រាស់​ពិត"
   },
   "panels/timeline/components/LiveMetricsView.ts | localFieldLearnMoreTooltip": {
-    "message": "មេទ្រិក​មូលដ្ឋាន​ត្រូវបានចាប់យកពី​ទំព័រ​បច្ចុប្បន្ន​ដោយប្រើ​ឧបករណ៍ និង​ការតភ្ជាប់បណ្ដាញ​របស់អ្នក។ ទិន្នន័យ​ពីអ្នក​ប្រើប្រាស់ពិត​ត្រូវបាន​វាស់វែង​ដោយ​អ្នកប្រើប្រាស់ពិត​ដោយប្រើ​ឧបករណ៍ និង​ការតភ្ជាប់​បណ្ដាញ​ខុសៗគ្នា​ជាច្រើន។"
+    "message": "មេទ្រិក​មូលដ្ឋាន​ត្រូវបាន​ចាប់យកពី​ទំព័រ​បច្ចុប្បន្ន​ដោយប្រើ​ឧបករណ៍ និង​ការតភ្ជាប់បណ្ដាញ​របស់អ្នក។ មេទ្រិក​ពីអ្នកប្រើប្រាស់ពិត​ត្រូវបាន​វាស់ដោយ​អ្នកប្រើប្រាស់​ពិត​ដោយប្រើ​ឧបករណ៍ និង​ការតភ្ជាប់បណ្ដាញ​ជាច្រើន​ផ្សេងៗគ្នា។"
   },
   "panels/timeline/components/LiveMetricsView.ts | localMetrics": {
     "message": "មេទ្រិក​មូលដ្ឋាន"
@@ -14922,10 +15126,10 @@
     "message": "ទៅ​កាន់​បណ្ដុំនៃការប្ដូរប្លង់អន់បំផុត។"
   },
   "panels/timeline/components/LiveMetricsView.ts | showFieldDataForDevice": {
-    "message": "បង្ហាញ​ទិន្នន័យពី​អ្នកប្រើប្រាស់​ពិត​សម្រាប់​ប្រភេទ​ឧបករណ៍៖ {PH1}"
+    "message": "បង្ហាញ​មេទ្រិកពី​អ្នកប្រើប្រាស់​ពិត​សម្រាប់​ប្រភេទ​ឧបករណ៍៖ {PH1}"
   },
   "panels/timeline/components/LiveMetricsView.ts | showFieldDataForPage": {
-    "message": "បង្ហាញ​ទិន្នន័យ​ពីអ្នក​ប្រើប្រាស់ពិត​សម្រាប់ {PH1}"
+    "message": "បង្ហាញ​មេទ្រិក​ពីអ្នក​ប្រើប្រាស់ពិត​សម្រាប់ {PH1}"
   },
   "panels/timeline/components/LiveMetricsView.ts | showInpInteraction": {
     "message": "ចូល​ទៅកាន់​អន្តរកម្ម INP។"
@@ -15033,13 +15237,13 @@
     "message": "តម្លៃ {PH1} មូលដ្ឋាន​របស់អ្នក {PH2} គឺល្អ ប៉ុន្តែល្អប្រសើរជាងបទ​ពិសោធអ្នកប្រើប្រាស់របស់អ្នកយ៉ាងខ្លាំង។"
   },
   "panels/timeline/components/MetricCompareStrings.ts | goodGoodDetailedCompare": {
-    "message": "តម្លៃ {PH1} មូលដ្ឋាន​របស់អ្នក {PH2} គឺល្អ និង​ទទួលបាន​ការវាយតម្លៃ​ដូចគ្នានឹង {PH4} នៃបទពិសោធ​ប្រើប្រាស់ {PH1} របស់​អ្នកប្រើប្រាស់​ពិត។ លើស​ពីនេះ តម្លៃ {PH1} នៃចំណុច​សតភាគទី 75 របស់​ទិន្នន័យពី​អ្នកប្រើប្រាស់​ពិត {PH3} គឺល្អ។"
+    "message": "តម្លៃ {PH1} មូលដ្ឋាន​របស់អ្នក {PH2} គឺល្អ និង​ទទួលបាន​ការវាយតម្លៃ​ដូចគ្នានឹង {PH4} នៃបទពិសោធ​ប្រើប្រាស់ {PH1} របស់​អ្នកប្រើប្រាស់​ពិត។ លើស​ពីនេះ តម្លៃ {PH1} នៃចំណុច​សតភាគទី 75 របស់​មេទ្រិកពី​អ្នកប្រើប្រាស់​ពិត {PH3} គឺល្អ។"
   },
   "panels/timeline/components/MetricCompareStrings.ts | goodNeedsImprovementDetailedCompare": {
-    "message": "តម្លៃ {PH1} មូលដ្ឋាន​របស់អ្នក {PH2} គឺល្អ និង​ទទួលបាន​ការវាយតម្លៃ​ដូចគ្នានឹង {PH4} នៃបទពិសោធ​ប្រើប្រាស់ {PH1} របស់​អ្នកប្រើប្រាស់​ពិត។ ទោះយ៉ាងណាក៏ដោយ តម្លៃ {PH1} នៃចំណុច​សតភាគទី 75 របស់​ទិន្នន័យពី​អ្នកប្រើប្រាស់​ពិត {PH3} ត្រូវការ​ការកែលម្អ។"
+    "message": "តម្លៃ {PH1} មូលដ្ឋាន​របស់អ្នក {PH2} គឺល្អ និង​ទទួលបាន​ការវាយតម្លៃ​ដូចគ្នានឹង {PH4} នៃបទពិសោធ​ប្រើប្រាស់ {PH1} របស់​អ្នកប្រើប្រាស់​ពិត។ ទោះយ៉ាងណា​ក៏ដោយ តម្លៃ {PH1} នៃចំណុច​សតភាគទី 75 របស់​មេទ្រិកពី​អ្នកប្រើប្រាស់​ពិត {PH3} ត្រូវការ​ការកែលម្អ។"
   },
   "panels/timeline/components/MetricCompareStrings.ts | goodPoorDetailedCompare": {
-    "message": "តម្លៃ {PH1} មូលដ្ឋាន​របស់អ្នក {PH2} គឺល្អ និង​ទទួលបាន​ការវាយតម្លៃ​ដូចគ្នានឹង {PH4} នៃបទពិសោធ​ប្រើប្រាស់ {PH1} របស់​អ្នកប្រើប្រាស់​ពិត។ ទោះយ៉ាងណាក៏ដោយ តម្លៃ {PH1} នៃចំណុច​សតភាគទី 75 របស់​ទិន្នន័យពី​អ្នកប្រើប្រាស់​ពិត {PH3} គឺខ្សោយ។"
+    "message": "តម្លៃ {PH1} មូលដ្ឋាន​របស់អ្នក {PH2} គឺល្អ និង​ទទួលបាន​ការវាយតម្លៃ​ដូចគ្នានឹង {PH4} នៃបទពិសោធ​ប្រើប្រាស់ {PH1} របស់​អ្នកប្រើប្រាស់​ពិត។ ទោះយ៉ាងណា​ក៏ដោយ តម្លៃ {PH1} នៃចំណុច​សតភាគទី 75 របស់​មេទ្រិកពី​អ្នកប្រើប្រាស់​ពិត {PH3} គឺខ្សោយ។"
   },
   "panels/timeline/components/MetricCompareStrings.ts | goodSimilarCompare": {
     "message": "តម្លៃ {PH1} មូលដ្ឋាន​របស់អ្នក {PH2} គឺល្អ និង​ស្រដៀងនឹង​បទពិសោធ​អ្នកប្រើប្រាស់​របស់អ្នក។"
@@ -15054,13 +15258,13 @@
     "message": "តម្លៃ {PH1} មូលដ្ឋាន​របស់អ្នក {PH2} ត្រូវការ​ការកែលម្អ ប៉ុន្តែល្អប្រសើរជាងបទ​ពិសោធអ្នកប្រើប្រាស់របស់អ្នកយ៉ាងខ្លាំង។"
   },
   "panels/timeline/components/MetricCompareStrings.ts | needsImprovementGoodDetailedCompare": {
-    "message": "តម្លៃ {PH1} មូលដ្ឋានរបស់អ្នក {PH2} ត្រូវការ​ការកែលម្អ និង​ទទួលបាន​ការវាយតម្លៃ​ដូចគ្នានឹង {PH4} នៃបទពិសោធ​ប្រើប្រាស់ {PH1} របស់​អ្នកប្រើប្រាស់​ពិត។ ទោះយ៉ាងណាក៏ដោយ តម្លៃ {PH1} នៃចំណុច​សតភាគទី 75 របស់​ទិន្នន័យពី​អ្នកប្រើប្រាស់ពិត {PH3} គឺល្អ។"
+    "message": "តម្លៃ {PH1} មូលដ្ឋានរបស់អ្នក {PH2} ត្រូវការ​ការកែលម្អ និង​ទទួលបាន​ការវាយតម្លៃ​ដូចគ្នានឹង {PH4} នៃបទពិសោធ​ប្រើប្រាស់ {PH1} របស់​អ្នកប្រើប្រាស់​ពិត។ ទោះយ៉ាងណា​ក៏ដោយ តម្លៃ {PH1} នៃចំណុច​សតភាគទី 75 របស់​មេទ្រិកពី​អ្នកប្រើប្រាស់ពិត {PH3} គឺល្អ។"
   },
   "panels/timeline/components/MetricCompareStrings.ts | needsImprovementNeedsImprovementDetailedCompare": {
-    "message": "តម្លៃ {PH1} មូលដ្ឋានរបស់អ្នក {PH2} ត្រូវការ​ការកែលម្អ និង​ទទួលបាន​ការវាយតម្លៃ​ដូចគ្នានឹង {PH4} នៃបទពិសោធ​ប្រើប្រាស់ {PH1} របស់​អ្នកប្រើប្រាស់​ពិត។ លើស​ពីនេះ តម្លៃ {PH1} នៃចំណុច​សតភាគទី 75 របស់​ទិន្នន័យពី​អ្នកប្រើប្រាស់​ពិត {PH3} ត្រូវការ​ការកែលម្អ។"
+    "message": "តម្លៃ {PH1} មូលដ្ឋានរបស់អ្នក {PH2} ត្រូវការ​ការកែលម្អ និង​ទទួលបាន​ការវាយតម្លៃ​ដូចគ្នានឹង {PH4} នៃបទពិសោធ​ប្រើប្រាស់ {PH1} របស់​អ្នកប្រើប្រាស់​ពិត។ លើស​ពីនេះ តម្លៃ {PH1} នៃចំណុច​សតភាគទី 75 របស់​មេទ្រិកពី​អ្នកប្រើប្រាស់​ពិត {PH3} ត្រូវការ​ការកែលម្អ។"
   },
   "panels/timeline/components/MetricCompareStrings.ts | needsImprovementPoorDetailedCompare": {
-    "message": "តម្លៃ {PH1} មូលដ្ឋានរបស់អ្នក {PH2} ត្រូវការ​ការកែលម្អ និង​ទទួលបាន​ការវាយតម្លៃ​ដូចគ្នានឹង {PH4} នៃបទពិសោធ​ប្រើប្រាស់ {PH1} របស់​អ្នកប្រើប្រាស់​ពិត។ ទោះយ៉ាងណាក៏ដោយ តម្លៃ {PH1} នៃចំណុច​សតភាគទី 75 របស់​ទិន្នន័យពី​អ្នកប្រើប្រាស់​ពិត {PH3} គឺខ្សោយ។"
+    "message": "តម្លៃ {PH1} មូលដ្ឋានរបស់អ្នក {PH2} ត្រូវការ​ការកែលម្អ និង​ទទួលបាន​ការវាយតម្លៃ​ដូចគ្នានឹង {PH4} នៃបទពិសោធ​ប្រើប្រាស់ {PH1} របស់​អ្នកប្រើប្រាស់​ពិត។ ទោះយ៉ាងណា​ក៏ដោយ តម្លៃ {PH1} នៃចំណុច​សតភាគទី 75 របស់​មេទ្រិកពី​អ្នកប្រើប្រាស់​ពិត {PH3} គឺខ្សោយ។"
   },
   "panels/timeline/components/MetricCompareStrings.ts | needsImprovementSimilarCompare": {
     "message": "តម្លៃ {PH1} មូលដ្ឋាន​របស់អ្នក {PH2} ត្រូវការ​ការកែលម្អ និង​ស្រដៀងនឹង​បទពិសោធ​អ្នកប្រើប្រាស់​របស់អ្នក។"
@@ -15075,13 +15279,13 @@
     "message": "តម្លៃ {PH1} មូលដ្ឋាន​របស់អ្នក {PH2} គឺខ្សោយ ប៉ុន្តែល្អប្រសើរជាងបទ​ពិសោធអ្នកប្រើប្រាស់របស់អ្នកយ៉ាងខ្លាំង។"
   },
   "panels/timeline/components/MetricCompareStrings.ts | poorGoodDetailedCompare": {
-    "message": "តម្លៃ {PH1} មូលដ្ឋាន​របស់អ្នក {PH2} គឺខ្សោយ និង​ទទួលបាន​ការវាយតម្លៃ​ដូចគ្នានឹង {PH4} នៃបទពិសោធ​ប្រើប្រាស់ {PH1} របស់​អ្នកប្រើប្រាស់​ពិត។ ទោះយ៉ាងណាក៏ដោយ តម្លៃ {PH1} នៃចំណុច​សតភាគទី 75 របស់​ទិន្នន័យពី​អ្នកប្រើប្រាស់ពិត {PH3} គឺល្អ។"
+    "message": "តម្លៃ {PH1} មូលដ្ឋាន​របស់អ្នក {PH2} គឺខ្សោយ និង​ទទួលបាន​ការវាយតម្លៃ​ដូចគ្នានឹង {PH4} នៃបទពិសោធ​ប្រើប្រាស់ {PH1} របស់​អ្នកប្រើប្រាស់​ពិត។ ទោះយ៉ាងណា​ក៏ដោយ តម្លៃ {PH1} នៃចំណុច​សតភាគទី 75 របស់​មេទ្រិកពី​អ្នកប្រើប្រាស់ពិត {PH3} គឺល្អ។"
   },
   "panels/timeline/components/MetricCompareStrings.ts | poorNeedsImprovementDetailedCompare": {
-    "message": "តម្លៃ {PH1} មូលដ្ឋាន​របស់អ្នក {PH2} គឺខ្សោយ និង​ទទួលបាន​ការវាយតម្លៃ​ដូចគ្នានឹង {PH4} នៃបទពិសោធ​ប្រើប្រាស់ {PH1} របស់​អ្នកប្រើប្រាស់​ពិត។ ទោះយ៉ាងណាក៏ដោយ តម្លៃ {PH1} នៃចំណុច​សតភាគទី 75 របស់​ទិន្នន័យពី​អ្នកប្រើប្រាស់​ពិត {PH3} ត្រូវការ​ការកែលម្អ។"
+    "message": "តម្លៃ {PH1} មូលដ្ឋាន​របស់អ្នក {PH2} គឺខ្សោយ និង​ទទួលបាន​ការវាយតម្លៃ​ដូចគ្នានឹង {PH4} នៃបទពិសោធ​ប្រើប្រាស់ {PH1} របស់​អ្នកប្រើប្រាស់​ពិត។ ទោះយ៉ាងណា​ក៏ដោយ តម្លៃ {PH1} នៃចំណុច​សតភាគទី 75 របស់​មេទ្រិកពី​អ្នកប្រើប្រាស់​ពិត {PH3} ត្រូវការ​ការកែលម្អ។"
   },
   "panels/timeline/components/MetricCompareStrings.ts | poorPoorDetailedCompare": {
-    "message": "តម្លៃ {PH1} មូលដ្ឋាន​របស់អ្នក {PH2} គឺខ្សោយ និង​ទទួលបាន​ការវាយតម្លៃ​ដូចគ្នានឹង {PH4} នៃបទពិសោធ​ប្រើប្រាស់ {PH1} របស់​អ្នកប្រើប្រាស់​ពិត។ លើស​ពីនេះ តម្លៃ {PH1} នៃចំណុច​សតភាគទី 75 របស់​ទិន្នន័យពី​អ្នកប្រើប្រាស់​ពិត {PH3} គឺខ្សោយ។"
+    "message": "តម្លៃ {PH1} មូលដ្ឋាន​របស់អ្នក {PH2} គឺខ្សោយ និង​ទទួលបាន​ការវាយតម្លៃ​ដូចគ្នានឹង {PH4} នៃបទពិសោធ​ប្រើប្រាស់ {PH1} របស់​អ្នកប្រើប្រាស់​ពិត។ លើស​ពីនេះ តម្លៃ {PH1} នៃចំណុច​សតភាគទី 75 របស់​មេទ្រិកពី​អ្នកប្រើប្រាស់​ពិត {PH3} គឺខ្សោយ។"
   },
   "panels/timeline/components/MetricCompareStrings.ts | poorSimilarCompare": {
     "message": "តម្លៃ {PH1} មូលដ្ឋាន​របស់អ្នក {PH2} គឺខ្សោយ និង​ស្រដៀងនឹង​បទពិសោធ​អ្នកប្រើប្រាស់​របស់អ្នក។"
@@ -15265,12 +15469,6 @@
   },
   "panels/timeline/components/SidebarAnnotationsTab.ts | timeRangeTutorialTitle": {
     "message": "កំណត់​ចន្លោះពេល"
-  },
-  "panels/timeline/components/SidebarInsightsTab.ts | feedbackButton": {
-    "message": "មតិកែលម្អ"
-  },
-  "panels/timeline/components/SidebarInsightsTab.ts | feedbackTooltip": {
-    "message": "ស្ថិតិ​គឺជា​មុខងារ​ដែលស្ថិត​ក្នុង​ដំណាក់កាល​ពិសោធន៍។ មតិកែលម្អ​របស់អ្នក​នឹងជួយយើង​ក្នុងការ​កែលម្អវា។"
   },
   "panels/timeline/components/SidebarSingleInsightSet.ts | dismissTitle": {
     "message": "ច្រានចោល"
@@ -15812,33 +16010,6 @@
   "panels/utils/utils.ts | thirdPartyPhaseout": {
     "message": "ខូគីសម្រាប់សំណើនេះត្រូវបានទប់ស្កាត់ដោយសារទង់ Chrome ឬការកំណត់រចនាសម្ព័ន្ធកម្មវិធីរុករកតាមអ៊ីនធឺណិត។ ស្វែងយល់បន្ថែមនៅក្នុងផ្ទាំងបញ្ហា។"
   },
-  "panels/web_audio/AudioContextContentBuilder.ts | callbackBufferSize": {
-    "message": "ទំហំកន្លែងផ្ទុកការហៅ​ត្រឡប់​វិញ"
-  },
-  "panels/web_audio/AudioContextContentBuilder.ts | callbackInterval": {
-    "message": "ចន្លោះពេល​ហៅ​ត្រឡប់វិញ"
-  },
-  "panels/web_audio/AudioContextContentBuilder.ts | currentTime": {
-    "message": "ម៉ោង​បច្ចុប្បន្ន"
-  },
-  "panels/web_audio/AudioContextContentBuilder.ts | maxOutputChannels": {
-    "message": "បណ្ដាញបញ្ចេញអតិបរមា"
-  },
-  "panels/web_audio/AudioContextContentBuilder.ts | renderCapacity": {
-    "message": "សមត្ថភាពនៃការបំប្លែង"
-  },
-  "panels/web_audio/AudioContextContentBuilder.ts | sampleRate": {
-    "message": "អត្រាសំណាក"
-  },
-  "panels/web_audio/AudioContextContentBuilder.ts | state": {
-    "message": "ស្ថានភាព"
-  },
-  "panels/web_audio/AudioContextSelector.ts | audioContextS": {
-    "message": "បរិបទ​សំឡេង៖ {PH1}"
-  },
-  "panels/web_audio/AudioContextSelector.ts | noRecordings": {
-    "message": "(គ្មានការថតទេ)"
-  },
   "panels/web_audio/WebAudioView.ts | noWebAudio": {
     "message": "រកមិនឃើញ​ការប្រើប្រាស់ Web Audio API ទេ"
   },
@@ -15862,9 +16033,6 @@
   },
   "panels/webauthn/WebauthnPane.ts | add": {
     "message": "បញ្ចូល"
-  },
-  "panels/webauthn/WebauthnPane.ts | addAuthenticator": {
-    "message": "បញ្ចូល​កម្មវិធីផ្ទៀងផ្ទាត់"
   },
   "panels/webauthn/WebauthnPane.ts | authenticatorS": {
     "message": "កម្មវិធីផ្ទៀងផ្ទាត់ {PH1}"
@@ -16226,6 +16394,9 @@
   "ui/legacy/InspectorView.ts | setToSpecificLanguage": {
     "message": "ប្ដូរ DevTools ទៅ {PH1}"
   },
+  "ui/legacy/InspectorView.ts | toggleDrawerOrientation": {
+    "message": "បិទ/បើក​ទិស​ថត"
+  },
   "ui/legacy/ListWidget.ts | addString": {
     "message": "បញ្ចូល"
   },
@@ -16402,6 +16573,9 @@
   },
   "ui/legacy/UIUtils.ts | copyLinkAddress": {
     "message": "ចម្លងអាសយដ្ឋានតំណ"
+  },
+  "ui/legacy/UIUtils.ts | new": {
+    "message": "ថ្មី"
   },
   "ui/legacy/UIUtils.ts | ok": {
     "message": "យល់ព្រម"
@@ -16792,9 +16966,6 @@
   },
   "ui/legacy/components/perf_ui/FilmStripView.ts | screenshotForSSelectToView": {
     "message": "រូបថតអេក្រង់​សម្រាប់ {PH1} - ជ្រើសរើស ដើម្បីមើលសំណើមុន។"
-  },
-  "ui/legacy/components/perf_ui/FlameChart.ts | deleteAnnotations": {
-    "message": "លុប​ចំណារ"
   },
   "ui/legacy/components/perf_ui/FlameChart.ts | enterTrackConfigurationMode": {
     "message": "កំណត់​រចនាសម្ព័ន្ធ​សំឡេង"

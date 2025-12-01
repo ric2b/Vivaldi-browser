@@ -16,13 +16,17 @@ limitations under the License.
 #ifndef XLA_BACKENDS_CPU_CODEGEN_FUSION_COMPILER_H_
 #define XLA_BACKENDS_CPU_CODEGEN_FUSION_COMPILER_H_
 
+#include <cstdint>
 #include <memory>
+#include <utility>
 
+#include "absl/functional/any_invocable.h"
 #include "absl/status/statusor.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/MLIRContext.h"
+#include "mlir/Pass/PassManager.h"
 #include "xla/codegen/llvm_ir_kernel_source.h"
 #include "xla/codegen/mlir_kernel_source.h"
 
@@ -32,11 +36,20 @@ namespace xla::cpu {
 // pipeline.
 class FusionCompiler {
  public:
-  struct Options {
-    // Placeholder for now, but will be used in the future.
+  struct CompilationHooks {
+    absl::AnyInvocable<void(mlir::ModuleOp)> pre_optimization;
+    absl::AnyInvocable<void(mlir::ModuleOp)> post_optimization;
+    absl::AnyInvocable<void(mlir::ModuleOp)> post_lowering;
   };
 
-  explicit FusionCompiler(Options options) {}
+  struct Options {
+    int32_t vector_width;
+    int32_t verification_level;
+    bool fast_min_max;
+  };
+
+  FusionCompiler(mlir::MLIRContext* context, Options options,
+                 CompilationHooks hooks = {});
 
   // Compile a given MLIR module to LLVM, using the provided LLVM context.
   absl::StatusOr<std::unique_ptr<llvm::Module>> Compile(
@@ -50,6 +63,13 @@ class FusionCompiler {
   static std::unique_ptr<mlir::MLIRContext> CreateContext();
 
  private:
+  Options options_;
+  CompilationHooks hooks_;
+  // Pass manager that holds the optimization & loop transformation passes.
+  mlir::PassManager optimization_pass_manager_;
+  // Pass manager that holds the passes responsible for lowering the module from
+  // MLIR to LLVM.
+  mlir::PassManager lowering_pass_manager_;
 };
 
 }  // namespace xla::cpu

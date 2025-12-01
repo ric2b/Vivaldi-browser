@@ -1,13 +1,12 @@
-RWByteAddressBuffer output : register(u0);
 
+RWByteAddressBuffer output : register(u0);
 void main_inner(uint subgroup_invocation_id, uint subgroup_size) {
-  uint tint_symbol_1 = 0u;
-  output.GetDimensions(tint_symbol_1);
-  uint tint_symbol_2 = (tint_symbol_1 / 4u);
-  output.Store((4u * min(subgroup_invocation_id, (tint_symbol_2 - 1u))), asuint(subgroup_size));
+  uint v = 0u;
+  output.GetDimensions(v);
+  output.Store((0u + (min(subgroup_invocation_id, ((v / 4u) - 1u)) * 4u)), subgroup_size);
 }
 
 void main() {
   main_inner(WaveGetLaneIndex(), WaveGetLaneCount());
-  return;
 }
+

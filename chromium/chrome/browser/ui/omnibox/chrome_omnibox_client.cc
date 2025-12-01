@@ -17,6 +17,7 @@
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
 #include "base/rand_util.h"
+#include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/bind_post_task.h"
@@ -42,8 +43,11 @@
 #include "chrome/browser/predictors/autocomplete_action_predictor_factory.h"
 #include "chrome/browser/predictors/loading_predictor.h"
 #include "chrome/browser/predictors/loading_predictor_factory.h"
+#include "chrome/browser/preloading/autocomplete_dictionary_preload_service.h"
+#include "chrome/browser/preloading/autocomplete_dictionary_preload_service_factory.h"
 #include "chrome/browser/preloading/prefetch/search_prefetch/search_prefetch_service.h"
 #include "chrome/browser/preloading/prefetch/search_prefetch/search_prefetch_service_factory.h"
+#include "chrome/browser/preloading/preloading_features.h"
 #include "chrome/browser/preloading/prerender/prerender_manager.h"
 #include "chrome/browser/preloading/prerender/prerender_utils.h"
 #include "chrome/browser/preloading/search_preload/search_preload_service.h"
@@ -53,7 +57,6 @@
 #include "chrome/browser/ui/bookmarks/bookmark_stats.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
-#include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -379,8 +382,8 @@ void ChromeOmniboxClient::OnKeywordModeChanged(bool entered,
 
   TemplateURL* template_url =
       GetTemplateURLService()->GetTemplateURLForKeyword(keyword);
-  if (!template_url ||
-      template_url->starter_pack_id() != TemplateURLStarterPackData::kPage) {
+  if (!template_url || template_url->starter_pack_id() !=
+                           template_url_starter_pack_data::kPage) {
     return;
   }
 
@@ -520,6 +523,11 @@ void ChromeOmniboxClient::OnResultChanged(
     bool should_preload,
     const BitmapFetchedCallback& on_bitmap_fetched) {
   if (should_preload) {
+    if (auto* dictionary_preload_service =
+            AutocompleteDictionaryPreloadServiceFactory::GetForProfile(
+                profile_)) {
+      dictionary_preload_service->MaybePreload(result);
+    }
     if (SearchPrefetchService* search_prefetch_service =
             SearchPrefetchServiceFactory::GetForProfile(profile_)) {
       search_prefetch_service->OnResultChanged(location_bar_->GetWebContents(),
@@ -764,11 +772,17 @@ void ChromeOmniboxClient::OnAutocompleteAccept(
               text, "match", match, "alternative_nav_match",
               alternative_nav_match);
 
+  std::string extra_headers;
+  for (const auto& header : match.extra_headers) {
+    base::StrAppend(&extra_headers,
+                    {header.first, ": ", header.second, "\r\n"});
+  }
+
   // Store the details necessary to open the omnibox match via browser commands.
   location_bar_->set_navigation_params(LocationBar::NavigationParams(
       destination_url, disposition, transition, match_selection_timestamp,
       destination_url_entered_without_scheme,
-      destination_url_entered_with_http_scheme, match.extra_headers));
+      destination_url_entered_with_http_scheme, extra_headers));
 
   if (browser_) {
     auto navigation = chrome::OpenCurrentURL(browser_);
@@ -805,6 +819,13 @@ void ChromeOmniboxClient::OnPopupVisibilityChanged(bool popup_is_open) {
   }
 }
 
+void ChromeOmniboxClient::OpenUrl(GURL gurl) {
+  CHECK(browser_);
+  NavigateParams params(browser_, gurl, ui::PAGE_TRANSITION_GENERATED);
+  params.disposition = WindowOpenDisposition::CURRENT_TAB;
+  Navigate(&params);
+}
+
 void ChromeOmniboxClient::OpenIphLink(GURL gurl) {
   ui::PageTransition transition = ui::PageTransitionFromInt(
       ui::PAGE_TRANSITION_LINK | ui::PAGE_TRANSITION_FROM_ADDRESS_BAR);
@@ -825,6 +846,20 @@ ChromeOmniboxClient::GetLensOverlaySuggestInputs() const {
         ->GetLensSuggestInputs();
   }
   return std::nullopt;
+}
+
+void ChromeOmniboxClient::MaybePrewarmForDefaultSearchEngine() {
+  if (!features::kPrewarmZeroSuggestTrigger.Get()) {
+    // TODO(https://crbug.com/423465927): Consider to add a TriggerPlace enum
+    // argument for this method on adding another triggers, and gate triggers
+    // per the enum.
+    return;
+  }
+
+  auto* prerender_manager = PrerenderManager::GetOrCreateForWebContents(
+      location_bar_->GetWebContents());
+  CHECK(prerender_manager);
+  prerender_manager->MaybeStartPrewarmSearchResult();
 }
 
 base::WeakPtr<OmniboxClient> ChromeOmniboxClient::AsWeakPtr() {
@@ -855,10 +890,17 @@ void ChromeOmniboxClient::DoPreconnect(const AutocompleteMatch& match) {
   auto* loading_predictor =
       predictors::LoadingPredictorFactory::GetForProfile(profile_);
   if (loading_predictor) {
+    bool is_preconnectable =
+        predictors::AutocompleteActionPredictor::IsPreconnectable(match);
     loading_predictor->PrepareForPageLoad(
         /*initiator_origin=*/std::nullopt, match.destination_url,
-        predictors::HintOrigin::OMNIBOX,
-        predictors::AutocompleteActionPredictor::IsPreconnectable(match));
+        predictors::HintOrigin::OMNIBOX, is_preconnectable);
+    base::UmaHistogramExactLinear(
+        base::StrCat(
+            {"Omnibox.LoadingPredictor.MatchType.",
+             is_preconnectable ? "Preconnectable" : "NonPreconnectable"}),
+        match.GetOmniboxEventResultType(),
+        metrics::OmniboxEventProto::Suggestion::ResultType_MAX + 1);
   }
   // We could prefetch the alternate nav URL, if any, but because there
   // can be many of these as a user types an initial series of characters,

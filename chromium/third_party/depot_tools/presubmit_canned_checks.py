@@ -1878,7 +1878,6 @@ def CheckGNFormatted(input_api, output_api):
     warnings = []
     for f in affected_files:
         cmd = [
-            input_api.python3_executable,
             input_api.os_path.join(_HERE, 'gn.py'), 'format', '--dry-run',
             f.AbsoluteLocalPath()
         ]
@@ -2845,3 +2844,23 @@ def CheckUpdateOwnersFileReferences(input_api, output_api):
             'OWNERS files being moved/removed, please update any file:// ' +
             'references to them in other OWNERS files', files)
     ]
+
+
+def CheckValidHostsInDEPSOnUpload(input_api, output_api):
+    """Checks that DEPS file deps are from allowed_hosts."""
+    # Run only if DEPS file has been modified to annoy fewer bystanders.
+    if all(f.LocalPath() != 'DEPS' for f in input_api.AffectedFiles()):
+        return []
+    # Outsource work to gclient verify
+    try:
+        gclient_path = input_api.os_path.join(_HERE, 'gclient.py')
+        input_api.subprocess.check_output(
+            [input_api.python3_executable, gclient_path, 'verify'],
+            stderr=input_api.subprocess.STDOUT)
+        return []
+    except input_api.subprocess.CalledProcessError as error:
+        return [
+            output_api.PresubmitError(
+                'DEPS file must have only git dependencies.',
+                long_text=error.output)
+        ]

@@ -416,7 +416,9 @@ Mantenha o seu ficheiro de chave num local seguro, pois irá precisar dele para 
 <translation id="8004582292198964060">Navegador</translation>
 <translation id="8018313076035239964">Controle as informações que os websites podem utilizar e os conteúdos que podem apresentar</translation>
 <translation id="8071432093239591881">Imprimir como imagem</translation>
-<translation id="8118448640060360549">{EXTENSIONS_COUNT,plural, =1{# marcador}other{# marcadores}}</translation>
+<translation id="8118448640060360549">{EXTENSIONS_COUNT,plural,
+        =1{# favorito}
+        other{# favoritos}}</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
         =1 {Transferência em curso} other {Transferências em curso}}</translation>

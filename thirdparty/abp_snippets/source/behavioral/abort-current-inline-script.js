@@ -19,8 +19,9 @@ import $ from "../$.js";
 import {call} from "proxy-pants/function";
 
 import {overrideOnError, wrapPropertyAccess} from "../utils/execution.js";
-import {randomId, toRegExp} from "../utils/general.js";
+import {formatArguments, randomId, toRegExp} from "../utils/general.js";
 import {getDebugger} from "../introspection/log.js";
+import {profile} from "../introspection/profile.js";
 
 let {HTMLScriptElement, Object, ReferenceError} = $(window);
 let Script = Object.getPrototypeOf(HTMLScriptElement);
@@ -37,7 +38,9 @@ let Script = Object.getPrototypeOf(HTMLScriptElement);
  * @since Adblock Plus 3.4.3
  */
 export function abortCurrentInlineScript(api, search = null) {
+  const formattedArguments = formatArguments(arguments);
   const debugLog = getDebugger("abort-current-inline-script");
+  const {mark, end} = profile("abort-current-inline-script");
   const re = search ? toRegExp(search) : null;
 
   const rid = randomId();
@@ -71,7 +74,12 @@ export function abortCurrentInlineScript(api, search = null) {
         $(element, "HTMLScriptElement").src == "" &&
         element != us &&
         (!re || re.test($(element).textContent))) {
-      debugLog("success", path, " is aborted \n", element);
+      debugLog("success",
+               path,
+               " is aborted \n",
+               element,
+               "\nFILTER: abort-current-inline-script",
+               formattedArguments);
       throw new ReferenceError(rid);
     }
   };
@@ -95,7 +103,11 @@ export function abortCurrentInlineScript(api, search = null) {
     }
   };
 
-  wrapPropertyAccess(object, name, descriptor);
+  mark();
+  wrapPropertyAccess(object,
+                     name,
+                     descriptor);
+  end();
 
   overrideOnError(rid);
 }

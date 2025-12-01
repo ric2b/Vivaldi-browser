@@ -86,12 +86,13 @@ ReceiverSession::ReceiverSession(Client& client,
       environment_(environment),
       constraints_(std::move(constraints)),
       session_id_(MakeUniqueSessionId("streaming_receiver")),
-      messenger_(message_port,
-                 session_id_,
-                 [this](Error error) {
-                   OSP_DLOG_WARN << "Got a session messenger error: " << error;
-                   client_.OnError(this, error);
-                 }),
+      messenger_(std::make_unique<ReceiverSessionMessenger>(
+          message_port,
+          session_id_,
+          [this](Error error) {
+            OSP_DLOG_WARN << "Got a session messenger error: " << error;
+            client_.OnError(this, error);
+          })),
       packet_router_(environment_) {
   OSP_CHECK(std::none_of(
       constraints_.video_codecs.begin(), constraints_.video_codecs.end(),
@@ -100,17 +101,17 @@ ReceiverSession::ReceiverSession(Client& client,
       constraints_.audio_codecs.begin(), constraints_.audio_codecs.end(),
       [](AudioCodec c) { return c == AudioCodec::kNotSpecified; }));
 
-  messenger_.SetHandler(
+  messenger_->SetHandler(
       SenderMessage::Type::kOffer,
       [this](const std::string& sender_id, SenderMessage message) {
         OnOffer(sender_id, std::move(message));
       });
-  messenger_.SetHandler(
+  messenger_->SetHandler(
       SenderMessage::Type::kGetCapabilities,
       [this](const std::string& sender_id, SenderMessage message) {
         OnCapabilitiesRequest(sender_id, std::move(message));
       });
-  messenger_.SetHandler(
+  messenger_->SetHandler(
       SenderMessage::Type::kRpc,
       [this](const std::string& sender_id, SenderMessage message) {
         this->OnRpcMessage(sender_id, std::move(message));
@@ -119,6 +120,10 @@ ReceiverSession::ReceiverSession(Client& client,
 }
 
 ReceiverSession::~ReceiverSession() {
+  // messenger_ must be destroyed before OnReceiversDestroying runs, since it
+  // calls message_port_.ResetClient(). That MessagePort is destroyed before
+  // OnReceiversDestroying returns. See crbug.com/374199735 for more details.
+  messenger_.reset();
   ResetReceivers(Client::kEndOfSession);
 }
 
@@ -245,7 +250,7 @@ void ReceiverSession::OnCapabilitiesRequest(const std::string& sender_id,
 
   // NOTE: we respond to any arbitrary sender here, to allow sender to get
   // capabilities before making an OFFER.
-  const Error result = messenger_.SendMessage(sender_id, std::move(response));
+  const Error result = messenger_->SendMessage(sender_id, std::move(response));
   if (!result.ok()) {
     client_.OnError(this, result);
   }
@@ -280,7 +285,7 @@ void ReceiverSession::SendRpcMessage(std::vector<uint8_t> message) {
     return;
   }
 
-  const Error error = messenger_.SendMessage(
+  const Error error = messenger_->SendMessage(
       negotiated_sender_id_,
       ReceiverMessage{ReceiverMessage::Type::kRpc, -1, true /* valid */,
                       std::move(message)});
@@ -340,7 +345,7 @@ void ReceiverSession::InitializeSession(const PendingOffer& properties) {
         this, RemotingNegotiation{std::move(receivers), rpc_messenger_.get()});
   }
 
-  const Error result = messenger_.SendMessage(
+  const Error result = messenger_->SendMessage(
       negotiated_sender_id_,
       ReceiverMessage{ReceiverMessage::Type::kAnswer,
                       properties.sequence_number, true /* valid */,
@@ -496,7 +501,7 @@ void ReceiverSession::SendErrorAnswerReply(const std::string& sender_id,
                                            int sequence_number,
                                            const Error& error) {
   OSP_DLOG_WARN << error;
-  const Error result = messenger_.SendMessage(
+  const Error result = messenger_->SendMessage(
       sender_id,
       ReceiverMessage{ReceiverMessage::Type::kAnswer, sequence_number,
                       false /* valid */, ReceiverError(error)});

@@ -36,7 +36,6 @@ import * as Workspace from '../workspace/workspace.js';
 
 import {ContentProviderBasedProject} from './ContentProviderBasedProject.js';
 import type {DebuggerSourceMapping, DebuggerWorkspaceBinding} from './DebuggerWorkspaceBinding.js';
-import {IgnoreListManager} from './IgnoreListManager.js';
 import {NetworkProject} from './NetworkProject.js';
 
 /**
@@ -189,7 +188,7 @@ export class CompilerScriptMapping implements DebuggerSourceMapping {
    * If `rawLocation` points to a script with a source map managed by this `CompilerScriptMapping`, which
    * is stale (because it was overridden by a more recent mapping), `null` will be returned.
    *
-   * @param rawLocation script location.
+   * @param rawLocation - script location.
    * @returns the {@link Workspace.UISourceCode.UILocation} for the `rawLocation` if any.
    */
   rawLocationToUILocation(rawLocation: SDK.DebuggerModel.Location): Workspace.UISourceCode.UILocation|null {
@@ -243,9 +242,9 @@ export class CompilerScriptMapping implements DebuggerSourceMapping {
    * can reference the same shared source file in case of code splitting, and locations within
    * this shared source file will then resolve to locations in all the bundles).
    *
-   * @param uiSourceCode the source mapped entity.
-   * @param lineNumber the line number in terms of the {@link uiSourceCode}.
-   * @param columnNumber the column number in terms of the {@link uiSourceCode}.
+   * @param uiSourceCode - the source mapped entity.
+   * @param lineNumber - the line number in terms of the {@link uiSourceCode}.
+   * @param columnNumber - the column number in terms of the {@link uiSourceCode}.
    * @returns a list of raw locations that correspond to the UI location.
    */
   uiLocationToRawLocations(uiSourceCode: Workspace.UISourceCode.UISourceCode, lineNumber: number, columnNumber: number):
@@ -295,8 +294,8 @@ export class CompilerScriptMapping implements DebuggerSourceMapping {
    * Computes the set of line numbers which are source-mapped to a script within the
    * given {@link uiSourceCode}.
    *
-   * @param uiSourceCode the source mapped entity.
-   * @return a set of source-mapped line numbers or `null` if the {@link uiSourceCode}
+   * @param uiSourceCode - the source mapped entity.
+   * @returns a set of source-mapped line numbers or `null` if the {@link uiSourceCode}
    *         is not provided by this {@link CompilerScriptMapping} instance.
    */
   getMappedLines(uiSourceCode: Workspace.UISourceCode.UISourceCode): Set<number>|null {
@@ -322,14 +321,14 @@ export class CompilerScriptMapping implements DebuggerSourceMapping {
    * loaded to avoid showing the generated code when the DevTools front-end is stopped early (for
    * example on a breakpoint).
    *
-   * @param event holds the {@link SDK.Script.Script} whose source map is being loaded.
+   * @param event - holds the {@link SDK.Script.Script} whose source map is being loaded.
    */
   private sourceMapWillAttach(event: Common.EventTarget.EventTargetEvent<{client: SDK.Script.Script}>): void {
     const {client: script} = event.data;
     // Create stub UISourceCode for the time source mapping is being loaded.
     this.addStubUISourceCode(script);
     void this.#debuggerWorkspaceBinding.updateLocations(script);
-    if (IgnoreListManager.instance().isUserIgnoreListedURL(
+    if (Workspace.IgnoreListManager.IgnoreListManager.instance().isUserIgnoreListedURL(
             script.sourceURL, {isContentScript: script.isContentScript()})) {
       this.#sourceMapManager.cancelAttachSourceMap(script);
     }
@@ -341,7 +340,7 @@ export class CompilerScriptMapping implements DebuggerSourceMapping {
    * remove the {@link Workspace.UISourceCode.UISourceCode} stub, and from this time on won't
    * report any mappings for the `client` script.
    *
-   * @param event holds the {@link SDK.Script.Script} whose source map failed to load.
+   * @param event - holds the {@link SDK.Script.Script} whose source map failed to load.
    */
   private sourceMapFailedToAttach(event: Common.EventTarget.EventTargetEvent<{client: SDK.Script.Script}>): void {
     const {client: script} = event.data;
@@ -361,7 +360,7 @@ export class CompilerScriptMapping implements DebuggerSourceMapping {
    * URL). If they are considered incompatible, the original `UISourceCode` will simply be
    * removed and a new mapping will be established.
    *
-   * @param event holds the {@link SDK.Script.Script} and its {@link SDK.SourceMap.SourceMap}.
+   * @param event - holds the {@link SDK.Script.Script} and its {@link SDK.SourceMap.SourceMap}.
    */
   private sourceMapAttached(event: Common.EventTarget.EventTargetEvent<{
     client: SDK.Script.Script,
@@ -450,7 +449,7 @@ export class CompilerScriptMapping implements DebuggerSourceMapping {
    * context was destroyed, or the user manually asked to replace the source map for a given
    * script.
    *
-   * @param event holds the {@link SDK.Script.Script} and {@link SDK.SourceMap.SourceMap} that
+   * @param event - holds the {@link SDK.Script.Script} and {@link SDK.SourceMap.SourceMap} that
    *              should be detached.
    */
   private sourceMapDetached(event: Common.EventTarget.EventTargetEvent<{

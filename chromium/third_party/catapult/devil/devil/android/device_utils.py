@@ -102,13 +102,6 @@ _FILE_LIST_SCRIPT = """
   done
 """
 
-_MKDIR_SCRIPT = """
-  for dir in {dirs}
-  do
-    mkdir -p "$dir"
-  done
-"""
-
 # Not all permissions can be set.
 _PERMISSIONS_DENYLIST_RE = re.compile('|'.join(
     fnmatch.translate(p) for p in [
@@ -2455,23 +2448,10 @@ class DeviceUtils(object):
         # sync-unaware implementation.
         logging.warning(str(e))
 
-    changed_files, missing_dirs, cache_commit_func = (self._GetChangedFiles(
+    changed_files, cache_commit_func = (self._GetChangedFiles(
         host_device_tuples, delete_device_stale))
 
     if changed_files:
-      if missing_dirs:
-        # Read dirs from temp file to avoid potential errors like
-        # "Argument list too long" (crbug.com/1174331) when the list
-        # is too long.
-        with device_temp_file.DeviceTempFile(self.adb, suffix='.sh') as script:
-          script_contents = _MKDIR_SCRIPT.format(dirs=' '.join(
-              cmd_helper.SingleQuote(d) for d in missing_dirs))
-          self.WriteFile(script.name, script_contents)
-          self.RunShellCommand(['source', script.name],
-                               check_return=True,
-                               run_as=run_as,
-                               as_root=as_root,
-                               timeout=timeout)
       self._PushFilesImpl(host_device_tuples, changed_files)
     cache_commit_func()
 
@@ -2524,10 +2504,9 @@ class DeviceUtils(object):
       delete_stale: Whether to delete stale files
 
     Returns:
-      a three-element tuple
+      a two-element tuple
       1st element: a list of (host_files_path, device_files_path) tuples to push
-      2nd element: a list of missing device directories to mkdir
-      3rd element: a cache commit function
+      2nd element: a cache commit function
     """
     # The fully expanded list of host/device tuples of files to push.
     file_tuples = []
@@ -2575,12 +2554,10 @@ class DeviceUtils(object):
       current_device_nodes = self._GetDeviceNodes(device_dirs_to_push_to)
       nodes_to_delete = current_device_nodes - expected_device_nodes
 
-    missing_dirs = device_dirs_to_push_to - current_device_nodes
-
     if not file_tuples:
       if delete_stale and nodes_to_delete:
         self.RemovePath(nodes_to_delete, force=True, recursive=True)
-      return (host_device_tuples, missing_dirs, lambda: 0)
+      return (host_device_tuples, lambda: 0)
 
     possibly_stale_device_nodes = current_device_nodes - nodes_to_delete
     possibly_stale_tuples = (
@@ -2642,7 +2619,7 @@ class DeviceUtils(object):
         host_checksum = host_checksums.get(host_path, None)
         self._cache['device_path_checksums'][device_path] = host_checksum
 
-    return (to_push, missing_dirs, cache_commit_func)
+    return (to_push, cache_commit_func)
 
   def _ComputeDeviceChecksumsForApks(self, package_name):
     ret = self._cache['package_apk_checksums'].get(package_name)
@@ -2714,12 +2691,8 @@ class DeviceUtils(object):
       # We need to set the SELinux policy to "permissive", because a SELinux
       # policy of "enforcing" will prevent us from working with named pipes.
       with self.SetEnforceContext(False):
-        # TODO(martinkong): Currently this is just a regular file and we are
-        # doing the push step and extraction step one at a time. We will use a
-        # named pipe and run the push step and extraction step concurrently
-        # once we verified that everything is working correctly.
         with device_temp_file.DeviceTempFile(self.adb) as named_pipe:
-          #devil_util.CreateNamedPipe(named_pipe.name, self)
+          devil_util.CreateNamedPipe(named_pipe.name, self)
 
           def push_compressed_archive():
             self.adb.Push(compressed_archive.name, named_pipe.name)
@@ -2727,11 +2700,8 @@ class DeviceUtils(object):
           def extract_compressed_archive():
             devil_util.ExtractZstCompressedArchive(named_pipe.name, self)
 
-          #reraiser_thread.RunAsync(
-          #    (push_compressed_archive, extract_compressed_archive))
-
-          push_compressed_archive()
-          extract_compressed_archive()
+          reraiser_thread.RunAsync(
+              (push_compressed_archive, extract_compressed_archive))
 
     return True
 

@@ -36,7 +36,6 @@ import type * as ProtocolProxyApi from '../../generated/protocol-proxy-api.js';
 import * as Protocol from '../../generated/protocol.js';
 import * as TextUtils from '../../models/text_utils/text_utils.js';
 import * as Common from '../common/common.js';
-import type {Serializer} from '../common/Settings.js';
 import * as Host from '../host/host.js';
 import * as i18n from '../i18n/i18n.js';
 import * as Platform from '../platform/platform.js';
@@ -151,11 +150,31 @@ const CONNECTION_TYPES = new Map([
   ['wimax', Protocol.Network.ConnectionType.Wimax],
 ]);
 
+/**
+ * We store two settings to disk to persist network throttling.
+ * 1. The custom conditions that the user has defined.
+ * 2. The active `key` that applies the correct current preset.
+ * The reason the setting creation functions are defined here is because they are referred
+ * to in multiple places, and this ensures we don't have accidental typos which
+ * mean extra settings get mistakenly created.
+ */
+export function customUserNetworkConditionsSetting(): Common.Settings.Setting<Conditions[]> {
+  return Common.Settings.Settings.instance().moduleSetting<Conditions[]>('custom-network-conditions');
+}
+
+export function activeNetworkThrottlingKeySetting(): Common.Settings.Setting<ThrottlingConditionKey> {
+  return Common.Settings.Settings.instance().createSetting(
+      'active-network-condition-key', PredefinedThrottlingConditionKey.NO_THROTTLING);
+}
+
 export class NetworkManager extends SDKModel<EventTypes> {
   readonly dispatcher: NetworkDispatcher;
   readonly fetchDispatcher: FetchDispatcher;
   readonly #networkAgent: ProtocolProxyApi.NetworkApi;
   readonly #bypassServiceWorkerSetting: Common.Settings.Setting<boolean>;
+
+  readonly activeNetworkThrottlingKey: Common.Settings.Setting<ThrottlingConditionKey> =
+      activeNetworkThrottlingKeySetting();
 
   constructor(target: Target) {
     super(target);
@@ -176,8 +195,10 @@ export class NetworkManager extends SDKModel<EventTypes> {
       this.cookieControlFlagsSettingChanged();
     }
 
-    void this.#networkAgent.invoke_enable(
-        {maxPostDataSize: MAX_EAGER_POST_REQUEST_BODY_LENGTH, reportDirectSocketTraffic: true});
+    void this.#networkAgent.invoke_enable({
+      maxPostDataSize: MAX_EAGER_POST_REQUEST_BODY_LENGTH,
+      reportDirectSocketTraffic: true,
+    });
     void this.#networkAgent.invoke_setAttachDebugStack({enabled: true});
 
     this.#bypassServiceWorkerSetting =
@@ -461,6 +482,7 @@ export interface EventTypes {
  */
 
 export const NoThrottlingConditions: Conditions = {
+  key: PredefinedThrottlingConditionKey.NO_THROTTLING,
   title: i18nLazyString(UIStrings.noThrottling),
   i18nTitleKey: UIStrings.noThrottling,
   download: -1,
@@ -469,6 +491,7 @@ export const NoThrottlingConditions: Conditions = {
 };
 
 export const OfflineConditions: Conditions = {
+  key: PredefinedThrottlingConditionKey.OFFLINE,
   title: i18nLazyString(UIStrings.offline),
   i18nTitleKey: UIStrings.offline,
   download: 0,
@@ -478,6 +501,7 @@ export const OfflineConditions: Conditions = {
 
 const slow3GTargetLatency = 400;
 export const Slow3GConditions: Conditions = {
+  key: PredefinedThrottlingConditionKey.SPEED_3G,
   title: i18nLazyString(UIStrings.slowG),
   i18nTitleKey: UIStrings.slowG,
   // ~500Kbps down
@@ -493,6 +517,7 @@ export const Slow3GConditions: Conditions = {
 // 2024 to align with LH (crbug.com/342406608).
 const slow4GTargetLatency = 150;
 export const Slow4GConditions: Conditions = {
+  key: PredefinedThrottlingConditionKey.SPEED_SLOW_4G,
   title: i18nLazyString(UIStrings.fastG),
   i18nTitleKey: UIStrings.fastG,
   // ~1.6 Mbps down
@@ -506,6 +531,7 @@ export const Slow4GConditions: Conditions = {
 
 const fast4GTargetLatency = 60;
 export const Fast4GConditions: Conditions = {
+  key: PredefinedThrottlingConditionKey.SPEED_FAST_4G,
   title: i18nLazyString(UIStrings.fast4G),
   i18nTitleKey: UIStrings.fast4G,
   // 9 Mbps down
@@ -673,6 +699,13 @@ export class NetworkDispatcher implements ProtocolProxyApi.NetworkDispatcher {
       networkRequest.setSecurityDetails(response.securityDetails);
     }
 
+    // TODO(crbug.com/425645896): Remove this guard once IP Protection is fully launched.
+    if (Root.Runtime.hostConfig.devToolsIpProtectionInDevTools?.enabled) {
+      if (response.isIpProtectionUsed) {
+        networkRequest.setIsIpProtectionUsed(response.isIpProtectionUsed);
+      }
+    }
+
     const newResourceType = Common.ResourceType.ResourceType.fromMimeTypeOverride(networkRequest.mimeType);
     if (newResourceType) {
       networkRequest.setResourceType(newResourceType);
@@ -726,12 +759,17 @@ export class NetworkDispatcher implements ProtocolProxyApi.NetworkDispatcher {
       if (!networkRequest) {
         return;
       }
+      // Or clause is never hit, but is here because we can't use non-null assertions.
+      const backendRequestId = networkRequest.backendRequestId() || requestId;
+      requestId = backendRequestId;
     }
     networkRequest.setSignedExchangeInfo(info);
     networkRequest.setResourceType(Common.ResourceType.resourceTypes.SignedExchange);
 
     this.updateNetworkRequestWithResponse(networkRequest, info.outerResponse);
     this.updateNetworkRequest(networkRequest);
+    this.getExtraInfoBuilder(requestId).addHasExtraInfo(info.hasExtraInfo);
+
     this.#manager.dispatchEventToListeners(
         Events.ResponseReceived, {request: networkRequest, response: info.outerResponse});
   }
@@ -744,6 +782,7 @@ export class NetworkDispatcher implements ProtocolProxyApi.NetworkDispatcher {
     timestamp,
     wallTime,
     initiator,
+    redirectHasExtraInfo,
     redirectResponse,
     type,
     frameId,
@@ -766,7 +805,7 @@ export class NetworkDispatcher implements ProtocolProxyApi.NetworkDispatcher {
           timestamp,
           type: type || Protocol.Network.ResourceType.Other,
           response: redirectResponse,
-          hasExtraInfo: false,
+          hasExtraInfo: redirectHasExtraInfo,
           frameId,
         });
       }
@@ -806,8 +845,8 @@ export class NetworkDispatcher implements ProtocolProxyApi.NetworkDispatcher {
     networkRequest.setFromMemoryCache();
   }
 
-  responseReceived({requestId, loaderId, timestamp, type, response, frameId}: Protocol.Network.ResponseReceivedEvent):
-      void {
+  responseReceived({requestId, loaderId, timestamp, type, response, hasExtraInfo, frameId}:
+                       Protocol.Network.ResponseReceivedEvent): void {
     const networkRequest = this.#requestsById.get(requestId);
     const lowercaseHeaders = NetworkManager.lowercaseHeaders(response.headers);
     if (!networkRequest) {
@@ -831,6 +870,7 @@ export class NetworkDispatcher implements ProtocolProxyApi.NetworkDispatcher {
     this.updateNetworkRequestWithResponse(networkRequest, response);
 
     this.updateNetworkRequest(networkRequest);
+    this.getExtraInfoBuilder(requestId).addHasExtraInfo(hasExtraInfo);
     this.#manager.dispatchEventToListeners(Events.ResponseReceived, {request: networkRequest, response});
   }
 
@@ -1564,13 +1604,13 @@ let multiTargetNetworkManagerInstance: MultitargetNetworkManager|null;
 
 export class MultitargetNetworkManager extends Common.ObjectWrapper.ObjectWrapper<MultitargetNetworkManager.EventTypes>
     implements SDKModelObserver<NetworkManager> {
-  #userAgentOverrideInternal = '';
+  #userAgentOverride = '';
   #userAgentMetadataOverride: Protocol.Emulation.UserAgentMetadata|null = null;
   #customAcceptedEncodings: Protocol.Network.ContentEncoding[]|null = null;
   readonly #networkAgents = new Set<ProtocolProxyApi.NetworkApi>();
   readonly #fetchAgents = new Set<ProtocolProxyApi.FetchApi>();
   readonly inflightMainResourceRequests = new Map<string, NetworkRequest>();
-  #networkConditionsInternal: Conditions = NoThrottlingConditions;
+  #networkConditions: Conditions = NoThrottlingConditions;
   #updatingInterceptionPatternsPromise: Promise<void>|null = null;
   readonly #blockingEnabledSetting =
       Common.Settings.Settings.instance().moduleSetting<boolean>('request-blocking-enabled');
@@ -1691,16 +1731,16 @@ export class MultitargetNetworkManager extends Common.ObjectWrapper.ObjectWrappe
   }
 
   isThrottling(): boolean {
-    return this.#networkConditionsInternal.download >= 0 || this.#networkConditionsInternal.upload >= 0 ||
-        this.#networkConditionsInternal.latency > 0;
+    return this.#networkConditions.download >= 0 || this.#networkConditions.upload >= 0 ||
+        this.#networkConditions.latency > 0;
   }
 
   isOffline(): boolean {
-    return !this.#networkConditionsInternal.download && !this.#networkConditionsInternal.upload;
+    return !this.#networkConditions.download && !this.#networkConditions.upload;
   }
 
   setNetworkConditions(conditions: Conditions): void {
-    this.#networkConditionsInternal = conditions;
+    this.#networkConditions = conditions;
     for (const agent of this.#networkAgents) {
       this.updateNetworkConditions(agent);
     }
@@ -1708,11 +1748,11 @@ export class MultitargetNetworkManager extends Common.ObjectWrapper.ObjectWrappe
   }
 
   networkConditions(): Conditions {
-    return this.#networkConditionsInternal;
+    return this.#networkConditions;
   }
 
   private updateNetworkConditions(networkAgent: ProtocolProxyApi.NetworkApi): void {
-    const conditions = this.#networkConditionsInternal;
+    const conditions = this.#networkConditions;
     if (!this.isThrottling()) {
       void networkAgent.invoke_emulateNetworkConditions({
         offline: false,
@@ -1742,7 +1782,7 @@ export class MultitargetNetworkManager extends Common.ObjectWrapper.ObjectWrappe
   }
 
   currentUserAgent(): string {
-    return this.#customUserAgent ? this.#customUserAgent : this.#userAgentOverrideInternal;
+    return this.#customUserAgent ? this.#customUserAgent : this.#userAgentOverride;
   }
 
   private updateUserAgentOverride(): void {
@@ -1754,8 +1794,8 @@ export class MultitargetNetworkManager extends Common.ObjectWrapper.ObjectWrappe
   }
 
   setUserAgentOverride(userAgent: string, userAgentMetadataOverride: Protocol.Emulation.UserAgentMetadata|null): void {
-    const uaChanged = (this.#userAgentOverrideInternal !== userAgent);
-    this.#userAgentOverrideInternal = userAgent;
+    const uaChanged = (this.#userAgentOverride !== userAgent);
+    this.#userAgentOverride = userAgent;
     if (!this.#customUserAgent) {
       this.#userAgentMetadataOverride = userAgentMetadataOverride;
       this.updateUserAgentOverride();
@@ -1766,10 +1806,6 @@ export class MultitargetNetworkManager extends Common.ObjectWrapper.ObjectWrappe
     if (uaChanged) {
       this.dispatchEventToListeners(MultitargetNetworkManager.Events.USER_AGENT_CHANGED);
     }
-  }
-
-  userAgentOverride(): string {
-    return this.#userAgentOverrideInternal;
   }
 
   setCustomUserAgentOverride(
@@ -1972,7 +2008,7 @@ export namespace MultitargetNetworkManager {
 
 export class InterceptedRequest {
   readonly #fetchAgent: ProtocolProxyApi.FetchApi;
-  #hasRespondedInternal: boolean;
+  #hasResponded = false;
   request: Protocol.Network.Request;
   resourceType: Protocol.Network.ResourceType;
   responseStatusCode: number|undefined;
@@ -1990,7 +2026,6 @@ export class InterceptedRequest {
       responseHeaders?: Protocol.Fetch.HeaderEntry[],
   ) {
     this.#fetchAgent = fetchAgent;
-    this.#hasRespondedInternal = false;
     this.request = request;
     this.resourceType = resourceType;
     this.responseStatusCode = responseStatusCode;
@@ -2000,7 +2035,7 @@ export class InterceptedRequest {
   }
 
   hasResponded(): boolean {
-    return this.#hasRespondedInternal;
+    return this.#hasResponded;
   }
 
   static mergeSetCookieHeaders(
@@ -2064,7 +2099,7 @@ export class InterceptedRequest {
   async continueRequestWithContent(
       contentBlob: Blob, encoded: boolean, responseHeaders: Protocol.Fetch.HeaderEntry[],
       isBodyOverridden: boolean): Promise<void> {
-    this.#hasRespondedInternal = true;
+    this.#hasResponded = true;
     const body = encoded ? await contentBlob.text() : await Common.Base64.encode(contentBlob).catch(err => {
       console.error(err);
       return '';
@@ -2086,15 +2121,9 @@ export class InterceptedRequest {
   }
 
   continueRequestWithoutChange(): void {
-    console.assert(!this.#hasRespondedInternal);
-    this.#hasRespondedInternal = true;
+    console.assert(!this.#hasResponded);
+    this.#hasResponded = true;
     void this.#fetchAgent.invoke_continueRequest({requestId: this.requestId});
-  }
-
-  continueRequestWithError(errorReason: Protocol.Network.ErrorReason): void {
-    console.assert(!this.#hasRespondedInternal);
-    this.#hasRespondedInternal = true;
-    void this.#fetchAgent.invoke_failRequest({requestId: this.requestId, errorReason});
   }
 
   async responseBody(): Promise<TextUtils.ContentData.ContentDataOrError> {
@@ -2115,7 +2144,7 @@ export class InterceptedRequest {
 
   /**
    * Tries to determine the MIME type and charset for this intercepted request.
-   * Looks at the interecepted response headers first (for Content-Type header), then
+   * Looks at the intercepted response headers first (for Content-Type header), then
    * checks the `NetworkRequest` if we have one.
    */
   getMimeTypeAndCharset(): {mimeType: string|null, charset: string|null} {
@@ -2137,26 +2166,32 @@ export class InterceptedRequest {
  * same requestId due to redirects.
  */
 class ExtraInfoBuilder {
-  readonly #requests: NetworkRequest[];
-  #requestExtraInfos: Array<ExtraRequestInfo|null>;
-  #responseExtraInfos: Array<ExtraResponseInfo|null>;
-  #responseEarlyHintsHeaders: NameValue[];
-  #finishedInternal: boolean;
-  #webBundleInfo: WebBundleInfo|null;
-  #webBundleInnerRequestInfo: WebBundleInnerRequestInfo|null;
-
-  constructor() {
-    this.#requests = [];
-    this.#requestExtraInfos = [];
-    this.#responseEarlyHintsHeaders = [];
-    this.#responseExtraInfos = [];
-    this.#finishedInternal = false;
-    this.#webBundleInfo = null;
-    this.#webBundleInnerRequestInfo = null;
-  }
+  readonly #requests: NetworkRequest[] = [];
+  #responseExtraInfoFlag: Array<boolean|null> = [];
+  #requestExtraInfos: Array<ExtraRequestInfo|null> = [];
+  #responseExtraInfos: Array<ExtraResponseInfo|null> = [];
+  #responseEarlyHintsHeaders: NameValue[] = [];
+  #finished = false;
+  #webBundleInfo: WebBundleInfo|null = null;
+  #webBundleInnerRequestInfo: WebBundleInnerRequestInfo|null = null;
 
   addRequest(req: NetworkRequest): void {
     this.#requests.push(req);
+    this.sync(this.#requests.length - 1);
+  }
+
+  addHasExtraInfo(hasExtraInfo: boolean): void {
+    this.#responseExtraInfoFlag.push(hasExtraInfo);
+    // This comes in response, so it can't come before request or after next
+    // request in the redirect chain.
+    console.assert(this.#requests.length === this.#responseExtraInfoFlag.length, 'request/response count mismatch');
+    if (!hasExtraInfo) {
+      // We may potentially have gotten extra infos from the next redirect
+      // request already. Account for that by inserting null for missing
+      // extra infos at current position.
+      this.#requestExtraInfos.splice(this.#requests.length - 1, 0, null);
+      this.#responseExtraInfos.splice(this.#requests.length - 1, 0, null);
+    }
     this.sync(this.#requests.length - 1);
   }
 
@@ -2186,17 +2221,38 @@ class ExtraInfoBuilder {
   }
 
   finished(): void {
-    this.#finishedInternal = true;
+    this.#finished = true;
+    // We may have missed responseReceived event in case of failure.
+    // That said, the ExtraInfo events still may be here, so mark them
+    // as present. Event if they are not, this is harmless.
+    // TODO(caseq): consider if we need to report hasExtraInfo in the
+    // loadingFailed event.
+    if (this.#responseExtraInfoFlag.length < this.#requests.length) {
+      this.#responseExtraInfoFlag.push(true);
+      this.sync(this.#responseExtraInfoFlag.length - 1);
+    }
+    console.assert(
+        this.#requests.length === this.#responseExtraInfoFlag.length,
+        'request/response count mismatch when request finished');
     this.updateFinalRequest();
   }
 
   isFinished(): boolean {
-    return this.#finishedInternal;
+    return this.#finished;
   }
 
   private sync(index: number): void {
     const req = this.#requests[index];
     if (!req) {
+      return;
+    }
+
+    // No response yet, so we don't know if extra info would
+    // be there, bail out for now.
+    if (index >= this.#responseExtraInfoFlag.length) {
+      return;
+    }
+    if (!this.#responseExtraInfoFlag[index]) {
       return;
     }
 
@@ -2214,14 +2270,14 @@ class ExtraInfoBuilder {
   }
 
   finalRequest(): NetworkRequest|null {
-    if (!this.#finishedInternal) {
+    if (!this.#finished) {
       return null;
     }
     return this.#requests[this.#requests.length - 1] || null;
   }
 
   private updateFinalRequest(): void {
-    if (!this.#finishedInternal) {
+    if (!this.#finished) {
       return;
     }
     const finalRequest = this.finalRequest();
@@ -2233,25 +2289,6 @@ class ExtraInfoBuilder {
 
 SDKModel.register(NetworkManager, {capabilities: Capability.NETWORK, autostart: true});
 
-export class ConditionsSerializer implements Serializer<Conditions, Conditions> {
-  stringify(value: unknown): string {
-    const conditions = value as Conditions;
-    return JSON.stringify({
-      ...conditions,
-      title: typeof conditions.title === 'function' ? conditions.title() : conditions.title,
-    });
-  }
-
-  parse(serialized: string): Conditions {
-    const parsed = JSON.parse(serialized);
-    return {
-      ...parsed,
-      // eslint-disable-next-line rulesdir/l10n-i18nString-call-only-with-uistrings
-      title: parsed.i18nTitleKey ? i18nLazyString(parsed.i18nTitleKey) : parsed.title,
-    };
-  }
-}
-
 export function networkConditionsEqual(first: Conditions, second: Conditions): boolean {
   // Caution: titles might be different function instances, which produce
   // the same value.
@@ -2260,12 +2297,59 @@ export function networkConditionsEqual(first: Conditions, second: Conditions): b
   // locally.
   const firstTitle = first.i18nTitleKey || (typeof first.title === 'function' ? first.title() : first.title);
   const secondTitle = second.i18nTitleKey || (typeof second.title === 'function' ? second.title() : second.title);
+
   return second.download === first.download && second.upload === first.upload && second.latency === first.latency &&
       first.packetLoss === second.packetLoss && first.packetQueueLength === second.packetQueueLength &&
       first.packetReordering === second.packetReordering && secondTitle === firstTitle;
 }
 
+/**
+ * IMPORTANT: this key is used as the value that is persisted so we remember
+ * the user's throttling settings
+ *
+ * This means that it is very important that;
+ * 1. Each Conditions that is defined must have a unique key.
+ * 2. The keys & values DO NOT CHANGE for a particular condition, else we might break
+ *    DevTools when restoring a user's persisted setting.
+ *
+ * If you do want to change them, you need to handle that in a migration, but
+ * please talk to jacktfranklin@ first.
+ */
+export const enum PredefinedThrottlingConditionKey {
+  NO_THROTTLING = 'NO_THROTTLING',
+  OFFLINE = 'OFFLINE',
+  SPEED_3G = 'SPEED_3G',
+  SPEED_SLOW_4G = 'SPEED_SLOW_4G',
+  SPEED_FAST_4G = 'SPEED_FAST_4G',
+}
+
+export type UserDefinedThrottlingConditionKey = `USER_CUSTOM_SETTING_${number}`;
+export type ThrottlingConditionKey = PredefinedThrottlingConditionKey|UserDefinedThrottlingConditionKey;
+
+export const THROTTLING_CONDITIONS_LOOKUP: ReadonlyMap<PredefinedThrottlingConditionKey, Conditions> = new Map([
+  [PredefinedThrottlingConditionKey.NO_THROTTLING, NoThrottlingConditions],
+  [PredefinedThrottlingConditionKey.OFFLINE, OfflineConditions],
+  [PredefinedThrottlingConditionKey.SPEED_3G, Slow3GConditions],
+  [PredefinedThrottlingConditionKey.SPEED_SLOW_4G, Slow4GConditions],
+  [PredefinedThrottlingConditionKey.SPEED_FAST_4G, Fast4GConditions]
+]);
+
+function keyIsPredefined(key: ThrottlingConditionKey): key is PredefinedThrottlingConditionKey {
+  return !key.startsWith('USER_CUSTOM_SETTING_');
+}
+export function keyIsCustomUser(key: ThrottlingConditionKey): key is UserDefinedThrottlingConditionKey {
+  return key.startsWith('USER_CUSTOM_SETTING_');
+}
+
+export function getPredefinedCondition(key: ThrottlingConditionKey): Conditions|null {
+  if (!keyIsPredefined(key)) {
+    return null;
+  }
+  return THROTTLING_CONDITIONS_LOOKUP.get(key) ?? null;
+}
+
 export interface Conditions {
+  readonly key: ThrottlingConditionKey;
   download: number;
   upload: number;
   latency: number;
@@ -2279,10 +2363,13 @@ export interface Conditions {
   // doubles as both part of group of fields which (loosely) uniquely
   // identify instances, as well as the literal string displayed in the
   // UI, which leads to complications around persistance.
+  // TODO(crbug.com/422682525): make this just a function because we use lazy string everywhere.
   title: string|(() => string);
   // Instances may be serialized to local storage, so localized titles
   // should not be irrecoverably baked, just in case the string changes
   // (or the user switches locales).
+  // TODO(crbug.com/422682525): get rid of this, there is no need to store on
+  // the condition now we do not rely on it to reload a setting from disk.
   i18nTitleKey?: string;
   /**
    * RTT values are multiplied by adjustment factors to make DevTools' emulation more accurate.

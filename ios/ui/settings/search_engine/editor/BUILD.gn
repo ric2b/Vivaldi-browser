@@ -1,0 +1,51 @@
+# Copyright 2025 Vivaldi Technologies. All rights reserved.
+
+import("//build/config/apple/swift_source_set.gni")
+
+source_set("vivaldi_search_engine_editor") {
+  sources = [
+    "vivaldi_search_engine_editor_consumer.h",
+    "vivaldi_search_engine_editor_coordinator.h",
+    "vivaldi_search_engine_editor_coordinator.mm",
+    "vivaldi_search_engine_editor_mediator.h",
+    "vivaldi_search_engine_editor_mediator.mm",
+  ]
+
+  deps = [
+    ":vivaldi_search_engine_editor_swift",
+    "//base",
+    "//components/search_engines",
+    "//ios/chrome/browser/shared/coordinator/chrome_coordinator",
+    "//ios/chrome/browser/shared/model/browser",
+    "//ios/chrome/browser/shared/model/profile",
+    "//ios/chrome/browser/shared/model/utils",
+    "//ui/base",
+  ]
+
+  frameworks = [
+    "UIKit.framework"
+  ]
+}
+
+swift_source_set("vivaldi_search_engine_editor_swift") {
+  bridge_header = "vivaldi_search_engine_editor_swift_bridge.h"
+  sources = [
+    "vivaldi_search_engine_editor_item.swift",
+    "vivaldi_search_engine_editor_view_provider.swift",
+    "vivaldi_search_engine_editor_view_state.swift",
+    "vivaldi_search_engine_editor_view.swift",
+  ]
+
+  deps = [
+    "//base",
+    "//ios/chrome/common/ui/colors:swift",
+    "//ui/base",
+    "//vivaldi/app:vivaldi_ios_native_strings",
+    "//vivaldi/ios/ui/helpers:helpers_swift",
+  ]
+
+  frameworks = [
+    "UIKit.framework",
+    "SwiftUI.framework",
+  ]
+}

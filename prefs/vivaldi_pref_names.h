@@ -10,9 +10,20 @@ namespace vivaldiprefs {
 // Profile prefs go here.
 extern const char kAutoUpdateEnabled[];
 extern const char kVivaldiAccountPendingRegistration[];
-extern const char kVivaldiExperiments[];
 extern const char kVivaldiLastTopSitesVacuumDate[];
 extern const char kVivaldiPIPPlacement[];
+
+// Depracated profile prefs go here.
+// DEPRECATED 06/2025
+extern const char kVivaldiExperiments[];
+
+// DEPRECATED 08/2025
+extern const char kSyncedDefaultPrivateSearchProviderGUID[];
+extern const char kSyncedDefaultSearchFieldProviderGUID[];
+extern const char kSyncedDefaultPrivateSearchFieldProviderGUID[];
+extern const char kSyncedDefaultSpeedDialsSearchProviderGUID[];
+extern const char kSyncedDefaultSpeedDialsPrivateSearchProviderGUID[];
+extern const char kSyncedDefaultImageSearchProviderGUID[];
 
 // Local state prefs go here.
 extern const char kVivaldiAutoUpdateStandalone[];
@@ -96,6 +107,8 @@ extern const char kVivaldiHomepageURL[];
 extern const char kVivaldiHomepageEnabled[];
 // Allow audio to play in background tab
 extern const char kVivaldiBackgroundAudioEnabled[];
+// Enable/Disable Translate Infobar Banner.
+extern const char kVivaldiTranslateInfobarBannerDisabled[];
 
 // Apearance
 // Selected browser theme i.e. Light, Dark, System
@@ -148,6 +161,11 @@ extern const char kVivaldiPreferTranslatePanel[];
 extern const char kVivaldiPageZoomLevel[];
 // Privacy & Security Settings
 extern const char kVivaldiBlockExternalApps[];
+// Reader Mode [iOS]
+extern const char kVivaldiReaderModeEnabled[];
+extern const char kReaderModeFontSize[];
+extern const char kReaderModeFontFamily[];
+extern const char kReaderModeTheme[];
 #endif
 
 #if BUILDFLAG(IS_ANDROID)

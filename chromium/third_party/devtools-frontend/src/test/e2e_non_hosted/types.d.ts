@@ -42,6 +42,16 @@ declare global {
     export interface HookFunction {
       (fn: E2E.SuiteSettings): void;
     }
+    export interface Context {
+      before: undefined;
+      after: undefined;
+      beforeEach: undefined;
+      afterEach: undefined;
+    }
+
+    export interface Test {
+      realDuration?: number;
+    }
   }
   namespace E2E {
     export type HarnessSettings = BrowserSettings&DevtoolsSettings;
@@ -53,6 +63,7 @@ declare global {
       browser: BrowserWrapper;
     }
 
-    export type TestAsyncCallbackWithState = (this: Mocha.Context, state: State) => PromiseLike<unknown>;
+    // We do not allow test functions to affect mocha context.
+    export type TestAsyncCallbackWithState = (this: undefined, state: State) => PromiseLike<unknown>;
   }
 }

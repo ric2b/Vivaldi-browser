@@ -39,7 +39,7 @@
 #include "device/bluetooth/test/mock_bluetooth_adapter.h"
 #include "net/test/embedded_test_server/controllable_http_response.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
-#include "net/test/spawned_test_server/spawned_test_server.h"
+#include "net/test/embedded_test_server/install_default_websocket_handlers.h"
 #include "net/test/test_data_directory.h"
 #include "services/device/public/cpp/test/fake_hid_manager.h"
 #include "services/device/public/cpp/test/fake_sensor_and_provider.h"
@@ -1059,38 +1059,6 @@ IN_PROC_BROWSER_TEST_F(BackForwardCacheWithDedicatedWorkerBrowserTest,
   EXPECT_EQ(1, CountWorkerClients(current_frame_host()));
 }
 
-// TODO(crbug.com/40290702): Shared workers are not available on Android.
-#if BUILDFLAG(IS_ANDROID)
-#define MAYBE_PageWithSharedWorkerNotCached \
-  DISABLED_PageWithSharedWorkerNotCached
-#else
-#define MAYBE_PageWithSharedWorkerNotCached PageWithSharedWorkerNotCached
-#endif
-IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTest,
-                       MAYBE_PageWithSharedWorkerNotCached) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-
-  EXPECT_TRUE(NavigateToURL(
-      shell(),
-      embedded_test_server()->GetURL(
-          "a.com", "/back_forward_cache/page_with_shared_worker.html")));
-  RenderFrameDeletedObserver delete_observer_rfh_a(current_frame_host());
-
-  // Navigate away.
-  EXPECT_TRUE(NavigateToURL(
-      shell(), embedded_test_server()->GetURL("b.com", "/title1.html")));
-
-  // The page with the unsupported feature should be deleted (not cached).
-  delete_observer_rfh_a.WaitUntilDeleted();
-
-  // Go back.
-  ASSERT_TRUE(HistoryGoBack(web_contents()));
-  ExpectNotRestored(
-      {NotRestoredReason::kBlocklistedFeatures},
-      {blink::scheduler::WebSchedulerTrackedFeature::kSharedWorker}, {}, {}, {},
-      FROM_HERE);
-}
-
 IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTest,
                        AllowedFeaturesForSubframesDoNotEvict) {
   // The main purpose of this test is to check that when a state of a subframe
@@ -1857,31 +1825,11 @@ IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTest,
   ExpectRestored(FROM_HERE);
 }
 
-class BackForwardCacheNonStickyDoubleFixBrowserTest
-    : public BackForwardCacheBrowserTest,
-      public testing::WithParamInterface<bool> {
- protected:
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    if (IsBackForwardCacheNonStickyDoubleFixEnabled()) {
-      EnableFeatureAndSetParams(kBackForwardCacheNonStickyDoubleFix, "", "");
-    } else {
-      DisableFeature(kBackForwardCacheNonStickyDoubleFix);
-    }
-    BackForwardCacheBrowserTest::SetUpCommandLine(command_line);
-  }
-
-  bool IsBackForwardCacheNonStickyDoubleFixEnabled() { return GetParam(); }
-};
-
-INSTANTIATE_TEST_SUITE_P(All,
-                         BackForwardCacheNonStickyDoubleFixBrowserTest,
-                         testing::Bool());
-
 // If pages released keyboard lock during pagehide, they can enter
 // BackForwardCache. This also covers the case of entering BFCache for a
 // second time. KeyboardLock is a good feature to use as it will always
 // block BFCache. See https://crbug.com/360183659
-IN_PROC_BROWSER_TEST_P(BackForwardCacheNonStickyDoubleFixBrowserTest,
+IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTest,
                        CacheIfKeyboardLockReleasedInPagehide) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
@@ -1918,16 +1866,7 @@ IN_PROC_BROWSER_TEST_P(BackForwardCacheNonStickyDoubleFixBrowserTest,
 
   // Go back again.
   ASSERT_TRUE(HistoryGoBack(web_contents()));
-  if (IsBackForwardCacheNonStickyDoubleFixEnabled()) {
-    // The page should be restored from BackForwardCache.
-    ExpectRestored(FROM_HERE);
-  } else {
-    // The page should not be restored from BackForwardCache.
-    ExpectNotRestored(
-        {NotRestoredReason::kBlocklistedFeatures},
-        {blink::scheduler::WebSchedulerTrackedFeature::kKeyboardLock}, {}, {},
-        {}, FROM_HERE);
-  }
+  ExpectRestored(FROM_HERE);
 }
 
 IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTest,
@@ -2224,10 +2163,6 @@ IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTest,
 #endif
 IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTest,
                        MAYBE_MultipleBlocksFromJavaScriptFile) {
-  net::SpawnedTestServer ws_server(net::SpawnedTestServer::TYPE_WS,
-                                   net::GetWebSocketTestDataDirectory());
-  ASSERT_TRUE(ws_server.Start());
-
   ASSERT_TRUE(embedded_test_server()->Start());
 
   // 1) Navigate to a page with multiple WebSocket usage.
@@ -2240,18 +2175,16 @@ IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTest,
 
   RenderFrameHostImplWrapper rfh_a(current_frame_host());
   // Open WebSocket connections.
-  const char scriptA[] = R"(
+  const char kScriptA[] = R"(
     openWebSocketConnectionA($1);
   )";
-  const char scriptB[] = R"(
+  const char kScriptB[] = R"(
     openWebSocketConnectionB($1);
   )";
-  ASSERT_EQ(123, EvalJs(rfh_a.get(),
-                        JsReplace(scriptA,
-                                  ws_server.GetURL("echo-with-no-extension"))));
-  ASSERT_EQ(123, EvalJs(rfh_a.get(),
-                        JsReplace(scriptB,
-                                  ws_server.GetURL("echo-with-no-extension"))));
+  GURL ws_url = net::test_server::GetWebSocketURL(*embedded_test_server(),
+                                                  "/echo-with-no-extension");
+  ASSERT_EQ(123, EvalJs(rfh_a.get(), JsReplace(kScriptA, ws_url)));
+  ASSERT_EQ(123, EvalJs(rfh_a.get(), JsReplace(kScriptB, ws_url)));
   ASSERT_EQ(true, EvalJs(rfh_a.get(), "isSocketAOpen()"));
   ASSERT_EQ(true, EvalJs(rfh_a.get(), "isSocketBOpen()"));
 
@@ -2293,10 +2226,6 @@ IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTest,
 #endif
 IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTest,
                        MAYBE_BlockAndUnblockFromJavaScriptFile) {
-  net::SpawnedTestServer ws_server(net::SpawnedTestServer::TYPE_WS,
-                                   net::GetWebSocketTestDataDirectory());
-  ASSERT_TRUE(ws_server.Start());
-
   ASSERT_TRUE(embedded_test_server()->Start());
 
   // 1) Navigate to a page with multiple WebSocket usage.
@@ -2311,18 +2240,16 @@ IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTest,
   rfh_a->GetBackForwardCacheMetrics()->SetObserverForTesting(this);
   // Open WebSocket connections socketA and socketB, but close socketA
   // immediately..
-  const char scriptA[] = R"(
+  const char kScriptA[] = R"(
     openWebSocketConnectionA($1);
   )";
-  const char scriptB[] = R"(
+  const char kScriptB[] = R"(
     openWebSocketConnectionB($1);
   )";
-  ASSERT_EQ(123, EvalJs(rfh_a.get(),
-                        JsReplace(scriptA,
-                                  ws_server.GetURL("echo-with-no-extension"))));
-  ASSERT_EQ(123, EvalJs(rfh_a.get(),
-                        JsReplace(scriptB,
-                                  ws_server.GetURL("echo-with-no-extension"))));
+  GURL ws_url = net::test_server::GetWebSocketURL(*embedded_test_server(),
+                                                  "/echo-with-no-extension");
+  ASSERT_EQ(123, EvalJs(rfh_a.get(), JsReplace(kScriptA, ws_url)));
+  ASSERT_EQ(123, EvalJs(rfh_a.get(), JsReplace(kScriptB, ws_url)));
   ASSERT_EQ(true, EvalJs(rfh_a.get(), "isSocketAOpen()"));
   ASSERT_EQ(true, EvalJs(rfh_a.get(), "isSocketBOpen()"));
   ASSERT_TRUE(ExecJs(rfh_a.get(), "closeConnection();"));
@@ -2359,9 +2286,6 @@ IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTest,
 #endif
 IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTest,
                        MAYBE_MultipleBlocksFromHTMLFile) {
-  net::SpawnedTestServer ws_server(net::SpawnedTestServer::TYPE_WS,
-                                   net::GetWebSocketTestDataDirectory());
-  ASSERT_TRUE(ws_server.Start());
   ASSERT_TRUE(embedded_test_server()->Start());
 
   // 1) Navigate to a page with multiple WebSocket usage.
@@ -2372,18 +2296,16 @@ IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTest,
 
   RenderFrameHostImplWrapper rfh_a(current_frame_host());
   // Open WebSocket connections.
-  const char scriptA[] = R"(
+  const char kScriptA[] = R"(
     openWebSocketConnectionA($1);
   )";
-  const char scriptB[] = R"(
+  const char kScriptB[] = R"(
     openWebSocketConnectionB($1);
   )";
-  ASSERT_EQ(123, EvalJs(rfh_a.get(),
-                        JsReplace(scriptA,
-                                  ws_server.GetURL("echo-with-no-extension"))));
-  ASSERT_EQ(123, EvalJs(rfh_a.get(),
-                        JsReplace(scriptB,
-                                  ws_server.GetURL("echo-with-no-extension"))));
+  GURL ws_url = net::test_server::GetWebSocketURL(*embedded_test_server(),
+                                                  "/echo-with-no-extension");
+  ASSERT_EQ(123, EvalJs(rfh_a.get(), JsReplace(kScriptA, ws_url)));
+  ASSERT_EQ(123, EvalJs(rfh_a.get(), JsReplace(kScriptB, ws_url)));
   ASSERT_EQ(true, EvalJs(rfh_a.get(), "isSocketAOpen()"));
   ASSERT_EQ(true, EvalJs(rfh_a.get(), "isSocketBOpen()"));
   // Call this to access tree result later.
@@ -2422,9 +2344,6 @@ IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTest,
 #endif
 IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTest,
                        MAYBE_BlockAndUnblockFromHTMLFile) {
-  net::SpawnedTestServer ws_server(net::SpawnedTestServer::TYPE_WS,
-                                   net::GetWebSocketTestDataDirectory());
-  ASSERT_TRUE(ws_server.Start());
   ASSERT_TRUE(embedded_test_server()->Start());
 
   // 1) Navigate to a page with multiple broadcast channel usage.
@@ -2438,18 +2357,16 @@ IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTest,
   rfh_a->GetBackForwardCacheMetrics()->SetObserverForTesting(this);
   // Open WebSocket connections socketA and socketB, but close socketA
   // immediately.
-  const char scriptA[] = R"(
+  const char kScriptA[] = R"(
     openWebSocketConnectionA($1);
   )";
-  const char scriptB[] = R"(
+  const char kScriptB[] = R"(
     openWebSocketConnectionB($1);
   )";
-  ASSERT_EQ(123, EvalJs(rfh_a.get(),
-                        JsReplace(scriptA,
-                                  ws_server.GetURL("echo-with-no-extension"))));
-  ASSERT_EQ(123, EvalJs(rfh_a.get(),
-                        JsReplace(scriptB,
-                                  ws_server.GetURL("echo-with-no-extension"))));
+  GURL ws_url = net::test_server::GetWebSocketURL(*embedded_test_server(),
+                                                  "/echo-with-no-extension");
+  ASSERT_EQ(123, EvalJs(rfh_a.get(), JsReplace(kScriptA, ws_url)));
+  ASSERT_EQ(123, EvalJs(rfh_a.get(), JsReplace(kScriptB, ws_url)));
   ASSERT_EQ(true, EvalJs(rfh_a.get(), "isSocketAOpen()"));
   ASSERT_EQ(true, EvalJs(rfh_a.get(), "isSocketBOpen()"));
   ASSERT_TRUE(ExecJs(rfh_a.get(), "closeConnection();"));
@@ -2485,9 +2402,6 @@ IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTest,
 #endif
 IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTest,
                        MAYBE_StickyFeaturesWithDetails) {
-  net::SpawnedTestServer ws_server(net::SpawnedTestServer::TYPE_WS,
-                                   net::GetWebSocketTestDataDirectory());
-  ASSERT_TRUE(ws_server.Start());
   ASSERT_TRUE(embedded_test_server()->Start());
   GURL url_a_no_store(embedded_test_server()->GetURL(
       "a.com", "/set-header?Cache-Control: no-store"));
@@ -2506,8 +2420,9 @@ IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTest,
         socket.addEventListener('open', () => resolve(42));
       });)";
   ASSERT_EQ(42, EvalJs(rfh_a.get(),
-                       JsReplace(script,
-                                 ws_server.GetURL("echo-with-no-extension"))));
+                       JsReplace(script, net::test_server::GetWebSocketURL(
+                                             *embedded_test_server(),
+                                             "/echo-with-no-extension"))));
 
   // 3) Navigate away to `url_b`.
   ASSERT_TRUE(NavigateToURL(shell(), url_b));
@@ -2863,8 +2778,11 @@ IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTest,
 // Verifies that transactions from a single client/render frame and a dedicated
 // worker belonging to the frame cannot disable BFCache for that client.
 // Regression test for https://crbug.com/343519262.
-IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTest,
-                       IndexedDBClientWithDedicatedWorkerDoesntBlockSelf) {
+//
+// TODO(https://crbug.com/422753550): Reactivate test.
+IN_PROC_BROWSER_TEST_F(
+    BackForwardCacheBrowserTest,
+    DISABLED_IndexedDBClientWithDedicatedWorkerDoesntBlockSelf) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
   // 1) Use IDB and spam transactions.
@@ -3237,10 +3155,6 @@ IN_PROC_BROWSER_TEST_P(BackForwardCacheWithBroadcastChannelTest,
 // Pages with WebSocket should be cached if the connection is closed.
 IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTest,
                        MAYBE_WebSocketCachedIfClosed) {
-  net::SpawnedTestServer ws_server(net::SpawnedTestServer::TYPE_WS,
-                                   net::GetWebSocketTestDataDirectory());
-  ASSERT_TRUE(ws_server.Start());
-
   ASSERT_TRUE(embedded_test_server()->Start());
 
   GURL url_a(embedded_test_server()->GetURL("a.com", "/title1.html"));
@@ -3261,8 +3175,9 @@ IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTest,
         socket.addEventListener('open', () => resolve(42));
       });)";
   ASSERT_EQ(42, EvalJs(rfh_a.get(),
-                       JsReplace(script,
-                                 ws_server.GetURL("echo-with-no-extension"))));
+                       JsReplace(script, net::test_server::GetWebSocketURL(
+                                             *embedded_test_server(),
+                                             "/echo-with-no-extension"))));
 
   // 2) Navigate to B.
   ASSERT_TRUE(NavigateToURL(shell(), url_b));
@@ -3363,10 +3278,6 @@ IN_PROC_BROWSER_TEST_F(WebTransportBackForwardCacheBrowserTest,
 #define MAYBE_WebSocketNotCached WebSocketNotCached
 #endif
 IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTest, MAYBE_WebSocketNotCached) {
-  net::SpawnedTestServer ws_server(net::SpawnedTestServer::TYPE_WS,
-                                   net::GetWebSocketTestDataDirectory());
-  ASSERT_TRUE(ws_server.Start());
-
   ASSERT_TRUE(embedded_test_server()->Start());
 
   GURL url_a(embedded_test_server()->GetURL("a.com", "/title1.html"));
@@ -3383,9 +3294,10 @@ IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTest, MAYBE_WebSocketNotCached) {
         const socket = new WebSocket($1);
         socket.addEventListener('open', () => resolve(42));
       });)";
-  ASSERT_EQ(
-      42, EvalJs(rfh_a, JsReplace(script,
-                                  ws_server.GetURL("echo-with-no-extension"))));
+  ASSERT_EQ(42,
+            EvalJs(rfh_a, JsReplace(script, net::test_server::GetWebSocketURL(
+                                                *embedded_test_server(),
+                                                "/echo-with-no-extension"))));
 
   // 2) Navigate to B.
   ASSERT_TRUE(NavigateToURL(shell(), url_b));
@@ -4482,9 +4394,7 @@ IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTest, VideoSuspendAndResume) {
             EvalJs(rfh_a, "video.testObserverEvents"));
 }
 
-class SensorBackForwardCacheBrowserTest
-    : public BackForwardCacheBrowserTest,
-      public testing::WithParamInterface<bool> {
+class SensorBackForwardCacheBrowserTest : public BackForwardCacheBrowserTest {
  protected:
   SensorBackForwardCacheBrowserTest() {
     WebContentsSensorProviderProxy::OverrideSensorProviderBinderForTesting(
@@ -4503,11 +4413,6 @@ class SensorBackForwardCacheBrowserTest
     provider_->SetAccelerometerData(1.0, 2.0, 3.0);
 
     BackForwardCacheBrowserTest::SetUpOnMainThread();
-  }
-
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    EnableFeatureAndSetParams(features::kAllowSensorsToEnterBfcache, "", "");
-    BackForwardCacheBrowserTest::SetUpCommandLine(command_line);
   }
 
   std::unique_ptr<device::FakeSensorProvider> provider_;

@@ -80,41 +80,22 @@ int ff_mpeg_update_thread_context(AVCodecContext *dst,
 {
     MpegEncContext *const s1 = src->priv_data;
     MpegEncContext *const s  = dst->priv_data;
-    int ret;
+    int ret = 0;
 
     if (dst == src)
         return 0;
 
     av_assert0(s != s1);
 
-    // FIXME can parameters change on I-frames?
-    // in that case dst may need a reinit
-    if (!s->context_initialized) {
-        void *private_ctx = s->private_ctx;
-        int err;
-        memcpy(s, s1, sizeof(*s));
-
-        s->context_initialized   = 0;
-        s->context_reinit        = 0;
-        s->avctx                 = dst;
-        s->private_ctx           = private_ctx;
-
-        if (s1->context_initialized) {
-            if ((err = ff_mpv_common_init(s)) < 0)
-                return err;
-        }
-    }
-
     if (s->height != s1->height || s->width != s1->width || s->context_reinit) {
         s->height = s1->height;
         s->width  = s1->width;
         if ((ret = ff_mpv_common_frame_size_change(s)) < 0)
             return ret;
+        ret = 1;
     }
 
     s->quarter_sample       = s1->quarter_sample;
-
-    s->picture_number       = s1->picture_number;
 
     ff_mpv_replace_picture(&s->cur_pic,  &s1->cur_pic);
     ff_mpv_replace_picture(&s->last_pic, &s1->last_pic);
@@ -125,7 +106,6 @@ int ff_mpeg_update_thread_context(AVCodecContext *dst,
 
     // Error/bug resilience
     s->workaround_bugs      = s1->workaround_bugs;
-    s->padding_bug_score    = s1->padding_bug_score;
 
     // MPEG-4 timing info
     memcpy(&s->last_time_base, &s1->last_time_base,
@@ -139,7 +119,7 @@ int ff_mpeg_update_thread_context(AVCodecContext *dst,
     memcpy(&s->progressive_sequence, &s1->progressive_sequence,
            (char *) &s1->first_field + sizeof(s1->first_field) - (char *) &s1->progressive_sequence);
 
-    return 0;
+    return ret;
 }
 
 av_cold int ff_mpv_decode_close(AVCodecContext *avctx)
@@ -440,13 +420,6 @@ av_cold void ff_mpeg_flush(AVCodecContext *avctx)
 
     s->pp_time = 0;
 }
-
-void ff_mpv_report_decode_progress(MpegEncContext *s)
-{
-    if (s->pict_type != AV_PICTURE_TYPE_B && !s->partitioned_frame && !s->er.error_occurred)
-        ff_thread_progress_report(&s->cur_pic.ptr->progress, s->mb_y);
-}
-
 
 static inline int hpel_motion_lowres(MpegEncContext *s,
                                      uint8_t *dest, const uint8_t *src,
@@ -834,7 +807,7 @@ static inline void MPV_motion_lowres(MpegEncContext *s,
         }
         break;
     default:
-        av_assert2(0);
+        av_unreachable("No other mpegvideo MV types exist");
     }
 }
 
@@ -878,10 +851,10 @@ unhandled:
 
 /* add block[] to dest[] */
 static inline void add_dct(MpegEncContext *s,
-                           int16_t *block, int i, uint8_t *dest, int line_size)
+                           int16_t block[][64], int i, uint8_t *dest, int line_size)
 {
     if (s->block_last_index[i] >= 0) {
-        s->idsp.idct_add(dest, line_size, block);
+        s->idsp.idct_add(dest, line_size, block[i]);
     }
 }
 
@@ -894,12 +867,12 @@ static inline void put_dct(MpegEncContext *s,
 }
 
 static inline void add_dequant_dct(MpegEncContext *s,
-                           int16_t *block, int i, uint8_t *dest, int line_size, int qscale)
+                                   int16_t block[][64], int i, uint8_t *dest, int line_size, int qscale)
 {
     if (s->block_last_index[i] >= 0) {
-        s->dct_unquantize_inter(s, block, i, qscale);
+        s->dct_unquantize_inter(s, block[i], i, qscale);
 
-        s->idsp.idct_add(dest, line_size, block);
+        s->idsp.idct_add(dest, line_size, block[i]);
     }
 }
 
@@ -984,42 +957,46 @@ void mpv_reconstruct_mb_internal(MpegEncContext *s, int16_t block[12][64],
         }
 
         /* add dct residue */
-        if (!(IS_MPEG12_H261(s) || s->msmpeg4_version != MSMP4_UNUSED ||
-              (s->codec_id == AV_CODEC_ID_MPEG4 && !s->mpeg_quant))) {
-            add_dequant_dct(s, block[0], 0, dest_y                          , dct_linesize, s->qscale);
-            add_dequant_dct(s, block[1], 1, dest_y              + block_size, dct_linesize, s->qscale);
-            add_dequant_dct(s, block[2], 2, dest_y + dct_offset             , dct_linesize, s->qscale);
-            add_dequant_dct(s, block[3], 3, dest_y + dct_offset + block_size, dct_linesize, s->qscale);
+        if (is_mpeg12 != DEFINITELY_MPEG12_H261 && s->dct_unquantize_inter) {
+            // H.263, H.263+, H.263I, FLV, RV10, RV20 and MPEG-4 with MPEG-2 quantization
+            add_dequant_dct(s, block, 0, dest_y                          , dct_linesize, s->qscale);
+            add_dequant_dct(s, block, 1, dest_y              + block_size, dct_linesize, s->qscale);
+            add_dequant_dct(s, block, 2, dest_y + dct_offset             , dct_linesize, s->qscale);
+            add_dequant_dct(s, block, 3, dest_y + dct_offset + block_size, dct_linesize, s->qscale);
 
             if (!CONFIG_GRAY || !(s->avctx->flags & AV_CODEC_FLAG_GRAY)) {
                 av_assert2(s->chroma_y_shift);
-                add_dequant_dct(s, block[4], 4, dest_cb, uvlinesize, s->chroma_qscale);
-                add_dequant_dct(s, block[5], 5, dest_cr, uvlinesize, s->chroma_qscale);
+                add_dequant_dct(s, block, 4, dest_cb, uvlinesize, s->chroma_qscale);
+                add_dequant_dct(s, block, 5, dest_cr, uvlinesize, s->chroma_qscale);
             }
         } else if (is_mpeg12 == DEFINITELY_MPEG12_H261 || lowres_flag || (s->codec_id != AV_CODEC_ID_WMV2)) {
-            add_dct(s, block[0], 0, dest_y                          , dct_linesize);
-            add_dct(s, block[1], 1, dest_y              + block_size, dct_linesize);
-            add_dct(s, block[2], 2, dest_y + dct_offset             , dct_linesize);
-            add_dct(s, block[3], 3, dest_y + dct_offset + block_size, dct_linesize);
+            // H.261, MPEG-1, MPEG-2, MPEG-4 with H.263 quantization,
+            // MSMP4V1-3 and WMV1.
+            // Also RV30, RV40 and the VC-1 family when performing error resilience,
+            // but all blocks are skipped in this case.
+            add_dct(s, block, 0, dest_y                          , dct_linesize);
+            add_dct(s, block, 1, dest_y              + block_size, dct_linesize);
+            add_dct(s, block, 2, dest_y + dct_offset             , dct_linesize);
+            add_dct(s, block, 3, dest_y + dct_offset + block_size, dct_linesize);
 
             if (!CONFIG_GRAY || !(s->avctx->flags & AV_CODEC_FLAG_GRAY)) {
                 if (s->chroma_y_shift) {//Chroma420
-                    add_dct(s, block[4], 4, dest_cb, uvlinesize);
-                    add_dct(s, block[5], 5, dest_cr, uvlinesize);
+                    add_dct(s, block, 4, dest_cb, uvlinesize);
+                    add_dct(s, block, 5, dest_cr, uvlinesize);
                 } else {
                     //chroma422
                     dct_linesize = uvlinesize << s->interlaced_dct;
                     dct_offset   = s->interlaced_dct ? uvlinesize : uvlinesize*block_size;
 
-                    add_dct(s, block[4], 4, dest_cb, dct_linesize);
-                    add_dct(s, block[5], 5, dest_cr, dct_linesize);
-                    add_dct(s, block[6], 6, dest_cb + dct_offset, dct_linesize);
-                    add_dct(s, block[7], 7, dest_cr + dct_offset, dct_linesize);
+                    add_dct(s, block, 4, dest_cb, dct_linesize);
+                    add_dct(s, block, 5, dest_cr, dct_linesize);
+                    add_dct(s, block, 6, dest_cb + dct_offset, dct_linesize);
+                    add_dct(s, block, 7, dest_cr + dct_offset, dct_linesize);
                     if (!s->chroma_x_shift) {//Chroma444
-                        add_dct(s, block[8],   8, dest_cb + block_size, dct_linesize);
-                        add_dct(s, block[9],   9, dest_cr + block_size, dct_linesize);
-                        add_dct(s, block[10], 10, dest_cb + block_size + dct_offset, dct_linesize);
-                        add_dct(s, block[11], 11, dest_cr + block_size + dct_offset, dct_linesize);
+                        add_dct(s, block,  8, dest_cb + block_size, dct_linesize);
+                        add_dct(s, block,  9, dest_cr + block_size, dct_linesize);
+                        add_dct(s, block, 10, dest_cb + block_size + dct_offset, dct_linesize);
+                        add_dct(s, block, 11, dest_cr + block_size + dct_offset, dct_linesize);
                     }
                 }
             } //fi gray
@@ -1084,7 +1061,26 @@ void mpv_reconstruct_mb_internal(MpegEncContext *s, int16_t block[12][64],
     }
 }
 
-void ff_mpv_reconstruct_mb(MpegEncContext *s, int16_t block[12][64])
+static av_cold void debug_dct_coeffs(MPVContext *s, const int16_t block[][64])
+{
+    if (!block) // happens when called via error resilience
+        return;
+
+    void *const logctx = s->avctx;
+    const uint8_t *const idct_permutation = s->idsp.idct_permutation;
+
+    /* print DCT coefficients */
+    av_log(logctx, AV_LOG_DEBUG, "DCT coeffs of MB at %dx%d:\n", s->mb_x, s->mb_y);
+    for (int i = 0; i < 6; i++) {
+        for (int j = 0; j < 64; j++) {
+            av_log(logctx, AV_LOG_DEBUG, "%5d",
+                   block[i][idct_permutation[j]]);
+        }
+        av_log(logctx, AV_LOG_DEBUG, "\n");
+    }
+}
+
+void ff_mpv_reconstruct_mb(MPVContext *s, int16_t block[][64])
 {
     const int mb_xy = s->mb_y * s->mb_stride + s->mb_x;
     uint8_t *mbskip_ptr = &s->mbskip_table[mb_xy];
@@ -1102,17 +1098,8 @@ void ff_mpv_reconstruct_mb(MpegEncContext *s, int16_t block[12][64])
         *mbskip_ptr = 0; /* not skipped */
     }
 
-    if (s->avctx->debug & FF_DEBUG_DCT_COEFF) {
-       /* print DCT coefficients */
-       av_log(s->avctx, AV_LOG_DEBUG, "DCT coeffs of MB at %dx%d:\n", s->mb_x, s->mb_y);
-       for (int i = 0; i < 6; i++) {
-           for (int j = 0; j < 64; j++) {
-               av_log(s->avctx, AV_LOG_DEBUG, "%5d",
-                      block[i][s->idsp.idct_permutation[j]]);
-           }
-           av_log(s->avctx, AV_LOG_DEBUG, "\n");
-       }
-    }
+    if (s->avctx->debug & FF_DEBUG_DCT_COEFF)
+        debug_dct_coeffs(s, block);
 
     av_assert2((s->out_format <= FMT_H261) == (s->out_format == FMT_H261 || s->out_format == FMT_MPEG1));
     if (!s->avctx->lowres) {

@@ -157,24 +157,6 @@ if (is_ios) {
     ]
   }
 
-  if (ios_enable_content_widget_extension) {
-    update_template_instance("//ios/chrome/content_widget_extension/appex:entitlements") {
-      entitlements_templates -= [ "entitlements/external/content_widget_extension.appex.entitlements" ]
-      entitlements_templates += [
-        "//vivaldi/ios/app/entitlements/content_widget_extension.appex.entitlements",
-      ]
-    }
-  }
-
-  if (ios_enable_search_widget_extension) {
-    update_template_instance("//ios/chrome/search_widget_extension/appex:entitlements") {
-      entitlements_templates -= [ "entitlements/external/search_widget_extension.appex.entitlements" ]
-      entitlements_templates += [
-        "//vivaldi/ios/app/entitlements/search_widget_extension.appex.entitlements",
-      ]
-    }
-  }
-
   update_template_instance("//ios/chrome/widget_kit_extension/appex:entitlements") {
     entitlements_templates -= [ "entitlements/external/widget_kit_extension.appex.entitlements" ]
     entitlements_templates += [

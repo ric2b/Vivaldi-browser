@@ -244,10 +244,6 @@
           "memoryUsage": {
             "type": "integer",
             "description": "Memory usage of tab in bytes."
-          },
-          "discarded": {
-            "type": "boolean",
-            "description": "If true |memoryUsage| will be saved memory."
           }
         }
       },
@@ -616,28 +612,22 @@
       {
         "name": "getTabPerformanceData",
         "type": "function",
-        "description": "Look up performance data about tabs. We might migrate to TabRendererData instead.",
+        "description": "Look up performance data about tab. We might migrate to TabRendererData instead.",
         "parameters": [
           {
-            "name": "tabIds",
-            "type": "array",
-            "items": {
-              "name": "tabId",
-              "type": "integer",
-              "minimum": 0
-            },
-            "description": "Ids for tabs we want info about."
+            "name": "tabId",
+            "type": "integer",
+            "description": "Id for tab we want info about.",
+            "minimum": 0
           }
         ],
         "returns_async": {
           "name": "callback",
           "parameters": [
             {
-              "name": "performanceData",
-              "type": "array",
-              "items": {
-                "$ref": "TabPerformanceData"
-              }
+              "name": "memoryUsage",
+              "type": "integer",
+              "description": "Memory usage of tab in bytes."
             }
           ]
         }

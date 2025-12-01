@@ -82,6 +82,15 @@ void I444ToARGBRow_SVE2(const uint8_t* src_y,
       : "cc", "memory", YUVTORGB_SVE_REGS);
 }
 
+void I444ToRGB24Row_SVE2(const uint8_t* src_y,
+                         const uint8_t* src_u,
+                         const uint8_t* src_v,
+                         uint8_t* dst_rgb24,
+                         const struct YuvConstants* yuvconstants,
+                         int width) {
+  I444ToRGB24Row_SVE_SC(src_y, src_u, src_v, dst_rgb24, yuvconstants, width);
+}
+
 void I400ToARGBRow_SVE2(const uint8_t* src_y,
                         uint8_t* dst_argb,
                         const struct YuvConstants* yuvconstants,
@@ -145,6 +154,15 @@ void I422ToRGBARow_SVE2(const uint8_t* src_y,
   I422ToRGBARow_SVE_SC(src_y, src_u, src_v, dst_argb, yuvconstants, width);
 }
 
+void I422ToAR30Row_SVE2(const uint8_t* src_y,
+                        const uint8_t* src_u,
+                        const uint8_t* src_v,
+                        uint8_t* dst_argb,
+                        const struct YuvConstants* yuvconstants,
+                        int width) {
+  I422ToAR30Row_SVE_SC(src_y, src_u, src_v, dst_argb, yuvconstants, width);
+}
+
 void I422AlphaToARGBRow_SVE2(const uint8_t* src_y,
                              const uint8_t* src_u,
                              const uint8_t* src_v,
@@ -199,219 +217,13 @@ void NV21ToRGB24Row_SVE2(const uint8_t* src_y,
   NV21ToRGB24Row_SVE_SC(src_y, src_vu, dst_rgb24, yuvconstants, width);
 }
 
-// Dot-product constants are stored as four-tuples with the two innermost
-// elements flipped to account for the interleaving nature of the widening
-// addition instructions.
-
-// RGB to BT601 coefficients
-// UB   0.875 coefficient = 112
-// UG -0.5781 coefficient = -74
-// UR -0.2969 coefficient = -38
-// VB -0.1406 coefficient = -18
-// VG -0.7344 coefficient = -94
-// VR   0.875 coefficient = 112
-
-// SVE constants are not negated
-static const int16_t kARGBToUVCoefficients[] = {
-    // UB, -UR, -UG, 0, -VB, VR, -VG, 0
-    112, -38, -74, 0, -18, 112, -94, 0,
-};
-
-static const int16_t kRGBAToUVCoefficients[] = {
-    // 0, -UG, UB, -UR, 0, -VG, -VB, VR
-    0, -74, 112, -38, 0, -94, -18, 112,
-};
-
-static const int16_t kBGRAToUVCoefficients[] = {
-    // 0, -UG, -UR, UB, 0, -VG, VR, -VB
-    0, -74, -38, 112, 0, -94, 112, -18,
-};
-
-static const int16_t kABGRToUVCoefficients[] = {
-    // -UR, UB, -UG, 0, VR, -VB, -VG, 0
-    -38, 112, -74, 0, 112, -18, -94, 0,
-};
-
-// RGB to JPEG coefficients
-// UB  0.500    coefficient = 128
-// UG -0.33126  coefficient = -85
-// UR -0.16874  coefficient = -43
-// VB -0.08131  coefficient = -21
-// VG -0.41869  coefficient = -107
-// VR 0.500     coefficient = 128
-
-static const int16_t kARGBToUVJCoefficients[] = {
-    // UB, -UR, -UG, 0, -VB, VR, -VG, 0
-    128, -43, -85, 0, -21, 128, -107, 0,
-};
-
-static const int16_t kABGRToUVJCoefficients[] = {
-    // -UR, UB, -UG, 0, VR, -VB, -VG, 0
-    -43, 128, -85, 0, 128, -21, -107, 0,
-};
-
-static void ARGBToUVMatrixRow_SVE2(const uint8_t* src_argb,
-                                   int src_stride_argb,
-                                   uint8_t* dst_u,
-                                   uint8_t* dst_v,
-                                   int width,
-                                   const int16_t* uvconstants) {
-  const uint8_t* src_argb_1 = src_argb + src_stride_argb;
-  uint64_t vl;
-  asm volatile(
-      "ptrue    p0.b                                \n"
-      "ld1rd    {z24.d}, p0/z, [%[uvconstants]]     \n"
-      "ld1rd    {z25.d}, p0/z, [%[uvconstants], #8] \n"
-      "mov      z26.h, #0x8000                      \n"  // 128.0 (0x8000)
-      "cntb     %[vl]                               \n"
-      "subs     %w[width], %w[width], %w[vl]        \n"
-      "b.lt     2f                                  \n"
-
-      // Process 4x vectors from each input row per iteration.
-      // Cannot use predication here due to unrolling.
-      "1:                                           \n"  // e.g.
-      "ld1b     {z0.b}, p0/z, [%[src0], #0, mul vl] \n"  // bgrabgra
-      "ld1b     {z4.b}, p0/z, [%[src1], #0, mul vl] \n"  // bgrabgra
-      "ld1b     {z1.b}, p0/z, [%[src0], #1, mul vl] \n"  // bgrabgra
-      "ld1b     {z5.b}, p0/z, [%[src1], #1, mul vl] \n"  // bgrabgra
-      "ld1b     {z2.b}, p0/z, [%[src0], #2, mul vl] \n"  // bgrabgra
-      "ld1b     {z6.b}, p0/z, [%[src1], #2, mul vl] \n"  // bgrabgra
-      "ld1b     {z3.b}, p0/z, [%[src0], #3, mul vl] \n"  // bgrabgra
-      "ld1b     {z7.b}, p0/z, [%[src1], #3, mul vl] \n"  // bgrabgra
-      "incb     %[src0], all, mul #4                \n"
-      "incb     %[src1], all, mul #4                \n"
-
-      "uaddlb   z16.h, z0.b, z4.b                   \n"  // brbrbrbr
-      "uaddlt   z17.h, z0.b, z4.b                   \n"  // gagagaga
-      "uaddlb   z18.h, z1.b, z5.b                   \n"  // brbrbrbr
-      "uaddlt   z19.h, z1.b, z5.b                   \n"  // gagagaga
-      "uaddlb   z20.h, z2.b, z6.b                   \n"  // brbrbrbr
-      "uaddlt   z21.h, z2.b, z6.b                   \n"  // gagagaga
-      "uaddlb   z22.h, z3.b, z7.b                   \n"  // brbrbrbr
-      "uaddlt   z23.h, z3.b, z7.b                   \n"  // gagagaga
-
-      "trn1     z0.s, z16.s, z17.s                  \n"  // brgabgra
-      "trn2     z1.s, z16.s, z17.s                  \n"  // brgabgra
-      "trn1     z2.s, z18.s, z19.s                  \n"  // brgabgra
-      "trn2     z3.s, z18.s, z19.s                  \n"  // brgabgra
-      "trn1     z4.s, z20.s, z21.s                  \n"  // brgabgra
-      "trn2     z5.s, z20.s, z21.s                  \n"  // brgabgra
-      "trn1     z6.s, z22.s, z23.s                  \n"  // brgabgra
-      "trn2     z7.s, z22.s, z23.s                  \n"  // brgabgra
-
-      "subs     %w[width], %w[width], %w[vl]        \n"  // 4*VL per loop
-
-      "add      z0.h, p0/m, z0.h, z1.h              \n"  // brgabrga
-      "add      z2.h, p0/m, z2.h, z3.h              \n"  // brgabrga
-      "add      z4.h, p0/m, z4.h, z5.h              \n"  // brgabrga
-      "add      z6.h, p0/m, z6.h, z7.h              \n"  // brgabrga
-
-      "urshr    z0.h, p0/m, z0.h, #2                \n"  // brgabrga
-      "urshr    z2.h, p0/m, z2.h, #2                \n"  // brgabrga
-      "urshr    z4.h, p0/m, z4.h, #2                \n"  // brgabrga
-      "urshr    z6.h, p0/m, z6.h, #2                \n"  // brgabrga
-
-      "movi     v16.8h, #0                          \n"
-      "movi     v17.8h, #0                          \n"
-      "movi     v18.8h, #0                          \n"
-      "movi     v19.8h, #0                          \n"
-
-      "movi     v20.8h, #0                          \n"
-      "movi     v21.8h, #0                          \n"
-      "movi     v22.8h, #0                          \n"
-      "movi     v23.8h, #0                          \n"
-
-      "sdot     z16.d, z0.h, z24.h                  \n"  // UUxxxxxx
-      "sdot     z17.d, z2.h, z24.h                  \n"  // UUxxxxxx
-      "sdot     z18.d, z4.h, z24.h                  \n"  // UUxxxxxx
-      "sdot     z19.d, z6.h, z24.h                  \n"  // UUxxxxxx
-
-      "sdot     z20.d, z0.h, z25.h                  \n"  // VVxxxxxx
-      "sdot     z21.d, z2.h, z25.h                  \n"  // VVxxxxxx
-      "sdot     z22.d, z4.h, z25.h                  \n"  // VVxxxxxx
-      "sdot     z23.d, z6.h, z25.h                  \n"  // VVxxxxxx
-
-      "uzp1     z16.s, z16.s, z17.s                 \n"  // UUxx
-      "uzp1     z18.s, z18.s, z19.s                 \n"  // UUxx
-      "uzp1     z20.s, z20.s, z21.s                 \n"  // VVxx
-      "uzp1     z22.s, z22.s, z23.s                 \n"  // VVxx
-
-      "uzp1     z16.h, z16.h, z18.h                 \n"  // UU
-      "uzp1     z20.h, z20.h, z22.h                 \n"  // VV
-
-      "addhnb   z16.b, z16.h, z26.h                 \n"  // U
-      "addhnb   z20.b, z20.h, z26.h                 \n"  // V
-
-      "st1b     {z16.h}, p0, [%[dst_u]]             \n"  // U
-      "st1b     {z20.h}, p0, [%[dst_v]]             \n"  // V
-      "inch     %[dst_u]                            \n"
-      "inch     %[dst_v]                            \n"
-
-      "b.ge     1b                                  \n"
-
-      "2:                                           \n"
-      "adds     %w[width], %w[width], %w[vl]        \n"  // VL per loop
-      "b.le     99f                                 \n"
-
-      // Process remaining pixels from each input row.
-      // Use predication to do one vector from each input array, so may loop up
-      // to three iterations.
-      "cntw     %x[vl]                              \n"
-
-      "3:                                           \n"
-      "whilelt  p1.s, wzr, %w[width]                \n"
-      "ld1d     {z0.d}, p1/z, [%[src0]]             \n"  // bgrabgra
-      "ld1d     {z4.d}, p1/z, [%[src1]]             \n"  // bgrabgra
-      "incb     %[src0]                             \n"
-      "incb     %[src1]                             \n"
-
-      "uaddlb   z16.h, z0.b, z4.b                   \n"  // brbrbrbr
-      "uaddlt   z17.h, z0.b, z4.b                   \n"  // gagagaga
-
-      "trn1     z0.s, z16.s, z17.s                  \n"  // brgabgra
-      "trn2     z1.s, z16.s, z17.s                  \n"  // brgabgra
-
-      "add      z0.h, p0/m, z0.h, z1.h              \n"  // brgabrga
-
-      "urshr    z0.h, p0/m, z0.h, #2                \n"  // brgabrga
-
-      "subs     %w[width], %w[width], %w[vl]        \n"  // VL per loop
-
-      "movi     v16.8h, #0                          \n"
-      "movi     v20.8h, #0                          \n"
-
-      "sdot     z16.d, z0.h, z24.h                  \n"
-      "sdot     z20.d, z0.h, z25.h                  \n"
-
-      "addhnb   z16.b, z16.h, z26.h                 \n"  // U
-      "addhnb   z20.b, z20.h, z26.h                 \n"  // V
-
-      "st1b     {z16.d}, p0, [%[dst_u]]             \n"  // U
-      "st1b     {z20.d}, p0, [%[dst_v]]             \n"  // V
-      "incd     %[dst_u]                            \n"
-      "incd     %[dst_v]                            \n"
-      "b.gt     3b                                  \n"
-
-      "99:                                          \n"
-      : [src0] "+r"(src_argb),    // %[src0]
-        [src1] "+r"(src_argb_1),  // %[src1]
-        [dst_u] "+r"(dst_u),      // %[dst_u]
-        [dst_v] "+r"(dst_v),      // %[dst_v]
-        [width] "+r"(width),      // %[width]
-        [vl] "=&r"(vl)            // %[vl]
-      : [uvconstants] "r"(uvconstants)
-      : "cc", "memory", "z0", "z1", "z2", "z3", "z4", "z5", "z6", "z7", "z16",
-        "z17", "z18", "z19", "z20", "z21", "z22", "z23", "z24", "z25", "z26",
-        "p0");
-}
-
 void ARGBToUVRow_SVE2(const uint8_t* src_argb,
                       int src_stride_argb,
                       uint8_t* dst_u,
                       uint8_t* dst_v,
                       int width) {
-  ARGBToUVMatrixRow_SVE2(src_argb, src_stride_argb, dst_u, dst_v, width,
-                         kARGBToUVCoefficients);
+  ARGBToUVMatrixRow_SVE_SC(src_argb, src_stride_argb, dst_u, dst_v, width,
+                           kARGBToUVCoefficients);
 }
 
 void ARGBToUVJRow_SVE2(const uint8_t* src_argb,
@@ -419,8 +231,8 @@ void ARGBToUVJRow_SVE2(const uint8_t* src_argb,
                        uint8_t* dst_u,
                        uint8_t* dst_v,
                        int width) {
-  ARGBToUVMatrixRow_SVE2(src_argb, src_stride_argb, dst_u, dst_v, width,
-                         kARGBToUVJCoefficients);
+  ARGBToUVMatrixRow_SVE_SC(src_argb, src_stride_argb, dst_u, dst_v, width,
+                           kARGBToUVJCoefficients);
 }
 
 void ABGRToUVJRow_SVE2(const uint8_t* src_abgr,
@@ -428,8 +240,8 @@ void ABGRToUVJRow_SVE2(const uint8_t* src_abgr,
                        uint8_t* dst_uj,
                        uint8_t* dst_vj,
                        int width) {
-  ARGBToUVMatrixRow_SVE2(src_abgr, src_stride_abgr, dst_uj, dst_vj, width,
-                         kABGRToUVJCoefficients);
+  ARGBToUVMatrixRow_SVE_SC(src_abgr, src_stride_abgr, dst_uj, dst_vj, width,
+                           kABGRToUVJCoefficients);
 }
 
 void BGRAToUVRow_SVE2(const uint8_t* src_bgra,
@@ -437,8 +249,8 @@ void BGRAToUVRow_SVE2(const uint8_t* src_bgra,
                       uint8_t* dst_u,
                       uint8_t* dst_v,
                       int width) {
-  ARGBToUVMatrixRow_SVE2(src_bgra, src_stride_bgra, dst_u, dst_v, width,
-                         kBGRAToUVCoefficients);
+  ARGBToUVMatrixRow_SVE_SC(src_bgra, src_stride_bgra, dst_u, dst_v, width,
+                           kBGRAToUVCoefficients);
 }
 
 void ABGRToUVRow_SVE2(const uint8_t* src_abgr,
@@ -446,8 +258,8 @@ void ABGRToUVRow_SVE2(const uint8_t* src_abgr,
                       uint8_t* dst_u,
                       uint8_t* dst_v,
                       int width) {
-  ARGBToUVMatrixRow_SVE2(src_abgr, src_stride_abgr, dst_u, dst_v, width,
-                         kABGRToUVCoefficients);
+  ARGBToUVMatrixRow_SVE_SC(src_abgr, src_stride_abgr, dst_u, dst_v, width,
+                           kABGRToUVCoefficients);
 }
 
 void RGBAToUVRow_SVE2(const uint8_t* src_rgba,
@@ -455,8 +267,8 @@ void RGBAToUVRow_SVE2(const uint8_t* src_rgba,
                       uint8_t* dst_u,
                       uint8_t* dst_v,
                       int width) {
-  ARGBToUVMatrixRow_SVE2(src_rgba, src_stride_rgba, dst_u, dst_v, width,
-                         kRGBAToUVCoefficients);
+  ARGBToUVMatrixRow_SVE_SC(src_rgba, src_stride_rgba, dst_u, dst_v, width,
+                           kRGBAToUVCoefficients);
 }
 
 #define ARGBTORGB565_SVE                    \

@@ -14,18 +14,22 @@
 
 #include "internal/platform/implementation/g3/preferences_manager.h"
 
-#include <filesystem>  // NOLINT(build/c++17)
+#include <cstdint>
 #include <memory>
-#include <optional>
 #include <ostream>
 #include <string>
 #include <vector>
 
+#include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
+#include "absl/synchronization/mutex.h"
+#include "absl/time/time.h"
+#include "absl/types/span.h"
 #include "nlohmann/json.hpp"
 #include "nlohmann/json_fwd.hpp"
-#include "internal/platform/implementation/g3/device_info.h"
+#include "internal/platform/device_info_impl.h"
 #include "internal/platform/implementation/g3/preferences_repository.h"
+#include "internal/platform/implementation/preferences_manager.h"
 #include "internal/platform/logging.h"
 
 namespace nearby {
@@ -34,18 +38,9 @@ namespace {
 using json = ::nlohmann::json;
 }  // namespace
 
-PreferencesManager::PreferencesManager(absl::string_view file_path)
-    : api::PreferencesManager(file_path) {
-  auto device_info = std::make_unique<g3::DeviceInfo>();
-  std::optional<std::filesystem::path> path =
-      device_info->GetLocalAppDataPath();
-  if (!path.has_value()) {
-    path = std::filesystem::temp_directory_path();
-  }
-
-  std::filesystem::path full_path = *path / std::string(file_path);
-  preferences_repository_ =
-      std::make_unique<PreferencesRepository>(full_path.string());
+PreferencesManager::PreferencesManager() {
+  auto device_info = std::make_unique<DeviceInfoImpl>();
+  preferences_repository_ = std::make_unique<PreferencesRepository>();
   value_ = preferences_repository_->LoadPreferences();
 }
 
@@ -188,7 +183,7 @@ void PreferencesManager::Remove(absl::string_view key) {
 // Writes data to storage.
 bool PreferencesManager::Commit() {
   if (!preferences_repository_->SavePreferences(value_)) {
-    NEARBY_LOGS(ERROR) << "Failed to save preference." << std::endl;
+    LOG(ERROR) << "Failed to save preference." << std::endl;
     return false;
   }
   return true;

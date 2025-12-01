@@ -18,6 +18,7 @@
 #include "components/datasource/vivaldi_data_url_utils.h"
 
 #include "components/signature/vivaldi_signature.h"
+#include "chrome/browser/profiles/nuke_profile_directory_utils.h"
 #include "net/base/load_flags.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "services/network/public/cpp/resource_request.h"

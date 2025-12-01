@@ -34,6 +34,16 @@ namespace {
 
 class SizedBindingArrayTests : public DawnTest {
   public:
+    void SetUp() override {
+        DawnTest::SetUp();
+
+        // TODO(https://issues.chromium.org/411573959) Fails using WARP but not on real hardware.
+        // WARP 10.0.19031.4355 samples the wrong textures when indexing while WARP 1.0.12.0 fails
+        // pipeline creation.
+        DAWN_SUPPRESS_TEST_IF(IsD3D12() && IsWARP());
+    }
+
+    // A 1x1 texture with a single value to check the correct binding is used.
     wgpu::Texture MakeTestR8Texture(uint8_t value) {
         wgpu::TextureDescriptor desc;
         desc.size = {1, 1};
@@ -45,6 +55,23 @@ class SizedBindingArrayTests : public DawnTest {
         wgpu::TexelCopyBufferLayout dstInfo = {};
         wgpu::Extent3D copySize = {1, 1, 1};
         queue.WriteTexture(&srcInfo, &value, 1, &dstInfo, &copySize);
+
+        return texture;
+    }
+
+    // Test textures that can be used that samplers correctly clamp or wrap.
+    wgpu::Texture MakeTest2x1R8Texture(uint8_t left, uint8_t right) {
+        wgpu::TextureDescriptor desc;
+        desc.size = {2, 1};
+        desc.usage = wgpu::TextureUsage::CopyDst | wgpu::TextureUsage::TextureBinding;
+        desc.format = wgpu::TextureFormat::R8Unorm;
+        wgpu::Texture texture = device.CreateTexture(&desc);
+
+        wgpu::TexelCopyTextureInfo srcInfo = utils::CreateTexelCopyTextureInfo(texture);
+        wgpu::TexelCopyBufferLayout dstInfo = {};
+        wgpu::Extent3D copySize = {2, 1, 1};
+        std::array<uint8_t, 2> data = {left, right};
+        queue.WriteTexture(&srcInfo, &data, sizeof(data), &dstInfo, &copySize);
 
         return texture;
     }
@@ -103,6 +130,14 @@ TEST_P(SizedBindingArrayTests, IndexingWithConstants) {
 
 // Test accessing a binding_array with dynamically uniform values.
 TEST_P(SizedBindingArrayTests, IndexingWithDynamicallyUniformValues) {
+    // Compat should disallow dynamically uniform indexing of binding_array of textures.
+    DAWN_TEST_UNSUPPORTED_IF(IsCompatibilityMode());
+
+    // TODO(https://issues.chromium.org/425328998): D3D11 exposes core when FXC cannot support
+    // core's uniform indexing of binding_array<texture*>. We should make D3D11 expose only compat
+    // by default.
+    DAWN_SUPPRESS_TEST_IF(IsD3D11());
+
     // Make the test pipeline
     wgpu::ShaderModule module = utils::CreateShaderModule(device, R"(
         @vertex fn vs() -> @builtin(position) vec4f {
@@ -192,7 +227,7 @@ TEST_P(SizedBindingArrayTests, ArrayEntryOversizedAndSurrounded) {
 
         @group(0) @binding(0) var t0 : texture_2d<f32>;
         // Note that the layout will contain one extra entry using @binding(3)
-        @group(0) @binding(1) var ts : binding_array<texture_2d<f32>, 3>;
+        @group(0) @binding(1) var ts : binding_array<texture_2d<f32>, 2>;
         @group(0) @binding(4) var t3 : texture_2d<f32>;
         @fragment fn fs() -> @location(0) vec4f {
             let r = textureLoad(t0, vec2(0, 0), 0)[0];
@@ -346,7 +381,252 @@ TEST_P(SizedBindingArrayTests, BindingArraySize1CompatibleWithNonArrayedBGL) {
     EXPECT_PIXEL_RGBA8_EQ(utils::RGBA8(42, 0, 0, 0), rp.color, 0, 0);
 }
 
-DAWN_INSTANTIATE_TEST(SizedBindingArrayTests, MetalBackend(), VulkanBackend());
+// Test passing sampled textures of binding_array as function arguments.
+TEST_P(SizedBindingArrayTests, BindingArraySampledTextureAsFunctionArgument) {
+    // TODO(https://issues.chromium.org/411573957) OgenGL requires that indices in arrays of sampler
+    // be constants but even after the DirectVariableAccess transform, the index is a function
+    // parameter (that's constant at the callsite) and not a constant.
+    DAWN_SUPPRESS_TEST_IF(IsOpenGL() || IsOpenGLES());
+
+    // Make the test pipeline
+    wgpu::ShaderModule module = utils::CreateShaderModule(device, R"(
+        @vertex fn vs() -> @builtin(position) vec4f {
+            return vec4f(0, 0, 0.5, 0.5);
+        }
+
+        fn load(t : texture_2d<f32>) -> f32 {
+            return textureLoad(t, vec2(0, 0), 0)[0];
+        }
+
+        @group(0) @binding(0) var ts : binding_array<texture_2d<f32>, 4>;
+        @fragment fn fs() -> @location(0) vec4f {
+            let r = load(ts[0]);
+            let g = load(ts[1]);
+            let b = load(ts[2]);
+            let a = load(ts[3]);
+            return vec4(r, g, b, a);
+        }
+    )");
+
+    utils::ComboRenderPipelineDescriptor pDesc;
+    pDesc.vertex.module = module;
+    pDesc.cFragment.module = module;
+    pDesc.cFragment.targetCount = 1;
+    pDesc.cTargets[0].format = wgpu::TextureFormat::RGBA8Unorm;
+    pDesc.primitive.topology = wgpu::PrimitiveTopology::PointList;
+    wgpu::RenderPipeline testPipeline = device.CreateRenderPipeline(&pDesc);
+
+    // Create a bind group with textures of decreasing values
+    wgpu::BindGroup arrayGroup = utils::MakeBindGroup(device, testPipeline.GetBindGroupLayout(0),
+                                                      {
+                                                          {3, MakeTestR8Texture(0).CreateView()},
+                                                          {2, MakeTestR8Texture(1).CreateView()},
+                                                          {1, MakeTestR8Texture(2).CreateView()},
+                                                          {0, MakeTestR8Texture(3).CreateView()},
+                                                      });
+
+    // Run the test
+    auto rp = utils::CreateBasicRenderPass(device, 1, 1);
+    wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
+    wgpu::RenderPassEncoder pass = encoder.BeginRenderPass(&rp.renderPassInfo);
+
+    pass.SetPipeline(testPipeline);
+    pass.SetBindGroup(0, arrayGroup);
+    pass.Draw(1);
+    pass.End();
+
+    wgpu::CommandBuffer commands = encoder.Finish();
+    queue.Submit(1, &commands);
+
+    EXPECT_PIXEL_RGBA8_EQ(utils::RGBA8(3, 2, 1, 0), rp.color, 0, 0);
+}
+
+// Test accessing a binding_array of sampled textures passed as function argument.
+TEST_P(SizedBindingArrayTests, BindingArrayOfSampledTexturesPassedAsArgument) {
+    // Crashes on the Intel Windows Vulkan shader compiler.
+    DAWN_SUPPRESS_TEST_IF(IsVulkan() && IsWindows() && IsIntel());
+
+    // Make the test pipeline
+    wgpu::ShaderModule module = utils::CreateShaderModule(device, R"(
+        @vertex fn vs() -> @builtin(position) vec4f {
+            return vec4f(0, 0, 0.5, 0.5);
+        }
+
+        @group(0) @binding(0) var ts : binding_array<texture_2d<f32>, 4>;
+        fn f(textures : binding_array<texture_2d<f32>, 4>) -> vec4f {
+            let r = textureLoad(textures[0], vec2(0, 0), 0)[0];
+            let g = textureLoad(textures[1], vec2(0, 0), 0)[0];
+            let b = textureLoad(textures[2], vec2(0, 0), 0)[0];
+            let a = textureLoad(textures[3], vec2(0, 0), 0)[0];
+            return vec4(r, g, b, a);
+        }
+
+        @fragment fn fs() -> @location(0) vec4f {
+            return f(ts);
+        }
+    )");
+
+    utils::ComboRenderPipelineDescriptor pDesc;
+    pDesc.vertex.module = module;
+    pDesc.cFragment.module = module;
+    pDesc.cFragment.targetCount = 1;
+    pDesc.cTargets[0].format = wgpu::TextureFormat::RGBA8Unorm;
+    pDesc.primitive.topology = wgpu::PrimitiveTopology::PointList;
+    wgpu::RenderPipeline testPipeline = device.CreateRenderPipeline(&pDesc);
+
+    // Create a bind group with textures of decreasing values
+    wgpu::BindGroup arrayGroup = utils::MakeBindGroup(device, testPipeline.GetBindGroupLayout(0),
+                                                      {
+                                                          {3, MakeTestR8Texture(0).CreateView()},
+                                                          {2, MakeTestR8Texture(1).CreateView()},
+                                                          {1, MakeTestR8Texture(2).CreateView()},
+                                                          {0, MakeTestR8Texture(3).CreateView()},
+                                                      });
+
+    // Run the test
+    auto rp = utils::CreateBasicRenderPass(device, 1, 1);
+    wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
+    wgpu::RenderPassEncoder pass = encoder.BeginRenderPass(&rp.renderPassInfo);
+
+    pass.SetPipeline(testPipeline);
+    pass.SetBindGroup(0, arrayGroup);
+    pass.Draw(1);
+    pass.End();
+
+    wgpu::CommandBuffer commands = encoder.Finish();
+    queue.Submit(1, &commands);
+
+    EXPECT_PIXEL_RGBA8_EQ(utils::RGBA8(3, 2, 1, 0), rp.color, 0, 0);
+}
+
+// Test that multiple texture and sampler combinations are handled correctly (in particular on GL).
+TEST_P(SizedBindingArrayTests, TextureAndSamplerCombination) {
+    // Make the test pipeline
+    wgpu::ShaderModule module = utils::CreateShaderModule(device, R"(
+        @vertex fn vs() -> @builtin(position) vec4f {
+            return vec4f(0, 0, 0.5, 0.5);
+        }
+
+        @group(0) @binding(0) var ts : binding_array<texture_2d<f32>, 2>;
+        @group(0) @binding(2) var samplerClamping : sampler;
+        @group(0) @binding(3) var samplerWrapping : sampler;
+        @fragment fn fs() -> @location(0) vec4f {
+            let r = textureSample(ts[0], samplerWrapping, vec2(1.25, 0.5))[0];
+            let g = textureSample(ts[0], samplerClamping, vec2(1.25, 0.5))[0];
+            let b = textureSample(ts[1], samplerWrapping, vec2(1.25, 0.5))[0];
+            let a = textureSample(ts[1], samplerClamping, vec2(1.25, 0.5))[0];
+            return vec4(r, g, b, a);
+        }
+    )");
+
+    utils::ComboRenderPipelineDescriptor pDesc;
+    pDesc.vertex.module = module;
+    pDesc.cFragment.module = module;
+    pDesc.cFragment.targetCount = 1;
+    pDesc.cTargets[0].format = wgpu::TextureFormat::RGBA8Unorm;
+    pDesc.primitive.topology = wgpu::PrimitiveTopology::PointList;
+    wgpu::RenderPipeline testPipeline = device.CreateRenderPipeline(&pDesc);
+
+    // Create a bind group with textures of decreasing values
+    wgpu::SamplerDescriptor sDesc = {};
+    sDesc.addressModeU = wgpu::AddressMode::ClampToEdge;
+    wgpu::Sampler samplerClamping = device.CreateSampler(&sDesc);
+    sDesc.addressModeU = wgpu::AddressMode::Repeat;
+    wgpu::Sampler samplerWrapping = device.CreateSampler(&sDesc);
+
+    wgpu::BindGroup arrayGroup =
+        utils::MakeBindGroup(device, testPipeline.GetBindGroupLayout(0),
+                             {
+                                 {0, MakeTest2x1R8Texture(3, 2).CreateView()},
+                                 {1, MakeTest2x1R8Texture(1, 0).CreateView()},
+                                 {2, samplerClamping},
+                                 {3, samplerWrapping},
+                             });
+
+    // Run the test
+    auto rp = utils::CreateBasicRenderPass(device, 1, 1);
+    wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
+    wgpu::RenderPassEncoder pass = encoder.BeginRenderPass(&rp.renderPassInfo);
+
+    pass.SetPipeline(testPipeline);
+    pass.SetBindGroup(0, arrayGroup);
+    pass.Draw(1);
+    pass.End();
+
+    wgpu::CommandBuffer commands = encoder.Finish();
+    queue.Submit(1, &commands);
+
+    EXPECT_PIXEL_RGBA8_EQ(utils::RGBA8(3, 2, 1, 0), rp.color, 0, 0);
+}
+
+// Test that calling textureNumLevels on an element of a binding_array returns the correct value,
+// this is targeted for the GL backend that has emulation of that builtin with a UBO.
+TEST_P(SizedBindingArrayTests, TextureNumLevels) {
+    // Make the test pipeline
+    wgpu::ShaderModule module = utils::CreateShaderModule(device, R"(
+        @vertex fn vs() -> @builtin(position) vec4f {
+            return vec4f(0, 0, 0.5, 0.5);
+        }
+
+        @group(0) @binding(0) var ts : binding_array<texture_2d<f32>, 3>;
+        @fragment fn fs() -> @location(0) vec4f {
+            let r = f32(textureNumLevels(ts[0])) / 255.0;
+            let g = f32(textureNumLevels(ts[1])) / 255.0;
+            let b = f32(textureNumLevels(ts[2])) / 255.0;
+            let a : f32 = 0.0;
+            return vec4(r, g, b, a);
+        }
+    )");
+
+    utils::ComboRenderPipelineDescriptor pDesc;
+    pDesc.vertex.module = module;
+    pDesc.cFragment.module = module;
+    pDesc.cFragment.targetCount = 1;
+    pDesc.cTargets[0].format = wgpu::TextureFormat::RGBA8Unorm;
+    pDesc.primitive.topology = wgpu::PrimitiveTopology::PointList;
+    wgpu::RenderPipeline testPipeline = device.CreateRenderPipeline(&pDesc);
+
+    // Create a bind group with textures views of decreasing numlevels.
+    wgpu::TextureDescriptor tDesc;
+    tDesc.size = {4, 4};
+    tDesc.format = wgpu::TextureFormat::RGBA8Unorm;
+    tDesc.usage = wgpu::TextureUsage::TextureBinding;
+    tDesc.mipLevelCount = 3;
+    wgpu::TextureView view3 = device.CreateTexture(&tDesc).CreateView();
+    tDesc.mipLevelCount = 2;
+    wgpu::TextureView view2 = device.CreateTexture(&tDesc).CreateView();
+    tDesc.mipLevelCount = 1;
+    wgpu::TextureView view1 = device.CreateTexture(&tDesc).CreateView();
+
+    wgpu::BindGroup arrayGroup = utils::MakeBindGroup(device, testPipeline.GetBindGroupLayout(0),
+                                                      {
+                                                          {0, view3},
+                                                          {1, view2},
+                                                          {2, view1},
+                                                      });
+
+    // Run the test
+    auto rp = utils::CreateBasicRenderPass(device, 1, 1);
+    wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
+    wgpu::RenderPassEncoder pass = encoder.BeginRenderPass(&rp.renderPassInfo);
+
+    pass.SetPipeline(testPipeline);
+    pass.SetBindGroup(0, arrayGroup);
+    pass.Draw(1);
+    pass.End();
+
+    wgpu::CommandBuffer commands = encoder.Finish();
+    queue.Submit(1, &commands);
+
+    EXPECT_PIXEL_RGBA8_EQ(utils::RGBA8(3, 2, 1, 0), rp.color, 0, 0);
+}
+DAWN_INSTANTIATE_TEST(SizedBindingArrayTests,
+                      D3D11Backend(),
+                      D3D12Backend(),
+                      MetalBackend(),
+                      OpenGLBackend(),
+                      OpenGLESBackend(),
+                      VulkanBackend());
 
 }  // anonymous namespace
 }  // namespace dawn

@@ -173,3 +173,6 @@ void MarkProfileDirectoryForDeletion(const base::FilePath& path) {
     entry->SetIsOmitted(true);
   }
 }
+
+// Vivaldi
+#include "ui/webui/nuke_profile_directory_utils.inc"

@@ -8,7 +8,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.provider.Settings;
@@ -43,10 +42,7 @@ import org.chromium.chrome.browser.homepage.HomepageManager;
 import org.chromium.chrome.browser.magic_stack.HomeModulesConfigManager;
 import org.chromium.chrome.browser.night_mode.NightModeMetrics.ThemeSettingsEntry;
 import org.chromium.chrome.browser.night_mode.settings.ThemeSettingsFragment;
-import org.chromium.chrome.browser.password_check.PasswordCheck;
-import org.chromium.chrome.browser.password_check.PasswordCheckFactory;
 import org.chromium.chrome.browser.password_manager.ManagePasswordsReferrer;
-import org.chromium.chrome.browser.password_manager.PasswordAccessLossDialogHelper;
 import org.chromium.chrome.browser.password_manager.PasswordExportLauncher;
 import org.chromium.chrome.browser.password_manager.PasswordManagerHelper;
 import org.chromium.chrome.browser.password_manager.PasswordManagerLauncher;
@@ -154,7 +150,6 @@ public class MainSettings extends ChromeBaseSettingsFragment
 
     private ManagedPreferenceDelegate mManagedPreferenceDelegate;
     private ChromeBasePreference mManageSync;
-    private @Nullable PasswordCheck mPasswordCheck;
     private ObservableSupplier<ModalDialogManager> mModalDialogManagerSupplier;
     // TODO(crbug.com/343933167): This should be removed when the snackbar issue is addressed.
     // Will be true if `onSignedOut()` was called when the current activity state is not
@@ -175,11 +170,9 @@ public class MainSettings extends ChromeBaseSettingsFragment
     }
 
     @Override
-    public void onCreate(Bundle savedInstanceState) {
+    public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         mPageTitle.set(getString(R.string.settings));
-        if (!ChromeApplicationImpl.isVivaldi())
-        mPasswordCheck = PasswordCheckFactory.getOrCreate();
         SigninManager signinManager = IdentityServicesProvider.get().getSigninManager(getProfile());
         if (signinManager.isSigninSupported(/* requireUpdatedPlayServices= */ false)) {
             signinManager.addSignInStateObserver(this);
@@ -206,10 +199,6 @@ public class MainSettings extends ChromeBaseSettingsFragment
         if (signinManager.isSigninSupported(/* requireUpdatedPlayServices= */ false)) {
             signinManager.removeSignInStateObserver(this);
         }
-        // The component should only be destroyed when the activity has been closed by the user
-        // (e.g. by pressing on the back button) and not when the activity is temporarily destroyed
-        // by the system.
-        if (getActivity().isFinishing() && mPasswordCheck != null) PasswordCheckFactory.destroy();
     }
 
     @Override
@@ -265,7 +254,9 @@ public class MainSettings extends ChromeBaseSettingsFragment
                 useLegacySettingsOrder() ? R.xml.main_preferences_legacy : R.xml.main_preferences);
 
         ProfileDataCache profileDataCache =
-                ProfileDataCache.createWithDefaultImageSizeAndNoBadge(getContext());
+                ProfileDataCache.createWithDefaultImageSizeAndNoBadge(
+                        getContext(),
+                        IdentityServicesProvider.get().getIdentityManager(getProfile()));
         AccountManagerFacade accountManagerFacade = AccountManagerFacadeProvider.getInstance();
 
         // Vivaldi
@@ -298,10 +289,6 @@ public class MainSettings extends ChromeBaseSettingsFragment
                     PreferenceSearchManager.getInstance()
                             .excludePreference(PREF_ALLOW_BACKGROUND_MEDIA);
                 }
-                if (!VivaldiUtils.isVivaldiScreenLockEnabled()) {
-                    PreferenceSearchManager.getInstance()
-                            .excludePreference(VivaldiPreferences.SCREEN_LOCK);
-                }
             }
         }
 
@@ -315,30 +302,22 @@ public class MainSettings extends ChromeBaseSettingsFragment
 
         // Vivaldi
         if (!BuildConfig.IS_VIVALDI) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            // If we are on Android O+ the Notifications preference should lead to the Android
-            // Settings notifications page.
-            Intent intent = new Intent();
-            intent.setAction(Settings.ACTION_APP_NOTIFICATION_SETTINGS);
-            intent.putExtra(
-                    Settings.EXTRA_APP_PACKAGE,
-                    ContextUtils.getApplicationContext().getPackageName());
-            PackageManager pm = getActivity().getPackageManager();
-            if (intent.resolveActivity(pm) != null) {
-                Preference notifications = findPreference(PREF_NOTIFICATIONS);
-                notifications.setOnPreferenceClickListener(
-                        preference -> {
-                            startActivity(intent);
-                            // We handle the click so the default action isn't triggered.
-                            return true;
-                        });
-            } else {
-                removePreferenceIfPresent(PREF_NOTIFICATIONS);
-            }
+        // The Notifications preference should lead to the Android Settings notifications page.
+        Intent intent = new Intent();
+        intent.setAction(Settings.ACTION_APP_NOTIFICATION_SETTINGS);
+        intent.putExtra(
+                Settings.EXTRA_APP_PACKAGE, ContextUtils.getApplicationContext().getPackageName());
+        PackageManager pm = getActivity().getPackageManager();
+        if (intent.resolveActivity(pm) != null) {
+            Preference notifications = findPreference(PREF_NOTIFICATIONS);
+            notifications.setOnPreferenceClickListener(
+                    preference -> {
+                        startActivity(intent);
+                        // We handle the click so the default action isn't triggered.
+                        return true;
+                    });
         } else {
-            // The per-website notification settings page can be accessed from Site
-            // Settings, so we don't need to show this here.
-            getPreferenceScreen().removePreference(findPreference(PREF_NOTIFICATIONS));
+            removePreferenceIfPresent(PREF_NOTIFICATIONS);
         }
         } // Vivaldi
 
@@ -586,7 +565,8 @@ public class MainSettings extends ChromeBaseSettingsFragment
 
         if (ChromeApplicationImpl.isVivaldi()) {
             removePreferenceIfPresent(PREF_TABS);
-            removePreferenceIfPresent(PREF_HOMEPAGE);
+            boolean isTablet = DeviceFormFactor.isNonMultiDisplayContextOnTablet(getContext());
+            if (isTablet) removePreferenceIfPresent(PREF_HOMEPAGE);
         }
         // End Vivaldi
     }
@@ -664,9 +644,7 @@ public class MainSettings extends ChromeBaseSettingsFragment
     }
 
     private void updateAutofillPreferences() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
-                && ChromeFeatureList.isEnabled(
-                        AutofillFeatures.AUTOFILL_VIRTUAL_VIEW_STRUCTURE_ANDROID)) {
+        if (ChromeFeatureList.isEnabled(AutofillFeatures.AUTOFILL_VIRTUAL_VIEW_STRUCTURE_ANDROID)) {
             addPreferenceIfAbsent(PREF_AUTOFILL_SECTION);
             addPreferenceIfAbsent(PREF_AUTOFILL_OPTIONS);
             Preference preference = findPreference(PREF_AUTOFILL_OPTIONS);
@@ -719,16 +697,11 @@ public class MainSettings extends ChromeBaseSettingsFragment
                         && getArguments().containsKey(PasswordExportLauncher.START_PASSWORDS_EXPORT)
                         && getArguments().getBoolean(PasswordExportLauncher.START_PASSWORDS_EXPORT);
         if (startPasswordsExportFlow) {
-            if (ChromeFeatureList.isEnabled(ChromeFeatureList.LOGIN_DB_DEPRECATION_ANDROID)) {
-                assert mSettingsCustomTabLauncher != null
-                        : "The CSV download flow dialog requires a non-null"
-                                + " SettingsCustomTabLauncher.";
-                PasswordManagerHelper.getForProfile(getProfile())
-                        .launchDownloadPasswordsCsvFlow(getContext(), mSettingsCustomTabLauncher);
-            } else {
-                PasswordAccessLossDialogHelper.launchExportFlow(
-                        getContext(), getProfile(), mModalDialogManagerSupplier);
-            }
+            assert mSettingsCustomTabLauncher != null
+                    : "The CSV download flow dialog requires a non-null"
+                            + " SettingsCustomTabLauncher.";
+            PasswordManagerHelper.getForProfile(getProfile())
+                    .launchDownloadPasswordsCsvFlow(getContext(), mSettingsCustomTabLauncher);
             getArguments().putBoolean(PasswordExportLauncher.START_PASSWORDS_EXPORT, false);
         }
     }
@@ -769,12 +742,14 @@ public class MainSettings extends ChromeBaseSettingsFragment
 
         if (showSetting) {
             Preference addressBarPreference = addPreferenceIfAbsent(PREF_ADDRESS_BAR);
+            if (!ChromeApplicationImpl.isVivaldi()) {
             addressBarPreference.setSummary(ToolbarPositionController.getToolbarPositionResId());
             updateNewPreferenceAndIncrementViewCount(
                     addressBarPreference,
                     AddressBarSettingsFragment.getTitle(getContext()),
                     ChromePreferenceKeys.ADDRESS_BAR_SETTINGS_CLICKED,
                     ChromePreferenceKeys.ADDRESS_BAR_SETTINGS_VIEW_COUNT);
+            } // End Vivaldi
         } else {
             if (!ChromeApplicationImpl.isVivaldi())
             removePreferenceIfPresent(PREF_ADDRESS_BAR);

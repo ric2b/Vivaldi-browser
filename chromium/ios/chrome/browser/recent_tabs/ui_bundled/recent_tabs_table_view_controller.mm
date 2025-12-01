@@ -17,7 +17,6 @@
 #import "base/strings/sys_string_conversions.h"
 #import "base/time/time.h"
 #import "components/prefs/pref_service.h"
-#import "components/search_engines/template_url_service.h"
 #import "components/sessions/core/session_id.h"
 #import "components/sessions/core/tab_restore_service.h"
 #import "components/strings/grit/components_strings.h"
@@ -35,6 +34,7 @@
 #import "ios/chrome/browser/authentication/ui_bundled/enterprise/enterprise_utils.h"
 #import "ios/chrome/browser/authentication/ui_bundled/history_sync/history_sync_coordinator.h"
 #import "ios/chrome/browser/authentication/ui_bundled/history_sync/history_sync_utils.h"
+#import "ios/chrome/browser/authentication/ui_bundled/signin/signin_coordinator.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin/signin_utils.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin_presenter.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin_promo_view_mediator.h"
@@ -49,9 +49,6 @@
 #import "ios/chrome/browser/recent_tabs/ui_bundled/recent_tabs_constants.h"
 #import "ios/chrome/browser/recent_tabs/ui_bundled/recent_tabs_menu_provider.h"
 #import "ios/chrome/browser/recent_tabs/ui_bundled/recent_tabs_presentation_delegate.h"
-#import "ios/chrome/browser/recent_tabs/ui_bundled/recent_tabs_table_view_controller_delegate.h"
-#import "ios/chrome/browser/recent_tabs/ui_bundled/recent_tabs_table_view_controller_ui_delegate.h"
-#import "ios/chrome/browser/search_engines/model/template_url_service_factory.h"
 #import "ios/chrome/browser/sessions/model/live_tab_context_browser_agent.h"
 #import "ios/chrome/browser/sessions/model/session_util.h"
 #import "ios/chrome/browser/settings/model/sync/utils/sync_presenter.h"
@@ -71,7 +68,6 @@
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_disclosure_header_footer_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_illustrated_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_image_item.h"
-#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_tabs_search_suggested_history_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_text_button_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_text_header_footer_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_text_item.h"
@@ -79,7 +75,6 @@
 #import "ios/chrome/browser/shared/ui/table_view/legacy_chrome_table_view_styler.h"
 #import "ios/chrome/browser/shared/ui/table_view/table_view_favicon_data_source.h"
 #import "ios/chrome/browser/shared/ui/table_view/table_view_utils.h"
-#import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/signin/model/authentication_service.h"
 #import "ios/chrome/browser/signin/model/authentication_service_factory.h"
 #import "ios/chrome/browser/signin/model/chrome_account_manager_service_factory.h"
@@ -91,8 +86,6 @@
 #import "ios/chrome/browser/synced_sessions/model/distant_session.h"
 #import "ios/chrome/browser/synced_sessions/model/distant_tab.h"
 #import "ios/chrome/browser/synced_sessions/model/synced_sessions.h"
-#import "ios/chrome/browser/tabs_search/model/tabs_search_service.h"
-#import "ios/chrome/browser/tabs_search/model/tabs_search_service_factory.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_params.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_util.h"
@@ -109,12 +102,19 @@
 // Vivaldi
 #import "app/vivaldi_apptools.h"
 #import "app/vivaldi_constants.h"
-#import "ios/components/webui/web_ui_url_constants.h"
+#import "components/search_engines/template_url_service.h"
+#import "ios/chrome/browser/recent_tabs/ui_bundled/recent_tabs_table_view_controller_ui_delegate.h"
+#import "ios/chrome/browser/search_engines/model/template_url_service_factory.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_tabs_search_suggested_history_item.h"
+#import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/grid/grid_constants.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/grid/grid_empty_state_view.h"
+#import "ios/chrome/browser/tabs_search/model/tabs_search_service_factory.h"
+#import "ios/chrome/browser/tabs_search/model/tabs_search_service.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/vivaldi_tab_grid_constants.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/vivaldi_tab_grid_empty_state_view_delegate.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
+#import "ios/components/webui/web_ui_url_constants.h"
 #import "ios/ui/context_menu/vivaldi_context_menu_constants.h"
 #import "ios/ui/helpers/vivaldi_global_helpers.h"
 #import "ios/ui/vivaldi_overflow_menu/vivaldi_oveflow_menu_constants.h"
@@ -129,9 +129,12 @@ namespace {
 typedef NS_ENUM(NSInteger, SectionIdentifier) {
   SectionIdentifierRecentlyClosedTabs = kSectionIdentifierEnumZero,
   SectionIdentifierOtherDevices,
-  SectionIdentifierSuggestedActions,
   // The first SessionsSectionIdentifier index.
   kFirstSessionSectionIdentifier,
+
+  // Vivaldi
+  SectionIdentifierSuggestedActions,
+  // End Vivaldi
 };
 
 typedef NS_ENUM(NSInteger, ItemType) {
@@ -145,10 +148,13 @@ typedef NS_ENUM(NSInteger, ItemType) {
   ItemTypeSessionHeader,
   ItemTypeSessionTabData,
   ItemTypeShowFullHistory,
+
+  // Vivaldi
   ItemTypeSuggestedActionsHeader,
   ItemTypeSuggestedActionSearchOpenTabs,
   ItemTypeSuggestedActionSearchWeb,
   ItemTypeSuggestedActionSearchHistory,
+  // End Vivaldi
 };
 
 // Key for saving whether the Other Device section is collapsed.
@@ -177,7 +183,7 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
 
 @interface RecentTabsTableViewController () <
     SigninPromoViewConsumer,
-    SigninPresenter,
+    SigninPromoViewMediatorDelegate,
     SyncObserverModelBridge,
     SyncPresenter,
     TableViewURLDragDataSource,
@@ -226,7 +232,9 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
 
 @end
 
-@implementation RecentTabsTableViewController
+@implementation RecentTabsTableViewController {
+  SigninCoordinator* _signinCoordinator;
+}
 
 #pragma mark - Public Interface
 
@@ -356,14 +364,6 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
          AuthenticationService::ServiceStatus::SigninDisabledByPolicy;
 }
 
-- (BOOL)isScrolledToTop {
-  return IsScrollViewScrolledToTop(self.tableView);
-}
-
-- (BOOL)isScrolledToBottom {
-  return IsScrollViewScrolledToBottom(self.tableView);
-}
-
 #pragma mark - SyncObserverModelBridge
 
 - (void)onSyncStateChanged {
@@ -376,7 +376,7 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
   if (IsVivaldiRunning()) {
     [self.tableView
         performBatchUpdates:^{
-          if (self.searchTerms.length)
+          if (self.tableViewModel.numberOfSections)
             [self updateSessionSections];
           else
             [self updateEmptyStateViewWithUserState:self.sessionState];
@@ -385,11 +385,7 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
   } else {
   [self.tableView
       performBatchUpdates:^{
-        if (self.searchTerms.length) {
-          [self updateSessionSections];
-        } else {
-          [self updateOtherDevicesSectionForState:self.sessionState];
-        }
+        [self updateOtherDevicesSectionForState:self.sessionState];
       }
                completion:nil];
   } // End Vivaldi
@@ -456,14 +452,9 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
     return;
   }
   // End Vivaldi
-
   // Hide section during search if empty.
   if (![self recentlyClosedTabsSectionExists]) {
-
-    // Vivaldi
     [self setEmptyStateVisibilityWithSearchTerm];
-    // End Vivaldi
-
     return;
   }
 
@@ -527,10 +518,9 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
     return;
   }
 
-  if (!self.searchTerms.length) {
+  if (IsVivaldiRunning() && !self.searchTerms.length) {
     // A manual item refresh is necessary when tab search is disabled or when
     // there is no search term.
-
     std::vector<RecentlyClosedTableViewItemPair> recentlyClosedItems;
     for (auto iter = self.tabRestoreService->entries().begin();
          iter != self.tabRestoreService->entries().end(); ++iter) {
@@ -542,14 +532,18 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
       DCHECK_EQ(sessions::tab_restore::Type::TAB, entry->type);
 
       const sessions::tab_restore::Tab* tab =
-          static_cast<const sessions::tab_restore::Tab*>(entry);
+      static_cast<const sessions::tab_restore::Tab*>(entry);
       const sessions::SerializedNavigationEntry& navigationEntry =
-          tab->navigations[tab->current_navigation_index];
+      tab->navigations[tab->current_navigation_index];
 
       TableViewURLItem* recentlyClosedTab =
           [[TableViewURLItem alloc] initWithType:ItemTypeRecentlyClosed];
       recentlyClosedTab.title =
           base::SysUTF16ToNSString(navigationEntry.title());
+      recentlyClosedTab.URL =
+          [[CrURL alloc] initWithGURL:navigationEntry.virtual_url()];
+      RecentlyClosedTableViewItemPair item(entry->id, recentlyClosedTab);
+      recentlyClosedItems.push_back(item);
 
       // Note(VIB-250): (prio@vivaldi.com) - We use chrome scheme underneath
       // everywhere but show Vivaldi scheme for UI.
@@ -557,25 +551,64 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
         GURL final_gurl;
         if (navigationEntry.virtual_url().SchemeIs(kChromeUIScheme)) {
           final_gurl = GURL(
-            std::string(kVivaldiUIScheme) +
-                std::string(url::kStandardSchemeSeparator) +
-                navigationEntry.virtual_url().host() +
-                navigationEntry.virtual_url().path());
+                            std::string(kVivaldiUIScheme) +
+                            std::string(url::kStandardSchemeSeparator) +
+                            navigationEntry.virtual_url().host() +
+                            navigationEntry.virtual_url().path());
         } else {
           final_gurl = navigationEntry.virtual_url();
         }
         recentlyClosedTab.URL =
-            [[CrURL alloc] initWithGURL:final_gurl];
-      } else {
-      recentlyClosedTab.URL =
-          [[CrURL alloc] initWithGURL:navigationEntry.virtual_url()];
+        [[CrURL alloc] initWithGURL:final_gurl];
       } // End Vivaldi
-
-      RecentlyClosedTableViewItemPair item(entry->id, recentlyClosedTab);
-      recentlyClosedItems.push_back(item);
     }
     _recentlyClosedItems = recentlyClosedItems;
+  } else {
+  // A manual item refresh is necessary.
+  std::vector<RecentlyClosedTableViewItemPair> recentlyClosedItems;
+  for (auto iter = self.tabRestoreService->entries().begin();
+       iter != self.tabRestoreService->entries().end(); ++iter) {
+    const sessions::tab_restore::Entry* entry = iter->get();
+    DCHECK(entry);
+    // Only TAB type is handled.
+    // TODO(crbug.com/40676931) : Support WINDOW restoration under
+    // multi-window.
+    DCHECK_EQ(sessions::tab_restore::Type::TAB, entry->type);
+
+    const sessions::tab_restore::Tab* tab =
+        static_cast<const sessions::tab_restore::Tab*>(entry);
+    const sessions::SerializedNavigationEntry& navigationEntry =
+        tab->navigations[tab->current_navigation_index];
+
+    TableViewURLItem* recentlyClosedTab =
+        [[TableViewURLItem alloc] initWithType:ItemTypeRecentlyClosed];
+    recentlyClosedTab.title = base::SysUTF16ToNSString(navigationEntry.title());
+    recentlyClosedTab.URL =
+        [[CrURL alloc] initWithGURL:navigationEntry.virtual_url()];
+
+    RecentlyClosedTableViewItemPair item(entry->id, recentlyClosedTab);
+    recentlyClosedItems.push_back(item);
+
+    // Note(VIB-250): (prio@vivaldi.com) - We use chrome scheme underneath
+    // everywhere but show Vivaldi scheme for UI.
+    if (IsVivaldiRunning()) {
+      GURL final_gurl;
+      if (navigationEntry.virtual_url().SchemeIs(kChromeUIScheme)) {
+        final_gurl = GURL(
+          std::string(kVivaldiUIScheme) +
+              std::string(url::kStandardSchemeSeparator) +
+              navigationEntry.virtual_url().host() +
+              navigationEntry.virtual_url().path());
+      } else {
+        final_gurl = navigationEntry.virtual_url();
+      }
+      recentlyClosedTab.URL =
+          [[CrURL alloc] initWithGURL:final_gurl];
+     } // End Vivaldi
+
   }
+  _recentlyClosedItems = recentlyClosedItems;
+  } // End Vivaldi
 
   for (const RecentlyClosedTableViewItemPair& item : _recentlyClosedItems) {
     [self.tableViewModel addItem:item.second
@@ -915,7 +948,7 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
                               syncService:self.syncService
                               accessPoint:signin_metrics::AccessPoint::
                                               kRecentTabs
-                          signinPresenter:self
+                                 delegate:self
                  accountSettingsPresenter:nil
         changeProfileContinuationProvider:
             base::BindRepeating(&CreateChangeProfileRecentTabsContinuation)];
@@ -934,74 +967,6 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
       [self.signinPromoViewMediator createConfigurator];
   [self.tableViewModel addItem:signinPromoItem
        toSectionWithIdentifier:SectionIdentifierOtherDevices];
-}
-
-#pragma mark Suggested Actions Section
-
-- (void)addSuggestedActionsSection {
-  TableViewModel* model = self.tableViewModel;
-
-  UIColor* actionsTextColor = [UIColor colorNamed:kBlueColor];
-
-  [model addSectionWithIdentifier:SectionIdentifierSuggestedActions];
-  TableViewTextHeaderFooterItem* header = [[TableViewTextHeaderFooterItem alloc]
-      initWithType:ItemTypeSuggestedActionsHeader];
-  header.text = l10n_util::GetNSString(IDS_IOS_TABS_SEARCH_SUGGESTED_ACTIONS);
-  [model setHeader:header
-      forSectionWithIdentifier:SectionIdentifierSuggestedActions];
-
-  TableViewImageItem* searchWebItem = [[TableViewImageItem alloc]
-      initWithType:ItemTypeSuggestedActionSearchWeb];
-  searchWebItem.title =
-      l10n_util::GetNSString(IDS_IOS_TABS_SEARCH_SUGGESTED_ACTION_SEARCH_WEB);
-  searchWebItem.textColor = actionsTextColor;
-
-  if (IsVivaldiRunning()) {
-    searchWebItem.image = [[UIImage imageNamed:vSearch]
-        imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
-  } else {
-  searchWebItem.image = [[UIImage imageNamed:@"suggested_action_web"]
-      imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
-  } // End Vivaldi
-
-  [model addItem:searchWebItem
-      toSectionWithIdentifier:SectionIdentifierSuggestedActions];
-
-  if ([self.presentationDelegate
-          respondsToSelector:@selector(showRegularTabGridFromRecentTabs)]) {
-    TableViewImageItem* searchOpenTabsItem = [[TableViewImageItem alloc]
-        initWithType:ItemTypeSuggestedActionSearchOpenTabs];
-    searchOpenTabsItem.title = l10n_util::GetNSString(
-        IDS_IOS_TABS_SEARCH_SUGGESTED_ACTION_SEARCH_OPEN_TABS);
-    searchOpenTabsItem.textColor = actionsTextColor;
-
-    if (IsVivaldiRunning()) {
-      searchOpenTabsItem.image =
-          [[UIImage imageNamed:vOverflowRecentTabs]
-              imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
-    } else {
-    searchOpenTabsItem.image =
-        [[UIImage imageNamed:@"suggested_action_open_tabs"]
-            imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
-    } // End Vivaldi
-
-    [model addItem:searchOpenTabsItem
-        toSectionWithIdentifier:SectionIdentifierSuggestedActions];
-  }
-
-  TableViewTabsSearchSuggestedHistoryItem* searchHistoryItem =
-      [[TableViewTabsSearchSuggestedHistoryItem alloc]
-          initWithType:ItemTypeSuggestedActionSearchHistory];
-  searchHistoryItem.textColor = actionsTextColor;
-
-  // Vivaldi
-  searchHistoryItem.image =
-      [[UIImage imageNamed:vOverflowHistory]
-          imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
-  // End Vivaldi
-
-  [model addItem:searchHistoryItem
-      toSectionWithIdentifier:SectionIdentifierSuggestedActions];
 }
 
 #pragma mark - TableViewModel Helpers
@@ -1046,11 +1011,16 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
 }
 
 - (NSInteger)firstSessionSectionIndex {
-  NSInteger firstSessionSectionIndex = 0;
-  if ([self recentlyClosedTabsSectionExists]) {
-    firstSessionSectionIndex++;
-  }
-  return firstSessionSectionIndex;
+
+  if (IsVivaldiRunning()) {
+    NSInteger firstSessionSectionIndex = 0;
+    if ([self recentlyClosedTabsSectionExists]) {
+      firstSessionSectionIndex++;
+    }
+    return firstSessionSectionIndex;
+  } // End Vivaldi
+
+  return 1;
 }
 
 #pragma mark - Public
@@ -1083,68 +1053,6 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
       completion:^(BOOL) {
         [weakSelf deleteSession:sessionTag];
       }];
-}
-
-- (void)setSearchTerms:(NSString*)searchTerms {
-  if (_searchTerms == searchTerms ||
-      // No need for an update if transitioning between nil and empty string.
-      // (Length of both `_searchTerms` and `searchTerms` will be zero.)
-      (!_searchTerms.length && !searchTerms.length)) {
-    return;
-  }
-
-  _searchTerms = searchTerms;
-
-  if (self.preventUpdates) {
-    return;
-  }
-
-  TabsSearchService* search_service =
-      TabsSearchServiceFactory::GetForProfile(self.profile);
-  __weak RecentTabsTableViewController* weakSelf = self;
-  const std::u16string& search_terms =
-      base::SysNSStringToUTF16(self.searchTerms);
-
-  search_service->SearchRecentlyClosed(
-      search_terms,
-      base::BindOnce(^(
-          std::vector<TabsSearchService::RecentlyClosedItemPair> results) {
-        RecentTabsTableViewController* strongSelf = weakSelf;
-        if (!strongSelf) {
-          return;
-        }
-
-        std::vector<RecentlyClosedTableViewItemPair> matchedItems;
-        for (TabsSearchService::RecentlyClosedItemPair item_pair : results) {
-          const sessions::SerializedNavigationEntry& navigationEntry =
-              item_pair.second;
-
-          TableViewURLItem* recentlyClosedTab =
-              [[TableViewURLItem alloc] initWithType:ItemTypeRecentlyClosed];
-          recentlyClosedTab.title =
-              base::SysUTF16ToNSString(navigationEntry.title());
-          recentlyClosedTab.URL =
-              [[CrURL alloc] initWithGURL:navigationEntry.virtual_url()];
-
-          RecentlyClosedTableViewItemPair item(item_pair.first,
-                                               recentlyClosedTab);
-          matchedItems.push_back(item);
-        }
-
-        [strongSelf setRecentlyClosedItems:matchedItems];
-      }));
-
-  search_service->SearchRemoteTabs(
-      search_terms,
-      base::BindOnce(^(
-          std::unique_ptr<synced_sessions::SyncedSessions> synced_sessions,
-          std::vector<synced_sessions::DistantTabsSet> matching_distant_tabs) {
-        [weakSelf setSyncedSessions:std::move(synced_sessions)
-                 distantSessionTabs:matching_distant_tabs];
-      }));
-
-  [self loadModel];
-  [self.tableView reloadData];
 }
 
 // Helper to set the distant tabs to be displayed. The tabs referenced in
@@ -1191,6 +1099,11 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
 
 #pragma mark - Private
 
+- (void)stopSigninCoordinator {
+  [_signinCoordinator stop];
+  _signinCoordinator = nil;
+}
+
 // Returns YES if `sectionIdentifier` is a Sessions sectionIdentifier.
 - (BOOL)isSessionSectionIdentifier:(NSInteger)sectionIdentifier {
   NSArray* sessionSectionIdentifiers = [self allSessionSectionIdentifiers];
@@ -1235,7 +1148,7 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
     return;
   }
 
-  if (!self.searchTerms.length) {
+  if (IsVivaldiRunning() && !self.searchTerms.length) {
     // A manual item refresh is necessary when tab search is disabled or there
     // is no search term.
     sync_sessions::SessionSyncService* syncService =
@@ -1256,9 +1169,29 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
     // Reset `_displayedTabs` to contain all sessions and tabs.
     [self setSyncedSessions:std::move(syncedSessions)
          distantSessionTabs:displayedTabs];
+  } else {
+  // A manual item refresh is necessary.
+  sync_sessions::SessionSyncService* syncService =
+      SessionSyncServiceFactory::GetForProfile(self.profile);
+  auto syncedSessions =
+      std::make_unique<synced_sessions::SyncedSessions>(syncService);
+
+  std::vector<synced_sessions::DistantTabsSet> displayedTabs;
+  for (size_t s = 0; s < syncedSessions->GetSessionCount(); s++) {
+    const synced_sessions::DistantSession* session =
+        syncedSessions->GetSession(s);
+
+    synced_sessions::DistantTabsSet distant_tabs;
+    distant_tabs.session_tag = session->tag;
+    displayedTabs.push_back(distant_tabs);
   }
 
-  if (!self.preventUpdates && !self.searchTerms.length) {
+  // Reset `_displayedTabs` to contain all sessions and tabs.
+  [self setSyncedSessions:std::move(syncedSessions)
+       distantSessionTabs:displayedTabs];
+  } // End Vivaldi
+
+  if (!self.preventUpdates) {
     // Update the TableView and TableViewModel sections to match the new
     // sessionState.
     // Turn Off animations since UITableViewRowAnimationNone still animates.
@@ -1302,10 +1235,10 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
     return;
   }
 
-  // Do not try to reload section if it doesn't exist.
-  if (![self recentlyClosedTabsSectionExists]) {
+  if (IsVivaldiRunning() &&![self recentlyClosedTabsSectionExists]) {
+    // Do not try to reload section if it doesn't exist.
     return;
-  }
+  } // End Vivaldi
 
   [self.tableView
       performBatchUpdates:^{
@@ -1320,6 +1253,7 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
 
 - (void)dismissModals {
   [self disconnectMediator];
+  [self stopSigninCoordinator];
   [self.tableView.contextMenuInteraction dismissMenu];
   [self stopTrustedVaultReauthenticationCoordinator];
 }
@@ -1352,6 +1286,7 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
       // showing above recent tabs. This can happen when a user simultaneously
       // taps "show full history" and "enable sync". The sync settings UI
       // appears first and we should not dismiss it to display history.
+#if defined(VIVALDI_BUILD)
       if (!self.presentedViewController) {
         [self.presentationDelegate
             showHistoryFromRecentTabsFilteredBySearchTerms:nil];
@@ -1391,6 +1326,12 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
     case ItemTypeSuggestedActionSearchWeb:
       [self openNewTabWithCurrentSearchTerm];
       break;
+#else
+      if (!self.presentedViewController) {
+        [self.presentationDelegate showHistoryFromRecentTabs];
+      }
+      break;
+#endif // End Vivaldi
   }
 }
 
@@ -1408,10 +1349,6 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
                                     sectionIdentifierForSectionIndex:section]]
              ? 1.0
              : kSeparationSpaceBetweenSections;
-}
-
-- (void)scrollViewDidScroll:(UIScrollView*)scrollView {
-  [self.UIDelegate recentTabsScrollViewDidScroll:self];
 }
 
 #pragma mark - UITableViewDataSource
@@ -1465,8 +1402,10 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
     cell.separatorInset =
         UIEdgeInsetsMake(0, self.tableView.bounds.size.width, 0, 0);
   }
-  // Update the history search result count once available.
-  if (itemTypeSelected == ItemTypeSuggestedActionSearchHistory) {
+
+  if (IsVivaldiRunning() &&
+      itemTypeSelected == ItemTypeSuggestedActionSearchHistory) {
+    // Update the history search result count once available.
     TabsSearchService* search_service =
         TabsSearchServiceFactory::GetForProfile(self.profile);
     __weak TableViewTabsSearchSuggestedHistoryCell* weakCell =
@@ -1484,7 +1423,8 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
             [weakCell updateHistoryResultsCount:resultCount];
           }
         }));
-  }
+  } // End Vivaldi
+
   [cell layoutIfNeeded];
   return cell;
 }
@@ -1579,27 +1519,6 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
 }
 
 #pragma mark - Recently closed tab helpers
-
-- (BOOL)recentlyClosedTabsSectionExists {
-
-  // Vivaldi
-  if (self.page == TabGridPageRemoteTabs) {
-    return NO;
-  }
-  // End Vivaldi
-
-  // The recently closed section does not exist if the user is searching and
-  // there are no matching recently closed items.
-  if (self.searchTerms.length && [self numberOfRecentlyClosedTabs] == 0) {
-    return NO;
-  }
-
-  if (self.tabRestoreService->entries().empty()) {
-    return NO;
-  }
-
-  return YES;
-}
 
 - (NSInteger)numberOfRecentlyClosedTabs {
   if (!self.tabRestoreService) {
@@ -1788,11 +1707,11 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
 
     base::RecordAction(base::UserMetricsAction(
         "MobileRecentTabManagerTabFromOtherDeviceOpened"));
-    if (self.searchTerms.length) {
-      base::RecordAction(base::UserMetricsAction(
-          "MobileRecentTabManagerTabFromOtherDeviceOpenedSearchResult"));
+
+    if (IsVivaldiRunning() && self.searchTerms.length) {
       self.searchTerms = @"";
-    }
+    } // End Vivaldi
+
     web::WebState* currentWebState = self.webStateList->GetActiveWebState();
     bool is_ntp = currentWebState &&
                   currentWebState->GetVisibleURL() == kChromeUINewTabURL;
@@ -1831,10 +1750,6 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
 
   base::RecordAction(
       base::UserMetricsAction("MobileRecentTabManagerRecentTabOpened"));
-  if (self.searchTerms.length) {
-    base::RecordAction(base::UserMetricsAction(
-        "MobileRecentTabManagerRecentTabOpenedSearchResult"));
-  }
   web::WebState* activeWebState = self.webStateList->GetActiveWebState();
   bool is_ntp =
       activeWebState && activeWebState->GetVisibleURL() == kChromeUINewTabURL;
@@ -1847,50 +1762,6 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
           ? WindowOpenDisposition::CURRENT_TAB
           : WindowOpenDisposition::NEW_FOREGROUND_TAB;
   RestoreTab(entry_id, disposition, self.browser);
-  [self.presentationDelegate showActiveRegularTabFromRecentTabs];
-}
-
-- (void)openNewTabWithCurrentSearchTerm {
-  if (!self.browser) {
-    // Prevent interactions if the browser is nil, for example during dismissal.
-    return;
-  }
-
-  // It is reasonable to ignore this request if a modal UI is already showing
-  // above recent tabs. This can happen when a user simultaneously taps a
-  // recently closed tab and "enable sync". The sync settings UI appears first
-  // and we should not dismiss it to restore a recently closed tab.
-  if (self.presentedViewController) {
-    return;
-  }
-
-  base::RecordAction(
-      base::UserMetricsAction("TabsSearch.SuggestedActions.SearchOnWeb"));
-
-  TemplateURLService* templateURLService =
-      ios::TemplateURLServiceFactory::GetForProfile(self.profile);
-
-  const TemplateURL* defaultURL =
-      templateURLService->GetDefaultSearchProvider();
-  DCHECK(defaultURL);
-
-  TemplateURLRef::SearchTermsArgs search_args(
-      base::SysNSStringToUTF16(self.searchTerms));
-
-  GURL searchUrl(defaultURL->url_ref().ReplaceSearchTerms(
-      search_args, templateURLService->search_terms_data()));
-
-  web::WebState::CreateParams params(self.profile);
-  auto webState = web::WebState::Create(params);
-  web::WebState* webStatePtr = webState.get();
-
-  self.webStateList->InsertWebState(
-      std::move(webState),
-      WebStateList::InsertionParams::Automatic().Activate());
-  webStatePtr->OpenURL(web::WebState::OpenURLParams(
-      searchUrl, web::Referrer(), WindowOpenDisposition::CURRENT_TAB,
-      ui::PAGE_TRANSITION_GENERATED, /*is_renderer_initiated=*/false));
-
   [self.presentationDelegate showActiveRegularTabFromRecentTabs];
 }
 
@@ -1911,10 +1782,12 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
     NSInteger section = [self.tableViewModel
         sectionForSectionIdentifier:tappedHeaderSectionIdentifier];
     ListItem* headerItem = [self.tableViewModel headerForSectionIndex:section];
-    // Suggested actions header is not interactable.
-    if (headerItem.type == ItemTypeSuggestedActionsHeader) {
+
+    if (IsVivaldiRunning() &&
+        headerItem.type == ItemTypeSuggestedActionsHeader) {
+      // Suggested actions header is not interactable.
       return;
-    }
+    } // End Vivaldi
 
     [self toggleExpansionOfSectionIdentifier:tappedHeaderSectionIdentifier];
 
@@ -2017,20 +1890,10 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
   }
 }
 
-- (void)signinDidFinish {
-  [self.presentationDelegate showHistorySyncOptInAfterDedicatedSignIn:YES];
-}
-
 #pragma mark - SyncPresenter
 
 - (void)showPrimaryAccountReauth {
-  auto provider =
-      base::BindRepeating(&CreateChangeProfileRecentTabsContinuation);
-  ShowSigninCommand* command = [[ShowSigninCommand
-      alloc] initWithOperation:AuthenticationOperation::kPrimaryAccountReauth
-                            accessPoint:signin_metrics::AccessPoint::kRecentTabs
-      changeProfileContinuationProvider:provider];
-  [self.applicationHandler showSignin:command baseViewController:self];
+  [self.presentationDelegate showPrimaryAccountReauth];
 }
 
 - (void)showSyncPassphraseSettings {
@@ -2080,10 +1943,28 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
   [_trustedVaultReauthenticationCoordinator start];
 }
 
-#pragma mark - SigninPresenter
+#pragma mark - SigninPromoViewMediatorDelegate
 
-- (void)showSignin:(ShowSigninCommand*)command {
-  [self.applicationHandler showSignin:command baseViewController:self];
+- (void)showSignin:(SigninPromoViewMediator*)mediator
+           command:(ShowSigninCommand*)command {
+  CHECK_EQ(mediator, self.signinPromoViewMediator);
+  __weak __typeof(self) weakSelf = self;
+  [command addSigninCompletion:^(SigninCoordinatorResult result,
+                                 id<SystemIdentity>) {
+    [weakSelf signinDidCompleteWithResult:result];
+  }];
+  _signinCoordinator = [SigninCoordinator signinCoordinatorWithCommand:command
+                                                               browser:_browser
+                                                    baseViewController:self];
+  [_signinCoordinator start];
+}
+
+#pragma mark - SigninPromoViewMediatorDelegate Helper
+
+- (void)signinDidCompleteWithResult:(SigninCoordinatorResult)result {
+  [self.signinPromoViewMediator signinDidCompleteWithResult:result];
+  [self stopSigninCoordinator];
+  [self.presentationDelegate showHistorySyncOptInAfterDedicatedSignIn:YES];
 }
 
 #pragma mark - UIAdaptivePresentationControllerDelegate
@@ -2094,7 +1975,7 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
   [self.presentationDelegate showActiveRegularTabFromRecentTabs];
 }
 
-#pragma mark - Accessibility
+#pragma mark - UIAccessibilityAction
 
 - (BOOL)accessibilityPerformEscape {
   [self.presentationDelegate showActiveRegularTabFromRecentTabs];
@@ -2121,7 +2002,7 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
 }
 
 - (void)keyCommand_close {
-  base::RecordAction(base::UserMetricsAction("MobileKeyCommandClose"));
+  base::RecordAction(base::UserMetricsAction(kMobileKeyCommandClose));
   [self.presentationDelegate showActiveRegularTabFromRecentTabs];
 }
 
@@ -2291,6 +2172,192 @@ typedef std::pair<SessionID, TableViewURLItem*> RecentlyClosedTableViewItemPair;
   }
 }
 
+- (void)openNewTabWithCurrentSearchTerm {
+  if (!self.browser) {
+    // Prevent interactions if the browser is nil, for example during dismissal.
+    return;
+  }
+
+  // It is reasonable to ignore this request if a modal UI is already showing
+  // above recent tabs. This can happen when a user simultaneously taps a
+  // recently closed tab and "enable sync". The sync settings UI appears first
+  // and we should not dismiss it to restore a recently closed tab.
+  if (self.presentedViewController) {
+    return;
+  }
+
+  base::RecordAction(
+      base::UserMetricsAction("TabsSearch.SuggestedActions.SearchOnWeb"));
+
+  TemplateURLService* templateURLService =
+      ios::TemplateURLServiceFactory::GetForProfile(self.profile);
+
+  const TemplateURL* defaultURL =
+      templateURLService->GetDefaultSearchProvider();
+  DCHECK(defaultURL);
+
+  TemplateURLRef::SearchTermsArgs search_args(
+      base::SysNSStringToUTF16(self.searchTerms));
+
+  GURL searchUrl(defaultURL->url_ref().ReplaceSearchTerms(
+      search_args, templateURLService->search_terms_data()));
+
+  web::WebState::CreateParams params(self.profile);
+  auto webState = web::WebState::Create(params);
+  web::WebState* webStatePtr = webState.get();
+
+  self.webStateList->InsertWebState(
+      std::move(webState),
+      WebStateList::InsertionParams::Automatic().Activate());
+  webStatePtr->OpenURL(web::WebState::OpenURLParams(
+      searchUrl, web::Referrer(), WindowOpenDisposition::CURRENT_TAB,
+      ui::PAGE_TRANSITION_GENERATED, /*is_renderer_initiated=*/false));
+
+  [self.presentationDelegate showActiveRegularTabFromRecentTabs];
+}
+
+- (BOOL)recentlyClosedTabsSectionExists {
+
+  if (self.page == TabGridPageRemoteTabs) {
+    return NO;
+  }
+
+  // The recently closed section does not exist if the user is searching and
+  // there are no matching recently closed items.
+  if (self.searchTerms.length && [self numberOfRecentlyClosedTabs] == 0) {
+    return NO;
+  }
+
+  if (self.tabRestoreService->entries().empty()) {
+    return NO;
+  }
+
+  return YES;
+}
+
+#pragma mark Suggested Actions Section
+
+- (void)addSuggestedActionsSection {
+  TableViewModel* model = self.tableViewModel;
+
+  UIColor* actionsTextColor = [UIColor colorNamed:kBlueColor];
+
+  [model addSectionWithIdentifier:SectionIdentifierSuggestedActions];
+  TableViewTextHeaderFooterItem* header = [[TableViewTextHeaderFooterItem alloc]
+      initWithType:ItemTypeSuggestedActionsHeader];
+  header.text = l10n_util::GetNSString(IDS_IOS_TABS_SEARCH_SUGGESTED_ACTIONS);
+  [model setHeader:header
+      forSectionWithIdentifier:SectionIdentifierSuggestedActions];
+
+  TableViewImageItem* searchWebItem = [[TableViewImageItem alloc]
+      initWithType:ItemTypeSuggestedActionSearchWeb];
+  searchWebItem.title =
+      l10n_util::GetNSString(IDS_IOS_TABS_SEARCH_SUGGESTED_ACTION_SEARCH_WEB);
+  searchWebItem.textColor = actionsTextColor;
+  searchWebItem.image = [[UIImage imageNamed:vSearch]
+      imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+  [model addItem:searchWebItem
+      toSectionWithIdentifier:SectionIdentifierSuggestedActions];
+
+  if ([self.presentationDelegate
+          respondsToSelector:@selector(showRegularTabGridFromRecentTabs)]) {
+    TableViewImageItem* searchOpenTabsItem = [[TableViewImageItem alloc]
+        initWithType:ItemTypeSuggestedActionSearchOpenTabs];
+    searchOpenTabsItem.title = l10n_util::GetNSString(
+        IDS_IOS_TABS_SEARCH_SUGGESTED_ACTION_SEARCH_OPEN_TABS);
+    searchOpenTabsItem.textColor = actionsTextColor;
+    searchOpenTabsItem.image =
+        [[UIImage imageNamed:vOverflowRecentTabs]
+            imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+    [model addItem:searchOpenTabsItem
+        toSectionWithIdentifier:SectionIdentifierSuggestedActions];
+  }
+
+  TableViewTabsSearchSuggestedHistoryItem* searchHistoryItem =
+      [[TableViewTabsSearchSuggestedHistoryItem alloc]
+          initWithType:ItemTypeSuggestedActionSearchHistory];
+  searchHistoryItem.textColor = actionsTextColor;
+  searchHistoryItem.image =
+      [[UIImage imageNamed:vOverflowHistory]
+          imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+  [model addItem:searchHistoryItem
+      toSectionWithIdentifier:SectionIdentifierSuggestedActions];
+}
+
+- (void)setSearchTerms:(NSString*)searchTerms {
+  if (_searchTerms == searchTerms ||
+      // No need for an update if transitioning between nil and empty string.
+      // (Length of both `_searchTerms` and `searchTerms` will be zero.)
+      (!_searchTerms.length && !searchTerms.length)) {
+    return;
+  }
+
+  _searchTerms = searchTerms;
+
+  if (self.preventUpdates) {
+    return;
+  }
+
+  TabsSearchService* search_service =
+      TabsSearchServiceFactory::GetForProfile(self.profile);
+  __weak RecentTabsTableViewController* weakSelf = self;
+  const std::u16string& search_terms =
+      base::SysNSStringToUTF16(self.searchTerms);
+
+  search_service->SearchRecentlyClosed(
+      search_terms,
+      base::BindOnce(^(
+          std::vector<TabsSearchService::RecentlyClosedItemPair> results) {
+        RecentTabsTableViewController* strongSelf = weakSelf;
+        if (!strongSelf) {
+          return;
+        }
+
+        std::vector<RecentlyClosedTableViewItemPair> matchedItems;
+        for (TabsSearchService::RecentlyClosedItemPair item_pair : results) {
+          const sessions::SerializedNavigationEntry& navigationEntry =
+              item_pair.second;
+
+          TableViewURLItem* recentlyClosedTab =
+              [[TableViewURLItem alloc] initWithType:ItemTypeRecentlyClosed];
+          recentlyClosedTab.title =
+              base::SysUTF16ToNSString(navigationEntry.title());
+          recentlyClosedTab.URL =
+              [[CrURL alloc] initWithGURL:navigationEntry.virtual_url()];
+
+          RecentlyClosedTableViewItemPair item(item_pair.first,
+                                               recentlyClosedTab);
+          matchedItems.push_back(item);
+        }
+
+        [strongSelf setRecentlyClosedItems:matchedItems];
+      }));
+
+  search_service->SearchRemoteTabs(
+      search_terms,
+      base::BindOnce(^(
+          std::unique_ptr<synced_sessions::SyncedSessions> synced_sessions,
+          std::vector<synced_sessions::DistantTabsSet> matching_distant_tabs) {
+        [weakSelf setSyncedSessions:std::move(synced_sessions)
+                 distantSessionTabs:matching_distant_tabs];
+      }));
+
+  [self loadModel];
+  [self.tableView reloadData];
+}
+
+
+- (BOOL)isScrolledToTop {
+  return IsScrollViewScrolledToTop(self.tableView);
+}
+
+- (BOOL)isScrolledToBottom {
+  return IsScrollViewScrolledToBottom(self.tableView);
+}
+
+- (void)scrollViewDidScroll:(UIScrollView*)scrollView {
+  [self.UIDelegate recentTabsScrollViewDidScroll:self];
+}
 
 // End Vivaldi
 @end

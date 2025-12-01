@@ -127,7 +127,7 @@ public class SearchWidgetProvider extends AppWidgetProvider {
                 });
     }
 
-    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
+    @VisibleForTesting
     public static PendingIntent createIntent(Context context, boolean startVoiceSearch) {
         SearchActivityClient client =
                 new SearchActivityClientImpl(context, IntentOrigin.SEARCH_WIDGET);
@@ -151,7 +151,7 @@ public class SearchWidgetProvider extends AppWidgetProvider {
                 optionsBundle);
     }
 
-    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
+    @VisibleForTesting
     public static void performUpdate(int[] ids, SearchActivityPreferences prefs) {
         SearchWidgetProviderDelegate delegate = getDelegate();
         if (ids == null) ids = delegate.getAllSearchWidgetIds();

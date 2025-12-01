@@ -211,6 +211,11 @@ static constexpr ToggleEnumAndInfoList kToggleNameAndInfoList = {{
       "Dump shaders for debugging purposes. Dumped shaders will be log via EmitLog, thus printed "
       "in Chrome console or consumed by user-defined callback function.",
       "https://crbug.com/dawn/792", ToggleStage::Device}},
+    {Toggle::DumpShadersOnFailure,
+     {"dump_shaders_on_failure",
+      "Dump shaders only on failure. Used for logging purposes. Dumped shaders will be log via "
+      "EmitLog, thus printed in Chrome console or consumed by user-defined callback function.",
+      "https://crbug.com/dawn/792", ToggleStage::Device}},
     {Toggle::DisableWorkgroupInit,
      {"disable_workgroup_init",
       "Disables the workgroup memory zero-initialization for compute shaders.",
@@ -532,9 +537,6 @@ static constexpr ToggleEnumAndInfoList kToggleNameAndInfoList = {{
       "with CreateCommittedResource() as a workaround of some driver issues on Intel Gen9 and "
       "Gen11 GPUs.",
       "https://crbug.com/dawn/484", ToggleStage::Device}},
-    {Toggle::UseTintIR,
-     {"use_tint_ir", "Enable the use of the Tint IR for backend codegen.",
-      "https://crbug.com/tint/1718", ToggleStage::Device}},
     {Toggle::D3DDisableIEEEStrictness,
      {"d3d_disable_ieee_strictness",
       "Disable IEEE strictness when compiling shaders. It is otherwise enabled by default to "
@@ -570,11 +572,22 @@ static constexpr ToggleEnumAndInfoList kToggleNameAndInfoList = {{
      {"disable_polyfills_on_integer_div_and_mod",
       "Disable the Tint polyfills on integer division and modulo.", "https://crbug.com/tint/2128",
       ToggleStage::Device}},
+    {Toggle::ScalarizeMaxMinClamp,
+     {"scalarize_max_min_clamp", "Scalarize max, min, and clamp builtins.",
+      "https://crbug.com/422144514", ToggleStage::Device}},
+    {Toggle::SubgroupShuffleClamped,
+     {"subgroup_shuffle_clamped",
+      "Polyfill subgroupShuffle by clamping the id param to within maximum possible subgroup size.",
+      "https://crbug.com/dawn/2502", ToggleStage::Device}},
+    {Toggle::MetalDisableModuleConstantF16,
+     {"metal_disable_module_constant_f16",
+      "Disable module constant hoisting for values that contain f16 types.",
+      "https://crbug.com/419804339", ToggleStage::Device}},
     {Toggle::EnableImmediateErrorHandling,
      {"enable_immediate_error_handling",
       "Have the uncaptured error callback invoked immediately when an error occurs, rather than "
       "waiting for the next Tick. This enables using the stack trace in which the uncaptured error "
-      "occured when breaking into the uncaptured error callback.",
+      "occurred when breaking into the uncaptured error callback.",
       "https://crbug.com/dawn/1789", ToggleStage::Device}},
     {Toggle::VulkanUseStorageInputOutput16,
      {"vulkan_use_storage_input_output_16",
@@ -639,9 +652,6 @@ static constexpr ToggleEnumAndInfoList kToggleNameAndInfoList = {{
     {Toggle::UseVulkanMemoryModel,
      {"use_vulkan_memory_model", "Use the Vulkan Memory Model if available.",
       "https://crbug.com/392606604", ToggleStage::Adapter}},
-    {Toggle::VulkanScalarizeClampBuiltin,
-     {"vulkan_scalarize_clamp_builtin", "Scalarize calls to the clamp builtin.",
-      "https://crbug.com/407109052", ToggleStage::Device}},
     {Toggle::VulkanDirectVariableAccessTransformHandle,
      {"vulkan_direct_variable_access_transform_handle",
       "Transform handles using direct variable access.", "https://crbug.com/387000529",
@@ -656,6 +666,15 @@ static constexpr ToggleEnumAndInfoList kToggleNameAndInfoList = {{
       "Compute the range of the index with Integer Range Analysis in the robustness transform and "
       "skip doing index clamping when the out of bound access cannot happen.",
       "https://crbug.com/348701956", ToggleStage::Device}},
+    {Toggle::UseSpirv14,
+     {"use_spirv_1_4", "Use SPIR-V 1.4 if available", "https://crbug.com/422421915",
+      ToggleStage::Device}},
+    {Toggle::MetalUseArgumentBuffers,
+     {"metal_use_argument_buffers", "Enables the use of Argument Buffers on Metal.",
+      "https://crbug.com/dawn/363031535", ToggleStage::Device}},
+    {Toggle::EnableShaderPrint,
+     {"enable_shader_print", "Enable print functions to produce output on supported devices.",
+      "https://crbug.com/433534277", ToggleStage::Device}},
     {Toggle::NoWorkaroundSampleMaskBecomesZeroForAllButLastColorTarget,
      {"no_workaround_sample_mask_becomes_zero_for_all_but_last_color_target",
       "MacOS 12.0+ Intel has a bug where the sample mask is only applied for the last color "
@@ -869,9 +888,13 @@ std::vector<const char*> TogglesState::GetDisabledToggleNames() const {
     return enabledTogglesName;
 }
 
+const TogglesSet& TogglesState::GetEnabledToggles() const {
+    return mEnabledToggles;
+}
+
 // Allowing TogglesState to be used in cache key.
 void StreamIn(stream::Sink* s, const TogglesState& togglesState) {
-    StreamIn(s, togglesState.mEnabledToggles.bitset);
+    StreamIn(s, togglesState.GetEnabledToggles());
 }
 
 const char* ToggleEnumToName(Toggle toggle) {
@@ -935,7 +958,7 @@ void TogglesInfo::EnsureToggleNameToEnumMapInitialized() {
 
     for (size_t index = 0; index < kToggleNameAndInfoList.size(); ++index) {
         const ToggleEnumAndInfo& toggleNameAndInfo = kToggleNameAndInfoList[index];
-        DAWN_ASSERT(index == static_cast<size_t>(toggleNameAndInfo.toggle));
+        DAWN_CHECK(index == static_cast<size_t>(toggleNameAndInfo.toggle));
         mToggleNameToEnumMap[toggleNameAndInfo.info.name] = toggleNameAndInfo.toggle;
     }
 

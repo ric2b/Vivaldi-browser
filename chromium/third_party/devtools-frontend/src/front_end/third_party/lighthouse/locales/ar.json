@@ -1188,7 +1188,7 @@
     "message": "مقياس \"الحد الأقصى المحتمَل لمهلة الاستجابة لأوّل إدخال\" هو أطول مدّة تستغرقها إحدى المهام استجابةً لإدخال المستخدمين. [مزيد من المعلومات حول مقياس \"الحد الأقصى المحتمَل لمهلة الاستجابة لأوّل إدخال\"](https://developer.chrome.com/docs/lighthouse/performance/lighthouse-max-potential-fid/)"
   },
   "core/audits/metrics/speed-index.js | description": {
-    "message": "يوضّح مؤشر السرعة وتيرة تعبئة محتوى الصفحة على شاشة المستخدم. [مزيد من المعلومات حول مقياس مؤشر السرعة](https://developer.chrome.com/docs/lighthouse/performance/speed-index/)"
+    "message": "يوضّح Speed Index وتيرة تعبئة محتوى الصفحة على شاشة المستخدم. [مزيد من المعلومات حول مقياس Speed Index](https://developer.chrome.com/docs/lighthouse/performance/speed-index/)"
   },
   "core/audits/metrics/total-blocking-time.js | description": {
     "message": "مجموع الفترات الزمنية بين \"سرعة عرض المحتوى على الصفحة\" و\"وقت التفاعل\" عندما تتجاوز مدّة المهمة 50 ملي ثانية، معبرًا عنها بالملي ثانية. [مزيد من المعلومات حول مقياس \"إجمالي وقت الحظر\"](https://developer.chrome.com/docs/lighthouse/performance/lighthouse-total-blocking-time/)"
@@ -1440,7 +1440,7 @@
     "message": "وقت استجابة الخادم الأوّلي قصير"
   },
   "core/audits/third-party-cookies.js | description": {
-    "message": "يوفِّر Chrome تجربة جديدة تتيح للمستخدمين إمكانية اختيار التصفُّح بدون ملفات تعريف الارتباط التابعة لجهات خارجية. [مزيد من المعلومات حول ملفات تعريف الارتباط التابعة لجهات خارجية](https://developers.google.com/privacy-sandbox/cookies)"
+    "message": "قد يتم حظر ملفات تعريف الارتباط الخارجية في بعض السياقات. [مزيد من المعلومات حول الاستعداد للقيود المفروضة على ملفات تعريف الارتباط الخارجية](https://privacysandbox.google.com/cookies/prepare/overview)"
   },
   "core/audits/third-party-cookies.js | displayValue": {
     "message": "{itemCount,plural, =1{تم العثور على ملف تعريف ارتباط واحد}zero{تم العثور على # ملف تعريف ارتباط}two{تم العثور على ملفَي تعريف ارتباط}few{تم العثور على # ملفات تعريف ارتباط}many{تم العثور على # ملف تعريف ارتباط}other{تم العثور على # ملف تعريف ارتباط}}"
@@ -1492,6 +1492,18 @@
   },
   "core/audits/third-party-summary.js | title": {
     "message": "تقليل استخدام الرموز التابعة لجهات خارجية"
+  },
+  "core/audits/trusted-types-xss.js | columnSeverity": {
+    "message": "درجة الخطورة"
+  },
+  "core/audits/trusted-types-xss.js | description": {
+    "message": "يوضّح توجيه `require-trusted-types-for` في عنوان `Content-Security-Policy` (CSP) لوكلاء المستخدمين كيفية التحكّم في البيانات التي يتم تمريرها إلى دوال DOM المتعلّقة بهجمات XSS. [مزيد من المعلومات حول الحدّ من هجمات XSS المستنِدة إلى DOM باستخدام Trusted Types](https://developer.chrome.com/docs/lighthouse/best-practices/trusted-types-xss)"
+  },
+  "core/audits/trusted-types-xss.js | noTrustedTypesToMitigateXss": {
+    "message": "لم يتم العثور على عنوان `Content-Security-Policy` مع توجيه Trusted Types"
+  },
+  "core/audits/trusted-types-xss.js | title": {
+    "message": "الحدّ من هجمات XSS المستنِدة إلى DOM باستخدام Trusted Types"
   },
   "core/audits/unsized-images.js | description": {
     "message": "يجب ضبط قيَم واضحة للعرض والارتفاع في عناصر الصور للحدّ من متغيّرات التصميم وتحسين متغيّرات التصميم التراكمية (CLS). تعرَّف على [كيفية ضبط أبعاد الصور](https://web.dev/articles/optimize-cls#images_without_dimensions)."
@@ -1676,11 +1688,17 @@
   "core/config/default-config.js | firstPaintImprovementsGroupTitle": {
     "message": "تحسينات العرض الأول"
   },
+  "core/config/default-config.js | insightsGroupDescription": {
+    "message": "تتوفّر هذه الإحصاءات أيضًا في لوحة \"أداء أدوات مطوري البرامج في Chrome\"، ويمكنك [تسجيل عملية تتبُّع](https://developer.chrome.com/docs/devtools/performance/reference) لعرض معلومات أكثر تفصيلاً."
+  },
+  "core/config/default-config.js | insightsGroupTitle": {
+    "message": "الإحصاءات"
+  },
   "core/config/default-config.js | metricGroupTitle": {
     "message": "المقاييس"
   },
   "core/config/default-config.js | overallImprovementsGroupDescription": {
-    "message": "يمكنك تحسين تجربة التحميل العامة لتصبح هذه الصفحة سريعة الاستجابة وجاهزة للاستخدام في أقرب وقت ممكن. المقاييس الأساسية: وقت التفاعل ومؤشر السرعة."
+    "message": "يمكنك تحسين تجربة التحميل العامة لتصبح هذه الصفحة سريعة الاستجابة وجاهزة للاستخدام في أقرب وقت ممكن. المقاييس الأساسية: وقت التفاعل ومؤشر Speed Index."
   },
   "core/config/default-config.js | overallImprovementsGroupTitle": {
     "message": "التحسينات العامة"
@@ -1857,22 +1875,22 @@
     "message": "عنوان URL"
   },
   "core/lib/i18n/i18n.js | columnWastedBytes": {
-    "message": "التوفيرات المحتملة"
+    "message": "التوفير المقدَّر"
   },
   "core/lib/i18n/i18n.js | columnWastedMs": {
-    "message": "التوفيرات المحتملة"
+    "message": "التوفير المقدَّر"
   },
   "core/lib/i18n/i18n.js | cumulativeLayoutShiftMetric": {
     "message": "Cumulative Layout Shift"
   },
   "core/lib/i18n/i18n.js | displayValueByteSavings": {
-    "message": "احتمال توفير {wastedBytes, number, bytes} كيبيبايت"
+    "message": "التوفير المقدَّر: {wastedBytes, number, bytes} كيبيبايت"
   },
   "core/lib/i18n/i18n.js | displayValueElementsFound": {
     "message": "{nodeCount,plural, =1{تم العثور على عنصر واحد}zero{تم العثور على # عنصر}two{تم العثور على عنصرَين}few{تم العثور على # عناصر}many{تم العثور على # عنصرًا}other{تم العثور على # عنصر}}"
   },
   "core/lib/i18n/i18n.js | displayValueMsSavings": {
-    "message": "التوفيرات المحتملة من {wastedMs, number, milliseconds} مللي ثانية"
+    "message": "التوفير المقدَّر: {wastedMs, number, milliseconds} ملي ثانية"
   },
   "core/lib/i18n/i18n.js | documentResourceType": {
     "message": "المستند"
@@ -2070,7 +2088,7 @@
     "message": "الحصول على نتيجة أداء أداة Lighthouse"
   },
   "flow-report/src/i18n/ui-strings.js | helpUseCaseNavigation2": {
-    "message": "التعرّف على قيم مقاييس أداء تحميل الصفحة، مثل سرعة عرض أكبر جزء من المحتوى على الصفحة ومؤشر السرعة"
+    "message": "التعرّف على قيم مقاييس أداء تحميل الصفحة، مثل سرعة عرض أكبر جزء من المحتوى على الصفحة ومؤشر Speed Index"
   },
   "flow-report/src/i18n/ui-strings.js | helpUseCaseNavigation3": {
     "message": "تقييم إمكانات تطبيقات الويب التقدّمية"
@@ -2191,9 +2209,6 @@
   },
   "node_modules/@paulirish/trace_engine/generated/Deprecation.js | CrossOriginWindowConfirm": {
     "message": "إنّ ميزة تنفيذ الوظيفة window.confirm المستنِدة إلى إطارات iframe من مصادر متعددة تم إيقافها نهائيًا وستتم إزالتها في المستقبل."
-  },
-  "node_modules/@paulirish/trace_engine/generated/Deprecation.js | DOMMutationEvents": {
-    "message": "إنّ أحداث تغيُّر نموذج العناصر في المستند (DOM)، بما في ذلك\nDOMSubtreeModified وDOMNodeInserted وDOMNodeRemoved وDOMNodeRemovedFromDocument وDOMNodeInsertedIntoDocument وDOMCharacterDataModified \nتم إيقافها نهائيًا (https://w3c.github.io/uievents/#legacy-event-types)، وستتم إزالتها. يُرجى استخدام MutationObserver بدلاً من ذلك."
   },
   "node_modules/@paulirish/trace_engine/generated/Deprecation.js | DataUrlInSvgUse": {
     "message": "تم بشكل نهائي إيقاف استخدام عناوين URL التي تبدأ بمخطّط \"data:‎\" في واجهة SVGUseElement، وستتم إزالة هذه الميزة في المستقبل."
@@ -2336,9 +2351,6 @@
   "node_modules/@paulirish/trace_engine/models/trace/insights/CLSCulprits.js | description": {
     "message": "تحدث تغييرات التصميم عندما تتحرك العناصر بدون أي تدخُّل من المستخدم. [تحقَّق من أسباب تغييرات التصميم](https://web.dev/articles/optimize-cls)، مثل إضافة عناصر أو إزالتها أو تغيير خطوطها أثناء تحميل الصفحة."
   },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/CLSCulprits.js | fontRequest": {
-    "message": "طلب الخط"
-  },
   "node_modules/@paulirish/trace_engine/models/trace/insights/CLSCulprits.js | injectedIframe": {
     "message": "إطار iframe الذي تم إدخاله"
   },
@@ -2357,8 +2369,8 @@
   "node_modules/@paulirish/trace_engine/models/trace/insights/CLSCulprits.js | topCulprits": {
     "message": "أهم أسباب تغييرات التصميم"
   },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/CLSCulprits.js | unsizedImages": {
-    "message": "صور بلا حجم محدَّد"
+  "node_modules/@paulirish/trace_engine/models/trace/insights/CLSCulprits.js | unsizedImage": {
+    "message": "Unsized image element"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/CLSCulprits.js | worstCluster": {
     "message": "أسوأ مجموعة"
@@ -2412,10 +2424,10 @@
     "message": "طلب الشبكة الأول هو الأهم.  يمكنك تقليل وقت الاستجابة للطلب عن طريق تجنُّب عمليات إعادة التوجيه وضمان استجابة الخادم بسرعة وتفعيل ميزة ضغط النص."
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/DocumentLatency.js | failedRedirects": {
-    "message": "تضمَّن الطلب عمليات إعادة توجيه"
+    "message": "تضمَّن الطلب عمليات إعادة توجيه (عدد عمليات إعادة التوجيه: {PH1}، ومدتها {PH2}+)"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/DocumentLatency.js | failedServerResponseTime": {
-    "message": "استجابة الخادم كانت بطيئة"
+    "message": "استجابة الخادم كانت بطيئة (المدة المرصودة: {PH1})"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/DocumentLatency.js | failedTextCompression": {
     "message": "لم يتمّ تطبيق أي ضغط"
@@ -2424,7 +2436,7 @@
     "message": "يتجنّب هذا الطلب عمليات إعادة التوجيه"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/DocumentLatency.js | passingServerResponseTime": {
-    "message": "استجاب الخادم بسرعة"
+    "message": "يستجيب الخادم بسرعة (المدة المرصودة: {PH1})"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/DocumentLatency.js | passingTextCompression": {
     "message": "تمّ تطبيق ضغط النص"
@@ -2465,6 +2477,9 @@
   "node_modules/@paulirish/trace_engine/models/trace/insights/FontDisplay.js | wastedTimeColumn": {
     "message": "الوقت الضائع"
   },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/ForcedReflow.js | anonymous": {
+    "message": "(مجهولة)"
+  },
   "node_modules/@paulirish/trace_engine/models/trace/insights/ForcedReflow.js | description": {
     "message": "إنّ العديد من واجهات برمجة التطبيقات، التي تقرأ عادةً عناصر التنسيق الهندسية، تجبر محرّك العرض على إيقاف تنفيذ النص البرمجي مؤقتًا لاحتساب عناصر النمط والتنسيق. يمكنك التعرّف على مزيد من المعلومات حول [إعادة التدفق الإلزامي](https://developers.google.com/web/fundamentals/performance/rendering/avoid-large-complex-layouts-and-layout-thrashing#avoid-forced-synchronous-layouts) وإجراءات التخفيف من آثاره."
   },
@@ -2481,7 +2496,7 @@
     "message": "إجمالي مدة إعادة التدفق"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/ForcedReflow.js | unattributed": {
-    "message": "مهام غير منسوبة لأي رموز برمجية"
+    "message": "[نص غير منسوب لأي جهة]"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/ImageDelivery.js | description": {
     "message": "يمكن أن يؤدي تقليل وقت تنزيل الصور إلى تحسين مدّة التحميل المُدرَكة للصفحة، بالإضافة إلى تحسين سرعة عرض أكبر محتوى مرئي. [مزيد من المعلومات حول تحسين حجم الصورة](https://developer.chrome.com/docs/lighthouse/performance/uses-optimized-images/)"
@@ -2513,30 +2528,6 @@
   "node_modules/@paulirish/trace_engine/models/trace/insights/ImageDelivery.js | useVideoFormat": {
     "message": "إنّ استخدام تنسيقات الفيديو بدلاً من ملفات GIF يمكن أن يؤدي إلى تحسين حجم تنزيل المحتوى المتحرك."
   },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/InteractionToNextPaint.js | description": {
-    "message": "ابدأ بالتحقيق في المرحلة الأطول. [يمكن تقليل التأخيرات](https://web.dev/articles/optimize-inp#optimize_interactions). ولتقليل مدة المعالجة، [حسِّن تكاليف سلسلة التعليمات الرئيسية](https://web.dev/articles/optimize-long-tasks)، والتي تكون في الغالب بيانات JavaScript."
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/InteractionToNextPaint.js | duration": {
-    "message": "المدة"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/InteractionToNextPaint.js | inputDelay": {
-    "message": "تأخير عملية الإدخال"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/InteractionToNextPaint.js | noInteractions": {
-    "message": "لم يتم رصد أي تفاعلات"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/InteractionToNextPaint.js | phase": {
-    "message": "المرحلة"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/InteractionToNextPaint.js | presentationDelay": {
-    "message": "تأخير العرض"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/InteractionToNextPaint.js | processingDuration": {
-    "message": "مدة المعالجة"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/InteractionToNextPaint.js | title": {
-    "message": "مدى استجابة الصفحة لتفاعلات المستخدم (INP) حسب المرحلة"
-  },
   "node_modules/@paulirish/trace_engine/models/trace/insights/LCPDiscovery.js | description": {
     "message": "يمكنك تحسين مقياس سرعة عرض أكبر محتوى مرئي (LCP) من خلال جعل صورة مقياس LCP [قابلة للاكتشاف](https://web.dev/articles/optimize-lcp#1_eliminate_resource_load_delay) من HTML على الفور، و[تجنُّب التحميل الكسول](https://web.dev/articles/lcp-lazy-loading)."
   },
@@ -2564,36 +2555,6 @@
   "node_modules/@paulirish/trace_engine/models/trace/insights/LCPDiscovery.js | title": {
     "message": "الاطّلاع على طلبات LCP"
   },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | description": {
-    "message": "لكل [مرحلة استراتيجيات تحسين محدَّدة](https://web.dev/articles/optimize-lcp#lcp-breakdown). ومن الأفضل أن يتم قضاء معظم وقت سرعة عرض أكبر محتوى مرئي (LCP) في تحميل الموارد، وليس في التأخيرات."
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | duration": {
-    "message": "المدة"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | elementRenderDelay": {
-    "message": "مهلة عرض العناصر"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | fieldDuration": {
-    "message": "الشريحة المئوية الـ 75 من بيانات تجارب المستخدمِين الحقيقيين"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | noLcp": {
-    "message": "لم يتم رصد أي مقياس لسرعة عرض أكبر محتوى مرئي (LCP)"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | phase": {
-    "message": "المرحلة"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | resourceLoadDelay": {
-    "message": "مهلة تحميل الموارد"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | resourceLoadDuration": {
-    "message": "مدة تحميل المورد"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | timeToFirstByte": {
-    "message": "مدة تحميل أول بايت"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | title": {
-    "message": "سرعة عرض أكبر محتوى مرئي (LCP) حسب المرحلة"
-  },
   "node_modules/@paulirish/trace_engine/models/trace/insights/LegacyJavaScript.js | columnScript": {
     "message": "النص البرمجي"
   },
@@ -2601,7 +2562,7 @@
     "message": "وحدات البايت المُهدرة"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/LegacyJavaScript.js | description": {
-    "message": "تساعد الرموز البرمجية polyfill وtransform المتصفّحات القديمة في استخدام ميزات JavaScript الجديدة. ومع ذلك، يكون العديد منها غير ضروري للمتصفّحات الحديثة. من الأفضل تعديل عملية إنشاء رموز JavaScript لتجنُّب تحويل رموز ميزات [Baseline](https://web.dev/articles/baseline-and-polyfills)، إلّا في حال ضرورة دعم المتصفِّحات القديمة. [التعرُّف على سبب إمكانية نشر معظم المواقع الإلكترونية لرمز ES6+‎ بدون تحويله](https://philipwalton.com/articles/the-state-of-es5-on-the-web/)"
+    "message": "تساعد الرموز البرمجية polyfill وtransform المتصفّحات القديمة في استخدام ميزات JavaScript الجديدة. ومع ذلك، يكون العديد منها غير ضروري للمتصفّحات الحديثة. من الأفضل تعديل عملية تصميم رموز JavaScript لتجنُّب تحويل رموز ميزات [Baseline](https://web.dev/articles/baseline-and-polyfills)، إلّا إذا كان من الضروري التوافق مع المتصفِّحات القديمة. [التعرُّف على سبب إمكانية نشر معظم المواقع الإلكترونية لرمز ES6+‎ بدون تحويله](https://philipwalton.com/articles/the-state-of-es5-on-the-web/)"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/LegacyJavaScript.js | title": {
     "message": "ميزات JavaScript القديمة"
@@ -2621,8 +2582,32 @@
   "node_modules/@paulirish/trace_engine/models/trace/insights/ModernHTTP.js | title": {
     "message": "بروتوكول HTTP الحديث"
   },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | columnOrigin": {
+    "message": "المصدر"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | columnRequest": {
+    "message": "طلب"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | columnSource": {
+    "message": "المصدر"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | columnTime": {
+    "message": "الوقت"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | columnWastedMs": {
+    "message": "التوفير المقدَّر في سرعة عرض أكبر محتوى مرئي (LCP)"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | crossoriginWarning": {
+    "message": "تمت إضافة اتصال مُسبَق لمصادر غير مستخدَمة. يُرجى التحقّق من استخدام السمة crossorigin بشكل صحيح."
+  },
   "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | description": {
     "message": "يُمكن [تجنُّب تقييد الطلبات المهمة](https://developer.chrome.com/docs/lighthouse/performance/critical-request-chains) عن طريق تقليل طول السلاسل أو تقليل حجم تنزيل الموارد أو تأجيل تنزيل الموارد غير الضرورية لتحسين تحميل الصفحة."
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | estSavingTableDescription": {
+    "message": "يمكنك إضافة إشارات [preconnect](https://developer.chrome.com/docs/lighthouse/performance/uses-rel-preconnect/) إلى أهم مصادرك، ولكن يُرجى محاولة استخدام 4 إشارات كحدّ أقصى."
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | estSavingTableTitle": {
+    "message": "المصادر المُرشَّحة للاتصال المُسبَق"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | maxCriticalPathLatency": {
     "message": "الحد الأقصى لوقت استجابة سلسلة الطلبات المُهمّة:"
@@ -2630,14 +2615,32 @@
   "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | noNetworkDependencyTree": {
     "message": "ما مِن مهام عرض متأثرة بطلبات اعتمادية الشبكة"
   },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | noPreconnectCandidates": {
+    "message": "ما مِن مصادر إضافية مناسبة للاتصال المُسبَق"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | noPreconnectOrigins": {
+    "message": "لم يتم إنشاء اتصال مُسبَق لأي مصادر"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | preconnectOriginsTableDescription": {
+    "message": "تساعد إشارات [preconnect](https://developer.chrome.com/docs/lighthouse/performance/uses-rel-preconnect/) المتصفّح على إنشاء اتصال قبل تحميل الصفحة، ما يوفِّر الوقت عند إرسال أول طلب إلى مصدر المحتوى هذا. في ما يلي المصادر التي تم إنشاء اتصال مُسبَق بها على الصفحة."
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | preconnectOriginsTableTitle": {
+    "message": "المصادر المتصلة مُسبَقًا"
+  },
   "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | title": {
     "message": "شجرة اعتمادية الشبكة"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | tooManyPreconnectLinksWarning": {
+    "message": "تم العثور على أكثر من 4 روابط preconnect. يُنصح بعدم استخدام هذه الروابط بشكل كبير واقتصارها على المصادر الأكثر أهمية فقط."
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | unusedWarning": {
+    "message": "تمت إضافة اتصال مُسبَق لمصادر غير مستخدَمة. يجب استخدام preconnect فقط للمصادر التي من المرجح أن تطلبها الصفحة."
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | warningDescription": {
     "message": "يُمكن تجنُّب تقييد الطلبات المهمة عن طريق تقليل طول السلاسل أو تقليل حجم تنزيل الموارد أو تأجيل تنزيل الموارد غير الضرورية لتحسين تحميل الصفحة."
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/RenderBlocking.js | description": {
-    "message": "تؤدي الطلبات إلى حظر العرض الأوّلي للصفحة، ما قد يُبطئ سرعة عرض أكبر محتوى مرئي (LCP). ويمكن [تأجيل هذه الطلبات](https://web.dev/learn/performance/understanding-the-critical-path#render-blocking_resources/) أو تضمينها لإخراجها من المسار الحرج."
+    "message": "تؤدي الطلبات إلى حظر العرض الأوّلي للصفحة، ما قد يُبطئ سرعة عرض أكبر محتوى مرئي (LCP). ويمكن [تأجيل هذه الطلبات](https://web.dev/learn/performance/understanding-the-critical-path#render-blocking_resources) أو تضمينها لإخراجها من المسار الحرج."
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/RenderBlocking.js | duration": {
     "message": "المدة"
@@ -2685,7 +2688,7 @@
     "message": "حجم عملية النقل"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/ThirdParties.js | description": {
-    "message": "يمكن أن يؤثر الرمز البرمجي التابع لجهة خارجية بشكل كبير في أداء التحميل. [يمكنك تقليل تحميل الرموز البرمجية التابعة لجهات خارجية وتأجيله](https://developers.google.com/web/fundamentals/performance/optimizing-content-efficiency/loading-third-party-javascript/)، ومنح الأولوية لمحتوى صفحتك."
+    "message": "يمكن أن يؤثر الرمز البرمجي التابع لجهة خارجية بشكل كبير في أداء التحميل. [يمكنك تقليل تحميل الرموز البرمجية التابعة لجهات خارجية وتأجيله](https://web.dev/articles/optimizing-content-efficiency-loading-third-party-javascript/)، ومنح الأولوية لمحتوى صفحتك."
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/ThirdParties.js | noThirdParties": {
     "message": "لم يتم العثور على أي محتوى خارجي"
@@ -2695,6 +2698,9 @@
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/Viewport.js | description": {
     "message": "قد يتم [تأخير الاستجابة لتفاعلات النقر بمقدار 300 ملي ثانية كحد أقصى](https://developer.chrome.com/blog/300ms-tap-delay-gone-away/) إذا لم يتم تحسين إطار العرض للأجهزة الجوّالة."
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/Viewport.js | mobileTapDelayLabel": {
+    "message": "مدة تأخير الاستجابة للنقر على الأجهزة الجوّالة"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/Viewport.js | title": {
     "message": "تحسين إطار العرض للأجهزة الجوّالة"
@@ -3587,8 +3593,14 @@
   "report/renderer/report-utils.js | footerIssue": {
     "message": "الإبلاغ عن مشكلة"
   },
+  "report/renderer/report-utils.js | goBackToAudits": {
+    "message": "الرجوع إلى عمليات التدقيق"
+  },
   "report/renderer/report-utils.js | hide": {
     "message": "إخفاء"
+  },
+  "report/renderer/report-utils.js | insightsNotice": {
+    "message": "ستحلّ الإحصاءات محل عمليات تدقيق الأداء في وقت لاحق من هذا العام. [يمكنك هنا التعرّف على مزيد من المعلومات وتقديم الملاحظات](https://github.com/GoogleChrome/lighthouse/discussions/16462)."
   },
   "report/renderer/report-utils.js | labDataTitle": {
     "message": "بيانات المختبَر"
@@ -3689,6 +3701,9 @@
   "report/renderer/report-utils.js | toplevelWarningsMessage": {
     "message": "حدثت مشاكل تؤثر في تشغيل Lighthouse:"
   },
+  "report/renderer/report-utils.js | tryInsights": {
+    "message": "تجربة الإحصاءات"
+  },
   "report/renderer/report-utils.js | unattributable": {
     "message": "موارد لا يمكن تحديد مصدرها"
   },
@@ -3719,6 +3734,9 @@
   "treemap/app/src/util.js | duplicateModulesLabel": {
     "message": "الوحدات المكرَّرة"
   },
+  "treemap/app/src/util.js | duplicatedBytesLabel": {
+    "message": "وحدات البايت المكرّرة"
+  },
   "treemap/app/src/util.js | resourceBytesLabel": {
     "message": "حجم الموارد بوحدة البايت"
   },
@@ -3726,9 +3744,12 @@
     "message": "الاسم"
   },
   "treemap/app/src/util.js | toggleTableButtonLabel": {
-    "message": "تبديل الجدول"
+    "message": "إظهار الجدول أو إخفاؤه"
+  },
+  "treemap/app/src/util.js | transferBytesLabel": {
+    "message": "نقل وحدات البايت"
   },
   "treemap/app/src/util.js | unusedBytesLabel": {
-    "message": "وحدات بايت غير المستخدمة"
+    "message": "وحدات البايت غير المستخدمة"
   }
 }

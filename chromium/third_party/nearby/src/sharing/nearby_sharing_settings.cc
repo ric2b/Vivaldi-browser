@@ -15,7 +15,6 @@
 #include "sharing/nearby_sharing_settings.h"
 
 #include <cstdint>
-#include <filesystem>  // NOLINT(build/c++17)
 #include <functional>
 #include <memory>
 #include <ostream>
@@ -30,7 +29,6 @@
 #include "internal/platform/device_info.h"
 #include "proto/sharing_enums.pb.h"
 #include "sharing/analytics/analytics_recorder.h"
-#include "sharing/common/compatible_u8_string.h"
 #include "sharing/common/nearby_share_enums.h"
 #include "sharing/common/nearby_share_prefs.h"
 #include "sharing/internal/api/preference_manager.h"
@@ -185,7 +183,7 @@ void NearbyShareSettings::RestoreFallbackVisibility() {
 std::string NearbyShareSettings::GetCustomSavePath() const {
   return preference_manager_.GetString(
       prefs::kNearbySharingCustomSavePath,
-      GetCompatibleU8String(device_info_.GetDownloadPath().u8string()));
+      device_info_.GetDownloadPath().ToString());
 }
 
 bool NearbyShareSettings::IsDisabledByPolicy() const { return false; }

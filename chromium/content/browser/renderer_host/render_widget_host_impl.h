@@ -143,7 +143,6 @@ class VisibleTimeRequestTrigger;
 //   * Main frame for webpage (root is `blink::WebView`)
 //   * Child frame for webpage (root is RenderFrame)
 //   * Popups (root is RenderWidget)
-//   * Pepper Fullscreen (root is RenderWidget)
 //
 // Destruction of the RenderWidgetHost will trigger destruction of the
 // RenderWidget iff RenderWidget is the root of the renderer object graph.
@@ -460,6 +459,8 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   void SetFrameDepth(unsigned int depth);
   void SetIntersectsViewport(bool intersects);
   void UpdatePriority();
+  void SetShouldContributePriorityToProcess(
+      bool should_contribute_priority_to_process);
 
   // Tells the renderer to die and optionally delete |this|.
   void ShutdownAndDestroyWidget(bool also_delete);
@@ -1021,6 +1022,10 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   // Requests a commit and forced redraw in the renderer compositor.
   void ForceRedrawForTesting();
 
+  // Indicates the page is discarding. The renderer process will get
+  // cpu-priority boosted to run discard logic.
+  void SetIsDiscarding(bool is_discarding);
+
   // NOTE(david@vivaldi.com): Returns the status of the device
   // emulation.
   bool IsDeviceEmulationActive() { return device_emulation_active_; }
@@ -1034,7 +1039,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   void VisibleTextSelectionChanged(const std::u16string& text);
 
  protected:
-  // |routing_id| must not be MSG_ROUTING_NONE.
+  // |routing_id| must not be IPC::mojom::kRoutingIdNone.
   // If this object outlives |delegate|, DetachDelegate() must be called when
   // |delegate| goes away. |site_instance_group| will outlive this
   // widget but we store it via a `base::SafeRef` instead of a scoped_refptr to
@@ -1328,6 +1333,14 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   // this is independent of |is_hidden_|. For widgets not associated with
   // RenderFrame/View, assume false.
   bool intersects_viewport_ = false;
+
+  // While the main frame is being discarded, the renderer process need to be
+  // foreground.
+  // This is only effective when WebContentsDiscard feature is enabled.
+  bool is_discarding_ = false;
+
+  // Indicates whether this widget contributes to the priority of the process.
+  bool should_contribute_priority_to_process_ = true;
 
   // Determines whether the page is mobile optimized or not.
   bool is_mobile_optimized_ = false;

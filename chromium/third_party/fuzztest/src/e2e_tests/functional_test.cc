@@ -35,6 +35,7 @@
 #include "absl/time/time.h"
 #include "./common/temp_dir.h"
 #include "./e2e_tests/test_binary_util.h"
+#include "./fuzztest/internal/escaping.h"
 #include "./fuzztest/internal/io.h"
 #include "./fuzztest/internal/logging.h"
 #include "./fuzztest/internal/printer.h"
@@ -479,8 +480,7 @@ TEST_F(
 
 TEST_F(UnitTestModeTest, DetectsRecursiveStructureIfOptionalsSetByDefault) {
   auto [status, std_out, std_err] = Run("MySuite.FailsIfCantInitializeProto");
-  // TODO: b/398261908 - Change to `ExpectTargetAbort` once the bug is fixed.
-  EXPECT_THAT(status, Eq(Signal(SIGABRT)));
+  ExpectTargetAbort(status, std_err);
   EXPECT_THAT(std_err, HasSubstr("recursive fields"));
 }
 
@@ -515,8 +515,7 @@ TEST_F(UnitTestModeTest,
 TEST_F(UnitTestModeTest, FailsWhenRepeatedFieldsSizeRangeIsInvalid) {
   auto [status, std_out, std_err] =
       Run("MySuite.FailsToInitializeIfRepeatedFieldsSizeRangeIsInvalid");
-  // TODO: b/398261908 - Change to `ExpectTargetAbort` once the bug is fixed.
-  EXPECT_THAT(status, Eq(Signal(SIGABRT)));
+  ExpectTargetAbort(status, std_err);
   EXPECT_THAT(std_err, HasSubstr("size range is not valid"));
 }
 
@@ -529,8 +528,7 @@ TEST_F(UnitTestModeTest, UsesPolicyProvidedDefaultDomainForProtos) {
 TEST_F(UnitTestModeTest, ChecksTypeOfProvidedDefaultDomainForProtos) {
   auto [status, std_out, std_err] =
       Run("MySuite.FailsWhenWrongDefaultProtobufDomainIsProvided");
-  // TODO: b/398261908 - Change to `ExpectTargetAbort` once the bug is fixed.
-  EXPECT_THAT(status, Eq(Signal(SIGABRT)));
+  ExpectTargetAbort(status, std_err);
   EXPECT_THAT(std_err, HasSubstr("does not match the expected message type"));
 }
 
@@ -638,6 +636,7 @@ class GenericCommandLineInterfaceTest : public ::testing::Test {
     return RunBinary(BinaryPath(binary),
                      RunOptions{/*flags=*/non_fuzztest_flags,
                                 /*fuzztest_flags=*/flags,
+                                /*raw_args=*/{},
                                 /*env=*/WithTestSanitizerOptions(env),
                                 /*timeout=*/timeout});
   }
@@ -1102,32 +1101,6 @@ TEST_F(FuzzingModeCommandLineInterfaceTest, ConfiguresStackLimitByFlag) {
 }
 
 TEST_F(FuzzingModeCommandLineInterfaceTest,
-       ConfiguresStackLimitByEnvVarWithWarning) {
-  auto [status, std_out, std_err] =
-      RunWith({{"fuzz", "MySuite.DataDependentStackOverflow"}},
-              {{"FUZZTEST_STACK_LIMIT", "512000"}});
-  EXPECT_THAT(std_err, HasSubstr("argument 0: "));
-  EXPECT_THAT(std_err,
-              HasSubstr(absl::StrCat(
-                  "Stack limit is set by FUZZTEST_STACK_LIMIT env var - this "
-                  "is going to be deprecated soon. Consider switching to ",
-                  CreateFuzzTestFlag("stack_limit_kb", ""), " flag.")));
-  ExpectStackLimitExceededMessage(std_err, 512000);
-  ExpectTargetAbort(status, std_err);
-}
-
-TEST_F(FuzzingModeCommandLineInterfaceTest,
-       ConfiguresStackLimitByEnvVarAndOverridesFlag) {
-  auto [status, std_out, std_err] =
-      RunWith({{"fuzz", "MySuite.DataDependentStackOverflow"},
-               {"stack_limit_kb", "1000"}},
-              {{"FUZZTEST_STACK_LIMIT", "512000"}});
-  EXPECT_THAT(std_err, HasSubstr("argument 0: "));
-  ExpectStackLimitExceededMessage(std_err, 512000);
-  ExpectTargetAbort(status, std_err);
-}
-
-TEST_F(FuzzingModeCommandLineInterfaceTest,
        DoesNotPrintWarningForDisabledLimitFlagsByDefault) {
   auto [status, std_out, std_err] = RunWith(
       {{"fuzz", "MySuite.PassesWithPositiveInput"}, {"fuzz_for", "10s"}},
@@ -1235,7 +1208,7 @@ TEST_F(FuzzingModeCommandLineInterfaceTest,
       {
           {"fuzz_for", "1s"},
           {"corpus_database", temp_dir.path()},
-          {"internal_centipede_binary_path", CentipedePath()},
+          {"internal_centipede_command", ShellEscape(CentipedePath())},
       },
       /*env=*/{},
       /*timeout=*/absl::Minutes(1), "testdata/unit_test_and_fuzz_tests");
@@ -1295,7 +1268,7 @@ class FuzzingModeFixtureTest
         run_options.fuzztest_flags = {
             {"fuzz", std::string(test_name)},
             {"print_subprocess_log", "true"},
-            {"internal_centipede_binary_path", CentipedePath()}};
+            {"internal_centipede_command", ShellEscape(CentipedePath())}};
         run_options.env = {
             {"FUZZTEST_MAX_FUZZING_RUNS", absl::StrCat(iterations)}};
         run_options.timeout = absl::InfiniteDuration();
@@ -1469,8 +1442,8 @@ class FuzzingModeCrashFindingTest
       run_options.timeout = timeout + absl::Seconds(10);
       if (GetParam() ==
           ExecutionModelParam::kTestBinaryInvokingCentipedeBinary) {
-        run_options.fuzztest_flags["internal_centipede_binary_path"] =
-            CentipedePath();
+        run_options.fuzztest_flags["internal_centipede_command"] =
+            ShellEscape(CentipedePath());
       }
       return RunBinary(BinaryPath(target_binary), run_options);
   }
@@ -1881,6 +1854,34 @@ TEST_P(FuzzingModeCrashFindingTest,
           },
           /*timeout=*/absl::Seconds(30));
   EXPECT_THAT(std_err, HasSubstr("argument 0: \"ahmfn\""));
+  ExpectTargetAbort(status, std_err);
+}
+
+TEST_P(FuzzingModeCrashFindingTest, FlatbuffersFailsWhenFieldsAreNotDefault) {
+  TempDir out_dir;
+  auto [status, std_out, std_err] =
+      Run("MySuite.FlatbuffersFailsWhenFieldsAreNotDefault");
+  EXPECT_THAT(std_err,
+              AllOf(HasSubstr("argument 0: {b: ("),  // b
+                    HasSubstr("i8: ("),              // i8
+                    HasSubstr("i16: ("),             // i16
+                    HasSubstr("i32: ("),             // i32
+                    HasSubstr("i64: ("),             // i64
+                    HasSubstr("u8: ("),              // u8
+                    HasSubstr("u16: ("),             // u16
+                    HasSubstr("u32: ("),             // u32
+                    HasSubstr("u64: ("),             // u64
+                    HasSubstr("f: ("),               // f
+                    HasSubstr("d: ("),               // d
+                    HasSubstr("str: "),              // str
+                    HasSubstr("ei8: ("),             // ei8
+                    HasSubstr("ei16: ("),            // ei16
+                    HasSubstr("ei32: ("),            // ei32
+                    HasSubstr("ei64: ("),            // ei64
+                    HasSubstr("eu8: ("),             // eu8
+                    HasSubstr("eu16: ("),            // eu16
+                    HasSubstr("eu32: ("),            // eu32
+                    HasSubstr("eu64: (")));          // eu64
   ExpectTargetAbort(status, std_err);
 }
 

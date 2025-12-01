@@ -1,3 +1,5 @@
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
 # Infrastructure for parallelization of compilation tasks.
 load("//xla:xla.default.bzl", "xla_cc_test")
 # copybara:uncomment load("//xla/tsl:tsl.default.bzl", "get_compatible_with_portable")
@@ -89,6 +91,7 @@ xla_cc_test(
         ":concurrency_utils",
         ":tsl_task_executor",
         "//xla:shape_util",
+        "//xla:xla_data_proto_cc",
         "//xla/hlo/ir:hlo",
         "//xla/hlo/testlib:hlo_hardware_independent_test_base",
         "//xla/service:hlo_module_config",

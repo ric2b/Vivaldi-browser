@@ -13,6 +13,7 @@
 #include "base/values.h"
 #include "chrome/browser/net/secure_dns_util.h"
 #include "components/country_codes/country_codes.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/storage_partition.h"
 #include "net/dns/public/doh_provider_entry.h"
 

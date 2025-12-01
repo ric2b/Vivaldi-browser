@@ -26,12 +26,12 @@
 #include <vector>
 
 #include "internal/platform/cancellation_flag.h"
+#import "internal/platform/implementation/apple/ble_l2cap_server_socket.h"
+#import "internal/platform/implementation/apple/ble_server_socket.h"
+#import "internal/platform/implementation/apple/bluetooth_adapter_v2.h"
 #include "internal/platform/implementation/ble_v2.h"
 #include "internal/platform/implementation/bluetooth_adapter.h"
 #include "internal/platform/uuid.h"
-
-#import "internal/platform/implementation/apple/ble_server_socket.h"
-#import "internal/platform/implementation/apple/bluetooth_adapter_v2.h"
 
 @class GNCBLEMedium;
 @class GNSCentralManager;
@@ -164,6 +164,15 @@ class BleMedium : public api::ble_v2::BleMedium {
   // This is currently always false for all Apple hardware.
   bool IsExtendedAdvertisementsAvailable() override;
 
+  // Retrieves a BlePeripheral ID from a native BLE peripheral ID.
+  // On Apple platform, the native ID is NSUUID in string format like
+  // "E621E1F8-C36C-495A-93FC-0C247A3E6E5F".
+  //
+  // Returns std::nullopt if cannot retrieve the BlePeripheral from the native
+  // BLE peripheral id.
+  std::optional<api::ble_v2::BlePeripheral::UniqueId> RetrieveBlePeripheralIdFromNativeId(
+      const std::string &ble_peripheral_native_id) override;
+
  private:
   // A map for maintaining the set of currently known peripherals.
   class PeripheralsMap {
@@ -185,10 +194,30 @@ class BleMedium : public api::ble_v2::BleMedium {
 
   void HandleAdvertisementFound(id<GNCPeripheral> peripheral,
                                 NSDictionary<CBUUID *, NSData *> *serviceData);
+  void ClearAdvertisementPacketsMap();
+  void CleanUpExpiredAdvertisementPackets(NSDate *now);
+  bool ShouldReportAdvertisement(NSDate *now, api::ble_v2::BlePeripheral::UniqueId peripheral_id,
+                                 NSDictionary<CBUUID *, NSData *> *service_data);
+  void AddAdvertisementPacketInfo(api::ble_v2::BlePeripheral::UniqueId peripheral_id,
+                                  NSDictionary<CBUUID *, NSData *> *service_data);
+  NSDate *GetLastTimestampToCleanExpiredAdvertisementPackets();
 
   GNCBLEMedium *medium_;
 
   PeripheralsMap peripherals_;
+  struct AdvertisementPacketInfo {
+    NSDate *last_timestamp;
+    NSDictionary<CBUUID *, NSData *> *last_service_data;
+  };
+
+  absl::Mutex advertisement_packets_mutex_;
+  // A map for maintaining the set of advertisement packets that should be tracked.
+  absl::flat_hash_map<api::ble_v2::BlePeripheral::UniqueId, AdvertisementPacketInfo>
+      advertisement_packets_map_ ABSL_GUARDED_BY(advertisement_packets_mutex_);
+  // The timestamp of the last time to clean up expired advertisement packets. This is used to
+  // prevent the map from growing indefinitely.
+  NSDate *last_timestamp_to_clean_expired_advertisement_packets_
+      ABSL_GUARDED_BY(advertisement_packets_mutex_) = {nil};
 
   GNSPeripheralServiceManager *socketPeripheralServiceManager_;
   GNSPeripheralManager *socketPeripheralManager_;
@@ -199,6 +228,9 @@ class BleMedium : public api::ble_v2::BleMedium {
   // Used for the async version of StartAdvertising and has both an advertisement found and result
   // callback.
   api::ble_v2::BleMedium::ScanningCallback scanning_cb_;
+
+  absl::Mutex l2cap_server_socket_mutex_;
+  BleL2capServerSocket *l2cap_server_socket_ptr_ = nullptr;
 };
 
 }  // namespace apple

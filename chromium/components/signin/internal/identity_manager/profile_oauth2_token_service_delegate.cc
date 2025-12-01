@@ -179,6 +179,9 @@ void ProfileOAuth2TokenServiceDelegate::FireRefreshTokenAvailable(
   ScopedBatchChange batch(this);
   for (auto& observer : observer_list_) {
     observer.OnRefreshTokenAvailable(account_id);
+    // Always call `OnAuthErrorChanged()` when refresh token is updated.
+    observer.OnAuthErrorChanged(account_id, token_error,
+                                update_refresh_token_source_);
   }
 }
 
@@ -193,13 +196,17 @@ void ProfileOAuth2TokenServiceDelegate::FireRefreshTokenRevoked(
     on_refresh_token_revoked_callback_.Run(account_id, source_string);
   }
 
+  // Copy the account ID to avoid a use-after-free if one of the observers
+  // owns the reference to the account ID and destroys it in
+  // `OnRefreshTokenRevoked()`.
+  CoreAccountId account_id_copy = account_id;
   ScopedBatchChange batch(this);
   for (auto& observer : observer_list_) {
-    observer.OnRefreshTokenRevoked(account_id);
+    observer.OnRefreshTokenRevoked(account_id_copy);
   }
 
   CHECK(on_refresh_token_revoked_notified_callback_);
-  on_refresh_token_revoked_notified_callback_.Run(account_id);
+  on_refresh_token_revoked_notified_callback_.Run(account_id_copy);
 }
 
 void ProfileOAuth2TokenServiceDelegate::FireRefreshTokensLoaded() {
@@ -308,20 +315,11 @@ void ProfileOAuth2TokenServiceDelegate::RevokeCredentials(
 void ProfileOAuth2TokenServiceDelegate::UpdateCredentials(
     const CoreAccountId& account_id,
     const std::string& refresh_token,
-    SourceForRefreshTokenOperation source
-#if BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
-    ,
-    const std::vector<uint8_t>& wrapped_binding_key
-#endif  // BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
-) {
+    SourceForRefreshTokenOperation source,
+    const std::vector<uint8_t>& wrapped_binding_key) {
   base::AutoReset<SourceForRefreshTokenOperation> auto_reset(
       &update_refresh_token_source_, source);
-  UpdateCredentialsInternal(account_id, refresh_token
-#if BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
-                            ,
-                            wrapped_binding_key
-#endif  // BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
-  );
+  UpdateCredentialsInternal(account_id, refresh_token, wrapped_binding_key);
 }
 
 bool ProfileOAuth2TokenServiceDelegate::FixAccountErrorIfPossible() {

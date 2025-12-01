@@ -12,29 +12,38 @@ SKIP: FAILED
     v = textureSample(t, s, vec2(0, 0));
         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Texture2D<float4> t : register(t1);
-SamplerState s : register(s2);
-
-struct tint_symbol_1 {
+struct main_inputs {
   float x : TEXCOORD0;
 };
 
+
+Texture2D<float4> t : register(t1);
+SamplerState s : register(s2);
 void main_inner(float x) {
   float4 v = (0.0f).xxxx;
   {
-    for(; (x > v.x); ) {
+    uint2 tint_loop_idx = (4294967295u).xx;
+    while(true) {
+      if (all((tint_loop_idx == (0u).xx))) {
+        break;
+      }
+      if ((x > v.x)) {
+      } else {
+        break;
+      }
       v = t.Sample(s, (0.0f).xx);
+      {
+        uint tint_low_inc = (tint_loop_idx.x - 1u);
+        tint_loop_idx.x = tint_low_inc;
+        uint tint_carry = uint((tint_low_inc == 4294967295u));
+        tint_loop_idx.y = (tint_loop_idx.y - tint_carry);
+      }
+      continue;
     }
   }
 }
 
-void main(tint_symbol_1 tint_symbol) {
-  main_inner(tint_symbol.x);
-  return;
+void main(main_inputs inputs) {
+  main_inner(inputs.x);
 }
-FXC validation failure:
-<scrubbed_path>(12,11-32): warning X3570: gradient instruction used in a loop with varying iteration, attempting to unroll the loop
-<scrubbed_path>(11,5-22): error X3511: unable to unroll loop, loop does not appear to terminate in a timely manner (1024 iterations)
 
-
-tint executable returned error: exit status 1

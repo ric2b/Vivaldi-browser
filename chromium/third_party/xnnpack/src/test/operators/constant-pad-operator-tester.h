@@ -3,7 +3,8 @@
 // This source code is licensed under the BSD-style license found in the
 // LICENSE file in the root directory of this source tree.
 
-#pragma once
+#ifndef XNNPACK_TEST_OPERATORS_CONSTANT_PAD_OPERATOR_TESTER_H_
+#define XNNPACK_TEST_OPERATORS_CONSTANT_PAD_OPERATOR_TESTER_H_
 
 #include <algorithm>
 #include <array>
@@ -216,6 +217,7 @@ class ConstantPadOperatorTester {
   }
 
   void TestRunX8() const {
+    ASSERT_EQ(xnn_status_success, xnn_initialize(nullptr /* allocator */));
     ASSERT_EQ(num_dims(), num_pre_paddings());
     ASSERT_EQ(num_dims(), num_post_paddings());
 
@@ -437,6 +439,7 @@ class ConstantPadOperatorTester {
   }
 
   void TestRunX16() const {
+    ASSERT_EQ(xnn_status_success, xnn_initialize(nullptr /* allocator */));
     ASSERT_EQ(num_dims(), num_pre_paddings());
     ASSERT_EQ(num_dims(), num_post_paddings());
 
@@ -656,6 +659,7 @@ class ConstantPadOperatorTester {
   }
 
   void TestRunX32() const {
+    ASSERT_EQ(xnn_status_success, xnn_initialize(nullptr /* allocator */));
     ASSERT_EQ(num_dims(), num_pre_paddings());
     ASSERT_EQ(num_dims(), num_post_paddings());
 
@@ -762,3 +766,5 @@ class ConstantPadOperatorTester {
   std::vector<size_t> post_paddings_;
   size_t iterations_{3};
 };
+
+#endif  // XNNPACK_TEST_OPERATORS_CONSTANT_PAD_OPERATOR_TESTER_H_

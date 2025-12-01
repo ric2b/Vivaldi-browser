@@ -18,7 +18,7 @@ namespace country_codes {
 class CountryId;
 }
 namespace adblock_filter {
-class RuleService;
+class RuleServiceCore;
 }
 
 class SearchEnginesPromptManager {
@@ -32,7 +32,7 @@ class SearchEnginesPromptManager {
   // Return true or false whenever should show the search engine prompt.
   bool ShouldPrompt(PrefService* prefs,
                     TemplateURLService* template_url_service,
-                    adblock_filter::RuleService* rule_service) const;
+                    adblock_filter::RuleServiceCore* rule_service) const;
 
   // Returns vector of TemplateURL, that are partner search engine for the
   // profile's locale.

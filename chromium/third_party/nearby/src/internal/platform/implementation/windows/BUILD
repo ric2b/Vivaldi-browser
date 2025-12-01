@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+
 licenses(["notice"])
 
 cc_library(
@@ -28,10 +31,8 @@ cc_library(
         "device_info.h",
         "executor.h",
         "future.h",
-        "input_file.h",
         "listenable_future.h",
         "mutex.h",
-        "output_file.h",
         "preferences_manager.h",
         "scheduled_executor.h",
         "settable_future.h",
@@ -47,6 +48,7 @@ cc_library(
     deps = [
         ":comm",
         "//internal/base:bluetooth_address",
+        "//internal/base:file_path",
         "//internal/base:files",
         "//internal/flags:nearby_flags",
         "//internal/platform:base",
@@ -244,6 +246,7 @@ cc_library(
         "//connections/implementation/mediums/ble_v2:ble_advertisement_header",
         "//connections/implementation/mediums/ble_v2:bloom_filter",
         "//internal/account",
+        "//internal/base:file_path",
         "//internal/base:files",
         "//internal/flags:nearby_flags",
         "//internal/platform:base",
@@ -262,7 +265,6 @@ cc_library(
         "//third_party/intel/pie",
         "//third_party/webrtc/files/stable/webrtc/api:libjingle_peerconnection_api",
         "//third_party/webrtc/files/stable/webrtc/api:scoped_refptr",
-        "//third_party/webrtc/files/stable/webrtc/api/task_queue:default_task_queue_factory",
         "//third_party/webrtc/files/stable/webrtc/rtc_base:threading",
         "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/container:flat_hash_map",

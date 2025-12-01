@@ -68,7 +68,7 @@
         sent by the client. In other words, the client must call bind(2) and
         listen(2) before sending the FD.
 
-        close_fd is a FD closed by the client when the compositor should stop
+        close_fd is a FD that will signal hangup when the compositor should stop
         accepting new connections on listen_fd.
 
         The compositor must continue to accept connections on listen_fd when
@@ -79,7 +79,7 @@
       </description>
       <arg name="id" type="new_id" interface="wp_security_context_v1"/>
       <arg name="listen_fd" type="fd" summary="listening socket FD"/>
-      <arg name="close_fd" type="fd" summary="FD closed when done"/>
+      <arg name="close_fd" type="fd" summary="FD signaling when done"/>
     </request>
   </interface>
 

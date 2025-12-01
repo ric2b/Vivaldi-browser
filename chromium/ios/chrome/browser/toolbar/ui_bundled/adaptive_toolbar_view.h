@@ -38,6 +38,8 @@ enum class ToolbarTabGroupState;
 @property(nonatomic, strong, readonly) ToolbarButton* toolsMenuButton;
 // Button to create a new tab.
 @property(nonatomic, strong, readonly) ToolbarButton* openNewTabButton;
+// Button for the diamond prototype.
+@property(nonatomic, strong, readonly) ToolbarButton* diamondPrototypeButton;
 // Separator between the toolbar and the content.
 @property(nonatomic, strong, readonly) UIView* separator;
 
@@ -56,6 +58,7 @@ enum class ToolbarTabGroupState;
 - (void)updateTabGroupState:(ToolbarTabGroupState)tabGroupState;
 
 // Vivaldi
+@property(nonatomic, strong, readonly) ToolbarButton* searchButton;
 @property(nonatomic, assign, readwrite) BOOL bottomOmniboxEnabled;
 @property(nonatomic, assign, readwrite) BOOL tabBarEnabled;
 @property(nonatomic, assign, readwrite) BOOL homePageEnabled;

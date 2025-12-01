@@ -393,7 +393,7 @@ class AutocompleteProvider
       listeners_;
 
   size_t provider_max_matches_;
-  const size_t provider_max_matches_in_keyword_mode_{7};
+  const size_t provider_max_matches_in_keyword_mode_;
 
   ACMatches matches_;
   // A map of suggestion group IDs to suggestion group information.

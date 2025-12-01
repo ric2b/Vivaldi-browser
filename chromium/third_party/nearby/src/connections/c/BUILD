@@ -14,6 +14,7 @@
 
 load("@rules_apple//apple:apple.bzl", "apple_static_xcframework")
 load("@rules_apple//apple:macos.bzl", "macos_dylib")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("//third_party/cpptoolchains/windows_llvm/build_defs:windows.bzl", "windows")
 
 package(default_visibility = [
@@ -52,7 +53,12 @@ cc_library(
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:span",
-    ],
+    ] + select({
+        "@platforms//os:platform_ios": [
+            "//internal/platform/implementation/apple:nearby_logger",
+        ],
+        "//conditions:default": [],
+    }),
 )
 
 # iOS only.

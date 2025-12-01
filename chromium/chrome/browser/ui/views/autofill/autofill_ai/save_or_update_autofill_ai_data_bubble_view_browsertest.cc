@@ -15,7 +15,7 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/test/test_browser_ui.h"
-#include "chrome/grit/theme_resources.h"
+#include "chrome/grit/browser_resources.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/test/browser_test.h"
@@ -25,7 +25,7 @@
 #include "ui/views/test/views_test_base.h"
 #include "ui/views/widget/widget.h"
 
-namespace autofill_ai {
+namespace autofill {
 namespace {
 
 using ::testing::Bool;
@@ -50,7 +50,7 @@ class SaveOrUpdateAutofillAiDataBubbleViewBrowsertest
     base::i18n::SetRTLForTesting(IsBrowserLanguageRTL(this->GetParam()));
     ON_CALL(mock_controller(), GetTitleImagesResourceId())
         .WillByDefault(testing::Return(
-            std::pair<int, int>({IDR_SAVE_PASSPORT, IDR_SAVE_PASSPORT_DARK})));
+            IDR_AUTOFILL_SAVE_PASSPORT_AND_NATIONAL_ID_CARD_LOTTIE));
   }
 
   void DismissUi() override { bubble_ = nullptr; }
@@ -244,6 +244,6 @@ INSTANTIATE_TEST_SUITE_P(
     SaveOrUpdateAutofillAiDataBubbleViewBrowsertest::GetTestSuffix);
 
 }  // namespace
-}  // namespace autofill_ai
+}  // namespace autofill
 
 #endif  // CHROME_BROWSER_UI_VIEWS_AUTOFILL_AUTOFILL_AI_SAVE_OR_UPDATE_AUTOFILL_AI_DATA_BUBBLE_VIEW_BROWSERTEST_CC_H_

@@ -1440,7 +1440,7 @@
     "message": "Ο αρχικός χρόνος απόκρισης διακομιστή ήταν σύντομος"
   },
   "core/audits/third-party-cookies.js | description": {
-    "message": "Το Chrome θα υποστηρίξει μια νέα εμπειρία που επιτρέπει στους χρήστες την επιλογή περιήγησης χωρίς cookie τρίτου μέρους. [Μάθετε περισσότερα σχετικά με τα cookie τρίτου μέρους](https://developers.google.com/privacy-sandbox/cookies)."
+    "message": "Τα cookie τρίτου μέρους ενδέχεται να αποκλείονται σε ορισμένα περιβάλλοντα. [Μάθετε περισσότερα σχετικά με την προετοιμασία για τους περιορισμούς cookie τρίτου μέρους](https://privacysandbox.google.com/cookies/prepare/overview)."
   },
   "core/audits/third-party-cookies.js | displayValue": {
     "message": "{itemCount,plural, =1{Βρέθηκε 1 cookie}other{Βρέθηκαν # cookie}}"
@@ -1492,6 +1492,18 @@
   },
   "core/audits/third-party-summary.js | title": {
     "message": "Ελαχιστοποίηση χρήσης τρίτων μερών"
+  },
+  "core/audits/trusted-types-xss.js | columnSeverity": {
+    "message": "Σοβαρότητα"
+  },
+  "core/audits/trusted-types-xss.js | description": {
+    "message": "Η οδηγία `require-trusted-types-for` στην κεφαλίδα `Content-Security-Policy` (CSP) δίνει οδηγίες στους παράγοντες χρήστη να ελέγχουν τα δεδομένα που μεταβιβάζονται στις συναρτήσεις δέσμευσης XSS που βασίζεται σε DOM. [Μάθετε περισσότερα σχετικά με τον περιορισμό του XSS που βασίζεται σε DOM με Αξιόπιστους τύπους](https://developer.chrome.com/docs/lighthouse/best-practices/trusted-types-xss)."
+  },
+  "core/audits/trusted-types-xss.js | noTrustedTypesToMitigateXss": {
+    "message": "Δεν βρέθηκε κεφαλίδα `Content-Security-Policy` με την οδηγία Αξιόπιστοι τύποι"
+  },
+  "core/audits/trusted-types-xss.js | title": {
+    "message": "Μετριάστε το XSS που βασίζεται σε DOM με Αξιόπιστους τύπους"
   },
   "core/audits/unsized-images.js | description": {
     "message": "Ορίστε ένα αποκλειστικό πλάτος και ύψος στα στοιχεία εικόνας, για να μειώσετε τις μετατοπίσεις διάταξης και να βελτιώσετε το CLS. [Μάθετε πώς μπορείτε να ορίσετε τις διαστάσεις εικόνας](https://web.dev/articles/optimize-cls#images_without_dimensions)"
@@ -1676,6 +1688,12 @@
   "core/config/default-config.js | firstPaintImprovementsGroupTitle": {
     "message": "Βελτιώσεις πρώτης μορφής"
   },
+  "core/config/default-config.js | insightsGroupDescription": {
+    "message": "Αυτά τα insight είναι επίσης διαθέσιμα στο πλαίσιο Απόδοση των Εργαλείων για προγραμματιστές Chrome. [Καταγράψτε ένα ίχνος](https://developer.chrome.com/docs/devtools/performance/reference), για να δείτε πιο λεπτομερείς πληροφορίες."
+  },
+  "core/config/default-config.js | insightsGroupTitle": {
+    "message": "Insight"
+  },
   "core/config/default-config.js | metricGroupTitle": {
     "message": "Μετρήσεις"
   },
@@ -1857,22 +1875,22 @@
     "message": "URL"
   },
   "core/lib/i18n/i18n.js | columnWastedBytes": {
-    "message": "Δυνητικές εξοικονομήσεις"
+    "message": "Εκτιμώμενη εξοικονόμηση"
   },
   "core/lib/i18n/i18n.js | columnWastedMs": {
-    "message": "Δυνητικές εξοικονομήσεις"
+    "message": "Εκτιμώμενη εξοικονόμηση"
   },
   "core/lib/i18n/i18n.js | cumulativeLayoutShiftMetric": {
     "message": "Cumulative Layout Shift"
   },
   "core/lib/i18n/i18n.js | displayValueByteSavings": {
-    "message": "Δυνητική εξοικονόμηση {wastedBytes, number, bytes} KiB"
+    "message": "Εκτιμώμενη εξοικονόμηση {wastedBytes, number, bytes} KiB"
   },
   "core/lib/i18n/i18n.js | displayValueElementsFound": {
     "message": "{nodeCount,plural, =1{Βρέθηκε 1 στοιχείο}other{Βρέθηκαν # στοιχεία}}"
   },
   "core/lib/i18n/i18n.js | displayValueMsSavings": {
-    "message": "Δυνητική εξοικονόμηση {wastedMs, number, milliseconds} χλστ.δ."
+    "message": "Εκτιμώμενη εξοικονόμηση {wastedMs, number, milliseconds} ms"
   },
   "core/lib/i18n/i18n.js | documentResourceType": {
     "message": "Έγγραφο"
@@ -2070,7 +2088,7 @@
     "message": "Λάβετε μια βαθμολογία απόδοσης του Lighthouse."
   },
   "flow-report/src/i18n/ui-strings.js | helpUseCaseNavigation2": {
-    "message": "Υπολογίσετε τις μετρήσεις απόδοσης φόρτωσης σελίδας, όπως Μεγαλύτερη σχεδίαση με περιεχόμενο και Ευρετήριο ταχύτητας."
+    "message": "Υπολογίσετε τις μετρήσεις απόδοσης φόρτωσης σελίδας, όπως Μεγαλύτερη σχεδίαση με περιεχόμενο και Speed Index."
   },
   "flow-report/src/i18n/ui-strings.js | helpUseCaseNavigation3": {
     "message": "Αξιολογήσετε τις δυνατότητες προηγμένων εφαρμογών ιστού."
@@ -2191,9 +2209,6 @@
   },
   "node_modules/@paulirish/trace_engine/generated/Deprecation.js | CrossOriginWindowConfirm": {
     "message": "Η ενεργοποίηση του window.confirm από iframe διασταυρούμενων προελεύσεων έχει καταργηθεί και θα αποσυρθεί στο μέλλον."
-  },
-  "node_modules/@paulirish/trace_engine/generated/Deprecation.js | DOMMutationEvents": {
-    "message": "Τα συμβάντα σίγασης DOM, συμπεριλαμβανομένων των DOMSubtreeModified, DOMNodeInserted, DOMNodeRemoved, DOMNodeRemovedFromDocument, DOMNodeInsertedIntoDocument και DOMCharacterDataModified έχουν καταργηθεί (https://w3c.github.io/uievents/#legacy-event-types) και θα αποσυρθούν. Εναλλακτικά, χρησιμοποιήστε το MutationObserver."
   },
   "node_modules/@paulirish/trace_engine/generated/Deprecation.js | DataUrlInSvgUse": {
     "message": "Υποστήριξη για δεδομένα: Τα URL στο SVGUseElement έχουν καταργηθεί και θα αποσυρθούν στο μέλλον."
@@ -2336,9 +2351,6 @@
   "node_modules/@paulirish/trace_engine/models/trace/insights/CLSCulprits.js | description": {
     "message": "Οι μετατοπίσεις διάταξης προκύπτουν, όταν τα στοιχεία μετακινούνται χωρίς αλληλεπίδραση με τον χρήστη. [Διερευνήστε τις αιτίες των μετατοπίσεων διάταξης](https://web.dev/articles/optimize-cls), όπως είναι η προσθήκη και η κατάργηση στοιχείων ή η αλλαγή των γραμματοσειρών τους κατά τη φόρτωση της σελίδας."
   },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/CLSCulprits.js | fontRequest": {
-    "message": "Αίτημα γραμματοσειράς"
-  },
   "node_modules/@paulirish/trace_engine/models/trace/insights/CLSCulprits.js | injectedIframe": {
     "message": "Έγινε εισαγωγή iframe"
   },
@@ -2357,8 +2369,8 @@
   "node_modules/@paulirish/trace_engine/models/trace/insights/CLSCulprits.js | topCulprits": {
     "message": "Κορυφαίες αιτίες για τη μετατόπιση διάταξης"
   },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/CLSCulprits.js | unsizedImages": {
-    "message": "Εικόνες χωρίς καθορισμένο μέγεθος"
+  "node_modules/@paulirish/trace_engine/models/trace/insights/CLSCulprits.js | unsizedImage": {
+    "message": "Unsized image element"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/CLSCulprits.js | worstCluster": {
     "message": "Χειρότερο σύμπλεγμα"
@@ -2412,10 +2424,10 @@
     "message": "Το πρώτο αίτημα δικτύου είναι το πιο σημαντικό.  Μειώστε τον λανθάνοντα χρόνο αποφεύγοντας τις ανακατευθύνσεις, προκειμένου να διασφαλίσετε μια γρήγορη απόκριση διακομιστή, και ενεργοποιώντας τη συμπίεση κειμένου."
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/DocumentLatency.js | failedRedirects": {
-    "message": "Είχε ανακατευθύνσεις"
+    "message": "Είχε ανακατευθύνσεις ({PH1} ανακατευθύνσεις, +{PH2})"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/DocumentLatency.js | failedServerResponseTime": {
-    "message": "Ο διακομιστής αποκρίθηκε αργά"
+    "message": "Ο διακομιστής ανταποκρίθηκε αργά (παρατηρήθηκε {PH1})"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/DocumentLatency.js | failedTextCompression": {
     "message": "Δεν εφαρμόστηκε συμπίεση"
@@ -2424,7 +2436,7 @@
     "message": "Αποφεύγει τις ανακατευθύνσεις"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/DocumentLatency.js | passingServerResponseTime": {
-    "message": "Ο διακομιστής ανταποκρίνεται γρήγορα"
+    "message": "Ο διακομιστής ανταποκρίνεται γρήγορα (παρατηρήθηκε {PH1})"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/DocumentLatency.js | passingTextCompression": {
     "message": "Εφαρμόζει συμπίεση κειμένου"
@@ -2465,6 +2477,9 @@
   "node_modules/@paulirish/trace_engine/models/trace/insights/FontDisplay.js | wastedTimeColumn": {
     "message": "Χαμένος χρόνος"
   },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/ForcedReflow.js | anonymous": {
+    "message": "(ανώνυμες)"
+  },
   "node_modules/@paulirish/trace_engine/models/trace/insights/ForcedReflow.js | description": {
     "message": "Πολλά API, που συνήθως διαβάζουν τη γεωμετρία διάταξης, αναγκάζουν τη μηχανή απόδοσης να κάνει παύση της εκτέλεσης σεναρίου, προκειμένου να υπολογιστεί το στιλ και η διάταξη. Μάθετε περισσότερα σχετικά με την [επιβολή επανάληψης ροής](https://developers.google.com/web/fundamentals/performance/rendering/avoid-large-complex-layouts-and-layout-thrashing#avoid-forced-synchronous-layouts) και τον μετριασμό της."
   },
@@ -2481,7 +2496,7 @@
     "message": "Συνολικός χρόνος επανάληψης ροής"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/ForcedReflow.js | unattributed": {
-    "message": "Χωρίς απόδοση"
+    "message": "[χωρίς απόδοση]"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/ImageDelivery.js | description": {
     "message": "Η μείωση του χρόνου λήψης των εικόνων μπορεί να βελτιώσει τον αντιληπτό χρόνο φόρτωσης της σελίδας και του LCP. [Μάθετε περισσότερα σχετικά με τη βελτιστοποίηση του μεγέθους εικόνας](https://developer.chrome.com/docs/lighthouse/performance/uses-optimized-images/)"
@@ -2513,30 +2528,6 @@
   "node_modules/@paulirish/trace_engine/models/trace/insights/ImageDelivery.js | useVideoFormat": {
     "message": "Η χρήση μορφών βίντεο αντί για GIF μπορεί να βελτιώσει το μέγεθος λήψης του περιεχομένου κινούμενων εικόνων."
   },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/InteractionToNextPaint.js | description": {
-    "message": "Ξεκινήστε την έρευνα με τη μεγαλύτερη φάση. [Οι καθυστερήσεις μπορούν να ελαχιστοποιηθούν](https://web.dev/articles/optimize-inp#optimize_interactions). Για να μειώσετε τη διάρκεια επεξεργασίας, [βελτιστοποιήστε τα κόστη κύριου νήματος](https://web.dev/articles/optimize-long-tasks), συχνά σε JS."
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/InteractionToNextPaint.js | duration": {
-    "message": "Διάρκεια"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/InteractionToNextPaint.js | inputDelay": {
-    "message": "Καθυστέρηση εισόδου"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/InteractionToNextPaint.js | noInteractions": {
-    "message": "Δεν ανιχνεύτηκαν αλληλεπιδράσεις"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/InteractionToNextPaint.js | phase": {
-    "message": "Φάση"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/InteractionToNextPaint.js | presentationDelay": {
-    "message": "Καθυστέρηση παρουσίασης"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/InteractionToNextPaint.js | processingDuration": {
-    "message": "Διάρκεια διεργασίας"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/InteractionToNextPaint.js | title": {
-    "message": "INP κατά φάση"
-  },
   "node_modules/@paulirish/trace_engine/models/trace/insights/LCPDiscovery.js | description": {
     "message": "Βελτιστοποιήστε το LCP κάνοντας την εικόνα LCP [ανακαλύψιμη](https://web.dev/articles/optimize-lcp#1_eliminate_resource_load_delay) απευθείας από το HTML και [αποφεύγοντας την αργή φόρτωση](https://web.dev/articles/lcp-lazy-loading)"
   },
@@ -2564,36 +2555,6 @@
   "node_modules/@paulirish/trace_engine/models/trace/insights/LCPDiscovery.js | title": {
     "message": "Ανακάλυψη αιτήματος LCP"
   },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | description": {
-    "message": "Κάθε [φάση έχει συγκεκριμένες στρατηγικές βελτίωσης](https://web.dev/articles/optimize-lcp#lcp-breakdown). Ιδανικά, το μεγαλύτερο μέρος του χρόνου LCP θα πρέπει να δαπανάται για τη φόρτωση των πόρων, όχι σε καθυστερήσεις."
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | duration": {
-    "message": "Διάρκεια"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | elementRenderDelay": {
-    "message": "Καθυστέρηση απόδοσης στοιχείων"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | fieldDuration": {
-    "message": "75ο εκατοστημόριο δεδομένων πραγματικών χρηστών"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | noLcp": {
-    "message": "Δεν εντοπίστηκε LCP"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | phase": {
-    "message": "Φάση"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | resourceLoadDelay": {
-    "message": "Καθυστέρηση φόρτωσης πόρου"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | resourceLoadDuration": {
-    "message": "Διάρκεια φόρτωσης πόρου"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | timeToFirstByte": {
-    "message": "Time to First Byte"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | title": {
-    "message": "LCP κατά φάση"
-  },
   "node_modules/@paulirish/trace_engine/models/trace/insights/LegacyJavaScript.js | columnScript": {
     "message": "Σενάριο"
   },
@@ -2601,7 +2562,7 @@
     "message": "Αχρησιμοποίητα byte"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/LegacyJavaScript.js | description": {
-    "message": "Τα Polyfill και οι μετασχηματισμοί επιτρέπουν στα προγράμματα περιήγησης παλαιού τύπου να χρησιμοποιούν νέες λειτουργίες JavaScript. Ωστόσο, πολλές από αυτές δεν είναι απαραίτητες για σύγχρονα προγράμματα περιήγησης. Εξετάστε το ενδεχόμενο να τροποποιήσετε τη διαδικασία κατασκευής JavaScript, ώστε να μην μετατρέπονται οι λειτουργίες [Baseline](https://web.dev/articles/baseline-and-polyfills), εκτός εάν γνωρίζετε ότι πρέπει να υποστηρίζετε τα προγράμματα περιήγησης παλαιού τύπου. [Μάθετε γιατί οι περισσότεροι ιστότοποι μπορούν να αναπτύξουν κώδικα ES6+ χωρίς μετατροπή](https://philipwalton.com/articles/the-state-of-es5-on-the-web/)"
+    "message": "Τα polyfill και οι μετασχηματισμοί επιτρέπουν στα προγράμματα περιήγησης παλαιού τύπου να χρησιμοποιούν νέες λειτουργίες JavaScript. Ωστόσο, πολλές από αυτές δεν είναι απαραίτητες για σύγχρονα προγράμματα περιήγησης. Εξετάστε το ενδεχόμενο να τροποποιήσετε τη διαδικασία κατασκευής JavaScript, ώστε να μην μετατρέπονται οι λειτουργίες [Baseline](https://web.dev/articles/baseline-and-polyfills), εκτός εάν γνωρίζετε ότι πρέπει να υποστηρίζετε παλαιότερα προγράμματα περιήγησης. [Μάθετε γιατί οι περισσότεροι ιστότοποι μπορούν να αναπτύξουν κώδικα ES6+ χωρίς μετατροπή](https://philipwalton.com/articles/the-state-of-es5-on-the-web/)"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/LegacyJavaScript.js | title": {
     "message": "JavaScript παλαιού τύπου"
@@ -2621,8 +2582,32 @@
   "node_modules/@paulirish/trace_engine/models/trace/insights/ModernHTTP.js | title": {
     "message": "Σύγχρονο HTTP"
   },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | columnOrigin": {
+    "message": "Προέλευση"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | columnRequest": {
+    "message": "Αίτημα"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | columnSource": {
+    "message": "Πηγή"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | columnTime": {
+    "message": "Ώρα"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | columnWastedMs": {
+    "message": "Εκτιμώμενη εξοικονόμηση LCP"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | crossoriginWarning": {
+    "message": "Προσύνδεση που δεν χρησιμοποιείται. Ελέγξτε ότι το χαρακτηριστικό crossorigin χρησιμοποιείται σωστά."
+  },
   "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | description": {
     "message": "Για τη βελτίωση της φόρτωσης σελίδας, [αποφύγετε τη δημιουργία αλυσίδων κρίσιμων αιτημάτων](https://developer.chrome.com/docs/lighthouse/performance/critical-request-chains), μειώνοντας το μήκος των αλυσίδων ή το μέγεθος λήψης των πόρων ή αναβάλλοντας τη λήψη των μη απαραίτητων πόρων."
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | estSavingTableDescription": {
+    "message": "Προσθέστε υποδείξεις [προσύνδεσης](https://developer.chrome.com/docs/lighthouse/performance/uses-rel-preconnect/) στις πιο σημαντικές προελεύσεις σας, αλλά προσπαθήστε να μην χρησιμοποιήσετε πάνω από 4."
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | estSavingTableTitle": {
+    "message": "Υποψήφιες για προσύνδεση"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | maxCriticalPathLatency": {
     "message": "Μέγιστος λανθάνων χρόνος κρίσιμης διαδρομής:"
@@ -2630,14 +2615,32 @@
   "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | noNetworkDependencyTree": {
     "message": "Καμία εργασία απόδοσης δεν έχει επηρεαστεί από τις εξαρτήσεις δικτύου"
   },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | noPreconnectCandidates": {
+    "message": "Δεν υπάρχουν πρόσθετες προελεύσεις που να είναι κατάλληλες για προσύνδεση"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | noPreconnectOrigins": {
+    "message": "δεν έγινε προσύνδεση προελεύσεων"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | preconnectOriginsTableDescription": {
+    "message": "Οι υποδείξεις [προσύνδεσης](https://developer.chrome.com/docs/lighthouse/performance/uses-rel-preconnect/) βοηθούν το πρόγραμμα περιήγησης να δημιουργήσει μια σύνδεση νωρίτερα κατά τη φόρτωση της σελίδας, εξοικονομώντας χρόνο όταν υποβάλλεται το πρώτο αίτημα για αυτή την προέλευση. Οι παρακάτω είναι οι προελεύσεις στις οποίες προσυνδεόταν η σελίδα."
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | preconnectOriginsTableTitle": {
+    "message": "Προσυνδεδεμένες προελεύσεις"
+  },
   "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | title": {
     "message": "Δέντρο εξαρτήσεων δικτύου"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | tooManyPreconnectLinksWarning": {
+    "message": "Βρέθηκαν περισσότερες από 4 συνδέσεις preconnect. Αυτές θα πρέπει να χρησιμοποιούνται με μέτρο και μόνο στις σημαντικότερες προελεύσεις."
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | unusedWarning": {
+    "message": "Προσύνδεση που δεν χρησιμοποιείται. Φροντίστε να χρησιμοποιείτε preconnect μόνο για προελεύσεις που είναι πιθανό να ζητήσει η σελίδα."
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | warningDescription": {
     "message": "Για τη βελτίωση της φόρτωσης σελίδας, αποφύγετε τη δημιουργία αλυσίδων κρίσιμων αιτημάτων, μειώνοντας το μήκος των αλυσίδων ή το μέγεθος λήψης των πόρων ή αναβάλλοντας τη λήψη των μη απαραίτητων πόρων."
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/RenderBlocking.js | description": {
-    "message": "Τα αιτήματα αποκλείουν την αρχική απόδοση της σελίδας, κάτι που μπορεί να οδηγήσει σε καθυστέρηση της μέτρησης LCP. Η [αναβολή ή η ενσωμάτωση](https://web.dev/learn/performance/understanding-the-critical-path#render-blocking_resources/) μπορεί να μετακινήσει αυτά τα αιτήματα δικτύου εκτός της κρίσιμης διαδρομής."
+    "message": "Τα αιτήματα αποκλείουν την αρχική απόδοση της σελίδας, κάτι που μπορεί να οδηγήσει σε καθυστέρηση της μέτρησης LCP. Η [αναβολή ή η ενσωμάτωση](https://web.dev/learn/performance/understanding-the-critical-path#render-blocking_resources) μπορεί να μετακινήσει αυτά τα αιτήματα δικτύου εκτός της κρίσιμης διαδρομής."
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/RenderBlocking.js | duration": {
     "message": "Διάρκεια"
@@ -2685,7 +2688,7 @@
     "message": "Μέγεθος μεταφοράς"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/ThirdParties.js | description": {
-    "message": "Ο κώδικας τρίτου μέρους μπορεί να επηρεάσει σημαντικά την απόδοση φόρτωσης. [Μειώστε και αναβάλετε τη φόρτωση κώδικα τρίτου μέρους](https://developers.google.com/web/fundamentals/performance/optimizing-content-efficiency/loading-third-party-javascript/), για να δώσετε προτεραιότητα στο περιεχόμενο της σελίδας σας."
+    "message": "Ο κώδικας τρίτου μέρους μπορεί να επηρεάσει σημαντικά την απόδοση φόρτωσης. [Μειώστε και αναβάλετε τη φόρτωση κώδικα τρίτου μέρους](https://web.dev/articles/optimizing-content-efficiency-loading-third-party-javascript/), για να δώσετε προτεραιότητα στο περιεχόμενο της σελίδας σας."
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/ThirdParties.js | noThirdParties": {
     "message": "Δεν βρέθηκαν τρίτα μέρη"
@@ -2695,6 +2698,9 @@
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/Viewport.js | description": {
     "message": "Οι αλληλεπιδράσεις με πάτημα μπορεί να [καθυστερούν έως και 300 ms](https://developer.chrome.com/blog/300ms-tap-delay-gone-away/), αν η θύρα προβολής δεν είναι βελτιστοποιημένη για κινητά."
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/Viewport.js | mobileTapDelayLabel": {
+    "message": "Καθυστέρηση πατήματος σε κινητό"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/Viewport.js | title": {
     "message": "Βελτιστοποίηση θύρας προβολής για κινητά"
@@ -3587,8 +3593,14 @@
   "report/renderer/report-utils.js | footerIssue": {
     "message": "Υποβολή προβλήματος"
   },
+  "report/renderer/report-utils.js | goBackToAudits": {
+    "message": "Επιστροφή στους ελέγχους"
+  },
   "report/renderer/report-utils.js | hide": {
     "message": "Απόκρυψη"
+  },
+  "report/renderer/report-utils.js | insightsNotice": {
+    "message": "Αργότερα φέτος, τα insight θα αντικαταστήσουν τους ελέγχους απόδοσης. [Μάθετε περισσότερα και υποβάλετε σχόλια εδώ](https://github.com/GoogleChrome/lighthouse/discussions/16462)."
   },
   "report/renderer/report-utils.js | labDataTitle": {
     "message": "Εργαστηριακά δεδομένα"
@@ -3689,6 +3701,9 @@
   "report/renderer/report-utils.js | toplevelWarningsMessage": {
     "message": "Παρουσιάστηκαν ορισμένα ζητήματα τα οποία επηρεάζουν αυτή την εκτέλεση του Lighthouse:"
   },
+  "report/renderer/report-utils.js | tryInsights": {
+    "message": "Δοκιμή insight"
+  },
   "report/renderer/report-utils.js | unattributable": {
     "message": "Χωρίς απόδοση"
   },
@@ -3711,13 +3726,16 @@
     "message": "Όλα"
   },
   "treemap/app/src/util.js | allScriptsDropdownLabel": {
-    "message": "Όλες οι γραφές"
+    "message": "Όλα τα σενάρια"
   },
   "treemap/app/src/util.js | coverageColumnName": {
     "message": "Κάλυψη"
   },
   "treemap/app/src/util.js | duplicateModulesLabel": {
     "message": "Διπλότυπες λειτουργικές μονάδες"
+  },
+  "treemap/app/src/util.js | duplicatedBytesLabel": {
+    "message": "Διπλότυπα byte"
   },
   "treemap/app/src/util.js | resourceBytesLabel": {
     "message": "Byte πόρου"
@@ -3727,6 +3745,9 @@
   },
   "treemap/app/src/util.js | toggleTableButtonLabel": {
     "message": "Εναλλαγή πίνακα"
+  },
+  "treemap/app/src/util.js | transferBytesLabel": {
+    "message": "Byte μεταφοράς"
   },
   "treemap/app/src/util.js | unusedBytesLabel": {
     "message": "Byte που δεν χρησιμοποιούνται"

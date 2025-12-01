@@ -63,16 +63,16 @@ export const UIStrings = {
    */
   noPreconnectOrigins: 'no origins were preconnected',
   /**
-   * @description A warning message that is shown when found more than 4 preconnected links
+   * @description A warning message that is shown when found more than 4 preconnected links. "preconnect" should not be translated.
    */
   tooManyPreconnectLinksWarning:
       'More than 4 `preconnect` connections were found. These should be used sparingly and only to the most important origins.',
   /**
-   * @description A warning message that is shown when the user added preconnect for some unnecessary origins.
+   * @description A warning message that is shown when the user added preconnect for some unnecessary origins. "preconnect" should not be translated.
    */
   unusedWarning: 'Unused preconnect. Only use `preconnect` for origins that the page is likely to request.',
   /**
-   * @description A warning message that is shown when the user forget to set the `crossorigin` HTML attribute, or setting it to an incorrect value, on the link is a common mistake when adding preconnect links.
+   * @description A warning message that is shown when the user forget to set the `crossorigin` HTML attribute, or setting it to an incorrect value, on the link is a common mistake when adding preconnect links. "preconnect" should not be translated.
    * */
   crossoriginWarning: 'Unused preconnect. Check that the `crossorigin` attribute is used properly.',
   /**
@@ -88,10 +88,10 @@ export const UIStrings = {
    */
   estSavingTableTitle: 'Preconnect candidates',
   /**
-   * @description Description of the table that recommends preconnecting to the origins to save time.
+   * @description Description of the table that recommends preconnecting to the origins to save time. "preconnect" should not be translated.
    */
   estSavingTableDescription:
-      'Add [preconnect](https://developer.chrome.com/docs/lighthouse/performance/uses-rel-preconnect/) hints to your most important origins, but try to use fewer than 4.',
+      'Add [preconnect](https://developer.chrome.com/docs/lighthouse/performance/uses-rel-preconnect/) hints to your most important origins, but try to use no more than 4.',
   /**
    * @description Label for a column in a data table; entries will be the origin of a web resource
    */
@@ -215,6 +215,33 @@ function isCritical(request: Types.Events.SyntheticNetworkRequest, context: Insi
   return isHighPriority || isBlocking;
 }
 
+function findMaxLeafNode(node: CriticalRequestNode): CriticalRequestNode {
+  if (node.children.length === 0) {
+    return node;
+  }
+  let maxLeaf = node.children[0];
+  for (const child of node.children) {
+    const leaf = findMaxLeafNode(child);
+    if (leaf.timeFromInitialRequest > maxLeaf.timeFromInitialRequest) {
+      maxLeaf = leaf;
+    }
+  }
+  return maxLeaf;
+}
+
+function sortRecursively(nodes: CriticalRequestNode[]): void {
+  for (const node of nodes) {
+    if (node.children.length > 0) {
+      node.children.sort((nodeA, nodeB) => {
+        const leafA = findMaxLeafNode(nodeA);
+        const leafB = findMaxLeafNode(nodeB);
+        return leafB.timeFromInitialRequest - leafA.timeFromInitialRequest;
+      });
+      sortRecursively(node.children);
+    }
+  }
+}
+
 function generateNetworkDependencyTree(context: InsightSetContextWithNavigation): {
   rootNodes: CriticalRequestNode[],
   maxTime: Types.Timing.Micro,
@@ -318,6 +345,8 @@ function generateNetworkDependencyTree(context: InsightSetContextWithNavigation)
     }
   }
 
+  sortRecursively(rootNodes);
+
   return {
     rootNodes,
     maxTime,
@@ -331,11 +360,67 @@ function getSecurityOrigin(url: string): Platform.DevToolsPath.UrlString {
   return parsedURL.securityOrigin();
 }
 
+function handleLinkResponseHeaderPart(trimmedPart: string): {url: string, headerText: string}|null {
+  if (!trimmedPart) {
+    // Skip empty string
+    return null;
+  }
+
+  // Extract URL
+  const urlStart = trimmedPart.indexOf('<');
+  const urlEnd = trimmedPart.indexOf('>');
+
+  if (urlStart !== 0 || urlEnd === -1 || urlEnd <= urlStart) {
+    // Skip parts without a valid URI (must start with '<' and have a closing '>')
+    return null;
+  }
+
+  const url = trimmedPart.substring(urlStart + 1, urlEnd).trim();
+  if (!url) {
+    // Skip empty url
+    return null;
+  }
+
+  // Extract parameters string (everything after '>')
+  const paramsString = trimmedPart.substring(urlEnd + 1).trim();
+
+  if (paramsString) {
+    const params = paramsString.split(';');
+
+    for (const param of params) {
+      const trimmedParam = param.trim();
+      if (!trimmedParam) {
+        continue;
+      }
+
+      const eqIndex = trimmedParam.indexOf('=');
+      if (eqIndex === -1) {
+        // Skip malformed parameters without an '='
+        continue;
+      }
+
+      const paramName = trimmedParam.substring(0, eqIndex).trim().toLowerCase();
+      let paramValue = trimmedParam.substring(eqIndex + 1).trim();
+
+      // Remove quotes from value if present
+      if (paramValue.startsWith('"') && paramValue.endsWith('"')) {
+        paramValue = paramValue.substring(1, paramValue.length - 1);
+      }
+
+      if (paramName === 'rel' && paramValue === 'preconnect') {
+        // Found 'rel=preconnect', no need to process other parameters for this link
+        return {url, headerText: trimmedPart};
+      }
+    }
+  }
+  return null;
+}
+
 /**
  * Parses an HTTP Link header string into an array of url and related header text.
  *
  * Export the function for test purpose.
- * @param linkHeaderValue The value of the HTTP Link header (e.g., '</style.css>; rel=preload; as=style, <https://example.com>; rel="preconnect"').
+ * @param linkHeaderValue - The value of the HTTP Link header (e.g., '</style.css>; rel=preload; as=style, <https://example.com>; rel="preconnect"').
  * @returns An array of url and header text objects if it contains `rel=preconnect`.
  */
 export function handleLinkResponseHeader(linkHeaderValue: string): Array<{url: string, headerText: string}> {
@@ -344,62 +429,29 @@ export function handleLinkResponseHeader(linkHeaderValue: string): Array<{url: s
   }
   const preconnectedOrigins: Array<{url: string, headerText: string}> = [];
 
-  const headerTextParts = linkHeaderValue.split(',');
-
-  for (const part of headerTextParts) {
-    const trimmedPart = part.trim();
-    if (!trimmedPart) {
-      // Skip empty string
-      continue;
+  for (let i = 0; i < linkHeaderValue.length;) {
+    const firstUrlEnd = linkHeaderValue.indexOf('>', i);
+    if (firstUrlEnd === -1) {
+      break;
     }
 
-    // Extract URL
-    const urlStart = trimmedPart.indexOf('<');
-    const urlEnd = trimmedPart.indexOf('>');
+    const commaIndex = linkHeaderValue.indexOf(',', firstUrlEnd);
+    const partEnd = commaIndex !== -1 ? commaIndex : linkHeaderValue.length;
+    const part = linkHeaderValue.substring(i, partEnd);
 
-    if (urlStart !== 0 || urlEnd === -1 || urlEnd <= urlStart) {
-      // Skip parts without a valid URI (must start with '<' and have a closing '>')
-      continue;
+    // This shouldn't be necessary, but we had a bug that created an infinite loop so
+    // let's guard against that.
+    // See crbug.com/431239629
+    if (partEnd + 1 <= i) {
+      console.warn('unexpected infinite loop, bailing');
+      break;
     }
 
-    const url = trimmedPart.substring(urlStart + 1, urlEnd).trim();
-    if (!url) {
-      // Skip empty url
-      continue;
-    }
+    i = partEnd + 1;
 
-    // Extract parameters string (everything after '>')
-    const paramsString = trimmedPart.substring(urlEnd + 1).trim();
-
-    if (paramsString) {
-      const params = paramsString.split(';');
-
-      for (const param of params) {
-        const trimmedParam = param.trim();
-        if (!trimmedParam) {
-          continue;
-        }
-
-        const eqIndex = trimmedParam.indexOf('=');
-        if (eqIndex === -1) {
-          // Skip malformed parameters without an '='
-          continue;
-        }
-
-        const paramName = trimmedParam.substring(0, eqIndex).trim().toLowerCase();
-        let paramValue = trimmedParam.substring(eqIndex + 1).trim();
-
-        // Remove quotes from value if present
-        if (paramValue.startsWith('"') && paramValue.endsWith('"')) {
-          paramValue = paramValue.substring(1, paramValue.length - 1);
-        }
-
-        if (paramName === 'rel' && paramValue === 'preconnect') {
-          preconnectedOrigins.push({url, headerText: trimmedPart});
-          // Found 'rel=preconnect', no need to process other parameters for this link
-          break;
-        }
-      }
+    const preconnectedOrigin = handleLinkResponseHeaderPart(part.trim());
+    if (preconnectedOrigin) {
+      preconnectedOrigins.push(preconnectedOrigin);
     }
   }
 
@@ -428,8 +480,7 @@ export function generatePreconnectedOrigins(
     });
   }
 
-  const documentRequest =
-      parsedTrace.NetworkRequests.byTime.find(req => req.args.data.requestId === context.navigationId);
+  const documentRequest = parsedTrace.NetworkRequests.byId.get(context.navigationId);
   documentRequest?.args.data.responseHeaders?.forEach(header => {
     if (header.name.toLowerCase() === 'link') {
       const preconnectedOriginsFromResponseHeader = handleLinkResponseHeader(header.value);  // , documentRequest);
@@ -541,8 +592,8 @@ export function generatePreconnectCandidates(
     return [];
   }
 
-  const mainResource = contextRequests.find(request => request.args.data.requestId === context.navigationId);
-  if (!mainResource) {
+  const documentRequest = parsedTrace.NetworkRequests.byId.get(context.navigationId);
+  if (!documentRequest) {
     return [];
   }
 
@@ -562,13 +613,13 @@ export function generatePreconnectCandidates(
     }
   });
 
-  const origins = candidateRequestsByOrigin(parsedTrace, mainResource, contextRequests, lcpGraphURLs);
+  const groupedOrigins = candidateRequestsByOrigin(parsedTrace, documentRequest, contextRequests, lcpGraphURLs);
 
   let maxWastedLcp = Types.Timing.Milli(0);
   let maxWastedFcp = Types.Timing.Milli(0);
   let preconnectCandidates: PreconnectCandidate[] = [];
 
-  origins.forEach(requests => {
+  groupedOrigins.forEach(requests => {
     const firstRequestOfOrigin = requests[0];
 
     // Skip the origin if we don't have timing information
@@ -590,7 +641,8 @@ export function generatePreconnectCandidates(
     }
 
     const timeBetweenMainResourceAndDnsStart = Types.Timing.Micro(
-        firstRequestOfOrigin.args.data.syntheticData.sendStartTime - mainResource.args.data.syntheticData.finishTime +
+        firstRequestOfOrigin.args.data.syntheticData.sendStartTime -
+        documentRequest.args.data.syntheticData.finishTime +
         Helpers.Timing.milliToMicro(firstRequestOfOrigin.args.data.timing.dnsStart));
     const wastedMs =
         Math.min(connectionTime, Helpers.Timing.microToMilli(timeBetweenMainResourceAndDnsStart)) as Types.Timing.Milli;
@@ -648,4 +700,22 @@ export function generateInsight(
     preconnectedOrigins,
     preconnectCandidates,
   });
+}
+
+export function createOverlays(model: NetworkDependencyTreeInsightModel): Types.Overlays.Overlay[] {
+  function walk(nodes: CriticalRequestNode[], overlays: Types.Overlays.Overlay[]): void {
+    nodes.forEach(node => {
+      overlays.push({
+        type: 'ENTRY_OUTLINE',
+        entry: node.request,
+        outlineReason: 'ERROR',
+      });
+      walk(node.children, overlays);
+    });
+  }
+
+  const overlays: Types.Overlays.Overlay[] = [];
+  walk(model.rootNodes, overlays);
+
+  return overlays;
 }

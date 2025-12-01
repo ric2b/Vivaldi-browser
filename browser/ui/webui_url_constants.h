@@ -18,9 +18,6 @@ inline constexpr char16_t kVivaldiUISettingsURL16[] = u"vivaldi://settings/";
 inline constexpr char kVivaldiUIExtensionsURL[] = "vivaldi://extensions/";
 inline constexpr char16_t kVivaldiUIExtensionsURL16[] =
     u"vivaldi://extensions/";
-inline constexpr char kVivaldiUIExperimentsURL[] = "vivaldi://experiments/";
-inline constexpr char16_t kVivaldiUIExperimentsURL16[] =
-    u"vivaldi://experiments/";
 inline constexpr char kVivaldiUIGameURL[] = "vivaldi://game/";
 inline constexpr char16_t kVivaldiUIGameURL16[] = u"vivaldi://game/";
 }  // namespace vivaldi

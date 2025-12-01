@@ -12,10 +12,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "src/xnnpack/simd/f32-avx512f.h"
-
 #include "src/xnnpack/common.h"
+#include "src/xnnpack/math.h"
 #include "src/xnnpack/microparams.h"
+#include "src/xnnpack/simd/f32-avx512f.h"
 
 void xnn_f32_avgpool_minmax_ukernel_9p__avx512f_u16(
     size_t output_pixels,
@@ -29,7 +29,7 @@ void xnn_f32_avgpool_minmax_ukernel_9p__avx512f_u16(
     float* output,
     size_t input_increment,
     size_t output_increment,
-    const struct xnn_f32_scaleminmax_params params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f32_scaleminmax_params* restrict params)
 {
   assert(output_pixels != 0);
   assert(channels != 0);

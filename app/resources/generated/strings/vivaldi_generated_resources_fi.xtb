@@ -6,7 +6,7 @@
 <translation id="1031362278801463162">Ladataan esikatselua</translation>
 <translation id="1047431265488717055">Kopioi linkin te&amp;ksti</translation>
 <translation id="1049795001945932310">&amp;Kieliasetukset</translation>
-<translation id="1054153489933238809">&amp;Avaa alkuperäinen kuva uuteen välilehteen</translation>
+<translation id="1054153489933238809">&amp;Avaa alkuperäinen kuva uudelle välilehdelle</translation>
 <translation id="1056898198331236512">Varoitus</translation>
 <translation id="1084824384139382525">Kopioi linkin osoit&amp;e</translation>
 <translation id="1163931534039071049">&amp;Näytä kehyksen lähdekoodi</translation>
@@ -155,7 +155,7 @@
 <translation id="354068948465830244">Voi lukea ja muuttaa sivuston tietoja</translation>
 <translation id="3560034655160545939">&amp;Oikoluku</translation>
 <translation id="3587482841069643663">Kaikki</translation>
-<translation id="3627588569887975815">Avaa linkki &amp;yksityisikkunassa</translation>
+<translation id="3627588569887975815">Avaa linkki &amp;yksityisikkunaan</translation>
 <translation id="3678156199662914018">Laajennus: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Ruudunjakopyyntö lähteestä <ph name="APP_NAME" /></translation>
 <translation id="3708684582558000260">Älä salli suljettujen sivustojen viimeistellä tietojen lähetystä tai vastaanottoa</translation>
@@ -440,7 +440,7 @@ other {# kirjanmerkkiä}}</translation>
 <translation id="8605428685123651449">SQLite-muisti</translation>
 <translation id="8615618338313291042">Yksityinen sovellus: <ph name="APP_NAME" /></translation>
 <translation id="862750493060684461">CSS-välimuisti</translation>
-<translation id="8661290697478713397">Avaa linkki &amp;yksityisikkunassa</translation>
+<translation id="8661290697478713397">Avaa linkki &amp;yksityisikkunaan</translation>
 <translation id="8664389313780386848">&amp;Näytä sivun lähdekoodi</translation>
 <translation id="8705331520020532516">Sarjanumero</translation>
 <translation id="8708000541097332489">Tyhjennä suljettaessa</translation>

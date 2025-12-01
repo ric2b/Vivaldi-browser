@@ -10,8 +10,10 @@
 
 #include <assert.h>
 #include <stddef.h>
+#include <stdint.h>
 
-#include "src/xnnpack/math.h"
+#include "src/xnnpack/common.h"
+#include "src/xnnpack/microparams.h"
 #include "src/xnnpack/packb.h"
 #include "src/xnnpack/unaligned.h"
 
@@ -22,7 +24,7 @@ void xnn_x32_packb_gemm_ukernel_4c4s1r__scalar_float(
   uint32_t* packed_weights,
   size_t channel_tile_stride,
   size_t channel_subtile_stride,
-  const struct xnn_x32_packb_params params[restrict XNN_MIN_ELEMENTS(1)])
+  const struct xnn_x32_packb_params* restrict params)
 {
   assert(groups != 0);
   assert(channels != 0);

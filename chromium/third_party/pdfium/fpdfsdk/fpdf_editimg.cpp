@@ -121,13 +121,13 @@ bool LoadJpegHelper(FPDF_PAGE* pages,
 
 FPDF_EXPORT FPDF_PAGEOBJECT FPDF_CALLCONV
 FPDFPageObj_NewImageObj(FPDF_DOCUMENT document) {
-  CPDF_Document* pDoc = CPDFDocumentFromFPDFDocument(document);
-  if (!pDoc) {
+  CPDF_Document* doc = CPDFDocumentFromFPDFDocument(document);
+  if (!doc) {
     return nullptr;
   }
 
   auto pImageObj = std::make_unique<CPDF_ImageObject>();
-  pImageObj->SetImage(pdfium::MakeRetain<CPDF_Image>(pDoc));
+  pImageObj->SetImage(pdfium::MakeRetain<CPDF_Image>(doc));
 
   // Caller takes ownership.
   return FPDFPageObjectFromCPDFPageObject(pImageObj.release());
@@ -435,12 +435,12 @@ FPDFImageObj_GetImageFilterCount(FPDF_PAGEOBJECT image_object) {
     return 0;
   }
 
-  RetainPtr<const CPDF_Dictionary> pDict = pImg->GetDict();
-  if (!pDict) {
+  RetainPtr<const CPDF_Dictionary> dict = pImg->GetDict();
+  if (!dict) {
     return 0;
   }
 
-  RetainPtr<const CPDF_Object> pFilter = pDict->GetDirectObjectFor("Filter");
+  RetainPtr<const CPDF_Object> pFilter = dict->GetDirectObjectFor("Filter");
   if (!pFilter) {
     return 0;
   }
@@ -466,9 +466,9 @@ FPDFImageObj_GetImageFilter(FPDF_PAGEOBJECT image_object,
   }
 
   CPDF_PageObject* pObj = CPDFPageObjectFromFPDFPageObject(image_object);
-  RetainPtr<const CPDF_Dictionary> pDict =
+  RetainPtr<const CPDF_Dictionary> dict =
       pObj->AsImage()->GetImage()->GetDict();
-  RetainPtr<const CPDF_Object> pFilter = pDict->GetDirectObjectFor("Filter");
+  RetainPtr<const CPDF_Object> pFilter = dict->GetDirectObjectFor("Filter");
   ByteString bsFilter = pFilter->IsName()
                             ? pFilter->AsName()->GetString()
                             : pFilter->AsArray()->GetByteStringAt(index);

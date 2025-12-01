@@ -9,9 +9,8 @@
 // LICENSE file in the root directory of this source tree.
 
 
-#include "src/xnnpack/simd/f32-hvx.h"
-
 #include "src/xnnpack/gemm.h"
+#include "src/xnnpack/simd/f32-hvx.h"
 
 void xnn_f32_gemm_minmax_ukernel_4x128__hvx_broadcast(
     size_t mr,
@@ -23,7 +22,7 @@ void xnn_f32_gemm_minmax_ukernel_4x128__hvx_broadcast(
     float* restrict c,
     size_t cm_stride,
     size_t cn_stride,
-    const struct xnn_f32_minmax_params params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f32_minmax_params* restrict params)
 {
   assert(mr != 0);
   assert(mr <= 4);

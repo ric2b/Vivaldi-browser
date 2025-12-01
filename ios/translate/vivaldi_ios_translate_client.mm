@@ -46,6 +46,7 @@
 #import "ios/web/public/browser_state.h"
 #import "ios/web/public/navigation/navigation_context.h"
 #import "ios/web/public/web_state.h"
+#import "prefs/vivaldi_pref_names.h"
 #import "third_party/metrics_proto/translate_event.pb.h"
 #import "url/gurl.h"
 
@@ -139,8 +140,22 @@ void VivaldiIOSTranslateClient::LoadTranslationScript() {
 
 std::unique_ptr<infobars::InfoBar> VivaldiIOSTranslateClient::CreateInfoBar(
     std::unique_ptr<translate::TranslateInfoBarDelegate> delegate) const {
-  bool skip_banner = delegate->translate_step() ==
-                     translate::TranslateStep::TRANSLATE_STEP_TRANSLATING;
+  ProfileIOS* profile =
+      ProfileIOS::FromBrowserState(web_state_->GetBrowserState());
+  PrefService* prefs = profile->GetOriginalProfile()->GetPrefs();
+  bool banner_disabled =
+      prefs->GetBoolean(vivaldiprefs::kVivaldiTranslateInfobarBannerDisabled);
+
+  bool skip_banner;
+  if (banner_disabled) {
+    // If banners are disabled by pref, only show for translation errors.
+    // If not, silent fail can lead users to confusion.
+    skip_banner = delegate->translate_step() !=
+                  translate::TranslateStep::TRANSLATE_STEP_TRANSLATE_ERROR;
+  } else {
+    skip_banner = delegate->translate_step() ==
+                  translate::TranslateStep::TRANSLATE_STEP_TRANSLATING;
+  }
   return std::make_unique<InfoBarIOS>(InfobarType::kInfobarTypeTranslate,
                                       std::move(delegate), skip_banner);
 }

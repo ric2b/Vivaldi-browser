@@ -29,6 +29,7 @@ import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.drawable.Drawable;
 
+import androidx.annotation.Nullable;
 import androidx.annotation.Px;
 import androidx.appcompat.content.res.AppCompatResources;
 
@@ -68,10 +69,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-// Vivaldi
-import org.vivaldi.browser.common.VivaldiUtils;
-import org.vivaldi.browser.screen_lock.ScreenLock;
-
 /**
  * Contains the logic for the TouchToFill component. It sets the state of the model and reacts to
  * events like clicks.
@@ -89,7 +86,6 @@ class TouchToFillMediator {
     private @Px int mDesiredIconSize;
     private List<WebauthnCredential> mWebAuthnCredentials;
     private List<Credential> mCredentials;
-    private boolean mManagePasskeysHidesPasswords;
     private BottomSheetFocusHelper mBottomSheetFocusHelper;
     private ImageFetcher mImageFetcher;
 
@@ -118,11 +114,8 @@ class TouchToFillMediator {
             List<Credential> credentials,
             boolean showMorePasskeys,
             boolean triggerSubmission,
-            boolean managePasskeysHidesPasswords,
             boolean showHybridPasskeyOption) {
         assert credentials != null;
-
-        mManagePasskeysHidesPasswords = managePasskeysHidesPasswords;
 
         ListModel<ListItem> sheetItems = mModel.get(SHEET_ITEMS);
         sheetItems.clear();
@@ -193,7 +186,10 @@ class TouchToFillMediator {
                     credentials, webAuthnCredentials, showMorePasskeys)) {
                 sheetItems.add(new ListItem(TouchToFillProperties.ItemType.FILL_BUTTON, model));
             }
-            requestIconOrFallbackImage(model, url);
+            if (!credential.isBackupCredential()) {
+                // Backup credentials display the history icon instead.
+                requestIconOrFallbackImage(model, url);
+            }
         }
 
         if (showMorePasskeys) {
@@ -287,7 +283,7 @@ class TouchToFillMediator {
             return mContext.getString(R.string.manage_passwords);
         }
 
-        if (credentials.size() > 0 && !mManagePasskeysHidesPasswords) {
+        if (credentials.size() > 0) {
             return mContext.getString(R.string.manage_passwords_and_passkeys);
         }
 
@@ -423,7 +419,7 @@ class TouchToFillMediator {
             FillableItemCollectionInfo itemCollectionInfo) {
         return new PropertyModel.Builder(CredentialProperties.ALL_KEYS)
                 .with(CREDENTIAL, credential)
-                .with(ON_CLICK_LISTENER, this::onSelectedCredentialVivaldi)
+                .with(ON_CLICK_LISTENER, this::onSelectedCredential)
                 .with(SHOW_SUBMIT_BUTTON, triggerSubmission)
                 .with(ITEM_COLLECTION_INFO, itemCollectionInfo)
                 .build();
@@ -445,7 +441,7 @@ class TouchToFillMediator {
             List<Credential> credentials) {
         // TODO(http://crbug.com/1504098) : Add render test for a bottom sheet with shared passwords
         // after the UI is complete.
-        List<Credential> sharedCredentials = new ArrayList<Credential>();
+        List<Credential> sharedCredentials = new ArrayList<>();
         for (Credential credential : credentials) {
             if (credential.isShared() && !credential.isSharingNotificationDisplayed()) {
                 sharedCredentials.add(credential);
@@ -479,7 +475,7 @@ class TouchToFillMediator {
             }
         }
 
-        private void onImageFetched(Bitmap image) {
+        private void onImageFetched(@Nullable Bitmap image) {
             if (image != null) {
                 mAvatarImages.add(image);
             }
@@ -501,23 +497,5 @@ class TouchToFillMediator {
                             mContext.getResources()
                                     .getDimensionPixelSize(R.dimen.touch_to_fill_avatar)));
         }
-    }
-
-    /**
-     * Vivaldi: Wrapper method which calls onSelectedCredential() with a previous authentication
-     * check.
-     */
-    private void onSelectedCredentialVivaldi(Credential credential) {
-        // Vivaldi
-        if (!VivaldiUtils.isDeviceSecure()) {
-            VivaldiUtils.showMissingDeviceLockDialog(mContext);
-            return;
-        }
-        if (ScreenLock.getInstance().canReauthenticate()) {
-            ScreenLock.getInstance().reauthenticate(result -> {
-                if (result) onSelectedCredential(credential);
-            });
-        } else
-            onSelectedCredential(credential);
     }
 }

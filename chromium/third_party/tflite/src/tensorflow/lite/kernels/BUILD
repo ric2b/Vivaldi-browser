@@ -1,3 +1,5 @@
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
 load("//tensorflow:tensorflow.bzl", "tf_opts_nortti_if_android")
 load("//tensorflow:tensorflow.default.bzl", "get_compatible_with_portable", "pybind_extension")
 load("//tensorflow/lite:build_def.bzl", "tflite_combine_cc_tests", "tflite_copts", "tflite_self_contained_libs_test_suite")
@@ -154,6 +156,7 @@ cc_library(
         "//tensorflow/lite/core/kernels:builtin_ops",
         "//tensorflow/lite/delegates/nnapi:acceleration_test_util",
         "//tensorflow/lite/delegates/nnapi:nnapi_delegate",
+        "//tensorflow/lite/kernels/internal:tensor_ctypes",
         "//tensorflow/lite/kernels/internal:tensor_utils",
         "//tensorflow/lite/kernels/internal/utils:sparsity_format_converter",
         "//tensorflow/lite/nnapi:nnapi_implementation",
@@ -162,9 +165,16 @@ cc_library(
         "//tensorflow/lite/testing:util",
         "//tensorflow/lite/tools:logging",
         "//tensorflow/lite/tools/optimize:quantization_utils",
+        "//tensorflow/lite/tools/serialization:writer_lib",
         "//tensorflow/lite/tools/versioning",
+        "@FP16",
         "@com_google_absl//absl/algorithm:container",
         "@com_google_absl//absl/base",
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/base:no_destructor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
+        "@com_google_absl//absl/synchronization",
         "@com_google_absl//absl/types:span",
         "@com_google_googletest//:gtest",
         "@eigen_archive//:eigen3",
@@ -816,6 +826,7 @@ cc_library(
     ],
     deps = BUILTIN_KERNEL_DEPS + [
         ":variable_op_kernels",
+        "@FP16",
         "@fft2d",
         "@ruy//ruy/profiler:instrumentation",
         "//tensorflow/lite/c:c_api_types",

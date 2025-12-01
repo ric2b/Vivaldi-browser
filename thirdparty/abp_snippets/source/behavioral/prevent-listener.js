@@ -19,8 +19,9 @@ import $ from "../$.js";
 import {apply, call, proxy} from "proxy-pants/function";
 
 import {debug} from "../introspection/debug.js";
-import {toRegExp} from "../utils/general.js";
+import {formatArguments, toRegExp} from "../utils/general.js";
 import {getDebugger} from "../introspection/log.js";
+import {profile} from "../introspection/profile.js";
 
 let {Error, Map, Object, console} = $(window);
 
@@ -53,9 +54,11 @@ export function preventListener(event, eventHandler, selector) {
     events = new Map();
 
     let debugLog = getDebugger("[prevent]");
+    const {mark, end} = profile("prevent-listener");
 
     Object.defineProperty(EventTargetProto, "addEventListener", {
       value: proxy(addEventListener, function(type, listener) {
+        mark();
         for (let {evt, handlers, selectors} of events.values()) {
           // bail out ASAP if current type doesn't match
           if (!evt.test(type))
@@ -114,7 +117,7 @@ export function preventListener(event, eventHandler, selector) {
             }
 
             if (debug()) {
-              console.groupCollapsed("DEBUG [prevent] was successful");
+              console.groupCollapsed("DEBUG [prevent] was successful", `\nFILTER: prevent-listener ${formattedArgs}`);
               debugLog("success", `type: ${type} matching ${evt}`);
               debugLog("success", "handler:", listener);
               if (handler)
@@ -127,17 +130,25 @@ export function preventListener(event, eventHandler, selector) {
             return;
           }
         }
+        end();
         return apply(addEventListener, this, arguments);
       })
     });
 
     debugLog("info", "Wrapped addEventListener");
   }
+  // Map each argument to a string format for logging purposes
+  const formattedArgsToLog = formatArguments(arguments);
 
-  if (!events.has(event))
-    events.set(event, {evt: toRegExp(event), handlers: [], selectors: []});
+  if (!events.has(event)) {
+    events.set(event,
+               {evt: toRegExp(event),
+                handlers: [],
+                selectors: [],
+                formattedArgs: formattedArgsToLog});
+  }
 
-  let {handlers, selectors} = events.get(event);
+  let {handlers, selectors, formattedArgs} = events.get(event);
 
   handlers.push(eventHandler ? toRegExp(eventHandler) : null);
   selectors.push(selector);

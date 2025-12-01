@@ -7,6 +7,7 @@
 
 #include <map>
 #include <mutex>
+#include <optional>
 #include <set>
 #include <string_view>
 #include <unordered_map>
@@ -57,6 +58,10 @@ class Args {
   // Returns the value corresponding to the given argument name, or NULL if no
   // argument is set.
   const Value* GetArgOverride(const char* name) const;
+
+  // Similar to above, except it searches for `name` from all arguments. If it
+  // has an override, it returns `override_value`.
+  std::optional<Value> GetArgFromAllArguments(const char* name) const;
 
   // Sets up the root scope for a toolchain. This applies the default system
   // flags and saves the toolchain overrides so they can be applied to
@@ -117,6 +122,10 @@ class Args {
   // Returns the KeyValueMap used for overrides for the specified
   // toolchain.
   Scope::KeyValueMap& OverridesForToolchainLocked(Scope* scope) const;
+
+  // Returns toolchains in a deterministic way. Always prioritize
+  // the default toolchain. Requires the lock being acquired.
+  std::vector<const Settings*> GetSortedToolchainsLocked() const;
 
   // Since this is called during setup which we assume is single-threaded,
   // this is not protected by the lock. It should be set only during init.

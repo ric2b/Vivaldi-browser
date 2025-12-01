@@ -23,6 +23,9 @@ tests = [
   ['test-family-matching.c'],
   ['test-ptrlist.c', {'include_directories': include_directories('../src'), 'dependencies': libintl_dep}],
 ]
+tests_build_only = [
+  ['test-gen-testcache.c', {'include_directories': include_directories('../src'), 'dependencies': libintl_dep}],
+]
 tests_not_parallel = []
 
 if host_machine.system() != 'windows'
@@ -34,6 +37,7 @@ if host_machine.system() != 'windows'
   tests_not_parallel += [
     # FIXME: this needs NotoSans-hinted.zip font downloaded and unpacked into test build directory! see run-test.sh
     ['test-crbug1004254.c', {'dependencies': dependency('threads')}], # for pthread
+    ['test-mt-fccfg.c', {'include_directories': include_directories('../src'), 'dependencies': dependency('threads')}],
   ]
 
   if get_option('default_library') == 'static'
@@ -49,7 +53,7 @@ if get_option('fontations').enabled()
   link_with_libs += [fc_fontations]
 endif
 
-foreach test_data : tests + tests_not_parallel
+foreach test_data : tests + tests_not_parallel + tests_build_only
   fname = test_data[0]
   opts = test_data.length() > 1 ? test_data[1] : {}
   extra_c_args = opts.get('c_args', [])
@@ -58,17 +62,19 @@ foreach test_data : tests + tests_not_parallel
 
   test_name = fname.split('.')[0].underscorify()
 
-  exe = executable(test_name, fname, fcstdint_h,
+  exe = executable(test_name, fname, fcstdint_h, fclang_h,
     c_args: c_args + extra_c_args,
     include_directories: [incbase] + extra_incdir,
     link_with: link_with_libs,
     dependencies: extra_deps,
   )
 
-  if test_data in tests
-    test(test_name, exe, timeout: 600, is_parallel: true)
-  else
-    test(test_name, exe, timeout: 600, is_parallel: false)
+  if test_data not in tests_build_only
+    if test_data in tests
+      test(test_name, exe, timeout: 600, is_parallel: true)
+    else
+      test(test_name, exe, timeout: 600, is_parallel: false)
+    endif
   endif
 endforeach
 
@@ -80,35 +86,29 @@ endif
 
 fs = import('fs')
 
-if host_machine.system() != 'windows'
-  if conf.get('FREETYPE_PCF_LONG_FAMILY_NAMES')
-    out_expected = fs.copyfile('out.expected-long-family-names',
-                               'out.expected')
-  else
-    out_expected = fs.copyfile('out.expected-no-long-family-names',
-                               'out.expected')
-  endif
+if conf.get('FREETYPE_PCF_LONG_FAMILY_NAMES')
+  out_expected = fs.copyfile('out.expected-long-family-names',
+                             'out.expected')
+else
+  out_expected = fs.copyfile('out.expected-no-long-family-names',
+                             'out.expected')
+endif
 
-  test('run_test_sh', find_program('run-test.sh'), timeout: 600, env: ['srcdir=@0@'.format(meson.current_source_dir()), 'builddir=@0@'.format(meson.current_build_dir()), 'EXEEXT=@0@'.format(conf.get('EXEEXT')), 'VERBOSE=1'])
-
-  if pytest.found()
-    test('pytest', pytest, args: ['--tap'],
-         workdir: meson.current_source_dir(),
-         env: ['builddir=@0@'.format(meson.project_build_root())],
-         protocol: 'tap',
-         timeout: 600,
-         depends: fetch_test_fonts)
-  endif
+if pytest.found()
+  test('pytest', pytest, args: ['--tap'],
+       workdir: meson.current_source_dir(),
+       env: [
+         'builddir=@0@'.format(meson.project_build_root()),
+         'srcdir=@0@'.format(meson.project_source_root()),
+         'EXEEXT=@0@'.format(conf.get('EXEEXT')),
+         'CC=@0@'.format(meson.get_compiler('c').cmd_array()[0]),
+       ],
+       protocol: 'tap',
+       timeout: 600,
+       depends: fetch_test_fonts)
 endif
 
 if jsonc_dep.found()
   test_conf = executable('test-conf', 'test-conf.c',
                          dependencies: [fontconfig_dep, jsonc_dep])
-  test('run_test_conf_sh', find_program('run-test-conf.sh'),
-       timeout: 120,
-       env: [
-         'srcdir=@0@'.format(meson.current_source_dir()),
-         'builddir=@0@'.format(meson.current_build_dir())
-       ],
-       depends: test_conf)
 endif

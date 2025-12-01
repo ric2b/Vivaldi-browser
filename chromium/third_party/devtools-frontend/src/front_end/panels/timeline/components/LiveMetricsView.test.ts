@@ -87,7 +87,7 @@ function getFieldMessage(view: Element): HTMLElement|null {
 
 function getLiveMetricsTitle(view: Element): HTMLElement {
   // There may be multiple, but this should always be the first one.
-  return view.shadowRoot!.querySelector('.live-metrics > .section-title') as HTMLElement;
+  return view.shadowRoot!.querySelector('.live-metrics > .section-title')!;
 }
 
 function getInpInteractionLink(view: Element): HTMLElement|null {
@@ -899,7 +899,7 @@ describeWithMockConnection('LiveMetricsView', () => {
         assert.match(envRecs[1].textContent!, /Slow 4G/);
 
         const recNotice = view.shadowRoot!.querySelector('.environment-option devtools-network-throttling-selector')
-                              ?.shadowRoot!.querySelector('devtools-button');
+                              ?.shadowRoot!.querySelector('devtools-icon[name="info"]');
         assert.exists(recNotice);
       });
 
@@ -916,7 +916,7 @@ describeWithMockConnection('LiveMetricsView', () => {
         assert.strictEqual(envRecs[1].textContent, 'Not enough data');
 
         const recNotice = view.shadowRoot!.querySelector('.environment-option devtools-network-throttling-selector')
-                              ?.shadowRoot!.querySelector('devtools-button');
+                              ?.shadowRoot!.querySelector('devtools-icon[name="info"]');
         assert.notExists(recNotice);
       });
 

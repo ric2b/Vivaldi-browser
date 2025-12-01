@@ -22,14 +22,12 @@ node_ts_library("helpers") {
     "issues-helpers.ts",
     "layers-helpers.ts",
     "lighthouse-helpers.ts",
-    "media-helpers.ts",
     "memory-helpers.ts",
     "network-helpers.ts",
     "performance-helpers.ts",
     "quick_open-helpers.ts",
-    "search-helpers.ts",
+    "recorder-helpers.ts",
     "security-helpers.ts",
-    "sensors-helpers.ts",
     "settings-helpers.ts",
     "settings-shortcuts-helpers.ts",
     "sources-helpers.ts",
@@ -39,6 +37,7 @@ node_ts_library("helpers") {
 
   deps = [
     "../../../extension-api",
+    "../../../front_end/panels/recorder:bundle",
     "../../e2e_non_hosted/shared",
     "../../shared",
   ]

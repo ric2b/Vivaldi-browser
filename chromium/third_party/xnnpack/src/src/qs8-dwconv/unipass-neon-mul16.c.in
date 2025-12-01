@@ -10,13 +10,16 @@ $ABC = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 $assert CHANNEL_TILE % 8 == 0
 $assert CHANNEL_TILE >= 8
 $assert KERNEL_TILE >= 2
-#include <assert.h>
-
 #include <arm_neon.h>
+#include <assert.h>
+#include <stddef.h>
+#include <stdint.h>
 
+#include "src/xnnpack/common.h"
 #include "src/xnnpack/dwconv.h"
 $if REQUANTIZATION == "FP32" and ARMV8:
   #include "src/xnnpack/intrinsics-polyfill.h"
+#include "src/xnnpack/microparams.h"
 
 
 $DATATYPE_SPEC = {"QS8": "qs8", "QC8": "qs8_qc8w", "QU8": "qu8"}[DATATYPE]
@@ -55,7 +58,7 @@ void xnn_${DATATYPE_SPEC}_dwconv_minmax_${REQUANTIZATION.lower()}_ukernel_${KERN
     size_t input_offset,
     size_t input_pixel_stride,
     const ${XINT8_T}* zero,
-    const ${PARAMS_TYPE} params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
+    const ${PARAMS_TYPE}* restrict params) XNN_OOB_READS
 {
   assert(channels != 0);
   assert(output_width != 0);

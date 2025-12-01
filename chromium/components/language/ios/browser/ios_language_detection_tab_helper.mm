@@ -179,14 +179,8 @@ std::string IOSLanguageDetectionTabHelper::DeterminePageLanguage(
     bool* is_model_reliable,
     float& model_reliability_score,
     std::string* detection_model_version) {
-
-#if defined(VIVALDI_BUILD)
-  if (language_detection_model_ && language_detection_model_->IsAvailable()) {
-#else
   if (translate::IsTFLiteLanguageDetectionEnabled() &&
       language_detection_model_ && language_detection_model_->IsAvailable()) {
-#endif // End Vivaldi
-
     base::ElapsedTimer timer;
     std::string tflite_language =
         language_detection_model_->DeterminePageLanguage(

@@ -227,7 +227,8 @@ FingerprintingProtectionFilterEnabledInIncognitoBrowserTest::
       /*enabled_features=*/
       {{features::kEnableFingerprintingProtectionFilterInIncognito,
         {{"performance_measurement_rate", "0.0"}}}},
-      /*disabled_features=*/{});
+      /*disabled_features=*/{
+          {features::kEnableFingerprintingProtectionFilter}});
 }
 
 FingerprintingProtectionFilterEnabledInIncognitoBrowserTest::
@@ -298,12 +299,10 @@ FingerprintingProtectionFilterTrackingProtectionSettingBrowserTest::
     FingerprintingProtectionFilterTrackingProtectionSettingBrowserTest() {
   scoped_feature_list_.InitWithFeatures(
       /*enabled_features=*/
-
       {// Enable FPP setting in Tracking Protection UX.
-       // This flag isn't used together with
-       // `EnableFingerprintingProtectionFilter(InIncognito)`.
-       privacy_sandbox::kFingerprintingProtectionUx},
-      /*disabled_features=*/{});
+       privacy_sandbox::kFingerprintingProtectionUx,
+       features::kEnableFingerprintingProtectionFilterInIncognito},
+      /*disabled_features=*/{features::kEnableFingerprintingProtectionFilter});
 }
 
 FingerprintingProtectionFilterTrackingProtectionSettingBrowserTest::
@@ -311,6 +310,30 @@ FingerprintingProtectionFilterTrackingProtectionSettingBrowserTest::
         default;
 
 void FingerprintingProtectionFilterTrackingProtectionSettingBrowserTest::
+    SetUpOnMainThread() {
+  FingerprintingProtectionFilterBrowserTest::SetUpOnMainThread();
+  ASSERT_TRUE(embedded_test_server()->Start());
+}
+
+// ====
+// FingerprintingProtectionFilterTrackingProtectionSettingAndNonIncognitoFilteringBrowserTest
+// ====
+
+FingerprintingProtectionFilterTrackingProtectionSettingAndNonIncognitoFilteringBrowserTest::
+    FingerprintingProtectionFilterTrackingProtectionSettingAndNonIncognitoFilteringBrowserTest() {
+  scoped_feature_list_.InitWithFeatures(
+      /*enabled_features=*/
+      {privacy_sandbox::kFingerprintingProtectionUx,
+       features::kEnableFingerprintingProtectionFilterInIncognito,
+       features::kEnableFingerprintingProtectionFilter},
+      /*disabled_features=*/{});
+}
+
+FingerprintingProtectionFilterTrackingProtectionSettingAndNonIncognitoFilteringBrowserTest::
+    ~FingerprintingProtectionFilterTrackingProtectionSettingAndNonIncognitoFilteringBrowserTest() =
+        default;
+
+void FingerprintingProtectionFilterTrackingProtectionSettingAndNonIncognitoFilteringBrowserTest::
     SetUpOnMainThread() {
   FingerprintingProtectionFilterBrowserTest::SetUpOnMainThread();
   ASSERT_TRUE(embedded_test_server()->Start());

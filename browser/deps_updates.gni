@@ -58,12 +58,17 @@ if (is_android) {
 update_target("//chrome/browser:browser") {
   public_deps += [
     "//vivaldi/browser",
+    "//vivaldi/browser/ad_blocker",
+    "//vivaldi/browser:features",
     "//vivaldi/browser:internal_handlers",
     "//vivaldi/browser:removed_partners_tracker",
     "//vivaldi/components:tabs",
   ]
   allow_circular_includes_from += [
     "//vivaldi/browser",
+  ]
+  configs += [
+     "//vivaldi/gn/config:release_kind"
   ]
 }
 

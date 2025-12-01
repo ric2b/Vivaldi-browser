@@ -37,6 +37,7 @@ void TabHandleLayer::SetProperties(
     bool foreground,
     bool shouldShowTabOutline,
     bool close_pressed,
+    bool should_hide_favicon,
     float toolbar_width,
     float x,
     float y,
@@ -58,6 +59,8 @@ void TabHandleLayer::SetProperties(
     int keyboard_focus_ring_offset,
     int stroke_width,
     float folio_foot_length,
+    float width_to_hide_tab_title,
+
     bool is_shown_as_favicon, // Vivaldi
     float title_offset) { // Vivaldi
   if (foreground != foreground_ || opacity != opacity_) {
@@ -195,11 +198,18 @@ void TabHandleLayer::SetProperties(
     // 8dp top padding for folio.
     title_y = std::min(content_offset_y, title_y_offset_mid);
 
+    // Hide tab title text when it reached threshold.
+    title_layer->SetShouldHideTitleText(width <= width_to_hide_tab_title);
+
+    // Hide tab favicon if necessary.
+    title_layer->SetShouldHideIcon(should_hide_favicon);
+
     if (vivaldi::IsVivaldiRunning()) {
       title_y = content_offset_y;
     }
 
     int title_x = is_rtl ? padding_left + close_width : padding_left;
+    int title_width = width - padding_left - padding_right - close_width;
 
     // Note(david@vivaldi.com): When close button is not visible we can increase
     // the title space in order to see more of the title. Also pass the show
@@ -208,8 +218,7 @@ void TabHandleLayer::SetProperties(
     title_layer->ShowOnlyFavicon(is_shown_as_favicon);
     title_layer->SetIsCloseButtonVisible(close_button_alpha == 1.f);
 
-    title_layer->setBounds(
-        gfx::Size(width - padding_right - padding_left - close_width, height));
+    title_layer->setBounds(gfx::Size(title_width, height));
 
     // Note(david@vivaldi.com): Center the favicon when the background tab is
     // shown as a favicon.

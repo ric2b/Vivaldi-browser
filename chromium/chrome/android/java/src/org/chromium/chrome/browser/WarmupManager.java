@@ -4,6 +4,8 @@
 
 package org.chromium.chrome.browser;
 
+import static org.chromium.build.NullUtil.assumeNonNull;
+
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.Intent;
@@ -25,7 +27,6 @@ import android.view.ViewStub;
 import android.widget.FrameLayout;
 
 import androidx.annotation.IntDef;
-import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 import androidx.asynclayoutinflater.appcompat.AsyncAppCompatFactory;
 import androidx.core.content.res.ResourcesCompat;
@@ -43,6 +44,8 @@ import org.chromium.base.TraceEvent;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.task.AsyncTask;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.app.tab_activity_glue.ReparentingTask;
 import org.chromium.chrome.browser.autofill.AutofillClientProviderUtils;
@@ -92,6 +95,7 @@ import org.vivaldi.browser.common.VivaldiUtils;
  *
  * <p>This class is not thread-safe and must only be used on the UI thread.
  */
+@NullMarked
 public class WarmupManager {
     private static final String TAG = "WarmupManager";
 
@@ -129,10 +133,11 @@ public class WarmupManager {
         }
 
         @Override
-        public void onActivityAttachmentChanged(Tab tab, WindowAndroid window) {
+        public void onActivityAttachmentChanged(Tab tab, @Nullable WindowAndroid window) {
             destroyOwnedWindow(tab);
         }
 
+        @SuppressWarnings("NullAway")
         private void destroyOwnedWindow(Tab tab) {
             assert mOwnedWindowAndroid != null;
             mOwnedWindowAndroid.destroy();
@@ -143,7 +148,7 @@ public class WarmupManager {
 
     /** Context wrapper that routes APIs via Activity context once it's available. */
     private static class CctContextWrapper extends ContextThemeWrapper {
-        Context mActivityContext;
+        /*package*/ @Nullable Context mActivityContext;
 
         public CctContextWrapper(Context base, int themeResId) {
             super(base, themeResId);
@@ -159,20 +164,20 @@ public class WarmupManager {
     }
 
     @SuppressLint("StaticFieldLeak")
-    private static WarmupManager sWarmupManager;
+    private static @Nullable WarmupManager sWarmupManager;
 
     private final Set<String> mDnsRequestsInFlight;
     private final Map<String, Profile> mPendingPreconnectWithProfile;
 
     private int mToolbarContainerId;
-    private ViewGroup mMainView;
-    @VisibleForTesting WebContents mSpareWebContents;
-    private RenderProcessGoneObserver mObserver;
+    private @Nullable ViewGroup mMainView;
+    @VisibleForTesting /*package*/ @Nullable WebContents mSpareWebContents;
+    private @Nullable RenderProcessGoneObserver mObserver;
     private boolean mIsCctPrewarmTabEnabled;
 
     // Stores a prebuilt tab. To load a URL, this can be used if available instead of creating one
     // from scratch.
-    @VisibleForTesting Tab mSpareTab;
+    @VisibleForTesting /*package*/ @Nullable Tab mSpareTab;
 
     /**
      * Represents various states of spareTab.
@@ -198,7 +203,7 @@ public class WarmupManager {
         int NUM_ENTRIES = 5;
     }
 
-    @SpareTabFinalStatus int mSpareTabFinalStatus;
+    /*package*/ @SpareTabFinalStatus int mSpareTabFinalStatus;
 
     /**
      * Records the spareTab final status.
@@ -219,7 +224,7 @@ public class WarmupManager {
         }
     }
 
-    private void destroySpareTabInternal(Tab tab) {
+    private void destroySpareTabInternal(@Nullable Tab tab) {
         // Don't do anything if the spare tab doesn't exist.
         if (mSpareTab == null) return;
 
@@ -278,7 +283,9 @@ public class WarmupManager {
         }
 
         if (mSpareTab != null) {
-            mSpareTab.addObserver(new HiddenTabObserver(mSpareTab.getWindowAndroid()));
+            WindowAndroid window = mSpareTab.getWindowAndroid();
+            assumeNonNull(window);
+            mSpareTab.addObserver(new HiddenTabObserver(window));
         }
     }
 
@@ -315,7 +322,9 @@ public class WarmupManager {
         Rect bounds = TabUtils.estimateContentSize(context);
         int width = bounds.right - bounds.left;
         int height = bounds.bottom - bounds.top;
-        tab.getWebContents().setSize(width, height);
+        webContents = tab.getWebContents();
+        assumeNonNull(webContents);
+        webContents.setSize(width, height);
 
         // Reparent the tab to detach it from the current activity.
         ReparentingTask.from(tab).detach();
@@ -332,6 +341,7 @@ public class WarmupManager {
     public Tab takeSpareTab(Profile profile, boolean initiallyHidden, @TabLaunchType int type) {
         ThreadUtils.assertOnUiThread();
         try (TraceEvent e = TraceEvent.scoped("WarmupManager.takeSpareTab")) {
+            assert mSpareTab != null : "Attempted to take a null spare tab.";
             if (mSpareTab.getProfile() != profile) {
                 throw new RuntimeException("Attempted to take the tab from another profile.");
             }
@@ -471,7 +481,7 @@ public class WarmupManager {
      * @param toolbarContainerId Id of the toolbar container.
      * @param toolbarId The toolbar's layout ID.
      */
-    private static ViewGroup inflateViewHierarchy(
+    private static @Nullable ViewGroup inflateViewHierarchy(
             CctContextWrapper context, int toolbarContainerId, int toolbarId) {
         try (TraceEvent e = TraceEvent.scoped("WarmupManager.inflateViewHierarchy")) {
             FrameLayout contentHolder = new FrameLayout(context);
@@ -518,9 +528,9 @@ public class WarmupManager {
     public void transferViewHierarchyTo(ViewGroup contentView) {
         ThreadUtils.assertOnUiThread();
         ViewGroup from = mMainView;
-        Set<Theme> rebasedThemes = new ArraySet<Theme>(from.getChildCount());
         mMainView = null;
         if (from == null) return;
+        Set<Theme> rebasedThemes = new ArraySet<>(from.getChildCount());
         ((CctContextWrapper) from.getContext()).mActivityContext = contentView.getContext();
         while (from.getChildCount() > 0) {
             View currentChild = from.getChildAt(0);
@@ -747,7 +757,7 @@ public class WarmupManager {
      *     BrowserServicesIntentDataProvider#getTargetNetwork).
      * @return a WebContents, or null.
      */
-    public WebContents takeSpareWebContents(
+    public @Nullable WebContents takeSpareWebContents(
             boolean incognito, boolean initiallyHidden, boolean targetsNetwork) {
         try (TraceEvent e = TraceEvent.scoped("WarmupManager.takeSpareWebContents")) {
             ThreadUtils.assertOnUiThread();
@@ -761,7 +771,9 @@ public class WarmupManager {
             WebContents result = mSpareWebContents;
             if (result == null) return null;
             mSpareWebContents = null;
-            mObserver.observe(null);
+            if (mObserver != null) {
+                mObserver.observe(null);
+            }
             mObserver = null;
             if (!initiallyHidden) result.updateWebContentsVisibility(Visibility.VISIBLE);
             return result;
@@ -776,8 +788,12 @@ public class WarmupManager {
     }
 
     private void destroySpareWebContentsInternal() {
-        mObserver.observe(null);
-        mSpareWebContents.destroy();
+        if (mObserver != null) {
+            mObserver.observe(null);
+        }
+        if (mSpareWebContents != null) {
+            mSpareWebContents.destroy();
+        }
         mSpareWebContents = null;
         mObserver = null;
     }

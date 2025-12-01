@@ -31,7 +31,7 @@
 
 #include "gtest/gtest.h"
 
-#include "src/tint/lang/core/address_space.h"
+#include "src/tint/lang/core/enums.h"
 #include "src/tint/lang/core/ir/builder.h"
 #include "src/tint/lang/core/ir/validator.h"
 #include "src/tint/lang/core/number.h"
@@ -415,7 +415,7 @@ TEST_F(IR_ValidatorTest, Var_Init_InvalidAddressSpace) {
     EXPECT_THAT(
         res.Failure().reason,
         testing::HasSubstr(
-            R"(:3:38 error: var: only variables in the function or private address space may be initialized
+            R"(:3:38 error: var: only variables in the function, private, or __out address space may be initialized
   %s:ptr<storage, f32, read_write> = var 1.0f
                                      ^^^
 )")) << res.Failure();
@@ -521,6 +521,110 @@ TEST_F(IR_ValidatorTest, Var_Storage_NotHostShareable) {
 )")) << res.Failure();
 }
 
+TEST_F(IR_ValidatorTest, Var_DuplicateBindingPoints_NeitherReferenced) {
+    auto* var_a = b.Var<uniform, f32>();
+    var_a->SetBindingPoint(1, 2);
+    mod.root_block->Append(var_a);
+
+    auto* var_b = b.Var<uniform, i32>();
+    var_b->SetBindingPoint(1, 2);
+    mod.root_block->Append(var_b);
+
+    auto res = ir::Validate(mod);
+    ASSERT_EQ(res, Success);
+}
+
+TEST_F(IR_ValidatorTest, Var_DuplicateBindingPoints_OnlyOneReferenced) {
+    auto* var_a = b.Var<uniform, f32>();
+    var_a->SetBindingPoint(1, 2);
+    mod.root_block->Append(var_a);
+
+    auto* var_b = b.Var<uniform, i32>();
+    var_b->SetBindingPoint(1, 2);
+    mod.root_block->Append(var_b);
+
+    auto* f = FragmentEntryPoint();
+    b.Append(f->Block(), [&] {
+        b.Let(var_a->Result());
+        b.Return(f);
+    });
+
+    auto res = ir::Validate(mod);
+    ASSERT_EQ(res, Success);
+}
+
+TEST_F(IR_ValidatorTest, Var_DuplicateBindingPoints_ReferencedInDifferentFunctions) {
+    auto* var_a = b.Var<uniform, f32>();
+    var_a->SetBindingPoint(1, 2);
+    mod.root_block->Append(var_a);
+
+    auto* var_b = b.Var<uniform, i32>();
+    var_b->SetBindingPoint(1, 2);
+    mod.root_block->Append(var_b);
+
+    auto* func_a = FragmentEntryPoint("func_a");
+    b.Append(func_a->Block(), [&] {
+        b.Let(var_a->Result());
+        b.Return(func_a);
+    });
+
+    auto* func_b = FragmentEntryPoint("func_b");
+    b.Append(func_b->Block(), [&] {
+        b.Let(var_a->Result());
+        b.Return(func_b);
+    });
+
+    auto res = ir::Validate(mod, Capabilities{Capability::kAllowMultipleEntryPoints});
+    ASSERT_EQ(res, Success);
+}
+
+TEST_F(IR_ValidatorTest, Var_DuplicateBindingPoints_BothReferenced) {
+    auto* var_a = b.Var<uniform, f32>();
+    var_a->SetBindingPoint(1, 2);
+    mod.root_block->Append(var_a);
+
+    auto* var_b = b.Var<uniform, i32>();
+    var_b->SetBindingPoint(1, 2);
+    mod.root_block->Append(var_b);
+
+    auto* f = FragmentEntryPoint();
+    b.Append(f->Block(), [&] {
+        b.Let(var_a->Result());
+        b.Let(var_b->Result());
+        b.Return(f);
+    });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_THAT(
+        res.Failure().reason,
+        testing::HasSubstr(
+            R"(:3:32 error: var: found non-unique binding point, [group: 1, binding: 2], being referenced in entry point, %f
+  %2:ptr<uniform, i32, read> = var undef @binding_point(1, 2)
+                               ^^^
+)")) << res.Failure();
+}
+
+TEST_F(IR_ValidatorTest, Var_DuplicateBindingPoints_CapabilityOverride) {
+    auto* var_a = b.Var<uniform, f32>();
+    var_a->SetBindingPoint(1, 2);
+    mod.root_block->Append(var_a);
+
+    auto* var_b = b.Var<uniform, i32>();
+    var_b->SetBindingPoint(1, 2);
+    mod.root_block->Append(var_b);
+
+    auto* f = FragmentEntryPoint();
+    b.Append(f->Block(), [&] {
+        b.Let(var_a->Result());
+        b.Let(var_b->Result());
+        b.Return(f);
+    });
+
+    auto res = ir::Validate(mod, Capabilities{Capability::kAllowDuplicateBindings});
+    ASSERT_EQ(res, Success);
+}
+
 TEST_F(IR_ValidatorTest, Var_MultipleIOAnnotations) {
     auto* v = b.Var<AddressSpace::kIn, vec4<f32>>();
     v->SetBuiltin(BuiltinValue::kPosition);
@@ -603,9 +707,9 @@ TEST_F(IR_ValidatorTest, Var_Sampler_NonHandleAddressSpace) {
     EXPECT_THAT(
         res.Failure().reason,
         testing::HasSubstr(
-            R"(:2:42 error: var: handle types can only be declared in the 'handle' address space
+            R"(:2:3 error: var: handle types can only be declared in the 'handle' address space
   %1:ptr<private, sampler, read_write> = var undef
-                                         ^^^
+  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 )")) << res.Failure();
 }
 
@@ -618,9 +722,9 @@ TEST_F(IR_ValidatorTest, Var_Texture_NonHandleAddressSpace) {
     EXPECT_THAT(
         res.Failure().reason,
         testing::HasSubstr(
-            R"(:2:42 error: var: handle types can only be declared in the 'handle' address space
+            R"(:2:3 error: var: handle types can only be declared in the 'handle' address space
   %1:ptr<private, sampler, read_write> = var undef
-                                         ^^^
+  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 )")) << res.Failure();
 }
 
@@ -636,9 +740,9 @@ TEST_F(IR_ValidatorTest, Var_BindingArray_Texture_NonHandleAddressSpace) {
     EXPECT_THAT(
         res.Failure().reason,
         testing::HasSubstr(
-            R"(:2:62 error: var: handle types can only be declared in the 'handle' address space
+            R"(:2:3 error: var: handle types can only be declared in the 'handle' address space
   %1:ptr<private, binding_array<texture_2d<f32>, 4>, read> = var undef
-                                                             ^^^
+  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 )")) << res.Failure();
 }
 
@@ -693,7 +797,7 @@ TEST_F(IR_ValidatorTest, Var_RuntimeArray_NonStorageInStruct) {
                              {
                                  {mod.symbols.New("a"), ty.runtime_array(ty.f32()), {}},
                              });
-    auto* v = b.Var(ty.ptr(AddressSpace::kHandle, str_ty, read_write));
+    auto* v = b.Var(ty.ptr(AddressSpace::kUniform, str_ty, read));
     v->SetBindingPoint(0, 0);
     v->SetInputAttachmentIndex(0);
     mod.root_block->Append(v);
@@ -703,8 +807,8 @@ TEST_F(IR_ValidatorTest, Var_RuntimeArray_NonStorageInStruct) {
     EXPECT_THAT(res.Failure().reason,
                 testing::HasSubstr(
                     R"(:6:3 error: var: runtime arrays must be in the 'storage' address space
-  %1:ptr<handle, MyStruct, read_write> = var undef @binding_point(0, 0) @input_attachment_index(0)
-  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  %1:ptr<uniform, MyStruct, read> = var undef @binding_point(0, 0) @input_attachment_index(0)
+  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 )")) << res.Failure();
 }
 

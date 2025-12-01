@@ -98,6 +98,10 @@ probefmt(){
     run ffprobe${PROGSUF}${EXECSUF} -bitexact -show_entries format=format_name -print_format default=nw=1:nk=1 "$@"
 }
 
+probecodec(){
+    run ffprobe${PROGSUF}${EXECSUF} -bitexact -show_entries stream=codec_name -print_format default=nw=1:nk=1 "$@"
+}
+
 probeaudiostream(){
     run ffprobe${PROGSUF}${EXECSUF} -bitexact -show_entries stream=codec_name,codec_time_base,sample_fmt,channels,channel_layout:side_data "$@"
 }
@@ -117,6 +121,10 @@ probeframes(){
 
 probechapters(){
     run ffprobe${PROGSUF}${EXECSUF} -bitexact -show_chapters "$@"
+}
+
+probe(){
+    run ffprobe${PROGSUF}${EXECSUF} -bitexact "$@"
 }
 
 probegaplessinfo(){
@@ -318,6 +326,7 @@ enc_external(){
 
     srcfile=$(target_path $srcfile)
     encfile=$(target_path "${outdir}/${test}.${enc_fmt}")
+    test "$keep" -ge 1 || cleanfiles="$cleanfiles $encfile"
 
     ffmpeg -i $srcfile $enc_opt -f $enc_fmt -y $encfile || return
     run ffprobe${PROGSUF}${EXECSUF} -bitexact $probe_opt $encfile || return

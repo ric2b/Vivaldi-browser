@@ -13,6 +13,17 @@ class PasswordManagerDriver;
 struct PasswordForm;
 class PasswordFormManager;
 
+#if !BUILDFLAG(IS_IOS)
+// Allows observing events inside PasswordFormManager. Declared here to allow
+// adding observers to all form mangers in the cache.
+class PasswordFormManagerObserver : public base::CheckedObserver {
+ public:
+  ~PasswordFormManagerObserver() override = default;
+
+  // Invoked whenever `form_manager` parses a form.
+  virtual void OnPasswordFormParsed(PasswordFormManager* form_manager) = 0;
+};
+#else
 // Allows observing events inside PasswordFormManager. Declared here to allow
 // adding observers to all form mangers in the cache.
 class PasswordFormManagerObserver {
@@ -22,6 +33,7 @@ class PasswordFormManagerObserver {
   // Invoked whenever `form_manager` parses a form.
   virtual void OnPasswordFormParsed(PasswordFormManager* form_manager) = 0;
 };
+#endif
 
 // Contains information about password forms detected on a web page.
 class PasswordFormCache {
@@ -41,7 +53,14 @@ class PasswordFormCache {
   virtual const PasswordForm* GetPasswordForm(
       PasswordManagerDriver* driver,
       autofill::FieldRendererId field_id) const = 0;
+#if !BUILDFLAG(IS_IOS)
+  // Allows adding an observer for all newly added password form managers.
+  virtual void AddObserver(PasswordFormManagerObserver* observer) {}
 
+  // Removes observer from all current form managers and prevents attaching
+  // observer to newly added.
+  virtual void RemoveObserver(PasswordFormManagerObserver* observer) {}
+#else
   // Allows adding an observer for all newly added password form managers.
   virtual void SetObserver(
       base::WeakPtr<PasswordFormManagerObserver> observer) {}
@@ -49,6 +68,10 @@ class PasswordFormCache {
   // Removes observer from all current form managers and prevents attaching
   // observer to newly added.
   virtual void ResetObserver() {}
+#endif
+  // Returns all the `PasswordFormManager`s for the current page.
+  virtual base::span<const std::unique_ptr<PasswordFormManager>>
+  GetFormManagers() const = 0;
 };
 
 }  // namespace password_manager

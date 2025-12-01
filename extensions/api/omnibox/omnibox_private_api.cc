@@ -16,6 +16,7 @@
 #include "chrome/browser/autocomplete/chrome_autocomplete_provider_client.h"
 #include "chrome/browser/autocomplete/shortcuts_backend_factory.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
+#include "components/omnibox/browser/autocomplete_match_classification.h"
 #include "components/omnibox/browser/autocomplete_classifier.h"
 #include "components/omnibox/browser/autocomplete_match_type.h"
 #include "components/omnibox/browser/shortcuts_backend.h"
@@ -238,6 +239,7 @@ vivaldi::omnibox_private::OmniboxProviderName providerNameToVivaldiProviderName(
 }
 
 OmniboxItem CreateOmniboxItem(AutocompleteMatch match,  TemplateURLService* template_url_service) {
+  std::string type_to_string = AutocompleteMatchType::ToString(match.type);
   OmniboxItem res;
 
   res.allowed_to_be_default_match = match.allowed_to_be_default_match;
@@ -252,8 +254,7 @@ OmniboxItem CreateOmniboxItem(AutocompleteMatch match,  TemplateURLService* temp
       match.transition);
   res.description = base::UTF16ToUTF8(match.description);
   res.inline_autocompletion = base::UTF16ToUTF8(match.inline_autocompletion);
-  res.category =
-      GetProviderCategory(AutocompleteMatchType::ToString(match.type));
+  res.category = GetProviderCategory(type_to_string);
   res.deletable = match.deletable;
   res.type = match.type;
   if (res.category == OmniboxItemCategory::kDirectMatch) {
@@ -265,10 +266,16 @@ OmniboxItem CreateOmniboxItem(AutocompleteMatch match,  TemplateURLService* temp
     if (!match.keyword.empty() && template_url_service) {
       TemplateURL* template_url =
         template_url_service->GetTemplateURLForKeyword(match.keyword);
-      if (template_url) {
+      // Only use template URL favicon if it is not a starter pack keyword.
+      if (template_url && template_url->starter_pack_id() == 0) {
         res.favicon_url = template_url->favicon_url().spec().c_str();
         // img is needed for proper lookup of icon urls
         res.favicon_type = "img";
+      } else if (type_to_string == "starter-pack") {
+        // This page doesn't exist, this is set to force the Vivaldi icon in
+        // address field.
+        res.favicon_url = "vivaldi://starter-pack-engine";
+        res.favicon_type = "favicon";
       }
     }
   }
@@ -276,7 +283,9 @@ OmniboxItem CreateOmniboxItem(AutocompleteMatch match,  TemplateURLService* temp
   return res;
 }
 
-AutocompleteMatch CreateAutocompleteMatchForShortcutsBackend(OmniboxItem &item) {
+AutocompleteMatch CreateAutocompleteMatchForShortcutsBackend(
+    std::u16string text,
+    OmniboxItem& item) {
   AutocompleteMatch match;
   match.contents = base::UTF8ToUTF16(item.contents);
   match.description = base::UTF8ToUTF16(item.description);
@@ -284,6 +293,14 @@ AutocompleteMatch CreateAutocompleteMatchForShortcutsBackend(OmniboxItem &item) 
   match.fill_into_edit = base::UTF8ToUTF16(item.fill_into_edit);
   match.transition = HistoryPrivateAPI::PrivateHistoryTransitionToUiTransition(
       item.transition);
+  auto contents_terms = FindTermMatches(text, match.contents);
+  match.contents_class = ClassifyTermMatches(
+      contents_terms, match.contents.length(),
+      ACMatchClassification::MATCH | ACMatchClassification::URL,
+      ACMatchClassification::URL);
+  if (!match.description.empty()) {
+    match.description_class = {{0, ACMatchClassification::NONE}};
+  }
   AutocompleteMatchType::FromInteger(item.type, &match.type);
   return match;
 }
@@ -359,7 +376,7 @@ ExtensionFunction::ResponseAction OmniboxPrivateAddOrUpdateShortcutFunction::Run
   // Can be null in incognito.
   if (shortcuts_backend) {
     auto text = base::UTF8ToUTF16(params->text);
-    auto match = CreateAutocompleteMatchForShortcutsBackend(params->item);
+    auto match = CreateAutocompleteMatchForShortcutsBackend(text, params->item);
     shortcuts_backend->AddOrUpdateShortcut(text, match);
   }
   return RespondNow(NoArguments());

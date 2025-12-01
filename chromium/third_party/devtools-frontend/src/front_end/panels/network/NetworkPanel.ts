@@ -45,6 +45,7 @@ import * as Logs from '../../models/logs/logs.js';
 import * as Trace from '../../models/trace/trace.js';
 import * as Workspace from '../../models/workspace/workspace.js';
 import * as NetworkForward from '../../panels/network/forward/forward.js';
+import * as Tracing from '../../services/tracing/tracing.js';
 import * as PerfUI from '../../ui/legacy/components/perf_ui/perf_ui.js';
 import * as UI from '../../ui/legacy/legacy.js';
 import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
@@ -821,7 +822,7 @@ export class NetworkPanel extends UI.Panel.Panel implements
 
   private onFilmFrameSelected(event: Common.EventTarget.EventTargetEvent<number>): void {
     const timestamp = event.data;
-    this.overviewPane.setWindowTimes(0, timestamp);
+    this.overviewPane.setWindowTimes(Trace.Types.Timing.Milli(0), Trace.Types.Timing.Milli(timestamp));
   }
 
   private onFilmFrameEnter(event: Common.EventTarget.EventTargetEvent<number>): void {
@@ -882,26 +883,24 @@ export class NetworkLogWithFilterRevealer implements
   }
 }
 
-export class FilmStripRecorder implements Trace.TracingManager.TracingManagerClient {
-  private tracingManager: Trace.TracingManager.TracingManager|null;
-  private resourceTreeModel: SDK.ResourceTreeModel.ResourceTreeModel|null;
-  private readonly timeCalculator: NetworkTimeCalculator;
-  private readonly filmStripView: PerfUI.FilmStripView.FilmStripView;
-  private callback: ((filmStrip: Trace.Extras.FilmStrip.Data) => void)|null;
+export class FilmStripRecorder implements Tracing.TracingManager.TracingManagerClient {
+  #tracingManager: Tracing.TracingManager.TracingManager|null = null;
+  #resourceTreeModel: SDK.ResourceTreeModel.ResourceTreeModel|null = null;
+  readonly #timeCalculator: NetworkTimeCalculator;
+  readonly #filmStripView: PerfUI.FilmStripView.FilmStripView;
+  #callback: ((filmStrip: Trace.Extras.FilmStrip.Data) => void)|null = null;
   // Used to fetch screenshots of the page load and show them in the panel.
-  #traceEngine: Trace.TraceModel.Model;
+  #traceEngine: Trace.TraceModel.Model = Trace.TraceModel.Model.createWithSubsetOfHandlers({
+    Screenshots: Trace.Handlers.ModelHandlers.Screenshots,
+  });
   #collectedTraceEvents: Trace.Types.Events.Event[] = [];
 
-  constructor(timeCalculator: NetworkTimeCalculator, filmStripView: PerfUI.FilmStripView.FilmStripView) {
-    this.#traceEngine = Trace.TraceModel.Model.createWithSubsetOfHandlers({
-      Screenshots: Trace.Handlers.ModelHandlers.Screenshots,
-    });
-
-    this.tracingManager = null;
-    this.resourceTreeModel = null;
-    this.timeCalculator = timeCalculator;
-    this.filmStripView = filmStripView;
-    this.callback = null;
+  constructor(
+      timeCalculator: NetworkTimeCalculator,
+      filmStripView: PerfUI.FilmStripView.FilmStripView,
+  ) {
+    this.#timeCalculator = timeCalculator;
+    this.#filmStripView = filmStripView;
   }
 
   traceEventsCollected(events: Trace.Types.Events.Event[]): void {
@@ -909,10 +908,10 @@ export class FilmStripRecorder implements Trace.TracingManager.TracingManagerCli
   }
 
   async tracingComplete(): Promise<void> {
-    if (!this.tracingManager) {
+    if (!this.#tracingManager) {
       return;
     }
-    this.tracingManager = null;
+    this.#tracingManager = null;
     await this.#traceEngine.parse(this.#collectedTraceEvents);
 
     const data = this.#traceEngine.parsedTrace(this.#traceEngine.size() - 1) as
@@ -920,23 +919,23 @@ export class FilmStripRecorder implements Trace.TracingManager.TracingManagerCli
     if (!data) {
       return;
     }
-    const zeroTimeInSeconds = Trace.Types.Timing.Seconds(this.timeCalculator.minimumBoundary());
+    const zeroTimeInSeconds = Trace.Types.Timing.Seconds(this.#timeCalculator.minimumBoundary());
     const filmStrip =
         Trace.Extras.FilmStrip.fromParsedTrace(data, Trace.Helpers.Timing.secondsToMicro(zeroTimeInSeconds));
 
-    if (this.callback) {
-      this.callback(filmStrip);
+    if (this.#callback) {
+      this.#callback(filmStrip);
     }
-    this.callback = null;
+    this.#callback = null;
     // Now we have created the film strip and stored the data, we need to reset
     // the trace processor so that it is ready to record again if the user
     // refreshes the page.
     this.#traceEngine.resetProcessor();
 
-    if (this.resourceTreeModel) {
-      this.resourceTreeModel.resumeReload();
+    if (this.#resourceTreeModel) {
+      this.#resourceTreeModel.resumeReload();
     }
-    this.resourceTreeModel = null;
+    this.#resourceTreeModel = null;
   }
 
   tracingBufferUsage(): void {
@@ -947,36 +946,36 @@ export class FilmStripRecorder implements Trace.TracingManager.TracingManagerCli
 
   startRecording(): void {
     this.#collectedTraceEvents = [];
-    this.filmStripView.reset();
-    this.filmStripView.setStatusText(i18nString(UIStrings.recordingFrames));
+    this.#filmStripView.reset();
+    this.#filmStripView.setStatusText(i18nString(UIStrings.recordingFrames));
     const tracingManager =
-        SDK.TargetManager.TargetManager.instance().scopeTarget()?.model(Trace.TracingManager.TracingManager);
-    if (this.tracingManager || !tracingManager) {
+        SDK.TargetManager.TargetManager.instance().scopeTarget()?.model(Tracing.TracingManager.TracingManager);
+    if (this.#tracingManager || !tracingManager) {
       return;
     }
 
-    this.tracingManager = tracingManager;
-    this.resourceTreeModel = this.tracingManager.target().model(SDK.ResourceTreeModel.ResourceTreeModel);
-    void this.tracingManager.start(this, '-*,disabled-by-default-devtools.screenshot');
+    this.#tracingManager = tracingManager;
+    this.#resourceTreeModel = this.#tracingManager.target().model(SDK.ResourceTreeModel.ResourceTreeModel);
+    void this.#tracingManager.start(this, '-*,disabled-by-default-devtools.screenshot');
 
     Host.userMetrics.actionTaken(Host.UserMetrics.Action.FilmStripStartedRecording);
   }
 
   isRecording(): boolean {
-    return Boolean(this.tracingManager);
+    return Boolean(this.#tracingManager);
   }
 
   stopRecording(callback: (filmStrip: Trace.Extras.FilmStrip.Data) => void): void {
-    if (!this.tracingManager) {
+    if (!this.#tracingManager) {
       return;
     }
 
-    this.tracingManager.stop();
-    if (this.resourceTreeModel) {
-      this.resourceTreeModel.suspendReload();
+    this.#tracingManager.stop();
+    if (this.#resourceTreeModel) {
+      this.#resourceTreeModel.suspendReload();
     }
-    this.callback = callback;
-    this.filmStripView.setStatusText(i18nString(UIStrings.fetchingFrames));
+    this.#callback = callback;
+    this.#filmStripView.setStatusText(i18nString(UIStrings.fetchingFrames));
   }
 }
 

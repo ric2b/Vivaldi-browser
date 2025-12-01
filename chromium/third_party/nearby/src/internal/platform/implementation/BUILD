@@ -1,3 +1,6 @@
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+
 # Copyright 2020 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -112,6 +115,7 @@ cc_library(
         "//sharing:__subpackages__",
     ],
     deps = [
+        "//internal/base:file_path",
         "//internal/crypto_cros",
         "//internal/platform:base",
         "//internal/platform/implementation/shared:crypto",  # Non-chromium impl
@@ -212,6 +216,27 @@ cc_library(
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
     ],
+)
+
+cc_library(
+    name = "platform_impl",
+    testonly = True,
+    visibility = [
+        "//:__subpackages__",
+        "//connections/implementation:__subpackages__",
+        "//location/nearby/analytics/cpp:__subpackages__",
+        "//location/nearby/apps/better_together/plugins/preferences_native:__subpackages__",
+        "//location/nearby/cpp/sharing:__subpackages__",
+    ],
+    deps = [
+    ] + select({
+        "@platforms//os:windows": [
+            "//internal/platform/implementation/windows",
+        ],
+        "//conditions:default": [
+            "//internal/platform/implementation/g3",
+        ],
+    }),
 )
 
 cc_test(

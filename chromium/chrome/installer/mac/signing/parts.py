@@ -217,7 +217,7 @@ def get_installer_tools(config):
     return tools
 
 
-def sign_chrome(paths, config, sign_framework=False):
+async def sign_chrome(paths, config, sign_framework=False):
     """Code signs the Chrome application bundle and all of its internal nested
     code parts.
 
@@ -268,12 +268,8 @@ def sign_chrome(paths, config, sign_framework=False):
     # Sign the outer app bundle.
     signing.sign_part(paths, config, parts['app'])
 
-    # Verify all the parts.
-    for part in parts.values():
-        signing.verify_part(paths, part)
-
     # Display the code signature.
-    signing.validate_app(paths, config, parts['app'])
+    await signing.validate_app(paths, config, parts['app'])
 
     # Validate the app's architecture geometry, if configured.
     signing.validate_app_geometry(paths, config, parts['app'])

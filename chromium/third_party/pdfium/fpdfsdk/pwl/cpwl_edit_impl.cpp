@@ -33,12 +33,12 @@ const int kEditUndoMaxItems = 10000;
 
 void DrawTextString(CFX_RenderDevice* pDevice,
                     const CFX_PointF& pt,
-                    CPDF_Font* pFont,
+                    CPDF_Font* font,
                     float fFontSize,
                     const CFX_Matrix& mtUser2Device,
                     const ByteString& str,
                     FX_ARGB crTextFill) {
-  if (!pFont) {
+  if (!font) {
     return;
   }
 
@@ -46,7 +46,7 @@ void DrawTextString(CFX_RenderDevice* pDevice,
   CPDF_RenderOptions ro;
   DCHECK(ro.GetOptions().bClearType);
   ro.SetColorMode(CPDF_RenderOptions::kNormal);
-  CPDF_TextRenderer::DrawTextString(pDevice, pos.x, pos.y, pFont, fFontSize,
+  CPDF_TextRenderer::DrawTextString(pDevice, pos.x, pos.y, font, fFontSize,
                                     mtUser2Device, str, crTextFill, ro);
 }
 
@@ -96,7 +96,7 @@ const CPVT_WordPlace& CPWL_EditImpl::Iterator::GetAt() const {
 
 class CPWL_EditImpl::Provider final : public CPVT_VariableText::Provider {
  public:
-  explicit Provider(IPVT_FontMap* pFontMap);
+  explicit Provider(IPVT_FontMap* font_map);
   ~Provider() override;
 
   // CPVT_VariableText::Provider:
@@ -106,8 +106,8 @@ class CPWL_EditImpl::Provider final : public CPVT_VariableText::Provider {
                            int32_t nFontIndex) override;
 };
 
-CPWL_EditImpl::Provider::Provider(IPVT_FontMap* pFontMap)
-    : CPVT_VariableText::Provider(pFontMap) {}
+CPWL_EditImpl::Provider::Provider(IPVT_FontMap* font_map)
+    : CPVT_VariableText::Provider(font_map) {}
 
 CPWL_EditImpl::Provider::~Provider() = default;
 
@@ -625,8 +625,8 @@ void CPWL_EditImpl::DrawEdit(CFX_RenderDevice* pDevice,
   }
 
   Iterator* pIterator = GetIterator();
-  IPVT_FontMap* pFontMap = GetFontMap();
-  if (!pFontMap) {
+  IPVT_FontMap* font_map = GetFontMap();
+  if (!font_map) {
     return;
   }
 
@@ -679,7 +679,7 @@ void CPWL_EditImpl::DrawEdit(CFX_RenderDevice* pDevice,
           if (!sTextBuf.IsEmpty()) {
             DrawTextString(pDevice,
                            CFX_PointF(ptBT.x + ptOffset.x, ptBT.y + ptOffset.y),
-                           pFontMap->GetPDFFont(nFontIndex).Get(), fFontSize,
+                           font_map->GetPDFFont(nFontIndex).Get(), fFontSize,
                            mtUser2Device, sTextBuf, crOldFill);
             sTextBuf.clear();
           }
@@ -692,7 +692,7 @@ void CPWL_EditImpl::DrawEdit(CFX_RenderDevice* pDevice,
         DrawTextString(
             pDevice,
             CFX_PointF(word.ptWord.x + ptOffset.x, word.ptWord.y + ptOffset.y),
-            pFontMap->GetPDFFont(word.nFontIndex).Get(), fFontSize,
+            font_map->GetPDFFont(word.nFontIndex).Get(), fFontSize,
             mtUser2Device,
             GetPDFWordString(word.nFontIndex, word.Word, SubWord), crCurFill);
       }
@@ -702,7 +702,7 @@ void CPWL_EditImpl::DrawEdit(CFX_RenderDevice* pDevice,
   if (!sTextBuf.IsEmpty()) {
     DrawTextString(pDevice,
                    CFX_PointF(ptBT.x + ptOffset.x, ptBT.y + ptOffset.y),
-                   pFontMap->GetPDFFont(nFontIndex).Get(), fFontSize,
+                   font_map->GetPDFFont(nFontIndex).Get(), fFontSize,
                    mtUser2Device, sTextBuf, crOldFill);
   }
 }
@@ -718,8 +718,8 @@ void CPWL_EditImpl::Initialize() {
   SetCaretOrigin();
 }
 
-void CPWL_EditImpl::SetFontMap(IPVT_FontMap* pFontMap) {
-  vt_provider_ = std::make_unique<Provider>(pFontMap);
+void CPWL_EditImpl::SetFontMap(IPVT_FontMap* font_map) {
+  vt_provider_ = std::make_unique<Provider>(font_map);
   vt_->SetProvider(vt_provider_.get());
 }
 
@@ -1855,7 +1855,9 @@ void CPWL_EditImpl::ReplaceAndKeepSelection(const WideString& text) {
   bool is_insert_undo_clear = ClearSelection();
   // It is necessary to determine whether the value of `undo_remaining_` is 2 or
   // 3 based on ClearSelection().
-  if (!is_insert_undo_clear) {
+  // Special case: when cutting (clearing selection and inserting empty text),
+  // we need to ensure proper undo counting to restore all characters.
+  if (!is_insert_undo_clear || text.IsEmpty()) {
     undo_.GetLastAddItem()->set_undo_remaining(2);
   }
   // Select the inserted text.
@@ -1865,7 +1867,7 @@ void CPWL_EditImpl::ReplaceAndKeepSelection(const WideString& text) {
   sel_state_.Set(caret_before_insert, caret_after_insert);
 
   AddEditUndoItem(std::make_unique<UndoReplaceSelection>(this, true));
-  if (!is_insert_undo_clear) {
+  if (!is_insert_undo_clear || text.IsEmpty()) {
     undo_.GetLastAddItem()->set_undo_remaining(2);
   }
 }
@@ -1875,12 +1877,14 @@ void CPWL_EditImpl::ReplaceSelection(const WideString& text) {
   bool is_insert_undo_clear = ClearSelection();
   // It is necessary to determine whether the value of `undo_remaining_` is 2 or
   // 3 based on ClearSelection().
-  if (!is_insert_undo_clear) {
+  // Special case: when cutting (clearing selection and inserting empty text),
+  // we need to ensure proper undo counting to restore all characters.
+  if (!is_insert_undo_clear || text.IsEmpty()) {
     undo_.GetLastAddItem()->set_undo_remaining(2);
   }
   InsertText(text, FX_Charset::kDefault);
   AddEditUndoItem(std::make_unique<UndoReplaceSelection>(this, true));
-  if (!is_insert_undo_clear) {
+  if (!is_insert_undo_clear || text.IsEmpty()) {
     undo_.GetLastAddItem()->set_undo_remaining(2);
   }
 }
@@ -2017,8 +2021,8 @@ CPVT_WordPlace CPWL_EditImpl::DoInsertText(const CPVT_WordPlace& place,
 
 FX_Charset CPWL_EditImpl::GetCharSetFromUnicode(uint16_t word,
                                                 FX_Charset nOldCharset) {
-  if (IPVT_FontMap* pFontMap = GetFontMap()) {
-    return pFontMap->CharSetFromUnicode(word, nOldCharset);
+  if (IPVT_FontMap* font_map = GetFontMap()) {
+    return font_map->CharSetFromUnicode(word, nOldCharset);
   }
   return nOldCharset;
 }
@@ -2031,8 +2035,8 @@ void CPWL_EditImpl::AddEditUndoItem(
 ByteString CPWL_EditImpl::GetPDFWordString(int32_t nFontIndex,
                                            uint16_t Word,
                                            uint16_t SubWord) {
-  IPVT_FontMap* pFontMap = GetFontMap();
-  RetainPtr<CPDF_Font> pPDFFont = pFontMap->GetPDFFont(nFontIndex);
+  IPVT_FontMap* font_map = GetFontMap();
+  RetainPtr<CPDF_Font> pPDFFont = font_map->GetPDFFont(nFontIndex);
   if (!pPDFFont) {
     return ByteString();
   }
@@ -2043,7 +2047,7 @@ ByteString CPWL_EditImpl::GetPDFWordString(int32_t nFontIndex,
   } else {
     uint32_t dwCharCode = pPDFFont->IsUnicodeCompatible()
                               ? pPDFFont->CharCodeFromUnicode(Word)
-                              : pFontMap->CharCodeFromUnicode(nFontIndex, Word);
+                              : font_map->CharCodeFromUnicode(nFontIndex, Word);
     if (dwCharCode > 0) {
       pPDFFont->AppendChar(&sWord, dwCharCode);
       return sWord;

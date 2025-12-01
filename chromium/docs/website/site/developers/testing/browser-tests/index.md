@@ -46,7 +46,6 @@ These are the current browser test binaries:
 *   `performance_browser_tests`: these are perf tests that run on bots
             with hardware GPUs for more realistic performance characteristics.
             These are not sharded.
-*   `weblayer_browsertests`: for code in //weblayer
 
 ## Example
 

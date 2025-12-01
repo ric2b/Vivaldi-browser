@@ -31,7 +31,7 @@ const UIStrings = {
    */
   addParameter: 'Add a parameter',
   /**
-   *@description The title of a button that reset the value of a paremeters to its default value.
+   *@description The title of a button that reset the value of a parameters to its default value.
    */
   resetDefaultValue: 'Reset to default value',
   /**
@@ -130,11 +130,11 @@ interface ViewInput {
   onParameterValueBlur: (event: Event) => void;
 }
 
-export type View = (input: ViewInput, output: object, targer: HTMLElement) => void;
+export type View = (input: ViewInput, output: object, target: HTMLElement) => void;
 
 const splitDescription = (description: string): [string, string] => {
   // If the description is too long we make the UI a bit better by highlighting the first sentence
-  // which contains the most informations.
+  // which contains the most information.
   // The number 150 has been chosen arbitrarily
   if (description.length > 150) {
     const [firstSentence, restOfDescription] = description.split('.');
@@ -178,7 +178,7 @@ export class JSONEditor extends Common.ObjectWrapper.eventMixin<EventTypes, type
   #view: View;
 
   constructor(element: HTMLElement, view = DEFAULT_VIEW) {
-    super(/* useShadowDom=*/ true, undefined, element);
+    super(element, {useShadowDom: true});
     this.#view = view;
     this.registerRequiredCSS(editorWidgetStyles);
   }
@@ -706,7 +706,32 @@ export class JSONEditor extends Common.ObjectWrapper.eventMixin<EventTypes, type
       this.command = event.target.value;
     }
     this.populateParametersForCommandWithDefaultValues();
+    const target = event.target as HTMLElement;
+    await this.updateComplete;
+    this.#focusNextElement(target);
   };
+
+  /**
+   * When devtools-suggestion-input closes, it blurs itself resulting in
+   * the focus shifting to the overall DevTools window.
+   *
+   * This method focuses on the next focusable element (button or input)
+   * so that the focus remains in the Editor and Ctrl + Shift works.
+   */
+  #focusNextElement(target: HTMLElement): void {
+    // FIXME: can we do this via view output?
+    const elements =
+        this.contentElement.querySelectorAll('devtools-suggestion-input,.add-button') as NodeListOf<HTMLElement>;
+    const element = [...elements].findIndex(value => value === target.shadowRoot?.host);
+    if (element >= 0 && element + 1 < elements.length) {
+      elements[element + 1].focus();
+    } else {
+      (this.contentElement.querySelector('devtools-button[jslogcontext="protocol-monitor.send-command"]') as
+           HTMLElement |
+       undefined)
+          ?.focus();
+    }
+  }
 
   #createNestedParameter(type: Parameter, name: string): Parameter {
     if (type.type === ParameterType.OBJECT) {
@@ -1210,8 +1235,8 @@ function renderParameters(
 export const DEFAULT_VIEW: View = (input, _output, target) => {
   // clang-format off
   render(html`
-    <div jslog=${VisualLogging.pane('command-editor').track({resize: true})}>
-      <div class="wrapper" @keydown=${input.onKeydown}>
+    <div class="wrapper" @keydown=${input.onKeydown} jslog=${VisualLogging.pane('command-editor').track({resize: true})}>
+      <div class="editor-wrapper">
         ${renderTargetSelectorRow(input)}
         <div class="row attribute padded">
           <div class="command">command<span class="separator">:</span></div>
@@ -1245,6 +1270,6 @@ export const DEFAULT_VIEW: View = (input, _output, target) => {
                         .variant=${Buttons.Button.Variant.PRIMARY_TOOLBAR}
                         @click=${input.onCommandSend}></devtools-button>
       </devtools-toolbar>
-    </div>`, target, {host: input});
+    </div>`, target);
   // clang-format on
 };

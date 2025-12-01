@@ -2,21 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /**
- * @fileoverview Library to identify and templatize manually calls to DevTools DOM API extensions.
+ * @file Library to identify and templatize manually calls to DevTools DOM API extensions.
  */
 
-import type {TSESTree} from '@typescript-eslint/utils';
+import {isIdentifier, type RuleCreator} from './ast.ts';
 
-import {isIdentifier} from './ast.ts';
-import type {DomFragment} from './dom-fragment.ts';
-type Node = TSESTree.Node;
-
-export const domApiDevtoolsExtensions = {
+export const domApiDevtoolsExtensions: RuleCreator = {
   create: function(context) {
-    const sourceCode = context.getSourceCode();
+    const sourceCode = context.sourceCode;
 
     return {
-      methodCall(property: Node, firstArg: Node, secondArg: Node, domFragment: DomFragment, call: Node): boolean {
+      methodCall(property, firstArg, secondArg, domFragment, call) {
         if (isIdentifier(property, 'createChild')) {
           if (firstArg?.type === 'Literal') {
             const childFragment = domFragment.appendChild(

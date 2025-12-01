@@ -13,12 +13,12 @@ import {assert} from '//resources/js/assert.js';
 import {loadTimeData} from '//resources/js/load_time_data.js';
 import {MetricsReporterImpl} from '//resources/js/metrics_reporter/metrics_reporter.js';
 import {hasKeyModifiers} from '//resources/js/util.js';
+import {NavigationPredictor} from '//resources/mojo/components/omnibox/browser/omnibox.mojom-webui.js';
+import type {AutocompleteMatch, AutocompleteResult, PageCallbackRouter, PageHandlerInterface} from '//resources/mojo/components/omnibox/browser/searchbox.mojom-webui.js';
+import {SideType} from '//resources/mojo/components/omnibox/browser/searchbox.mojom-webui.js';
 import {PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {NavigationPredictor} from './omnibox.mojom-webui.js';
 import {getTemplate} from './searchbox.html.js';
-import type {AutocompleteMatch, AutocompleteResult, PageCallbackRouter, PageHandlerInterface} from './searchbox.mojom-webui.js';
-import {SideType} from './searchbox.mojom-webui.js';
 import {SearchboxBrowserProxy} from './searchbox_browser_proxy.js';
 import type {SearchboxDropdownElement} from './searchbox_dropdown.js';
 import type {SearchboxIconElement} from './searchbox_icon.js';
@@ -288,6 +288,14 @@ export class SearchboxElement extends SearchboxElementBase {
         type: String,
         computed: `computeInputAriaLive_(selectedMatch_)`,
       },
+
+      useWebkitSearchIcons_: {
+        type: Boolean,
+        computed: `computeUseWebkitSearchIcons_(composeButtonEnabled,
+                                                searchboxChromeRefreshTheming,
+                                                colorSourceIsBaseline)`,
+        reflectToAttribute: true,
+      },
     };
   }
 
@@ -323,6 +331,7 @@ export class SearchboxElement extends SearchboxElementBase {
   declare private selectedMatchIndex_: number;
   declare private thumbnailUrl_: string;
   declare private isThumbnailDeletable_: boolean;
+  declare private useWebkitSearchIcons_: boolean;
 
   private pageHandler_: PageHandlerInterface;
   private callbackRouter_: PageCallbackRouter;
@@ -386,6 +395,10 @@ export class SearchboxElement extends SearchboxElementBase {
     this.queryAutocomplete_(this.$.input.value);
   }
 
+  setInputText(text: string) {
+    this.onSetInputText_(text);
+  }
+
   //============================================================================
   // Callbacks
   //============================================================================
@@ -405,8 +418,6 @@ export class SearchboxElement extends SearchboxElementBase {
       return sideType === SideType.kDefaultPrimary;
     });
     this.dropdownIsVisible = hasPrimaryMatches;
-
-    this.$.input.focus();
 
     const firstMatch = hasMatches ? this.result_.matches[0] : null;
     if (firstMatch && firstMatch.allowedToBeDefaultMatch) {
@@ -835,7 +846,7 @@ export class SearchboxElement extends SearchboxElementBase {
   }
 
   private onComposeButtonClick_(e: CustomEvent<ComposeClickEventDetail>) {
-    if (!this.composeboxEnabled) {
+    if (!this.composeboxEnabled || this.$.input.value.trim()) {
       // Construct navigation url.
       const searchParams = new URLSearchParams();
       searchParams.append('sourceid', 'chrome');
@@ -850,10 +861,6 @@ export class SearchboxElement extends SearchboxElementBase {
       queryUrl.search = searchParams.toString();
       const href = queryUrl.href;
 
-      chrome.metricsPrivate.recordBoolean(
-          'NewTabPage.ComposeEntrypoint.Click.UserTextPresent',
-          !this.isInputEmpty());
-
       // Handle mouse events.
       if (e.detail.ctrlKey || e.detail.metaKey) {
         window.open(href, '_blank');
@@ -865,6 +872,10 @@ export class SearchboxElement extends SearchboxElementBase {
     } else {
       this.dispatchEvent(new CustomEvent('open-composebox'));
     }
+
+    chrome.metricsPrivate.recordBoolean(
+        'NewTabPage.ComposeEntrypoint.Click.UserTextPresent',
+        !this.isInputEmpty());
   }
 
   private onRemoveThumbnailClick_() {
@@ -902,6 +913,11 @@ export class SearchboxElement extends SearchboxElementBase {
     }
     return this.showThumbnail ? this.i18n('searchBoxHintMultimodal') :
                                 this.i18n('searchBoxHint');
+  }
+
+  private computeUseWebkitSearchIcons_(): boolean {
+    return this.composeButtonEnabled ||
+        (this.searchboxChromeRefreshTheming && !this.colorSourceIsBaseline);
   }
 
   /**

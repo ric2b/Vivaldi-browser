@@ -16,9 +16,12 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include <stdatomic.h>
+
 #include "libavutil/mastering_display_metadata.h"
 #include "libavutil/mem_internal.h"
 #include "libavutil/pixdesc.h"
+#include "libavutil/thread.h"
 
 #include "apv.h"
 #include "apv_decode.h"
@@ -39,9 +42,8 @@ typedef struct APVDecodeContext {
     CodedBitstreamFragment au;
     APVDerivedTileInfo tile_info;
 
-    APVVLCLUT decode_lut;
-
     AVFrame *output_frame;
+    atomic_int tile_errors;
 
     uint8_t warned_additional_frames;
     uint8_t warned_unknown_pbu_types;
@@ -54,6 +56,8 @@ static const enum AVPixelFormat apv_format_table[5][5] = {
     { AV_PIX_FMT_YUV444P,  AV_PIX_FMT_YUV444P10,  AV_PIX_FMT_YUV444P12,  AV_PIX_FMT_GRAY14, AV_PIX_FMT_YUV444P16 },
     { AV_PIX_FMT_YUVA444P, AV_PIX_FMT_YUVA444P10, AV_PIX_FMT_YUVA444P12, AV_PIX_FMT_GRAY14, AV_PIX_FMT_YUVA444P16 },
 };
+
+static APVVLCLUT decode_lut;
 
 static int apv_decode_check_format(AVCodecContext *avctx,
                                    const APVRawFrameHeader *header)
@@ -101,10 +105,19 @@ static const CodedBitstreamUnitType apv_decompose_unit_types[] = {
     APV_PBU_METADATA,
 };
 
+static AVOnce apv_entropy_once = AV_ONCE_INIT;
+
+static av_cold void apv_entropy_build_decode_lut(void)
+{
+    ff_apv_entropy_build_decode_lut(&decode_lut);
+}
+
 static av_cold int apv_decode_init(AVCodecContext *avctx)
 {
     APVDecodeContext *apv = avctx->priv_data;
     int err;
+
+    ff_thread_once(&apv_entropy_once, apv_entropy_build_decode_lut);
 
     err = ff_cbs_init(&apv->cbc, AV_CODEC_ID_APV, avctx);
     if (err < 0)
@@ -117,9 +130,9 @@ static av_cold int apv_decode_init(AVCodecContext *avctx)
 
     // Extradata could be set here, but is ignored by the decoder.
 
-    ff_apv_entropy_build_decode_lut(&apv->decode_lut);
-
     ff_apv_dsp_init(&apv->dsp);
+
+    atomic_init(&apv->tile_errors, 0);
 
     return 0;
 }
@@ -147,10 +160,11 @@ static int apv_decode_block(AVCodecContext *avctx,
     int err;
 
     LOCAL_ALIGNED_32(int16_t, coeff, [64]);
+    memset(coeff, 0, 64 * sizeof(int16_t));
 
     err = ff_apv_entropy_decode_block(coeff, gbc, entropy_state);
     if (err < 0)
-        return 0;
+        return err;
 
     apv->dsp.decode_transquant(output, pitch,
                                coeff, qmatrix,
@@ -201,14 +215,18 @@ static int apv_decode_tile_component(AVCodecContext *avctx, void *data,
 
     APVEntropyState entropy_state = {
         .log_ctx           = avctx,
-        .decode_lut        = &apv->decode_lut,
+        .decode_lut        = &decode_lut,
         .prev_dc           = 0,
-        .prev_dc_diff      = 20,
-        .prev_1st_ac_level = 0,
+        .prev_k_dc         = 5,
+        .prev_k_level      = 0,
     };
 
-    init_get_bits8(&gbc, tile->tile_data[comp_index],
-                   tile->tile_header.tile_data_size[comp_index]);
+    int err;
+
+    err = init_get_bits8(&gbc, tile->tile_data[comp_index],
+                         tile->tile_header.tile_data_size[comp_index]);
+    if (err < 0)
+        goto fail;
 
     // Combine the bitstream quantisation matrix with the qp scaling
     // in advance.  (Including qp_shift as well would overflow 16 bits.)
@@ -243,12 +261,17 @@ static int apv_decode_tile_component(AVCodecContext *avctx, void *data,
                     uint8_t  *block_start = apv->output_frame->data[comp_index] +
                                             frame_y * frame_pitch + 2 * frame_x;
 
-                    apv_decode_block(avctx,
-                                     block_start, frame_pitch,
-                                     &gbc, &entropy_state,
-                                     bit_depth,
-                                     qp_shift,
-                                     qmatrix_scaled);
+                    err = apv_decode_block(avctx,
+                                           block_start, frame_pitch,
+                                           &gbc, &entropy_state,
+                                           bit_depth,
+                                           qp_shift,
+                                           qmatrix_scaled);
+                    if (err < 0) {
+                        // Error in block decode means entropy desync,
+                        // so this is not recoverable.
+                        goto fail;
+                    }
                 }
             }
         }
@@ -260,6 +283,13 @@ static int apv_decode_tile_component(AVCodecContext *avctx, void *data,
            tile_start_x, tile_start_y);
 
     return 0;
+
+fail:
+    av_log(avctx, AV_LOG_VERBOSE,
+           "Decode error in tile %d component %d.\n",
+           tile_index, comp_index);
+    atomic_fetch_add_explicit(&apv->tile_errors, 1, memory_order_relaxed);
+    return err;
 }
 
 static int apv_decode(AVCodecContext *avctx, AVFrame *output,
@@ -281,6 +311,7 @@ static int apv_decode(AVCodecContext *avctx, AVFrame *output,
         return err;
 
     apv->output_frame = output;
+    atomic_store_explicit(&apv->tile_errors, 0, memory_order_relaxed);
 
     // Each component within a tile is independent of every other,
     // so we can decode all in parallel.
@@ -288,6 +319,18 @@ static int apv_decode(AVCodecContext *avctx, AVFrame *output,
 
     avctx->execute2(avctx, apv_decode_tile_component,
                     input, NULL, job_count);
+
+    err = atomic_load_explicit(&apv->tile_errors, memory_order_relaxed);
+    if (err > 0) {
+        av_log(avctx, AV_LOG_ERROR,
+               "Decode errors in %d tile components.\n", err);
+        if (avctx->flags & AV_CODEC_FLAG_OUTPUT_CORRUPT) {
+            // Output the frame anyway.
+            output->flags |= AV_FRAME_FLAG_CORRUPT;
+        } else {
+            return AVERROR_INVALIDDATA;
+        }
+    }
 
     return 0;
 }
@@ -367,7 +410,7 @@ static int apv_decode_frame(AVCodecContext *avctx, AVFrame *frame,
     err = ff_cbs_read_packet(apv->cbc, au, packet);
     if (err < 0) {
         av_log(avctx, AV_LOG_ERROR, "Failed to read packet.\n");
-        return err;
+        goto fail;
     }
 
     for (int i = 0; i < au->nb_units; i++) {
@@ -377,7 +420,7 @@ static int apv_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         case APV_PBU_PRIMARY_FRAME:
             err = apv_decode(avctx, frame, pbu->content);
             if (err < 0)
-                return err;
+                goto fail;
             *got_frame = 1;
             break;
         case APV_PBU_METADATA:
@@ -411,9 +454,10 @@ static int apv_decode_frame(AVCodecContext *avctx, AVFrame *frame,
         }
     }
 
+    err = packet->size;
+fail:
     ff_cbs_fragment_reset(au);
-
-    return packet->size;
+    return err;
 }
 
 const FFCodec ff_apv_decoder = {

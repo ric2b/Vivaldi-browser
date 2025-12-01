@@ -7,10 +7,13 @@ $assert MR % 4 == 0
 $ABC = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 $VMULADD_F32 = "vfma_f32" if FMA else "vmla_f32"
 $VMULADDQ_F32 = "vfmaq_f32" if FMA else "vmlaq_f32"
-#include <assert.h>
-
 #include <arm_neon.h>
+#include <assert.h>
+#include <stddef.h>
+#include <stdint.h>
 
+#include "src/xnnpack/common.h"
+#include "src/xnnpack/microparams.h"
 #include "src/xnnpack/prefetch.h"
 #include "src/xnnpack/spmm.h"
 
@@ -24,7 +27,7 @@ void xnn_f32_spmm_minmax_ukernel_${MR}x${NR}__${"neonfma" if FMA else "neon"}${"
     const uint32_t* nidx_nnzmap,
     float* output,
     size_t output_stride,
-    const struct xnn_f32_minmax_params params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f32_minmax_params* restrict params)
 {
   assert(mc != 0);
   assert(mc % sizeof(float) == 0);

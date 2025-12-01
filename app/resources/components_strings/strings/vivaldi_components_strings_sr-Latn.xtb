@@ -8,11 +8,15 @@
 <translation id="1158211211994409885">Host <ph name="HOST_NAME" /> je neočekivano prekinuo vezu.</translation>
 <translation id="1161325031994447685">da se ponovo povežete na Wi-Fi mrežu</translation>
 <translation id="1175364870820465910">&amp;Odštampaj...</translation>
+<translation id="1204778305310783648">„Pogrešno je pretvoriti internet u ekonomiju nadzora”: Jon von Tetzchner na Web Summit 2023.</translation>
 <translation id="1285320974508926690">Nikada ne prevodi ovaj sajt</translation>
 <translation id="1375198122581997741">Osnovni podaci</translation>
 <translation id="139305205187523129">Host <ph name="HOST_NAME" /> nije poslao nikakve podatke.</translation>
+<translation id="1489123210863708132">Aktivirajte blokator praćenja i reklama kako biste zaštitili svoje pregledanje i izgradili statistiku privatnosti.</translation>
+<translation id="1500787357908295021">Vaša statistika privatnosti</translation>
 <translation id="1555191101192706055">Napadači na sajt koji ste pokušali da posetite mogu da vas prevare da instalirate štetan softver koji utiče na način na koji pregledate – na primer, tako što će promeniti početnu stranicu ili vam prikazivati dodatne reklame na sajtovima koje posećujete.</translation>
 <translation id="1559528461873125649">Nema takve datoteke ili direktorijuma</translation>
+<translation id="16328381871867323">Zakonodavci konačno obraćaju pažnju na zabrinutost oko toga kako se naši digitalni podaci prate, prikupljaju i čuvaju. Saznajte šta ova revolucionarna presuda znači i kako bi mogla da utiče na nas.</translation>
 <translation id="1640244768702815859">Pokušajte da <ph name="BEGIN_LINK" />posetite matičnu stranicu sajta<ph name="END_LINK" />.</translation>
 <translation id="1645368109819982629">Nepodržani protokol</translation>
 <translation id="1662550410081243962">Čuvaj i popuni načine plaćanja</translation>
@@ -20,6 +24,8 @@
 <translation id="1728677426644403582">Pregledate izvor veb stranice</translation>
 <translation id="1734878702283171397">Obratite se administratoru sistema.</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Pokušajte da pokrenete Windows dijagnostiku mreže<ph name="END_LINK" />.</translation>
+<translation id="1919345977826869612">Reklame</translation>
+<translation id="1970180444859658569">Podešavanje privatnosti „Ne prati” dobija zakonsku podršku u Nemačkoj</translation>
 <translation id="1974060860693918893">Napredno</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />da proverite proksi i zaštitni zid<ph name="END_LINK" /></translation>
 <translation id="2048261947532620704">Prevođenje stranice</translation>
@@ -28,6 +34,7 @@
 <translation id="2178904466768126352">Napadači na sajt koji ste pokušali da posetite mogu da instaliraju štetan softver koji krade ili briše stvari poput lozinki, slika, poruka ili brojeva kreditnih kartica.</translation>
 <translation id="2187317261103489799">Otkrij (podrazumevano)</translation>
 <translation id="2224337661447660594">Nema interneta</translation>
+<translation id="2225863440766607138">Praćenja</translation>
 <translation id="2283340219607151381">Čuvaj i popuni adrese</translation>
 <translation id="2292556288342944218">Pristup internetu je blokiran</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> zahteva korisničko ime i lozinku.</translation>
@@ -43,8 +50,11 @@
 <translation id="2634124572758952069">Nije pronađena IP adresa servera hosta <ph name="HOST_NAME" />.</translation>
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
 <translation id="2650446666397867134">Pristup datoteci je odbijen</translation>
+<translation id="2690699652723742414">Poslednjih 30 dana</translation>
 <translation id="2705137772291741111">Sačuvana (keširana) kopija ovog sajta nije mogla da se čita.</translation>
 <translation id="2730326759066348565"><ph name="BEGIN_LINK" />da pokrenete dijagnostiku veze<ph name="END_LINK" /></translation>
+<translation id="2741210449864955442">https://vivaldi.com/blog/technology/vivaldi-browser-at-the-web-summit/</translation>
+<translation id="2765309692777226484">Blokator praćenja i reklama je onemogućen.</translation>
 <translation id="2784949926578158345">Veza je vraćena na početne vrednosti.</translation>
 <translation id="2826760142808435982">Veza je šifrovana i njena autentičnost je potvrđena pomoću <ph name="CIPHER" /> i koristi <ph name="KX" /> kao mehanizam za razmenu šifara.</translation>
 <translation id="290376772003165898">Jezik ove stranice nije <ph name="LANGUAGE" />?</translation>
@@ -57,12 +67,16 @@
 <translation id="3037605927509011580">O, ne!</translation>
 <translation id="3041612393474885105">Informacije o sertifikatu</translation>
 <translation id="3109728660330352905">Nemate ovlašćenje da pregledate ovu stranicu.</translation>
+<translation id="3119245580849443327">Izveštaj o privatnosti Vivaldi pregledača</translation>
 <translation id="31207688938192855"><ph name="BEGIN_LINK" />Pokušajte da pokrenete dijagnostiku veze<ph name="END_LINK" />.</translation>
+<translation id="3126903660515914763">https://vivaldi.com/blog/news/alert-no-google-topics-in-vivaldi/</translation>
 <translation id="3154506275960390542">Ova stranica sadrži obrazac čije slanje može da bude nebezbedno. Podatke koje pošaljete mogu da vide i drugi dok su u prolazu i napadač može da ih izmeni da bi promenio sadržaj koji server prima.</translation>
+<translation id="3156779787905856989">Manifest V3, webRequest i blokatori reklama</translation>
 <translation id="3176929007561373547">Proverite podešavanja proksija ili se obratite administratoru mreže
 da biste se uverili da proksi server funkcioniše.
 Ako mislite da ne treba da koristite proksi server:
 <ph name="PLATFORM_TEXT" /></translation>
+<translation id="3191389212681074619">https://help.vivaldi.com/sr/android-sr/android-install-sr-sr/android-tracker-and-ad-blocker/</translation>
 <translation id="3226128629678568754">Pritisnite dugme za ponovno učitavanje da biste ponovo poslali podatke potrebne za učitavanje stranice.</translation>
 <translation id="3234666976984236645">Uvek otkrij važan sadržaj na ovom sajtu</translation>
 <translation id="3384522979010096022">Vaša organizacija vam ne dozvoljava da pregledate ovaj sajt</translation>
@@ -80,6 +94,8 @@ Ako mislite da ne treba da koristite proksi server:
 pokušajte da ga uklonite sa liste i ponovo ga dodate.</translation>
 <translation id="3658742229777143148">Revizija</translation>
 <translation id="3681007416295224113">Informacije o sertifikatu</translation>
+<translation id="3694122362646626770">Veb sajtovi</translation>
+<translation id="3716128635228495027">Nazad u Vivaldi</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />da proverite konfiguraciju proksija, zaštitnog zida i DNS-a<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">Ako koristite proksi server...</translation>
 <translation id="3861977424605124250">Prikaži pri pokretanju</translation>
@@ -99,9 +115,11 @@ pokušajte da ga uklonite sa liste i ponovo ga dodate.</translation>
 <translation id="4250431568374086873">Veza sa ovim sajtom nije potpuno bezbedna</translation>
 <translation id="4265872034478892965">Dozvolio administrator</translation>
 <translation id="4305666528087210886">Nije moguće pristupiti datoteci</translation>
+<translation id="430967081421617822">Sve vreme</translation>
 <translation id="4312866146174492540">Blokiraj (podrazumevano)</translation>
 <translation id="4408413947728134509">Kolačići (<ph name="NUM_COOKIES" />)</translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> nije prihvatio sertifikat za prijavljivanje ili sertifikat za prijavljivanje nije priložen.</translation>
+<translation id="4474776280324528449">https://vivaldi.com/blog/do-no-track-gets-legal-backing-in-germany/</translation>
 <translation id="4506599922270137252">da se obratite administratoru sistema</translation>
 <translation id="4522570452068850558">Detalji</translation>
 <translation id="4558551763791394412">Pokušajte da onemogućite proširenja.</translation>
@@ -121,8 +139,11 @@ pokušajte da ga uklonite sa liste i ponovo ga dodate.</translation>
 <translation id="5068778127327928576">{NUM_COOKIES,plural, =1 {koristi se 1} one {koristi se #} few {koriste se #} other {koristi se #}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />da proverite adresu proksija<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64 bita)</translation>
+<translation id="5216593085343845370">Pridružite se Vivaldi-jevom stavu za nulto praćenje i povratite kontrolu nad svojom privatnošću na mreži.
+Saznajte više o tome kako se borimo za prava korisnika u člancima ispod.</translation>
 <translation id="5355557959165512791">Ne možete posetiti sada <ph name="SITE" /> jer je njegov sertifikat opozvan. Greške i napadi na mreži su obično privremeni, pa će ova stranica verovatno funkcionisati kasnije.</translation>
 <translation id="5386426401304769735">Lanac sertifikata za ovaj sajt sadrži sertifikat potpisan pomoću algoritma SHA-1.</translation>
+<translation id="5398772614898833570">Blokirane reklame</translation>
 <translation id="5452270690849572955">Nije moguće pronaći ovu stranicu na <ph name="HOST_NAME" /></translation>
 <translation id="5457113250005438886">Nevažeći</translation>
 <translation id="5492298309214877701">Ovaj sajt na intranetu kompanije, organizacije ili škole ima isti URL kao i jedan spoljni veb-sajt.
@@ -130,9 +151,12 @@ pokušajte da ga uklonite sa liste i ponovo ga dodate.</translation>
     Pokušajte da se obratite administratoru sistema.</translation>
 <translation id="5510766032865166053">Možda je premeštena ili izbrisana.</translation>
 <translation id="5556459405103347317">Ponovo učitaj</translation>
+<translation id="5583322400766491358">Lični podaci podložni analizi se bezbedno čuvaju na vašem uređaju i nikada se ne dele sa trećim licima.</translation>
 <translation id="5610142619324316209">da proverite vezu</translation>
 <translation id="5617949217645503996">Host <ph name="HOST_NAME" /> vas je preusmerio preveliki broj puta.</translation>
+<translation id="5648166631817621825">Poslednjih 7 dana</translation>
 <translation id="5675650730144413517">Ova stranica ne funkcioniše</translation>
+<translation id="5741670635761443575">Upozorenje: Nema Google tema u Vivaldi pregledaču.</translation>
 <translation id="5785756445106461925">Pored toga, ova stranica sadrži i druge resurse koji nisu bezbedni. Ove resurse mogu da vide i drugi dok su u prolazu i napadač može da ih izmeni kako bi promenio izgled stranice.</translation>
 <translation id="5799902971440853357">Ne možete posetiti sada <ph name="SITE" /> jer je veb sajt poslao kodirane podatke za prijavljivanje koje Vivaldi ne može da obradi. Greške i napadi na mreži su obično privremeni, pa će ova stranica verovatno funkcionisati kasnije.</translation>
 <translation id="5810442152076338065">Veza sa domenom <ph name="DOMAIN" /> je šifrovana pomoću zastarelog paketa za šifrovanje.</translation>
@@ -162,11 +186,13 @@ ili druge mrežne uređaje koje možda koristite.</translation>
 <translation id="6653655836861174026">Sa Vivaldi profilima možete odvojiti sve svoje stvari u pregledaču. Kreirajte profile za prijatelje i porodicu ili podelite posao i zabavu.</translation>
 <translation id="6657585470893396449">Lozinka</translation>
 <translation id="6711464428925977395">Nešto nije u redu sa proksi serverom ili je adresa netačna.</translation>
+<translation id="6736243959894955139">Adresa</translation>
 <translation id="6757797048963528358">Vaš uređaj je prešao u stanje mirovanja.</translation>
 <translation id="6890956352250146925">Opcije za kolačiće i podatke o sajtovima</translation>
 <translation id="6897140037006041989">Korisnički agent</translation>
 <translation id="6935179587384421592"><ph name="SIZE" />. Neki sajtovi se mogu sporije učitavati prilikom sledeće posete.</translation>
 <translation id="6957624206566198865">Otvori stranicu u novoj privatnoj kartici</translation>
+<translation id="7013466836883158999">Da li je moguće napraviti održive proizvode bez špijuniranja korisnika? Kako izgleda budućnost pregledanja interneta? Pogledajte kako naš glavni izvršni direktor, Jon von Tetzchner, odgovara na ova pitanja na Veb samitu 2023.</translation>
 <translation id="7053983685419859001">Blokiraj</translation>
 <translation id="7066262000446496119">Ko koristi Vivaldi?</translation>
 <translation id="7096937462164235847">Identitet ovog veb sajta nije verifikovan.</translation>
@@ -176,15 +202,19 @@ ili druge mrežne uređaje koje možda koristite.</translation>
 <translation id="7210863904660874423">Host <ph name="HOST_NAME" /> ne poštuje bezbednosne standarde.</translation>
 <translation id="7219179957768738017">Veza koristi <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">prikazuje obaveštenja</translation>
+<translation id="7277237102285741596">https://vivaldi.com/blog/manifest-v3-webrequest-and-ad-blockers/</translation>
 <translation id="7283555985781738399">Režim gosta</translation>
 <translation id="7353601530677266744">Komandna linija</translation>
 <translation id="7419106976560586862">Putanja profila</translation>
+<translation id="7421665776469827022">Sačuvani podaci</translation>
+<translation id="7454640759045234067">Blokirana praćenja</translation>
 <translation id="7455133967321480974">Koristi globalnu podrazumevanu vrednost (Blokiraj)</translation>
 <translation id="7518003948725431193">Nijedna veb stranica nije pronađena za veb adresu: <ph name="URL" /></translation>
 <translation id="7549584377607005141">Ova veb stranica zahteva podatke koje ste uneli ranije da bi se pravilno prikazala. Možete ponovo da pošaljete te podatke, ali ako to uradite, ponovićete bilo koju radnju koju je ova stranica prethodno obavila.</translation>
 <translation id="759889825892636187">Host <ph name="HOST_NAME" /> trenutno ne može da obradi ovaj zahtev.</translation>
 <translation id="7662298039739062396">Podešavanjem upravlja proširenje</translation>
 <translation id="7663736086183791259">Sertifikat <ph name="CERTIFICATE_VALIDITY" /></translation>
+<translation id="7698231949697067951">Šta radite na mreži je vaša stvar! Ispod možete videti kako smo vam pomogli da ostanete zaštićeni.</translation>
 <translation id="7714464543167945231">Sertifikat</translation>
 <translation id="7716147886133743102">Blokirao administrator</translation>
 <translation id="7716424297397655342">Nije moguće učitati ovaj sajt iz keša</translation>
@@ -193,8 +223,11 @@ ili druge mrežne uređaje koje možda koristite.</translation>
 <translation id="7800304661137206267">Veza je šifrovana pomoću <ph name="CIPHER" /> i koristi <ph name="MAC" /> za potvrdu verodostojnosti poruka i <ph name="KX" /> kao mehanizam za razmenu ključeva.</translation>
 <translation id="7834399512844817676"><ph name="SITE" /> obično koristi šifrovanje da bi zaštitio vaše informacije. Kada je Vivaldi ovog puta pokušao da se poveže sa <ph name="SITE" />, veb sajt je vratio neuobičajene i netačne podatke za prijavljivanje. Ovo se može dogoditi kada napadač pokušava da se predstavi kao <ph name="SITE" /> ili je ekran za prijavljivanje na Wi-Fi prekinuo vezu. Vaše informacije su i dalje bezbedne zato što je Vivaldi prekinuo vezu pre nego što su razmenjeni bilo kakvi podaci.</translation>
 <translation id="7878562273885520351">Vaša lozinka je možda ugrožena</translation>
+<translation id="788493840831967104">Ušteđeno vreme</translation>
 <translation id="7951415247503192394">(32 bita)</translation>
 <translation id="7953236668995583915">Ponovo učitajte ovu stranicu da bi se primenila vaša ažurirana podešavanja na ovaj sajt</translation>
+<translation id="7981965265950405093">Vivaldi dolazi sa sopstvenim ugrađenim blokatorom reklama i praćenja, mnoštvom opcija za prilagođavanje, ugrađenom poštom i kalendarom i još mnogo toga. Da li će pratiti Google-ovo strogo oslanjanje na Manifest V3? Programer Vivaldi pregledača, Julien Picalausa, detaljno se bavi ovim pitanjem.</translation>
+<translation id="8034402064393340023">Naša posvećenost vašoj privatnosti</translation>
 <translation id="8037357227543935929">Pitaj (podrazumevano)</translation>
 <translation id="8041940743680923270">Koristi globalnu podrazumevanu vrednost (Pitaj)</translation>
 <translation id="808894953321890993">Promeni lozinku</translation>
@@ -204,6 +237,7 @@ ili druge mrežne uređaje koje možda koristite.</translation>
 <translation id="8211406090763984747">Veza je bezbedna</translation>
 <translation id="8241707690549784388">Stranica koju tražite je koristila informacije koje ste uneli. Povratak na tu stranicu može prouzrokovati potrebu ponavljanja radnji koje ste izvršili. Želite li da nastavite?</translation>
 <translation id="8241712895048303527">Blokiraj na ovom sajtu</translation>
+<translation id="8248593573177859437">Izveštaj o privatnosti</translation>
 <translation id="8286036467436129157">Prijavi se</translation>
 <translation id="8288807391153049143">Prikaži sertifikat</translation>
 <translation id="8289355894181816810">Obratite se administratoru mreže ako niste sigurni šta to znači.</translation>
@@ -223,9 +257,11 @@ ili druge mrežne uređaje koje možda koristite.</translation>
 <translation id="9062620674789239642">Možda je premeštena, izmenjena ili izbrisana.</translation>
 <translation id="9069693763241529744">Blokirano proširenjem</translation>
 <translation id="9073799351042754113">Odabrali ste da isključite bezbednosna upozorenja za ovaj sajt.</translation>
+<translation id="9118360612142967597">Špijuniranje ponašanja ljudi i njihovo profilisanje je pogrešno. Zato smo se pobrinuli da se Google-ove teme onemoguće na dva odvojena načina u Vivaldi pregledaču.</translation>
 <translation id="9168814207360376865">Dozvoli sajtovima da proveravaju da li imam sačuvane načine plaćanja</translation>
 <translation id="9169664750068251925">Uvek blokiraj na ovom sajtu</translation>
 <translation id="9183425211371246419">Host <ph name="HOST_NAME" /> koristi nepodržani protokol.</translation>
+<translation id="9188210215803842004">Detalji o veb sajtovima i praćenjima</translation>
 <translation id="936602727769022409">Mogli biste izgubiti pristup svom Google nalogu. Preporučujemo da odmah promenite lozinku. Od vas će se zatražiti da se prijavite.</translation>
 <translation id="969892804517981540">Zvanična verzija</translation>
 <translation id="984275831282074731">Načini plaćanja</translation>

@@ -6,9 +6,9 @@
 
 #include "base/functional/bind.h"
 
+#include "components/pref_registry/pref_registry_syncable.h"
 #include "components/search_engines/search_engines_pref_names.h"
 #include "components/search_engines/template_url_service_observer.h"
-
 #include "components/search_engines/vivaldi_pref_names.h"
 #include "components/search_engines/vivaldi_template_url_service.h"
 
@@ -39,21 +39,38 @@ const char* VivaldiGetDefaultProviderGuidPrefForType(
     TemplateURLService::DefaultSearchType type) {
   switch (type) {
     case TemplateURLService::kDefaultSearchMain:
-      return prefs::kSyncedDefaultSearchProviderGUID;
+      return prefs::kDefaultSearchProviderGUID;
     case TemplateURLService::kDefaultSearchPrivate:
-      return prefs::kSyncedDefaultPrivateSearchProviderGUID;
+      return prefs::kDefaultPrivateSearchProviderGUID;
     case TemplateURLService::kDefaultSearchField:
-      return prefs::kSyncedDefaultSearchFieldProviderGUID;
+      return prefs::kDefaultSearchFieldProviderGUID;
     case TemplateURLService::kDefaultSearchFieldPrivate:
-      return prefs::kSyncedDefaultPrivateSearchFieldProviderGUID;
+      return prefs::kDefaultPrivateSearchFieldProviderGUID;
     case TemplateURLService::kDefaultSearchSpeeddials:
-      return prefs::kSyncedDefaultSpeedDialsSearchProviderGUID;
+      return prefs::kDefaultSpeedDialsSearchProviderGUID;
     case TemplateURLService::kDefaultSearchSpeeddialsPrivate:
-      return prefs::kSyncedDefaultSpeedDialsPrivateSearchProviderGUID;
+      return prefs::kDefaultSpeedDialsPrivateSearchProviderGUID;
     case TemplateURLService::kDefaultSearchImage:
-      return prefs::kSyncedDefaultImageSearchProviderGUID;
+      return prefs::kDefaultImageSearchProviderGUID;
   }
   return nullptr;
+}
+
+void RegisterTemplateURLServiceProfilePrefs(
+    user_prefs::PrefRegistrySyncable* registry) {
+  registry->RegisterStringPref(prefs::kLanguageAtInstall, std::string());
+  registry->RegisterStringPref(prefs::kDefaultPrivateSearchProviderGUID,
+                               std::string());
+  registry->RegisterStringPref(prefs::kDefaultSearchFieldProviderGUID,
+                               std::string());
+  registry->RegisterStringPref(prefs::kDefaultPrivateSearchFieldProviderGUID,
+                               std::string());
+  registry->RegisterStringPref(prefs::kDefaultSpeedDialsSearchProviderGUID,
+                               std::string());
+  registry->RegisterStringPref(
+      prefs::kDefaultSpeedDialsPrivateSearchProviderGUID, std::string());
+  registry->RegisterStringPref(prefs::kDefaultImageSearchProviderGUID,
+                               std::string());
 }
 
 }  // namespace vivaldi
@@ -135,7 +152,7 @@ void TemplateURLService::ResetTemplateURL(
   data.is_active = TemplateURLData::ActiveStatus::kTrue;
 
   if (!reset_prepopulated) {
-    Update(url, TemplateURL(data));
+    UpdateData(url, data);
     return;
   }
 
@@ -148,7 +165,7 @@ void TemplateURLService::ResetTemplateURL(
   prepopulate_data.is_active = TemplateURLData::ActiveStatus::kFalse;
   prepopulate_data.id = kInvalidTemplateURLID;
 
-  Update(url, TemplateURL(data));
+  UpdateData(url, data);
 
   for (int i = 0; i < kDefaultSearchTypeCount; i++) {
     if (url == default_search_provider_[i])
@@ -226,4 +243,13 @@ TemplateURLService::VivaldiGetDefaultSearchManagers(
                             base::Unretained(this), kDefaultSearchImage)}
       },
   };
+}
+
+bool TemplateURLService::VivaldiIsDefaultSearchProvider(TemplateURL* turl) {
+  for (int i = 0; i < kDefaultSearchTypeCount; i++) {
+    if (turl == GetDefaultSearchProvider(DefaultSearchType(i), true)) {
+      return true;
+    }
+  }
+  return false;
 }

@@ -9,11 +9,15 @@
 // LICENSE file in the root directory of this source tree.
 
 #include <assert.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #include <immintrin.h>
 
 #include "src/xnnpack/common.h"
 #include "src/xnnpack/intrinsics-polyfill.h"
+#include "src/xnnpack/math.h"
+#include "src/xnnpack/microparams.h"
 #include "src/xnnpack/reduce.h"
 #include "src/xnnpack/unaligned.h"
 
@@ -22,7 +26,7 @@ void xnn_f16_f32acc_rsum_ukernel__f16c_u32_acc4(
     size_t batch,
     const xnn_float16* input,
     float* output,
-    const struct xnn_f16_f32acc_scale_params params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f16_f32acc_scale_params* restrict params)
 {
   static const int32_t mask_table[14] = {-1, -1, -1, -1, -1, -1, -1, 0, 0, 0, 0, 0, 0, 0};
 

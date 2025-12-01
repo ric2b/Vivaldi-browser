@@ -1,8 +1,3 @@
-get_filename_component(PARENT_DIR ../ ABSOLUTE)
-include_directories(${PARENT_DIR})
-
-include_directories(${CMAKE_BINARY_DIR})
-
 fuzztest_cc_test(
   NAME
     aggregate_combinators_test
@@ -11,13 +6,41 @@ fuzztest_cc_test(
   DEPS
     fuzztest::domain_testing
     absl::flat_hash_set
+    absl::random_bit_gen_ref
     absl::random_random
     absl::optional
     absl::span
+    absl::status
     absl::variant
     fuzztest::domain_core
+    fuzztest::serialization
+    fuzztest::type_support
     GTest::gmock_main
 )
+
+if (FUZZTEST_BUILD_FLATBUFFERS)
+  fuzztest_cc_test(
+    NAME
+      arbitrary_domains_flatbuffers_test
+    SRCS
+      "arbitrary_domains_flatbuffers_test.cc"
+    DEPS
+      absl::flat_hash_set
+      absl::random_bit_gen_ref
+      absl::random_random
+      absl::strings
+      flatbuffers
+      fuzztest::domain
+      fuzztest::domain_testing
+      fuzztest::flatbuffers
+      fuzztest::fuzztest_macros
+      GTest::gmock_main
+      fuzztest_test_flatbuffers_headers
+  )
+  add_dependencies(fuzztest_arbitrary_domains_flatbuffers_test
+    fuzztest_GENERATE_test_flatbuffers_headers
+  )
+endif()
 
 fuzztest_cc_test(
   NAME
@@ -31,7 +54,7 @@ fuzztest_cc_test(
     absl::random_bit_gen_ref
     absl::strings
     fuzztest::domain
-    test_protobuf
+    fuzztest::test_protobuf_cc_proto
     GTest::gmock_main
     protobuf::libprotobuf
 )
@@ -48,10 +71,9 @@ fuzztest_cc_test(
     absl::random_bit_gen_ref
     absl::status
     absl::time
-    fuzztest::absl_helpers
     fuzztest::domain_core
     fuzztest::serialization
-    test_protobuf
+    fuzztest::test_protobuf_cc_proto
     fuzztest::type_support
     GTest::gmock_main
 )
@@ -103,7 +125,7 @@ fuzztest_cc_library(
     fuzztest::logging
     fuzztest::meta
     fuzztest::serialization
-    test_protobuf
+    fuzztest::test_protobuf_cc_proto
     fuzztest::type_support
     GTest::gtest
     protobuf::libprotobuf

@@ -1387,6 +1387,16 @@ message GetAuthFactorExtendedInfoReply {
   }
 }
 
+message GenerateFreshRecoveryIdRequest {
+  // The account of a user.
+  cryptohome.AccountIdentifier account_id = 1;
+}
+
+message GenerateFreshRecoveryIdReply {
+  CryptohomeErrorCode error = 1;
+  CryptohomeErrorInfo error_info = 2;
+}
+
 // CreateVaultKeysetRequest is built when a user is trying to create a
 // VaultKeyset for a user, it is a similar operation to AddAuthFactor, but for
 // testing purposes with legacy VaultKeysets.

@@ -15,15 +15,18 @@ limitations under the License.
 
 #include "xla/shape.h"
 
+#include <cstdint>
 #include <vector>
 
 #include <gtest/gtest.h>
 #include "absl/hash/hash_testing.h"
+#include "absl/log/check.h"
 #include "absl/strings/str_cat.h"
 #include "xla/hlo/testlib/test.h"
 #include "xla/layout.h"
 #include "xla/shape_util.h"
 #include "xla/tsl/lib/core/status_test_util.h"
+#include "xla/tsl/platform/statusor.h"
 #include "xla/tsl/platform/test_benchmark.h"
 #include "xla/xla_data.pb.h"
 
@@ -40,7 +43,8 @@ class ShapeTest : public ::testing::Test {
   const Shape matrix_ = ShapeUtil::MakeShape(U32, {1, 2});
   const Shape matrix2_ =
       ShapeUtil::MakeShapeWithDenseLayout(S32, {3, 4}, {0, 1});
-  const Shape matrix_buffer_ = ShapeUtil::MakeBufferShape(S32, {3, 4});
+  const Shape matrix_buffer_ =
+      ShapeUtil::MakeValidatedBufferShape(S32, {3, 4}).value();
   const Shape tuple_ =
       ShapeUtil::MakeTupleShape({opaque_, scalar_, matrix_, matrix2_});
   const Shape nested_tuple_ =
@@ -51,10 +55,20 @@ class ShapeTest : public ::testing::Test {
       ShapeUtil::MakeShape(F32, {Shape::kUnboundedSize, 784}, {true, false});
 };
 
-// Tests that if the dynamic_dimensions parameter empty in the Shape
+// Tests that if the dynamic_dimensions parameter is empty in the Shape
 // constructor, it's treated as all dimensions are static.
 TEST(Shape, ArrayCtorTreatsEmptyDynamicDimensionsAsAllStatic) {
-  const Shape shape(F32, {1, 2, 3}, {});
+  const Shape shape(F32, {1, 2, 3}, /*dynamic_dimensions=*/{});
+  EXPECT_TRUE(shape.is_static());
+  EXPECT_TRUE(shape.is_static_dimension(0));
+  EXPECT_TRUE(shape.is_static_dimension(1));
+  EXPECT_TRUE(shape.is_static_dimension(2));
+}
+
+// Tests that if the dynamic_dimensions parameter is missing in the Shape
+// constructor, it's treated as all dimensions are static.
+TEST(Shape, ArrayCtorTreatsMissingDynamicDimensionsAsAllStatic) {
+  const Shape shape(F32, {1, 2, 3});
   EXPECT_TRUE(shape.is_static());
   EXPECT_TRUE(shape.is_static_dimension(0));
   EXPECT_TRUE(shape.is_static_dimension(1));
@@ -140,11 +154,15 @@ TEST_F(ShapeTest, EqualityTest) {
             ShapeUtil::MakeShapeWithDenseLayout(F32, {23, 44}, {1, 0}));
 
   // Equal with Buffer shapes.
-  EXPECT_TRUE(
-      Shape::Equal().IgnoreBuffer()(ShapeUtil::MakeBufferShape(S32, {3, 4}),
-                                    ShapeUtil::MakeShape(S32, {3, 4})));
-  EXPECT_FALSE(Shape::Equal()(ShapeUtil::MakeBufferShape(S32, {3, 4}),
-                              ShapeUtil::MakeShape(S32, {3, 4})));
+  EXPECT_TRUE(Shape::Equal().IgnoreBuffer()(
+      ShapeUtil::MakeValidatedBufferShape(S32, {3, 4}).value(),
+      ShapeUtil::MakeShape(S32, {3, 4})));
+  EXPECT_FALSE(
+      Shape::Equal()(ShapeUtil::MakeValidatedBufferShape(S32, {3, 4}).value(),
+                     ShapeUtil::MakeShape(S32, {3, 4})));
+  EXPECT_TRUE(Shape::Equal().IgnoreBuffer().IgnoreLayout()(
+      ShapeUtil::MakeValidatedBufferShape(S32, {3, 4}).value(),
+      ShapeUtil::MakeShapeWithDenseLayout(S32, {3, 4}, {0, 1})));
 }
 
 TEST_F(ShapeTest, AreAllLeavesIntegers) {
@@ -317,6 +335,10 @@ TEST_F(ShapeTest, SupportsAbslHash) {
        matrix_buffer_, tuple_, nested_tuple_, dynamic_matrix_}));
 }
 
+//===----------------------------------------------------------------------===//
+// Performance benchmarks below.
+//===----------------------------------------------------------------------===//
+
 static const int kDistinctShapes = 4;
 
 static Shape MakeShapeHelper(int id) {
@@ -328,19 +350,19 @@ static Shape MakeShapeHelper(int id) {
     }
     case 1: {
       // f32[1,2,2]{2,1,0}
-      shape = Shape(F32, {1, 2, 2}, {false, false, false});
+      shape = Shape(F32, {1, 2, 2});
       *shape.mutable_layout() = Layout({2, 1, 0});
       break;
     }
     case 2: {
       // f32[1,2,2]{2,1,0:T(2,128)}
-      shape = Shape(F32, {1, 2, 2}, {false, false, false});
+      shape = Shape(F32, {1, 2, 2});
       *shape.mutable_layout() = Layout({2, 1, 0}, {Tile({2, 128})});
       break;
     }
     default: {
       // f32[1,2,2]{2,1,0}
-      shape = Shape(F32, {1024, 1024, 128}, {});
+      shape = Shape(F32, {1024, 1024, 128});
     }
   }
   return shape;
@@ -391,6 +413,29 @@ BENCHMARK(BM_ShapeCopy)
     ->ArgPair(1000, 1)
     ->ArgPair(100000, 0)
     ->ArgPair(100000, 1);
+
+void BM_ArrayShapeEqual(::testing::benchmark::State& state) {
+  auto a = ShapeUtil::MakeShape(F32, {1, 2, 3});
+  auto b = ShapeUtil::MakeShape(F32, {1, 2, 3});
+
+  for (auto s : state) {
+    benchmark::DoNotOptimize(xla::Shape::Equal()(a, b));
+  }
+}
+BENCHMARK(BM_ArrayShapeEqual);
+
+void BM_TupleShapeEqual(::testing::benchmark::State& state) {
+  auto s0 = ShapeUtil::MakeShape(F32, {1, 2, 3});
+  auto s1 = ShapeUtil::MakeShape(F32, {1, 2, 3});
+
+  auto a = ShapeUtil::MakeTupleShape({s0, s1});
+  auto b = ShapeUtil::MakeTupleShape({s1, s0});
+
+  for (auto s : state) {
+    benchmark::DoNotOptimize(xla::Shape::Equal()(a, b));
+  }
+}
+BENCHMARK(BM_TupleShapeEqual);
 
 }  // namespace
 }  // namespace xla

@@ -31,10 +31,19 @@ namespace {
 
 // Converts `selected_types` to the corresponding DataTypeSet (e.g.
 // {kExtensions} becomes {EXTENSIONS, EXTENSION_SETTINGS}).
-DataTypeSet UserSelectableTypesToDataTypes(
-    UserSelectableTypeSet selected_types) {
+DataTypeSet UserSelectableTypesToDataTypes(UserSelectableTypeSet selected_types,
+                                           bool is_explicit_browser_sign_in) {
   DataTypeSet preferred_types;
   for (UserSelectableType type : selected_types) {
+    if (type == UserSelectableType::kPayments && !is_explicit_browser_sign_in) {
+      // If sign-in is implicit (legacy desktop Dice state), types such as
+      // AUTOFILL_WALLET_METADATA must be excluded.
+      preferred_types.PutAll(Intersection(
+          UserSelectableTypeToAllDataTypes(type),
+          DataTypeSet{AUTOFILL_WALLET_DATA, AUTOFILL_WALLET_CREDENTIAL,
+                      AUTOFILL_WALLET_USAGE}));
+      continue;
+    }
     preferred_types.PutAll(UserSelectableTypeToAllDataTypes(type));
   }
   return preferred_types;
@@ -124,7 +133,7 @@ UserSelectableTypeSet SyncUserSettingsImpl::GetSelectedTypes() const {
     case SyncPrefs::SyncAccountState::kNotSignedIn: {
       return UserSelectableTypeSet();
     }
-    case SyncPrefs::SyncAccountState::kSignedInNotSyncing: {
+    case SyncPrefs::SyncAccountState::kSignedInWithoutSyncConsent: {
       types = prefs_->GetSelectedTypesForAccount(
           delegate_->GetSyncAccountInfoForPrefs().gaia);
       break;
@@ -153,7 +162,7 @@ SyncUserSettings::UserSelectableTypePrefState
 SyncUserSettingsImpl::GetTypePrefStateForAccount(
     UserSelectableType type) const {
   if (delegate_->GetSyncAccountStateForPrefs() !=
-      SyncPrefs::SyncAccountState::kSignedInNotSyncing) {
+      SyncPrefs::SyncAccountState::kSignedInWithoutSyncConsent) {
     return SyncUserSettings::UserSelectableTypePrefState::kNotApplicable;
   }
   if (prefs_->IsTypeDisabledByUserForAccount(
@@ -173,7 +182,7 @@ void SyncUserSettingsImpl::SetSelectedTypes(bool sync_everything,
   switch (delegate_->GetSyncAccountStateForPrefs()) {
     case SyncPrefs::SyncAccountState::kNotSignedIn:
       NOTREACHED();
-    case SyncPrefs::SyncAccountState::kSignedInNotSyncing:
+    case SyncPrefs::SyncAccountState::kSignedInWithoutSyncConsent:
       for (UserSelectableType type : registered_types) {
         SetSelectedType(type, types.Has(type) || sync_everything);
       }
@@ -193,7 +202,7 @@ void SyncUserSettingsImpl::SetSelectedType(UserSelectableType type,
   switch (delegate_->GetSyncAccountStateForPrefs()) {
     case SyncPrefs::SyncAccountState::kNotSignedIn:
       NOTREACHED();
-    case SyncPrefs::SyncAccountState::kSignedInNotSyncing: {
+    case SyncPrefs::SyncAccountState::kSignedInWithoutSyncConsent: {
       prefs_->SetSelectedTypeForAccount(
           type, is_type_on, delegate_->GetSyncAccountInfoForPrefs().gaia);
       break;
@@ -210,7 +219,7 @@ void SyncUserSettingsImpl::SetSelectedType(UserSelectableType type,
 }
 
 void SyncUserSettingsImpl::ResetSelectedType(UserSelectableType type) {
-  CHECK_EQ(SyncPrefs::SyncAccountState::kSignedInNotSyncing,
+  CHECK_EQ(SyncPrefs::SyncAccountState::kSignedInWithoutSyncConsent,
            delegate_->GetSyncAccountStateForPrefs());
   prefs_->ResetSelectedTypeForAccount(
       type, delegate_->GetSyncAccountInfoForPrefs().gaia);
@@ -377,18 +386,31 @@ SyncUserSettingsImpl::GetExplicitPassphraseDecryptionNigoriKey() const {
 }
 
 DataTypeSet SyncUserSettingsImpl::GetPreferredDataTypes() const {
-  DataTypeSet types = UserSelectableTypesToDataTypes(GetSelectedTypes());
-  types.PutAll(AlwaysPreferredUserTypes());
+  DataTypeSet types = UserSelectableTypesToDataTypes(
+      GetSelectedTypes(), prefs_->IsExplicitBrowserSignin() ||
+                              delegate_->GetSyncAccountStateForPrefs() ==
+                                  SyncPrefs::SyncAccountState::kSyncing);
+
 #if BUILDFLAG(IS_CHROMEOS)
-  types.PutAll(UserSelectableOsTypesToDataTypes(GetSelectedOsTypes()));
+  if (IsSyncFeatureDisabledViaDashboard()) {
+    // If sync is disabled via dashboard, only a minimal set of datatypes should
+    // sync. This prevents code changes from causing accidental behavioral
+    // differences in this ChromeOS-specific edge case, as a side effect of
+    // starting sync-the-transport.
+    types.Clear();
+  } else {
+    types.PutAll(UserSelectableOsTypesToDataTypes(GetSelectedOsTypes()));
+  }
 #endif
+
+  types.PutAll(AlwaysPreferredUserTypes());
   types.RetainAll(registered_data_types_);
 
   // Control types (in practice, NIGORI) are always considered "preferred", even
   // though they're technically not registered.
   types.PutAll(ControlTypes());
 
-  static_assert(55 + 1 /* notes */ == GetNumDataTypes(),
+  static_assert(56 + 1 /* notes */ == GetNumDataTypes(),
                 "If adding a new sync data type, update the list below below if"
                 " you want to disable the new data type for local sync, aka"
                 " roaming profiles on Windows.");
@@ -412,6 +434,7 @@ DataTypeSet SyncUserSettingsImpl::GetPreferredDataTypes() const {
     types.Remove(PLUS_ADDRESS_SETTING);
     types.Remove(SECURITY_EVENTS);
     types.Remove(SEND_TAB_TO_SELF);
+    types.Remove(SHARED_COMMENT);
     types.Remove(SHARED_TAB_GROUP_ACCOUNT_DATA);
     types.Remove(SHARED_TAB_GROUP_DATA);
     types.Remove(SHARING_MESSAGE);

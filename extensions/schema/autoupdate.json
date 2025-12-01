@@ -40,6 +40,17 @@
             "type": "string"
           }
         }
+      },
+      {
+        "id": "UpdateNotFoundReason",
+        "type": "string",
+        "enum": [
+          "Unknown",
+          "OnLatestVersion",
+          "OnNewerThanLatestVersion",
+          "SystemIsTooOld",
+          "SystemIsTooNew"
+        ]
       }
     ],
     "functions": [
@@ -193,6 +204,12 @@
             }
           ]
         }
+      },
+      {
+        "name": "runStartupChecks",
+        "type": "function",
+        "description": "Runs startup checks after the autoupdate UI is prepared.",
+        "parameters": []
       }
 
     ],
@@ -218,7 +235,13 @@
         "name": "onUpdaterDidNotFindUpdate",
         "type": "function",
         "description": "Fired if checkForUpdates did not find an update.",
-        "parameters": []
+        "parameters": [
+          {
+              "name": "reason",
+              "description": "Enum reason why the updated did not find an update.",
+              "$ref": "UpdateNotFoundReason"
+            }
+        ]
       },
       {
         "name": "onWillDownloadUpdate",

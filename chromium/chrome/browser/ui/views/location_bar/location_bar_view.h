@@ -16,7 +16,6 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
-#include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/extensions/extension_context_menu_model.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
@@ -243,6 +242,7 @@ class LocationBarView
   // GeolocationSystemPermissionManager::PermissionObserver:
   void OnSystemPermissionUpdated(
       device::LocationSystemPermissionStatus new_status) override;
+  void OnPermissionManagerShuttingDown() override;
 #endif  // BUILDFLAG(OS_LEVEL_GEOLOCATION_PERMISSION_SUPPORTED)
 
   static bool IsVirtualKeyboardVisible(views::Widget* widget);
@@ -286,16 +286,6 @@ class LocationBarView
     return content_setting_views_;
   }
 
-  void RecordPageInfoMetrics();
-
-  void ResetConfirmationChipShownTime() {
-    confirmation_chip_collapsed_time_ = base::TimeTicks::Now();
-  }
-
-  void SetConfirmationChipShownTimeForTesting(base::TimeTicks time) {
-    confirmation_chip_collapsed_time_ = time;
-  }
-
   SkColor GetBackgroundColorForTesting() const { return background_color_; }
 
  private:
@@ -329,6 +319,9 @@ class LocationBarView
   // Updates the visibility state of the PageActionIconViews to reflect what
   // actions are available on the current page.
   void RefreshPageActionIconViews();
+
+  // Updates the visibility state of the AIM page action icon view.
+  void RefreshAiModePageActionIconView();
 
   // Updates PageActionContainerView's action controller to the active tab's
   // controller. At the same time, the page actions visibility will be set based
@@ -529,9 +522,6 @@ class LocationBarView
   const bool is_popup_mode_;
 
   bool is_initialized_ = false;
-
-  // Used for metrics collection.
-  base::TimeTicks confirmation_chip_collapsed_time_;
 
   SkColor background_color_ = gfx::kPlaceholderColor;
 

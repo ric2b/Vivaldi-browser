@@ -57,8 +57,7 @@ BluetoothBwuHandler::CreateUpgradedEndpointChannel(
       upgrade_path_info.bluetooth_credentials();
   if (!bluetooth_credentials.has_service_name() ||
       !bluetooth_credentials.has_mac_address()) {
-    NEARBY_LOGS(ERROR)
-        << "BluetoothBwuHandler failed to parse UpgradePathInfo.";
+    LOG(ERROR) << "BluetoothBwuHandler failed to parse UpgradePathInfo.";
     return {
         Error(OperationResultCode::CONNECTIVITY_BLUETOOTH_INVALID_CREDENTIAL)};
   }
@@ -66,14 +65,14 @@ BluetoothBwuHandler::CreateUpgradedEndpointChannel(
   const std::string& service_name = bluetooth_credentials.service_name();
   const std::string& mac_address = bluetooth_credentials.mac_address();
 
-  NEARBY_VLOG(1) << "BluetoothBwuHandler is attempting to connect to "
-                    "available Bluetooth device ("
-                 << service_name << ", " << mac_address << ") for endpoint "
-                 << endpoint_id << " and service ID " << service_id;
+  VLOG(1) << "BluetoothBwuHandler is attempting to connect to "
+             "available Bluetooth device ("
+          << service_name << ", " << mac_address << ") for endpoint "
+          << endpoint_id << " and service ID " << service_id;
 
   BluetoothDevice device = bluetooth_medium_.GetRemoteDevice(mac_address);
   if (!device.IsValid()) {
-    NEARBY_LOGS(ERROR)
+    LOG(ERROR)
         << "BluetoothBwuHandler failed to derive a valid Bluetooth device "
            "from the MAC address ("
         << mac_address << ") for endpoint " << endpoint_id;
@@ -84,26 +83,24 @@ BluetoothBwuHandler::CreateUpgradedEndpointChannel(
   ErrorOr<BluetoothSocket> socket_result = bluetooth_medium_.Connect(
       device, service_id, client->GetCancellationFlag(endpoint_id));
   if (socket_result.has_error()) {
-    NEARBY_LOGS(ERROR)
+    LOG(ERROR)
         << "BluetoothBwuHandler failed to connect to the Bluetooth device ("
         << service_name << ", " << mac_address << ") for endpoint "
         << endpoint_id << " and service ID " << service_id;
     return {Error(socket_result.error().operation_result_code().value())};
   }
 
-  NEARBY_VLOG(1)
-      << "BluetoothBwuHandler successfully connected to Bluetooth device ("
-      << service_id << ", " << mac_address << ") while upgrading endpoint "
-      << endpoint_id;
+  VLOG(1) << "BluetoothBwuHandler successfully connected to Bluetooth device ("
+          << service_id << ", " << mac_address << ") while upgrading endpoint "
+          << endpoint_id;
 
   auto channel = std::make_unique<BluetoothEndpointChannel>(
       service_id, /*channel_name=*/service_id, socket_result.value());
   if (channel == nullptr) {
-    NEARBY_LOGS(ERROR)
-        << "BluetoothBwuHandler failed to create Bluetooth endpoint "
-           "channel to the Bluetooth device ("
-        << service_name << ", " << mac_address << ") for endpoint "
-        << endpoint_id << " and service ID " << service_id;
+    LOG(ERROR) << "BluetoothBwuHandler failed to create Bluetooth endpoint "
+                  "channel to the Bluetooth device ("
+               << service_name << ", " << mac_address << ") for endpoint "
+               << endpoint_id << " and service ID " << service_id;
     socket_result.value().Close();
     return {Error(
         OperationResultCode::NEARBY_BT_ENDPOINT_CHANNEL_CREATION_FAILURE)};
@@ -118,10 +115,10 @@ ByteArray BluetoothBwuHandler::HandleInitializeUpgradedMediumForEndpoint(
     const std::string& endpoint_id) {
   std::string mac_address = bluetooth_medium_.GetMacAddress();
   if (mac_address.empty()) {
-    NEARBY_LOGS(ERROR) << "BluetoothBwuHandler couldn't initiate the "
-                          "BLUETOOTH upgrade for service ID "
-                       << upgrade_service_id << " and endpoint " << endpoint_id
-                       << " because MAC address is empty.";
+    LOG(ERROR) << "BluetoothBwuHandler couldn't initiate the "
+                  "BLUETOOTH upgrade for service ID "
+               << upgrade_service_id << " and endpoint " << endpoint_id
+               << " because MAC address is empty.";
     return {};
   }
 
@@ -131,15 +128,15 @@ ByteArray BluetoothBwuHandler::HandleInitializeUpgradedMediumForEndpoint(
             absl::bind_front(
                 &BluetoothBwuHandler::OnIncomingBluetoothConnection, this,
                 client))) {
-      NEARBY_LOGS(ERROR) << "BluetoothBwuHandler couldn't initiate the "
-                            "BLUETOOTH upgrade for endpoint "
-                         << endpoint_id
-                         << " because it failed to start listening for "
-                            "incoming Bluetooth connections.";
+      LOG(ERROR) << "BluetoothBwuHandler couldn't initiate the "
+                    "BLUETOOTH upgrade for endpoint "
+                 << endpoint_id
+                 << " because it failed to start listening for "
+                    "incoming Bluetooth connections.";
 
       return {};
     }
-    NEARBY_VLOG(1)
+    VLOG(1)
         << "BluetoothBwuHandler successfully started listening for incoming "
            "Bluetooth connections on service_id="
         << upgrade_service_id << " while upgrading endpoint " << endpoint_id;
@@ -151,8 +148,7 @@ ByteArray BluetoothBwuHandler::HandleInitializeUpgradedMediumForEndpoint(
 void BluetoothBwuHandler::HandleRevertInitiatorStateForService(
     const std::string& upgrade_service_id) {
   bluetooth_medium_.StopAcceptingConnections(upgrade_service_id);
-  NEARBY_LOGS(INFO)
-      << "BluetoothBwuHandler successfully reverted all Bluetooth state.";
+  LOG(INFO) << "BluetoothBwuHandler successfully reverted all Bluetooth state.";
 }
 
 // Accept Connection Callback.

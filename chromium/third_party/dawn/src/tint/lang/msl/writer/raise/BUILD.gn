@@ -51,6 +51,8 @@ if (tint_build_msl_writer) {
       "binary_polyfill.h",
       "builtin_polyfill.cc",
       "builtin_polyfill.h",
+      "convert_print_to_log.cc",
+      "convert_print_to_log.h",
       "module_constant.cc",
       "module_constant.h",
       "module_scope_vars.cc",
@@ -63,8 +65,6 @@ if (tint_build_msl_writer) {
       "shader_io.h",
       "simd_ballot.cc",
       "simd_ballot.h",
-      "unary_polyfill.cc",
-      "unary_polyfill.h",
     ]
     deps = [
       "${dawn_root}/src/utils:utils",
@@ -103,12 +103,12 @@ if (tint_build_unittests) {
         "argument_buffers_test.cc",
         "binary_polyfill_test.cc",
         "builtin_polyfill_test.cc",
+        "convert_print_to_log_test.cc",
         "module_constant_test.cc",
         "module_scope_vars_test.cc",
         "packed_vec3_test.cc",
         "shader_io_test.cc",
         "simd_ballot_test.cc",
-        "unary_polyfill_test.cc",
       ]
       deps = [
         "${dawn_root}/src/utils:utils",
@@ -133,7 +133,10 @@ if (tint_build_unittests) {
       ]
 
       if (tint_build_msl_writer) {
-        deps += [ "${tint_src_dir}/lang/msl/writer/raise" ]
+        deps += [
+          "${tint_src_dir}/lang/msl/writer/common",
+          "${tint_src_dir}/lang/msl/writer/raise",
+        ]
       }
     }
   }

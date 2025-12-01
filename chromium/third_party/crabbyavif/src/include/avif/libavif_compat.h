@@ -18,6 +18,8 @@
 #define avifAlloc crabby_avifAlloc
 #define avifCleanApertureBoxConvertCropRect \
   crabby_avifCleanApertureBoxConvertCropRect
+#define avifCodecChoiceFromName crabby_avifCodecChoiceFromName
+#define avifCodecName crabby_avifCodecName
 #define avifCropRectConvertCleanApertureBox \
   crabby_avifCropRectConvertCleanApertureBox
 #define avifDecoderCreate crabby_avifDecoderCreate
@@ -33,6 +35,7 @@
 #define avifDecoderRead crabby_avifDecoderRead
 #define avifDecoderReadFile crabby_avifDecoderReadFile
 #define avifDecoderReadMemory crabby_avifDecoderReadMemory
+#define avifDecoderReset crabby_avifDecoderReset
 #define avifDecoderSetIO crabby_avifDecoderSetIO
 #define avifDecoderSetIOFile crabby_avifDecoderSetIOFile
 #define avifDecoderSetIOMemory crabby_avifDecoderSetIOMemory
@@ -43,8 +46,12 @@
 #define avifEncoderCreate crabby_avifEncoderCreate
 #define avifEncoderDestroy crabby_avifEncoderDestroy
 #define avifEncoderFinish crabby_avifEncoderFinish
+#define avifEncoderSetCodecSpecificOption \
+  crabby_avifEncoderSetCodecSpecificOption
 #define avifEncoderWrite crabby_avifEncoderWrite
 #define avifFree crabby_avifFree
+#define avifGainMapCreate crabby_avifGainMapCreate
+#define avifGainMapDestroy crabby_avifGainMapDestroy
 #define avifGetPixelFormatInfo crabby_avifGetPixelFormatInfo
 #define avifIOCreateFileReader crabby_avifIOCreateFileReader
 #define avifIOCreateMemoryReader crabby_avifIOCreateMemoryReader
@@ -60,11 +67,21 @@
 #define avifImagePlaneHeight crabby_avifImagePlaneHeight
 #define avifImagePlaneRowBytes crabby_avifImagePlaneRowBytes
 #define avifImagePlaneWidth crabby_avifImagePlaneWidth
+#define avifImageRGBToYUV crabby_avifImageRGBToYUV
 #define avifImageScale crabby_avifImageScale
+#define avifImageSetMetadataExif crabby_avifImageSetMetadataExif
+#define avifImageSetMetadataXMP crabby_avifImageSetMetadataXMP
+#define avifImageSetProfileICC crabby_avifImageSetProfileICC
 #define avifImageSetViewRect crabby_avifImageSetViewRect
 #define avifImageUsesU16 crabby_avifImageUsesU16
 #define avifImageYUVToRGB crabby_avifImageYUVToRGB
 #define avifPeekCompatibleFileType crabby_avifPeekCompatibleFileType
+#define avifPixelFormatToString crabby_avifPixelFormatToString
+#define avifRGBFormatChannelCount crabby_avifRGBFormatChannelCount
+#define avifRGBFormatHasAlpha crabby_avifRGBFormatHasAlpha
+#define avifRGBImageAllocatePixels crabby_avifRGBImageAllocatePixels
+#define avifRGBImageFreePixels crabby_avifRGBImageFreePixels
+#define avifRGBImagePixelSize crabby_avifRGBImagePixelSize
 #define avifRGBImageSetDefaults crabby_avifRGBImageSetDefaults
 #define avifRWDataFree crabby_avifRWDataFree
 #define avifRWDataRealloc crabby_avifRWDataRealloc

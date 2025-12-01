@@ -4,12 +4,14 @@
 
 #include "components/translate/core/common/translate_util.h"
 #include "components/translate/core/language_detection/language_detection_util.h"
+#include "content/public/common/buildflags.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_thread.h"
 #include "content/renderer/render_frame_impl.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_registry.h"
 #include "third_party/blink/public/platform/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/web/web_element_collection.h"
+#include "third_party/blink/public/web/web_plugin.h"
 #include "third_party/blink/public/web/web_view.h"
 #include "third_party/blink/renderer/core/dom/focus_params.h"
 #include "third_party/blink/renderer/core/events/keyboard_event.h"
@@ -23,10 +25,6 @@
 #include "renderer/blink/vivaldi_snapshot_page.h"
 #include "renderer/blink/vivaldi_spatnav_quad.h"
 #include "ui/vivaldi_skia_utils.h"
-
-#if BUILDFLAG(ENABLE_PLUGINS)
-#include "content/renderer/pepper/pepper_plugin_instance_impl.h"
-#endif
 
 namespace {
 
@@ -108,7 +106,7 @@ void VivaldiFrameServiceImpl::AccessKeyAction(const std::string& access_key) {
   }
   blink::Document* document =
       static_cast<blink::WebLocalFrameImpl*>(frame)->GetFrame()->GetDocument();
-  String wtf_key(access_key.c_str());
+  blink::String wtf_key(access_key.c_str());
   blink::Element* elem = document->GetElementByAccessKey(wtf_key);
   if (elem) {
     elem->AccessKeyAction(blink::SimulatedClickCreationScope::kFromUserAgent);
@@ -147,16 +145,16 @@ void VivaldiFrameServiceImpl::ScrollPage(
 
   switch (scroll_type) {
     case ScrollType::kUp:
-      window->scrollBy(0.0, -scroll_amount);
+      window->scrollBy(nullptr, 0.0, -scroll_amount);
       break;
     case ScrollType::kDown:
-      window->scrollBy(0.0, scroll_amount);
+      window->scrollBy(nullptr, 0.0, scroll_amount);
       break;
     case ScrollType::kLeft:
-      window->scrollBy(-scroll_amount, 0.0);
+      window->scrollBy(nullptr, -scroll_amount, 0.0);
       break;
     case ScrollType::kRight:
-      window->scrollBy(scroll_amount, 0.0);
+      window->scrollBy(nullptr, scroll_amount, 0.0);
       break;
     case ScrollType::kPageUp:
       local_frame->GetEventHandler().BubblingScroll(

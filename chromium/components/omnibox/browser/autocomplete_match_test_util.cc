@@ -67,6 +67,25 @@ AutocompleteMatch CreateContextualSearchMatch(std::u16string contents) {
   return match;
 }
 
+AutocompleteMatch CreateZeroSuggestContextualSearchMatch(
+    std::u16string contents) {
+  AutocompleteMatch match;
+  match.type = AutocompleteMatchType::Type::SEARCH_SUGGEST;
+  match.contents = contents;
+  match.relevance = 195;
+  match.contents_class = {{0, 1}};
+  match.keyword = u"contextual";
+  match.suggestion_group_id = omnibox::GroupId::GROUP_CONTEXTUAL_SEARCH;
+  match.subtypes.insert(omnibox::SUBTYPE_CONTEXTUAL_SEARCH);
+  match.subtypes.insert(omnibox::SUBTYPE_ZERO_PREFIX);
+  match.search_terms_args =
+      std::make_unique<TemplateURLRef::SearchTermsArgs>(std::u16string());
+  match.search_terms_args->searchbox_stats.set_client_name("chrome");
+  match.destination_url =
+      GURL{"https://google.com/" + base::UTF16ToUTF8(contents)};
+  return match;
+}
+
 AutocompleteMatch CreateLensActionMatch(std::u16string contents) {
   AutocompleteMatch match;
   match.type = AutocompleteMatchType::Type::PEDAL;
@@ -112,15 +131,16 @@ AutocompleteMatch CreateFeaturedEnterpriseSearch(std::u16string keyword) {
 
 AutocompleteMatch CreateActionInSuggestMatch(
     std::u16string description,
-    std::vector<omnibox::ActionInfo::ActionType> action_types) {
+    std::vector<omnibox::SuggestTemplateInfo::TemplateAction::ActionType>
+        action_types) {
   AutocompleteMatch match;
   match.type = AutocompleteMatchType::Type::SEARCH_SUGGEST_ENTITY;
   match.description = description;
   for (auto action_type : action_types) {
-    omnibox::ActionInfo action_info;
-    action_info.set_action_type(action_type);
+    omnibox::SuggestTemplateInfo::TemplateAction template_action;
+    template_action.set_action_type(action_type);
     match.actions.push_back(base::MakeRefCounted<OmniboxActionInSuggest>(
-        std::move(action_info), std::nullopt));
+        std::move(template_action), std::nullopt));
   }
   return match;
 }

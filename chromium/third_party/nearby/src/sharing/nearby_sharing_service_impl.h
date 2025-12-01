@@ -54,7 +54,6 @@
 #include "sharing/internal/api/preference_manager.h"
 #include "sharing/internal/api/sharing_platform.h"
 #include "sharing/internal/api/sharing_rpc_client.h"
-#include "sharing/internal/api/sharing_rpc_notifier.h"
 #include "sharing/internal/api/wifi_adapter.h"
 #include "sharing/internal/public/connectivity_manager.h"
 #include "sharing/internal/public/context.h"
@@ -161,7 +160,6 @@ class NearbySharingServiceImpl
       proto::DeviceVisibility visibility, absl::Duration expiration,
       absl::AnyInvocable<void(StatusCodes status_code) &&> callback) override;
   NearbyShareSettings* GetSettings() override;
-  nearby::sharing::api::SharingRpcNotifier* GetRpcNotifier() override;
   NearbyShareLocalDeviceDataManager* GetLocalDeviceDataManager() override;
   NearbyShareContactManager* GetContactManager() override;
   NearbyShareCertificateManager* GetCertificateManager() override;
@@ -307,7 +305,6 @@ class NearbySharingServiceImpl
   // Returns the share target if it has been removed, std::nullopt otherwise.
   std::optional<ShareTarget> RemoveOutgoingShareTargetWithEndpointId(
       absl::string_view endpoint_id);
-  void RemoveOutgoingShareTargetAndReportLost(absl::string_view endpoint_id);
 
   void OnTransferComplete();
   void OnTransferStarted(bool is_incoming);
@@ -462,9 +459,12 @@ class NearbySharingServiceImpl
                                       TransferMetadata metadata, bool success);
 
   // Notify all registered send surfaces of share target state changes.
-  void OnShareTargetDiscovered(const ShareTarget& share_target);
-  void OnShareTargetUpdated(const ShareTarget& share_target);
-  void OnShareTargetLost(const ShareTarget& share_target);
+  void NotifyShareTargetDiscovered(const ShareTarget& share_target);
+  void NotifyShareTargetUpdated(const ShareTarget& share_target);
+  void NotifyShareTargetLost(const ShareTarget& share_target);
+
+  // Log analytics event of discovering share target.
+  void LogShareTargetDiscovered(const ShareTarget& share_target);
 
   // Used to run nearby sharing service APIs.
   std::unique_ptr<TaskRunner> service_thread_;

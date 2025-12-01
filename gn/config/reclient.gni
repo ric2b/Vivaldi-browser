@@ -30,9 +30,9 @@ if (vivaldi_enable_reclient) {
 }
 
 # Cannot be imported before the overrides are set
-import("//build/toolchain/cc_wrapper.gni")
-import("//build/toolchain/rbe.gni")
+# import("//build/toolchain/cc_wrapper.gni")
+# import("//build/toolchain/rbe.gni")
 
-if (use_remoteexec) {
-  assert(cc_wrapper == "")
-}
+#if (use_remoteexec) {
+#  assert(cc_wrapper == "")
+#}

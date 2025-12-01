@@ -1,44 +1,33 @@
+// Copyright (c) 2024 Vivaldi Technologies AS. All rights reserved
+
 #include "components/panel/panel_id.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 
 namespace vivaldi {
 namespace {
-static const char * kPnelId = "panelId";
+static const char* kPanelId = "panelId";
 }
 
-std::optional<std::string> ParseVivPanelId(
-    const std::optional<std::string>& viv_ext_data) {
-  if (!viv_ext_data) {
-    return std::optional<std::string>();
-  }
-
+std::optional<std::string> ParseVivPanelId(const std::string& viv_ext_data) {
   std::optional<base::Value> json =
-      base::JSONReader::Read(*viv_ext_data, base::JSON_PARSE_RFC);
+      base::JSONReader::Read(viv_ext_data, base::JSON_PARSE_RFC);
 
-  if (!json) {
-    return std::optional<std::string>();
+  if (!json || !json->is_dict()) {
+    return std::nullopt;
   }
 
-  if (!json->is_dict()) {
-    return std::optional<std::string>();
-  }
+  const std::string* panel_id = json->GetDict().FindString(kPanelId);
 
-  const std::string* panel_id = json->GetDict().FindString(kPnelId);
-
-  if (!panel_id) {
-    return std::optional<std::string>();
-  }
-
-  return *panel_id;
+  return panel_id ? *panel_id : std::optional<std::string>();
 }
 
-void SanitizeExtDataBeforeRestore(std::string *viv_ext_data) {
+void SanitizeExtDataBeforeRestore(std::string* viv_ext_data) {
   if (!viv_ext_data)
     return;
 
   std::optional<base::Value> json =
-    base::JSONReader::Read(*viv_ext_data, base::JSON_PARSE_RFC);
+      base::JSONReader::Read(*viv_ext_data, base::JSON_PARSE_RFC);
 
   if (!json)
     return;
@@ -46,14 +35,14 @@ void SanitizeExtDataBeforeRestore(std::string *viv_ext_data) {
   if (!json->is_dict())
     return;
 
-  auto &dict = json->GetDict();
-  if (!dict.FindString(kPnelId))
+  auto& dict = json->GetDict();
+  if (!dict.FindString(kPanelId))
     return;
 
-  dict.Remove(kPnelId);
+  dict.Remove(kPanelId);
 
   viv_ext_data->clear();
   base::JSONWriter::Write(dict, viv_ext_data);
 }
 
-} // namespace vivaldi
+}  // namespace vivaldi

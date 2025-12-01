@@ -383,11 +383,10 @@ void avformat_close_input(AVFormatContext **ps)
         if (ffifmt(s->iformat)->read_close)
             ffifmt(s->iformat)->read_close(s);
 
+    ff_format_io_close(s, &pb);
     avformat_free_context(s);
 
     *ps = NULL;
-
-    avio_close(pb);
 }
 
 static void force_codec_ids(AVFormatContext *s, AVStream *st)
@@ -1293,9 +1292,15 @@ static int codec_close(FFStream *sti)
 {
     AVCodecContext *avctx_new = NULL;
     AVCodecParameters *par_tmp = NULL;
+    const AVCodec *new_codec = NULL;
     int ret;
 
-    avctx_new = avcodec_alloc_context3(sti->avctx->codec);
+    new_codec =
+      (sti->avctx->codec_id != sti->pub.codecpar->codec_id) ?
+      avcodec_find_decoder(sti->pub.codecpar->codec_id) :
+      sti->avctx->codec;
+
+    avctx_new = avcodec_alloc_context3(new_codec);
     if (!avctx_new) {
         ret = AVERROR(ENOMEM);
         goto fail;

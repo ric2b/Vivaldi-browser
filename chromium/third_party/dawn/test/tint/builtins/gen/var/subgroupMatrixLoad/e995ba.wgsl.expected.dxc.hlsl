@@ -1,11 +1,5 @@
 SKIP: FAILED
 
-../../src/tint/lang/wgsl/ast/transform/transform.cc:188 internal compiler error: TINT_UNREACHABLE Unhandled type: tint::core::type::SubgroupMatrix
-********************************************************************
-*  The tint shader compiler has encountered an unexpected error.   *
-*                                                                  *
-*  Please help us fix this issue by submitting a bug report at     *
-*  crbug.com/tint with the source program that triggered the bug.  *
-********************************************************************
+subgroup matrices are not supported by the HLSL backend
 
-tint executable returned error: signal: trace/BPT trap
+tint executable returned error: exit status 1

@@ -34,7 +34,7 @@ static int vdpau_mpeg4_start_frame(AVCodecContext *avctx,
                                    const uint8_t *buffer, uint32_t size)
 {
     Mpeg4DecContext *ctx = avctx->priv_data;
-    MpegEncContext * const s = &ctx->m;
+    MPVContext *const s = &ctx->h.c;
     MPVPicture *pic          = s->cur_pic.ptr;
     struct vdpau_picture_context *pic_ctx = pic->hwaccel_picture_private;
     VdpPictureInfoMPEG4Part2 *info = &pic_ctx->info.mpeg4;
@@ -64,11 +64,11 @@ static int vdpau_mpeg4_start_frame(AVCodecContext *avctx,
     info->trd[1]                            = s->pp_field_time >> 1;
     info->trb[1]                            = s->pb_field_time >> 1;
     info->vop_time_increment_resolution     = s->avctx->framerate.num;
-    info->vop_fcode_forward                 = s->f_code;
-    info->vop_fcode_backward                = s->b_code;
+    info->vop_fcode_forward                 = ctx->f_code;
+    info->vop_fcode_backward                = ctx->b_code;
     info->resync_marker_disable             = !ctx->resync_marker;
     info->interlaced                        = !s->progressive_sequence;
-    info->quant_type                        = s->mpeg_quant;
+    info->quant_type                        = ctx->mpeg_quant;
     info->quarter_sample                    = s->quarter_sample;
     info->short_video_header                = avctx->codec->id == AV_CODEC_ID_H263;
     info->rounding_control                  = s->no_rounding;

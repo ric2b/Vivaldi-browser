@@ -3,13 +3,9 @@
 // static
 content::WebContents* DevToolsWindow::GetDevtoolsWebContentsForInspectedWebContents(
     content::WebContents* inspected_web_contents) {
-  if (!inspected_web_contents || !g_devtools_window_instances.IsCreated())
-    return nullptr;
-  DevToolsWindows* instances = g_devtools_window_instances.Pointer();
-  for (DevToolsWindows::iterator it(instances->begin()); it != instances->end();
-       ++it) {
-    if ((*it)->GetInspectedWebContents() == inspected_web_contents)
-      return (*it)->main_web_contents_;
+  auto* instance = GetInstanceForInspectedWebContents(inspected_web_contents);
+  if (instance) {
+    return instance->main_web_contents_;
   }
   return nullptr;
 }
@@ -17,10 +13,9 @@ content::WebContents* DevToolsWindow::GetDevtoolsWebContentsForInspectedWebConte
 // static
 DevToolsWindow* DevToolsWindow::FindWindowByDevtoolsWebContents(
     content::WebContents* devtools_web_contents) {
-  if (!devtools_web_contents || !g_devtools_window_instances.IsCreated())
+  if (!devtools_web_contents)
     return nullptr;
-  DevToolsWindows* instances = g_devtools_window_instances.Pointer();
-  for (DevToolsWindow* window : *instances) {
+  for (auto& window : GetDevToolsWindowInstances()) {
     if (window->main_web_contents_ == devtools_web_contents) {
       return window;
     }

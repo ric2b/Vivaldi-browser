@@ -596,6 +596,13 @@ void SetNodeDescription(BookmarkModel* model,
       model, node, GetMetaNames().description, description);
 }
 
+void SetNodeDisplayURL(BookmarkModel* model,
+                        const BookmarkNode* node,
+                        const std::string& url) {
+    VivaldiBookmarkModelFriend::SetNodeMetaInfoWithIndexChange(
+            model, node, GetMetaNames().display_url, url);
+}
+
 void SetNodeSpeeddial(BookmarkModel* model,
                       const BookmarkNode* node,
                       bool speeddial) {

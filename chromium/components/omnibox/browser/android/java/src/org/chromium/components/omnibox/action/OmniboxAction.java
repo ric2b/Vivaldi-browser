@@ -25,15 +25,30 @@ public abstract class OmniboxAction {
     /** Describes the ChipView decoration. */
     public static final class ChipIcon {
         public final @DrawableRes int iconRes;
+        public final @DrawableRes int incognitoIconRes;
         public final boolean tintWithTextColor;
+
+        /**
+         * @param iconRes The resource Id of the icon to be shown beside the text.
+         * @param incognitoIconRes The resource Id of the icon to be shown beside the text in
+         *     incognito.
+         * @param tintWithTextColor Whether to tint the icon using primary text color.
+         */
+        public ChipIcon(
+                @DrawableRes int iconRes,
+                @DrawableRes int incognitoIconRes,
+                boolean tintWithTextColor) {
+            this.iconRes = iconRes;
+            this.incognitoIconRes = incognitoIconRes;
+            this.tintWithTextColor = tintWithTextColor;
+        }
 
         /**
          * @param iconRes The resource Id of the icon to be shown beside the text.
          * @param tintWithTextColor Whether to tint the icon using primary text color.
          */
         public ChipIcon(@DrawableRes int iconRes, boolean tintWithTextColor) {
-            this.iconRes = iconRes;
-            this.tintWithTextColor = tintWithTextColor;
+            this(iconRes, iconRes, tintWithTextColor);
         }
     }
 
@@ -60,6 +75,9 @@ public abstract class OmniboxAction {
 
     public final int primaryTextAppearance;
 
+    /** Whether to show it as action button. */
+    public final boolean showAsActionButton;
+
     /** The corresponding native instance, or 0 if the native instance is not available. */
     private long mNativeInstance;
 
@@ -69,13 +87,15 @@ public abstract class OmniboxAction {
             String hint,
             String accessibilityHint,
             ChipIcon icon,
-            int primaryTextAppearance) {
+            int primaryTextAppearance,
+            boolean showAsActionButton) {
         assert !TextUtils.isEmpty(hint);
         this.actionId = actionId;
         this.hint = hint;
         this.accessibilityHint = accessibilityHint;
         this.icon = icon;
         this.primaryTextAppearance = primaryTextAppearance;
+        this.showAsActionButton = showAsActionButton;
         mNativeInstance = nativeInstance;
     }
 

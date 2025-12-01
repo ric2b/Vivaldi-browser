@@ -10,15 +10,16 @@ $assert REQUANTIZATION in ["FP32", "RNDNU", "RNDNU16"] or not REQUANTIZATION
 $assert DATATYPE in ["QC8", "QD8", "QS8", "QU8"]
 $assert DATATYPE != "QC8" or REQUANTIZATION == "FP32"
 $assert not DATATYPE == "QD8" or not REQUANTIZATION
-
-#include <assert.h>
-
 #include <arm_neon.h>
+#include <assert.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #include "src/xnnpack/common.h"
 #include "src/xnnpack/igemm.h"
 $if REQUANTIZATION == "FP32" and ARMV8:
   #include "src/xnnpack/intrinsics-polyfill.h"
+#include "src/xnnpack/microparams.h"
 $if PREFETCH:
   #include "src/xnnpack/prefetch.h"
 
@@ -70,10 +71,10 @@ void xnn_${DATATYPE_SPEC}_igemm_minmax${REQUANTIZATION_SPEC}_ukernel_${MR}x${NR}
     $if DATATYPE in ["QD8"]:
       const int8_t* zero_data,
     $if DATATYPE in ["QD8", "QC4"]:
-      const ${PARAMS_TYPE} params[restrict XNN_MIN_ELEMENTS(1)],
-      const struct ${SCALING_PARAMS} quantization_params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
+      const ${PARAMS_TYPE}* restrict params,
+      const struct ${SCALING_PARAMS}* restrict quantization_params) XNN_OOB_READS
     $else:
-      const ${PARAMS_TYPE} params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
+      const ${PARAMS_TYPE}* restrict params) XNN_OOB_READS
 {
   assert(mr != 0);
   assert(mr <= ${MR});

@@ -324,6 +324,12 @@
           "iswebpagewidget": {
             "type": "boolean"
           },
+          "isreader": {
+            "type": "boolean"
+          },
+          "isrichtexteditor": {
+            "type": "boolean"
+          },
           "support": {"$ref": "DocumentSupport"},
           "textfield": {
             "optional": true,

@@ -70,11 +70,10 @@ export class SourcesView extends Common.ObjectWrapper.eventMixin<EventTypes, typ
   private searchConfig?: UI.SearchableView.SearchConfig;
 
   constructor() {
-    super();
+    super({jslog: `${VisualLogging.pane('editor').track({keydown: 'Escape'})}`});
     this.registerRequiredCSS(sourcesViewStyles);
 
     this.element.id = 'sources-panel-sources-view';
-    this.element.setAttribute('jslog', `${VisualLogging.pane('editor').track({keydown: 'Escape'})}`);
     this.setMinimumAndPreferredSizes(88, 52, 150, 100);
 
     const workspace = Workspace.Workspace.WorkspaceImpl.instance();
@@ -426,7 +425,7 @@ export class SourcesView extends Common.ObjectWrapper.eventMixin<EventTypes, typ
     const widget = this.sourceViewByUISourceCode.get(uiSourceCode);
     if (widget) {
       if (this.#sourceViewTypeForWidget(widget) !== this.#sourceViewTypeForUISourceCode(uiSourceCode)) {
-        // Remove the exisiting editor tab and create a new one of the correct type.
+        // Remove the existing editor tab and create a new one of the correct type.
         this.removeUISourceCodes([uiSourceCode]);
         this.showSourceLocation(uiSourceCode);
       }

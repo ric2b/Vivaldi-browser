@@ -62,9 +62,10 @@ void BookmarkNicknameProvider::DoAutocomplete(const AutocompleteInput& input) {
     return;
   }
 
-  if (input.prevent_inline_autocomplete()) {
-    return;
-  }
+  // Remove the keyword from input if we're in keyword mode for a starter pack
+  // engine.
+  const auto [adjusted_input, starter_pack_engine] =
+      AdjustInputForStarterPackKeyword(input, client_->GetTemplateURLService());
 
   // Retrieve enough bookmarks so that we have a reasonable probability of
   // suggesting the one that the user desires.
@@ -84,8 +85,8 @@ void BookmarkNicknameProvider::DoAutocomplete(const AutocompleteInput& input) {
   //  - Multiple terms enclosed in quotes will require those exact words in that
   //    exact order to match.
   //
-  std::vector<TitledUrlMatch> matches =
-      bookmark_model_->GetNicknameMatching(input.text(), kMaxBookmarkMatches);
+  std::vector<TitledUrlMatch> matches = bookmark_model_->GetNicknameMatching(
+      adjusted_input.text(), kMaxBookmarkMatches);
 
   if (matches.empty())
     return;  // There were no matches.
@@ -94,7 +95,7 @@ void BookmarkNicknameProvider::DoAutocomplete(const AutocompleteInput& input) {
     // Score the TitledUrlMatch. If its score is greater than 0 then the
     // AutocompleteMatch is created and added to matches_.
     auto [relevance, bookmark_count] =
-        CalculateBookmarkMatchRelevance(bookmark_match, input);
+        CalculateBookmarkMatchRelevance(bookmark_match, adjusted_input);
     if (relevance == 0) {
       continue;
     }
@@ -110,11 +111,16 @@ void BookmarkNicknameProvider::DoAutocomplete(const AutocompleteInput& input) {
     if (matches_.size() < max_results || it != matches_.end()) {
       AutocompleteMatch match = NicknameMatchToAutocompleteMatch(
           bookmark_match, AutocompleteMatchType::BOOKMARK_NICKNAME, relevance,
-          bookmark_count, this, client_->GetSchemeClassifier(), input);
+          bookmark_count, this, client_->GetSchemeClassifier(), adjusted_input);
 
       if (match.inline_autocompletion.empty() &&
-          input.text().length() != match.nickname.length()) {
+          adjusted_input.text().length() != match.nickname.length()) {
         continue;
+      }
+
+      if (starter_pack_engine) {
+        match.keyword = starter_pack_engine->keyword();
+        match.transition = ui::PAGE_TRANSITION_KEYWORD;
       }
 
       matches_.insert(it, match);

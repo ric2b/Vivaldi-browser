@@ -91,7 +91,7 @@ void DumpDXCCompiledShader(Device* device,
 
     std::string logMessage = dumpedMsg.str();
     if (!logMessage.empty()) {
-        device->EmitLog(WGPULoggingType_Info, logMessage.c_str());
+        device->EmitLog(wgpu::LoggingType::Info, logMessage.c_str());
     }
 }
 }  // namespace
@@ -101,10 +101,9 @@ ResultOrError<Ref<ShaderModule>> ShaderModule::Create(
     Device* device,
     const UnpackedPtr<ShaderModuleDescriptor>& descriptor,
     const std::vector<tint::wgsl::Extension>& internalExtensions,
-    ShaderModuleParseResult* parseResult,
-    std::unique_ptr<OwnedCompilationMessages>* compilationMessages) {
+    ShaderModuleParseResult* parseResult) {
     Ref<ShaderModule> module = AcquireRef(new ShaderModule(device, descriptor, internalExtensions));
-    DAWN_TRY(module->Initialize(parseResult, compilationMessages));
+    DAWN_TRY(module->Initialize(parseResult));
     return module;
 }
 
@@ -113,10 +112,8 @@ ShaderModule::ShaderModule(Device* device,
                            std::vector<tint::wgsl::Extension> internalExtensions)
     : ShaderModuleBase(device, descriptor, std::move(internalExtensions)) {}
 
-MaybeError ShaderModule::Initialize(
-    ShaderModuleParseResult* parseResult,
-    std::unique_ptr<OwnedCompilationMessages>* compilationMessages) {
-    return InitializeBase(parseResult, compilationMessages);
+MaybeError ShaderModule::Initialize(ShaderModuleParseResult* parseResult) {
+    return InitializeBase(parseResult);
 }
 
 ResultOrError<d3d::CompiledShader> ShaderModule::Compile(
@@ -131,37 +128,28 @@ ResultOrError<d3d::CompiledShader> ShaderModule::Compile(
     DAWN_ASSERT(!IsError());
 
     const EntryPointMetadata& entryPoint = GetEntryPoint(programmableStage.entryPoint);
-    const bool useTintIR = device->IsToggleEnabled(Toggle::UseTintIR);
 
     d3d::D3DCompilationRequest req = {};
-    req.tracePlatform = UnsafeUnkeyedValue(device->GetPlatform());
+    req.tracePlatform = UnsafeUnserializedValue(device->GetPlatform());
     req.hlsl.shaderModel = ToBackend(device->GetPhysicalDevice())
                                ->GetAppliedShaderModelUnderToggles(device->GetTogglesState());
     req.hlsl.disableSymbolRenaming = device->IsToggleEnabled(Toggle::DisableSymbolRenaming);
     req.hlsl.dumpShaders = device->IsToggleEnabled(Toggle::DumpShaders);
-    req.hlsl.useTintIR = useTintIR;
+    req.hlsl.dumpShadersOnFailure = device->IsToggleEnabled(Toggle::DumpShadersOnFailure);
     req.hlsl.tintOptions.remapped_entry_point_name = device->GetIsolatedEntryPointName();
 
     req.bytecode.hasShaderF16Feature = device->HasFeature(Feature::ShaderF16);
     req.bytecode.compileFlags = compileFlags;
 
     if (device->IsToggleEnabled(Toggle::UseDXC)) {
-        // If UseDXC toggle are not forced to be disable, DXC should have been validated to be
-        // available.
-        DAWN_ASSERT(ToBackend(device->GetPhysicalDevice())->GetBackend()->IsDXCAvailable());
-        // We can get the DXC version information since IsDXCAvailable() is true.
-        d3d12::DxcVersionInfo dxcVersionInfo =
-            ToBackend(device->GetPhysicalDevice())->GetBackend()->GetDxcVersion();
-
         req.bytecode.compiler = d3d::Compiler::DXC;
-        req.bytecode.dxcLibrary = device->GetDxcLibrary().Get();
-        req.bytecode.dxcCompiler = device->GetDxcCompiler().Get();
-        req.bytecode.compilerVersion = dxcVersionInfo.DxcCompilerVersion;
+        req.bytecode.dxcLibrary = UnsafeUnserializedValue(device->GetDxcLibrary().Get());
+        req.bytecode.dxcCompiler = UnsafeUnserializedValue(device->GetDxcCompiler().Get());
         req.bytecode.dxcShaderProfile = device->GetDxcShaderProfiles()[stage];
     } else {
         req.bytecode.compiler = d3d::Compiler::FXC;
-        req.bytecode.d3dCompile = std::move(pD3DCompile{device->GetFunctions()->d3dCompile});
-        req.bytecode.compilerVersion = D3D_COMPILER_VERSION;
+        req.bytecode.d3dCompile =
+            UnsafeUnserializedValue(pD3DCompile{device->GetFunctions()->d3dCompile});
         switch (stage) {
             case SingleShaderStage::Vertex:
                 req.bytecode.fxcShaderProfile = "vs_5_1";
@@ -322,13 +310,9 @@ ResultOrError<d3d::CompiledShader> ShaderModule::Compile(
     }
 
     req.hlsl.shaderModuleHash = GetHash();
-    req.hlsl.inputProgram = UseTintProgram();
+    req.hlsl.inputProgram = UnsafeUnserializedValue(UseTintProgram());
     req.hlsl.entryPointName = programmableStage.entryPoint.c_str();
     req.hlsl.stage = stage;
-    if (!useTintIR) {
-        req.hlsl.firstIndexOffsetRegisterSpace = layout->GetFirstIndexOffsetRegisterSpace();
-        req.hlsl.firstIndexOffsetShaderRegister = layout->GetFirstIndexOffsetShaderRegister();
-    }
     req.hlsl.substituteOverrideConfig = BuildSubstituteOverridesTransformConfig(programmableStage);
     req.hlsl.tintOptions.disable_robustness = !device->IsRobustnessEnabled();
     req.hlsl.tintOptions.disable_workgroup_init =
@@ -343,7 +327,7 @@ ResultOrError<d3d::CompiledShader> ShaderModule::Compile(
         DAWN_ASSERT(stage == SingleShaderStage::Compute);
         req.hlsl.tintOptions.root_constant_binding_point = tint::BindingPoint{
             layout->GetNumWorkgroupsRegisterSpace(), layout->GetNumWorkgroupsShaderRegister()};
-    } else if (useTintIR && stage == SingleShaderStage::Vertex) {
+    } else if (stage == SingleShaderStage::Vertex) {
         // For vertex shaders, use root constant to add FirstIndexOffset, if needed
         req.hlsl.tintOptions.root_constant_binding_point =
             tint::BindingPoint{layout->GetFirstIndexOffsetRegisterSpace(),
@@ -356,6 +340,9 @@ ResultOrError<d3d::CompiledShader> ShaderModule::Compile(
     // them as well. This would allow us to only upload root constants that are actually
     // read by the shader.
     req.hlsl.tintOptions.array_length_from_uniform = std::move(arrayLengthFromUniform);
+
+    req.hlsl.tintOptions.immediate_binding_point = tint::BindingPoint{
+        layout->GetImmediatesRegisterSpace(), layout->GetImmediatesShaderRegister()};
 
     if (stage == SingleShaderStage::Vertex) {
         // Now that only vertex shader can have interstage outputs.
@@ -374,14 +361,16 @@ ResultOrError<d3d::CompiledShader> ShaderModule::Compile(
         device->IsToggleEnabled(Toggle::PolyFillPacked4x8DotProduct);
     req.hlsl.tintOptions.disable_polyfill_integer_div_mod =
         device->IsToggleEnabled(Toggle::DisablePolyfillsOnIntegerDivisonAndModulo);
+    req.hlsl.tintOptions.scalarize_max_min_clamp =
+        device->IsToggleEnabled(Toggle::ScalarizeMaxMinClamp);
     req.hlsl.tintOptions.polyfill_pack_unpack_4x8 =
         device->IsToggleEnabled(Toggle::D3D12PolyFillPackUnpack4x8);
     req.hlsl.tintOptions.enable_integer_range_analysis =
         device->IsToggleEnabled(Toggle::EnableIntegerRangeAnalysisInRobustness);
 
     req.hlsl.limits = LimitsForCompilationRequest::Create(device->GetLimits().v1);
-    req.hlsl.adapterSupportedLimits =
-        LimitsForCompilationRequest::Create(device->GetAdapter()->GetLimits().v1);
+    req.hlsl.adapterSupportedLimits = UnsafeUnserializedValue(
+        LimitsForCompilationRequest::Create(device->GetAdapter()->GetLimits().v1));
     req.hlsl.maxSubgroupSize = device->GetAdapter()->GetPhysicalDevice()->GetSubgroupMaxSize();
 
     CacheResult<d3d::CompiledShader> compiledShader;

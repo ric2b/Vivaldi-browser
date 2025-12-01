@@ -310,6 +310,8 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest> {
   void RequestPointerLock(content::WebContents* web_contents,
                           bool user_gesture,
                           bool last_unlocked_by_target) override;
+  // Vivaldi.
+  bool CanOverscrollContent() override;
 
   // WebContentsObserver implementation.
   void DidStartNavigation(content::NavigationHandle* navigation_handle) final;

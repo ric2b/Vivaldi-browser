@@ -5,12 +5,12 @@
 #import "base/check.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/strings/utf_string_conversions.h"
-#import "components/ad_blocker/adblock_known_sources_handler.h"
-#import "components/ad_blocker/adblock_rule_manager.h"
-#import "components/ad_blocker/adblock_rule_service.h"
-#import "components/ad_blocker/adblock_types.h"
+#import "components/ad_blocker/public/core/adblock_known_sources_handler.h"
+#import "components/ad_blocker/public/core/adblock_rule_manager.h"
+#import "components/ad_blocker/public/core/adblock_types.h"
+#import "components/ad_blocker/public/ios/adblock_rule_service.h"
 #import "components/url_formatter/url_fixer.h"
-#import "ios/ad_blocker/adblock_rule_service_factory.h"
+#import "ios/chrome/browser/ad_blocker/adblock_rule_service_factory.h"
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/ui/ad_tracker_blocker/manager/vivaldi_atb_manager_bridge.h"
 #import "ios/ui/ad_tracker_blocker/manager/vivaldi_atb_manager_helper.h"
@@ -361,8 +361,8 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
 
 - (BOOL)isApplyingExceptionRules {
   if (_ruleService && _ruleService->IsLoaded()) {
-    return _ruleService->IsApplyingIosRules(RuleGroup::kTrackingRules) ||
-        _ruleService->IsApplyingIosRules(RuleGroup::kAdBlockingRules);
+    return _ruleService->IsApplyingRules(RuleGroup::kTrackingRules) ||
+        _ruleService->IsApplyingRules(RuleGroup::kAdBlockingRules);
   }
   return NO;
 }

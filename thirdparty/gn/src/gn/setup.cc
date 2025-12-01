@@ -1205,7 +1205,8 @@ bool Setup::FillOtherConfig(const base::CommandLine& cmdline, Err* err) {
     if (!async_non_linkable_deps->VerifyTypeIs(Value::BOOLEAN, err)) {
       return false;
     }
-    build_settings_.set_async_non_linkable_deps(async_non_linkable_deps->boolean_value());
+    build_settings_.set_async_non_linkable_deps(
+        async_non_linkable_deps->boolean_value());
   }
 
   return true;

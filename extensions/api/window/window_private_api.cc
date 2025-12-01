@@ -19,6 +19,7 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_list_observer.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_features.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "chrome/browser/ui/window_sizer/window_sizer.h"
 #include "components/sessions/content/session_tab_helper.h"
@@ -428,9 +429,11 @@ ExtensionFunction::ResponseAction WindowPrivateSetStateFunction::Run() {
   switch (show_state) {
     case ui::mojom::WindowShowState::kMinimized:
       was_fullscreen = browser->window()->IsFullscreen();
-      browser->extension_window_controller()->window()->Minimize();
+      extensions::BrowserExtensionWindowController::From(browser)
+          ->window()
+          ->Minimize();
       if (was_fullscreen) {
-        browser->extension_window_controller()->SetFullscreenMode(
+        extensions::BrowserExtensionWindowController::From(browser)->SetFullscreenMode(
             false, extension()->url());
       }
       break;
@@ -439,29 +442,37 @@ ExtensionFunction::ResponseAction WindowPrivateSetStateFunction::Run() {
 #if BUILDFLAG(IS_MAC)
       // NOTE(bjorgvin@vivaldi.com): VB-82933 SetFullscreenMode has to be after
       // Maximize on macOS.
-      browser->extension_window_controller()->window()->Maximize();
+      extensions::BrowserExtensionWindowController::From(browser)
+          ->window()
+          ->Maximize();
       if (was_fullscreen) {
-        browser->extension_window_controller()->SetFullscreenMode(
+        extensions::BrowserExtensionWindowController::From(browser)
+            ->SetFullscreenMode(
             false, extension()->url());
       }
 #else
       // NOTE(bjorgvin@vivaldi.com): VB-83626 SetFullscreenMode has to be before
       // Maximize on Linux to prevent triggering of extra onStateChanged events.
       if (was_fullscreen) {
-        browser->extension_window_controller()->SetFullscreenMode(
+        extensions::BrowserExtensionWindowController::From(browser)
+            ->SetFullscreenMode(
             false, extension()->url());
       }
-      browser->extension_window_controller()->window()->Maximize();
+      extensions::BrowserExtensionWindowController::From(browser)
+          ->window()
+          ->Maximize();
 #endif
       break;
     case ui::mojom::WindowShowState::kFullscreen:
-      browser->extension_window_controller()->SetFullscreenMode(
+      extensions::BrowserExtensionWindowController::From(browser)
+          ->SetFullscreenMode(
           true, extension()->url());
       break;
     case ui::mojom::WindowShowState::kNormal:
       was_fullscreen = browser->window()->IsFullscreen();
       if (was_fullscreen) {
-        browser->extension_window_controller()->SetFullscreenMode(
+        extensions::BrowserExtensionWindowController::From(browser)
+            ->SetFullscreenMode(
             false, extension()->url());
       } else {
         browser->window()->Restore();

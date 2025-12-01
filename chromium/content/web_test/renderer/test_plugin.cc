@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/342213636): Remove this and spanify to fix the errors.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "content/web_test/renderer/test_plugin.h"
 
 #include <stddef.h>
@@ -15,6 +10,8 @@
 #include <utility>
 
 #include "base/check_op.h"
+#include "base/compiler_specific.h"
+#include "base/containers/span.h"
 #include "base/functional/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/unsafe_shared_memory_region.h"
@@ -60,9 +57,9 @@ namespace content {
 
 namespace {
 
-void PremultiplyAlpha(const uint8_t color_in[3],
+void PremultiplyAlpha(base::span<const uint8_t, 3> color_in,
                       float alpha,
-                      float color_out[4]) {
+                      base::span<float, 4> color_out) {
   for (int i = 0; i < 3; ++i)
     color_out[i] = (color_in[i] / 255.0f) * alpha;
 
@@ -133,13 +130,14 @@ blink::WebPluginContainer::TouchEventRequestType ParseTouchEventRequestType(
   return blink::WebPluginContainer::kTouchEventRequestTypeNone;
 }
 
-class ScriptableObject : public gin::Wrappable<ScriptableObject>,
-                         public gin::NamedPropertyInterceptor {
+class ScriptableObject
+    : public gin::DeprecatedWrappableWithNamedPropertyInterceptor<
+          ScriptableObject> {
  public:
-  static gin::WrapperInfo kWrapperInfo;
+  static gin::DeprecatedWrapperInfo kWrapperInfo;
 
   static v8::Local<v8::Object> Create(v8::Isolate* isolate) {
-    ScriptableObject* scriptable_object = new ScriptableObject(isolate);
+    ScriptableObject* scriptable_object = new ScriptableObject();
     return gin::CreateHandle(isolate, scriptable_object)
         .ToV8()
         .As<v8::Object>();
@@ -156,19 +154,20 @@ class ScriptableObject : public gin::Wrappable<ScriptableObject>,
   }
 
  private:
-  explicit ScriptableObject(v8::Isolate* isolate)
-      : gin::NamedPropertyInterceptor(isolate, this) {}
+  explicit ScriptableObject() = default;
 
-  // gin::Wrappable
+  // gin::DeprecatedWrappable
   gin::ObjectTemplateBuilder GetObjectTemplateBuilder(
       v8::Isolate* isolate) override {
-    return gin::Wrappable<ScriptableObject>::GetObjectTemplateBuilder(isolate)
+    return gin::DeprecatedWrappable<ScriptableObject>::GetObjectTemplateBuilder(
+               isolate)
         .AddNamedPropertyInterceptor();
   }
 };
 
 // static
-gin::WrapperInfo ScriptableObject::kWrapperInfo = {gin::kEmbedderNativeGin};
+gin::DeprecatedWrapperInfo ScriptableObject::kWrapperInfo = {
+    gin::kEmbedderNativeGin};
 
 }  // namespace
 
@@ -307,6 +306,7 @@ void TestPlugin::UpdateGeometry(const gfx::Rect& window_rect,
     // display compositor later.
     shared_image_ = sii->CreateSharedImage(
         {viz::SinglePlaneFormat::kRGBA_8888, rect_.size(), gfx::ColorSpace(),
+         kBottomLeft_GrSurfaceOrigin, kPremul_SkAlphaType,
          gpu::SHARED_IMAGE_USAGE_GLES2_WRITE |
              gpu::SHARED_IMAGE_USAGE_DISPLAY_READ,
          "TestLabel"},
@@ -336,6 +336,7 @@ void TestPlugin::UpdateGeometry(const gfx::Rect& window_rect,
     shared_image_ =
         shared_image_interface_->CreateSharedImageForSoftwareCompositor(
             {format, rect_.size(), gfx::ColorSpace(),
+             kBottomLeft_GrSurfaceOrigin, kPremul_SkAlphaType,
              gpu::SHARED_IMAGE_USAGE_CPU_WRITE_ONLY, "TestPluginSharedBitmap"});
     sync_token_ = shared_image_interface_->GenVerifiedSyncToken();
 
@@ -368,27 +369,17 @@ bool TestPlugin::PrepareTransferableResource(
     viz::ReleaseCallback* release_callback) {
   if (!content_changed_)
     return false;
-  gfx::Size size(rect_.size());
 
-  if (shared_image_ && !gl_) {
-    *resource = viz::TransferableResource::MakeSoftwareSharedImage(
-        shared_image_, sync_token_, shared_image_->size(),
-        viz::SinglePlaneFormat::kBGRA_8888,
-        viz::TransferableResource::ResourceSource::kCanvas);
-    *release_callback =
-        base::BindOnce(&ReleaseSharedImage, std::move(shared_image_));
-    sync_token_ = gpu::SyncToken();
-  } else if (shared_image_) {
-    *resource = viz::TransferableResource::MakeGpu(
-        shared_image_, GL_TEXTURE_2D, sync_token_, size,
-        viz::SinglePlaneFormat::kRGBA_8888, false /* is_overlay_candidate */);
+  if (shared_image_) {
+    *resource = viz::TransferableResource::Make(
+        shared_image_, viz::TransferableResource::ResourceSource::kCanvas,
+        sync_token_);
     // We pass ownership of the shared image to the callback.
     *release_callback = base::BindOnce(&ReleaseSharedImage,
                                        std::exchange(shared_image_, nullptr));
     sync_token_ = gpu::SyncToken();
   }
-  resource->origin = kBottomLeft_GrSurfaceOrigin;
-  resource->size = size;
+
   content_changed_ = false;
   return true;
 }
@@ -412,7 +403,8 @@ TestPlugin::Primitive TestPlugin::ParsePrimitive(
 
 // FIXME: This method should already exist. Use it.
 // For now just parse primary colors.
-void TestPlugin::ParseColor(const blink::WebString& string, uint8_t color[3]) {
+void TestPlugin::ParseColor(const blink::WebString& string,
+                            base::span<uint8_t, 3> color) {
   color[0] = color[1] = color[2] = 0;
   if (string == "black")
     return;
@@ -631,8 +623,10 @@ blink::WebInputEventResult TestPlugin::HandleInputEvent(
   auto* frame_proxy = static_cast<WebFrameTestProxy*>(
       RenderFrame::FromWebFrame(web_local_frame_));
   const char* event_name = blink::WebInputEvent::GetName(event.GetType());
-  if (!strcmp(event_name, "") || !strcmp(event_name, "Undefined"))
+  if (!UNSAFE_TODO(strcmp(event_name, "")) ||
+      !UNSAFE_TODO(strcmp(event_name, "Undefined"))) {
     event_name = "unknown";
+  }
   test_runner_->PrintMessage(
       std::string("Plugin received event: ") + event_name + "\n", *frame_proxy);
   if (print_event_details_)

@@ -64,9 +64,13 @@ void Register(const IRFuzzer& fuzzer) {
 #if TINT_BUILD_WGSL_READER
     wgsl::Register({
         fuzzer.name,
-        [fn = fuzzer.fn](const Program& program, const fuzz::wgsl::Context& context,
-                         Slice<const std::byte> data) {
+        [fn = fuzzer.fn, pre_capabilities = fuzzer.pre_capabilities](
+            const Program& program, const fuzz::wgsl::Context& context,
+            Slice<const std::byte> data) {
             if (program.AST().Enables().Any(tint::wgsl::reader::IsUnsupportedByIR)) {
+                if (context.options.verbose) {
+                    std::cout << "   - Features are not supported by IR.\n";
+                }
                 return;
             }
 
@@ -79,31 +83,24 @@ void Register(const IRFuzzer& fuzzer) {
             auto substituteOverridesResult =
                 tint::core::ir::transform::SubstituteOverrides(ir.Get(), cfg);
             if (substituteOverridesResult != Success) {
+                if (context.options.verbose) {
+                    std::cout << "   - Substitute overrides failed.\n";
+                }
                 return;
             }
 
-            // Workgroup sizes < 1 are checked by Dawn and the Tint binary,
-            // should be skipped by the fuzzer.
-            for (auto func : ir->functions) {
-                if (func->Stage() != tint::core::ir::Function::PipelineStage::kCompute) {
-                    continue;
+            // Validate the IR against the fuzzer's preconditions before running.
+            // We don't consider validation failure here to be an issue, as it only signals that
+            // there is a bug somewhere in the components run above. Those components have their own
+            // IR fuzzers.
+            if (auto val = core::ir::Validate(ir.Get(), pre_capabilities); val != Success) {
+                if (context.options.verbose) {
+                    std::cout
+                        << "   Failed to validate against fuzzer capabilities before running\n";
                 }
-
-                auto wg = func->WorkgroupSize().value();
-                for (auto value : wg) {
-                    auto* cnst = value->As<core::ir::Constant>();
-                    TINT_ASSERT(cnst);
-
-                    auto val = cnst->Value()->ValueAs<int32_t>();
-                    if (val < 1) {
-                        return;
-                    }
-                }
+                return;
             }
 
-            if (auto val = core::ir::Validate(ir.Get()); val != Success) {
-                TINT_ICE() << val.Failure();
-            }
             // Copy relevant options from wgsl::Context to ir::Context
             fuzz::ir::Context ir_context;
             ir_context.options.filter = context.options.filter;

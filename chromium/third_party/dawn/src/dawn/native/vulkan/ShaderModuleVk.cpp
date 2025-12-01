@@ -88,10 +88,9 @@ ResultOrError<Ref<ShaderModule>> ShaderModule::Create(
     Device* device,
     const UnpackedPtr<ShaderModuleDescriptor>& descriptor,
     const std::vector<tint::wgsl::Extension>& internalExtensions,
-    ShaderModuleParseResult* parseResult,
-    std::unique_ptr<OwnedCompilationMessages>* compilationMessages) {
+    ShaderModuleParseResult* parseResult) {
     Ref<ShaderModule> module = AcquireRef(new ShaderModule(device, descriptor, internalExtensions));
-    DAWN_TRY(module->Initialize(parseResult, compilationMessages));
+    DAWN_TRY(module->Initialize(parseResult));
     return module;
 }
 
@@ -100,10 +99,8 @@ ShaderModule::ShaderModule(Device* device,
                            std::vector<tint::wgsl::Extension> internalExtensions)
     : ShaderModuleBase(device, descriptor, std::move(internalExtensions)) {}
 
-MaybeError ShaderModule::Initialize(
-    ShaderModuleParseResult* parseResult,
-    std::unique_ptr<OwnedCompilationMessages>* compilationMessages) {
-    return InitializeBase(parseResult, compilationMessages);
+MaybeError ShaderModule::Initialize(ShaderModuleParseResult* parseResult) {
+    return InitializeBase(parseResult);
 }
 
 void ShaderModule::DestroyImpl() {
@@ -116,18 +113,18 @@ ShaderModule::~ShaderModule() = default;
 
 using SubstituteOverrideConfig = std::unordered_map<tint::OverrideId, double>;
 
-#define SPIRV_COMPILATION_REQUEST_MEMBERS(X)                                              \
-    X(SingleShaderStage, stage)                                                           \
-    X(ShaderModuleBase::ShaderModuleHash, shaderModuleHash)                               \
-    X(CacheKey::UnsafeUnkeyedValue<ShaderModuleBase::ScopedUseTintProgram>, inputProgram) \
-    X(SubstituteOverrideConfig, substituteOverrideConfig)                                 \
-    X(LimitsForCompilationRequest, limits)                                                \
-    X(CacheKey::UnsafeUnkeyedValue<LimitsForCompilationRequest>, adapterSupportedLimits)  \
-    X(uint32_t, maxSubgroupSize)                                                          \
-    X(std::string_view, entryPointName)                                                   \
-    X(bool, usesSubgroupMatrix)                                                           \
-    X(tint::spirv::writer::Options, tintOptions)                                          \
-    X(CacheKey::UnsafeUnkeyedValue<dawn::platform::Platform*>, platform)
+#define SPIRV_COMPILATION_REQUEST_MEMBERS(X)                                         \
+    X(SingleShaderStage, stage)                                                      \
+    X(ShaderModuleBase::ShaderModuleHash, shaderModuleHash)                          \
+    X(UnsafeUnserializedValue<ShaderModuleBase::ScopedUseTintProgram>, inputProgram) \
+    X(SubstituteOverrideConfig, substituteOverrideConfig)                            \
+    X(LimitsForCompilationRequest, limits)                                           \
+    X(UnsafeUnserializedValue<LimitsForCompilationRequest>, adapterSupportedLimits)  \
+    X(uint32_t, maxSubgroupSize)                                                     \
+    X(std::string_view, entryPointName)                                              \
+    X(bool, usesSubgroupMatrix)                                                      \
+    X(tint::spirv::writer::Options, tintOptions)                                     \
+    X(UnsafeUnserializedValue<dawn::platform::Platform*>, platform)
 
 DAWN_MAKE_CACHE_REQUEST(SpirvCompilationRequest, SPIRV_COMPILATION_REQUEST_MEMBERS);
 #undef SPIRV_COMPILATION_REQUEST_MEMBERS
@@ -244,9 +241,9 @@ ResultOrError<ShaderModule::ModuleAndSpirv> ShaderModule::GetHandleAndSpirv(
     SpirvCompilationRequest req = {};
     req.stage = stage;
     req.shaderModuleHash = GetHash();
-    req.inputProgram = UseTintProgram();
+    req.inputProgram = UnsafeUnserializedValue(UseTintProgram());
     req.entryPointName = programmableStage.entryPoint;
-    req.platform = UnsafeUnkeyedValue(GetDevice()->GetPlatform());
+    req.platform = UnsafeUnserializedValue(GetDevice()->GetPlatform());
     req.substituteOverrideConfig = BuildSubstituteOverridesTransformConfig(programmableStage);
     req.usesSubgroupMatrix = programmableStage.metadata->usesSubgroupMatrix;
 
@@ -282,10 +279,15 @@ ResultOrError<ShaderModule::ModuleAndSpirv> ShaderModule::GetHandleAndSpirv(
         GetDevice()->IsToggleEnabled(Toggle::PolyfillPackUnpack4x8Norm);
     req.tintOptions.disable_polyfill_integer_div_mod =
         GetDevice()->IsToggleEnabled(Toggle::DisablePolyfillsOnIntegerDivisonAndModulo);
+    req.tintOptions.scalarize_max_min_clamp =
+        GetDevice()->IsToggleEnabled(Toggle::ScalarizeMaxMinClamp);
+    req.tintOptions.subgroup_shuffle_clamped =
+        GetDevice()->IsToggleEnabled(Toggle::SubgroupShuffleClamped);
     req.tintOptions.use_vulkan_memory_model =
         GetDevice()->IsToggleEnabled(Toggle::UseVulkanMemoryModel);
-    req.tintOptions.scalarize_clamp_builtin =
-        GetDevice()->IsToggleEnabled(Toggle::VulkanScalarizeClampBuiltin);
+    req.tintOptions.spirv_version = GetDevice()->IsToggleEnabled(Toggle::UseSpirv14)
+                                        ? tint::spirv::writer::SpvVersion::kSpv14
+                                        : tint::spirv::writer::SpvVersion::kSpv13;
     req.tintOptions.dva_transform_handle =
         GetDevice()->IsToggleEnabled(Toggle::VulkanDirectVariableAccessTransformHandle);
     // Pass matrices to user functions by pointer on Qualcomm devices to workaround a known bug.
@@ -306,8 +308,8 @@ ResultOrError<ShaderModule::ModuleAndSpirv> ShaderModule::GetHandleAndSpirv(
         GetDevice()->IsToggleEnabled(Toggle::EnableIntegerRangeAnalysisInRobustness);
 
     req.limits = LimitsForCompilationRequest::Create(GetDevice()->GetLimits().v1);
-    req.adapterSupportedLimits =
-        LimitsForCompilationRequest::Create(GetDevice()->GetAdapter()->GetLimits().v1);
+    req.adapterSupportedLimits = UnsafeUnserializedValue(
+        LimitsForCompilationRequest::Create(GetDevice()->GetAdapter()->GetLimits().v1));
     req.maxSubgroupSize = GetDevice()->GetAdapter()->GetPhysicalDevice()->GetSubgroupMaxSize();
 
     CacheResult<CompiledSpirv> compilation;
@@ -385,8 +387,13 @@ ResultOrError<ShaderModule::ModuleAndSpirv> ShaderModule::GetHandleAndSpirv(
         "Vulkan.CompileShaderToSPIRV");
 
 #ifdef DAWN_ENABLE_SPIRV_VALIDATION
-    DAWN_TRY(ValidateSpirv(GetDevice(), compilation->spirv.data(), compilation->spirv.size(),
-                           GetDevice()->IsToggleEnabled(Toggle::DumpShaders)));
+    // Validate and if required dump the compiled SPIR-V code.
+    const bool spv14 = GetDevice()->IsToggleEnabled(Toggle::UseSpirv14);
+    DAWN_TRY(
+        ValidateSpirv(GetDevice(), compilation->spirv.data(), compilation->spirv.size(), spv14));
+    if (GetDevice()->IsToggleEnabled(Toggle::DumpShaders)) {
+        DumpSpirv(GetDevice(), compilation->spirv.data(), compilation->spirv.size());
+    }
 #endif
 
     VkShaderModuleCreateInfo createInfo;

@@ -3241,8 +3241,9 @@ static void rc_scene_detection_onepass_rt(AV1_COMP *cpi,
   // non-zero sad exists along bottom border even though source is static.
   const int border =
       rc->prev_frame_is_dropped || cpi->svc.number_temporal_layers > 1;
-  // Store blkwise SAD for later use
-  if (width == cm->render_width && height == cm->render_height) {
+  // Store blkwise SAD for later use. Disable for spatial layers for now.
+  if (width == cm->render_width && height == cm->render_height &&
+      cpi->svc.number_spatial_layers == 1) {
     if (cpi->src_sad_blk_64x64 == NULL) {
       CHECK_MEM_ERROR(cm, cpi->src_sad_blk_64x64,
                       (uint64_t *)aom_calloc(sb_cols * sb_rows,
@@ -3336,8 +3337,13 @@ static void rc_scene_detection_onepass_rt(AV1_COMP *cpi,
       // to determine if motion is scroll. Only test 3 points (pts) for now.
       // TODO(marpan): Only allow for 8 bit-depth for now.
       if (cm->seq_params->bit_depth == 8) {
-        const int sw_row = (cpi->rc.frame_source_sad > 20000) ? 512 : 192;
-        const int sw_col = (cpi->rc.frame_source_sad > 20000) ? 512 : 160;
+        int sw_row = (cpi->rc.frame_source_sad > 20000) ? 512 : 192;
+        int sw_col = (cpi->rc.frame_source_sad > 20000) ? 512 : 160;
+        if (cm->width * cm->height >= 3840 * 2160 &&
+            cpi->svc.number_temporal_layers > 1) {
+          sw_row = sw_row << 1;
+          sw_col = sw_col << 1;
+        }
         const int num_pts =
             unscaled_src->y_width * unscaled_src->y_height >= 1920 * 1080 ? 3
                                                                           : 1;
@@ -3568,17 +3574,19 @@ static void resize_reset_rc(AV1_COMP *cpi, int resize_width, int resize_height,
 
 /*!\brief Check for resize based on Q, for 1 pass real-time mode.
  *
- * Check if we should resize, based on average QP from past x frames.
+ * Check if we should resize, based on average QP and content/motion
+ * complexity from past x frames.
  * Only allow for resize at most 1/2 scale down for now, Scaling factor
  * for each step may be 3/4 or 1/2.
  *
  * \ingroup rate_control
- * \param[in]       cpi          Top level encoder structure
+ * \param[in]       cpi            Top level encoder structure
+ * \param[in]       one_half_only  Only allow 1/2 scaling factor
  *
  * \remark Return resized width/height in \c cpi->resize_pending_params,
  * and update some resize counters in \c rc.
  */
-static void dynamic_resize_one_pass_cbr(AV1_COMP *cpi) {
+static void dynamic_resize_one_pass_cbr(AV1_COMP *cpi, int one_half_only) {
   const AV1_COMMON *const cm = &cpi->common;
   RATE_CONTROL *const rc = &cpi->rc;
   PRIMARY_RATE_CONTROL *const p_rc = &cpi->ppi->p_rc;
@@ -3600,9 +3608,11 @@ static void dynamic_resize_one_pass_cbr(AV1_COMP *cpi) {
   if ((cm->width * cm->height) < min_width * min_height) down_size_on = 0;
 
   // Resize based on average buffer underflow and QP over some window.
-  // Ignore samples close to key frame, since QP is usually high after key.
-  if (cpi->rc.frames_since_key > cpi->framerate) {
-    const int window = AOMMIN(30, (int)(2 * cpi->framerate));
+  // Ignore samples close to key frame and scene change since QP is usually high
+  // after key and scene change.
+  // Need to incorpoate content/motion from scene detection analysis.
+  if (rc->frames_since_key > cpi->framerate && !rc->high_source_sad) {
+    const int window = AOMMAX(60, (int)(3 * cpi->framerate));
     rc->resize_avg_qp += p_rc->last_q[INTER_FRAME];
     if (cpi->ppi->p_rc.buffer_level <
         (int)(30 * p_rc->optimal_buffer_level / 100))
@@ -3622,13 +3632,14 @@ static void dynamic_resize_one_pass_cbr(AV1_COMP *cpi) {
           resize_action = DOWN_ONEHALF;
           rc->resize_state = ONE_HALF;
         } else if (rc->resize_state == ORIG) {
-          resize_action = DOWN_THREEFOUR;
-          rc->resize_state = THREE_QUARTER;
+          resize_action = one_half_only ? DOWN_ONEHALF : DOWN_THREEFOUR;
+          rc->resize_state = one_half_only ? ONE_HALF : THREE_QUARTER;
         }
       } else if (rc->resize_state != ORIG &&
                  avg_qp < avg_qp_thr1 * cpi->rc.worst_quality / 100) {
         if (rc->resize_state == THREE_QUARTER ||
-            avg_qp < avg_qp_thr2 * cpi->rc.worst_quality / 100) {
+            avg_qp < avg_qp_thr2 * cpi->rc.worst_quality / 100 ||
+            one_half_only) {
           resize_action = UP_ORIG;
           rc->resize_state = ORIG;
         } else if (rc->resize_state == ONE_HALF) {
@@ -3689,8 +3700,8 @@ static inline int set_key_frame(AV1_COMP *cpi, unsigned int frame_flags) {
 
 // Set to true if this frame is a recovery frame, for 1 layer RPS,
 // and whether we should apply some boost (QP, adjust speed features, etc).
-// Recovery frame here means frame whose closest reference suddenly
-// switched from previous frame to one much further away.
+// Recovery frame here means frame whose closest reference is x frames away,
+// where x = 4.
 // TODO(marpan): Consider adding on/off flag to SVC_REF_FRAME_CONFIG to
 // allow more control for applications.
 static bool set_flag_rps_bias_recovery_frame(const AV1_COMP *const cpi) {
@@ -3700,8 +3711,8 @@ static bool set_flag_rps_bias_recovery_frame(const AV1_COMP *const cpi) {
       cpi->ppi->rtc_ref.reference_was_previous_frame) {
     int min_dist = av1_svc_get_min_ref_dist(cpi);
     // Only consider boost for this frame if its closest reference is further
-    // than x frames away, using x = 4 for now.
-    if (min_dist != INT_MAX && min_dist > 4) return true;
+    // than or equal to x frames away, using x = 4 for now.
+    if (min_dist != INT_MAX && min_dist >= 4) return true;
   }
   return false;
 }
@@ -3805,7 +3816,7 @@ void av1_get_one_pass_rt_params(AV1_COMP *cpi, FRAME_TYPE *const frame_type,
   // For temporal layers only check on base temporal layer.
   if (cpi->oxcf.resize_cfg.resize_mode == RESIZE_DYNAMIC) {
     if (svc->number_spatial_layers == 1 && svc->temporal_layer_id == 0)
-      dynamic_resize_one_pass_cbr(cpi);
+      dynamic_resize_one_pass_cbr(cpi, /*one_half_only=*/1);
     if (rc->resize_state == THREE_QUARTER) {
       resize_pending_params->width = (3 + cpi->oxcf.frm_dim_cfg.width * 3) >> 2;
       resize_pending_params->height =

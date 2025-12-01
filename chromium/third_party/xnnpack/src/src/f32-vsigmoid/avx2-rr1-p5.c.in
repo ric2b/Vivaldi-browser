@@ -9,10 +9,13 @@ $assert DIV_ALGO in ["div", "nr1fma", "nr2fma"]
 $ABC = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 $SIMD_TILE = BATCH_TILE // 8
 #include <assert.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #include <immintrin.h>
 
 #include "src/xnnpack/common.h"
+#include "src/xnnpack/microparams.h"
 #include "src/xnnpack/vunary.h"
 
 
@@ -20,7 +23,7 @@ void xnn_f32_vsigmoid_ukernel__avx2_rr1_p5_${DIV_ALGO}_u${BATCH_TILE}(
     size_t batch,
     const float* input,
     float* output,
-    const struct xnn_f32_default_params params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f32_default_params* restrict params)
 {
   assert(batch != 0);
   assert(batch % sizeof(float) == 0);

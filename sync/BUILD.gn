@@ -12,7 +12,7 @@ source_set("invalidations") {
   ]
 
   deps = [
-    "//components/invalidation/impl",
+    "//base",
     "//vivaldi/vivaldi_account"
   ]
 

@@ -3,13 +3,16 @@
 #ifndef RENDERER_BLINK_VIVALDI_SPATIAL_NAVIGATION_CONTROLLER_H_
 #define RENDERER_BLINK_VIVALDI_SPATIAL_NAVIGATION_CONTROLLER_H_
 
-#include "content/public/renderer/render_frame_observer.h"
 #include "renderer/blink/vivaldi_spatnav_quad.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/geometry/dom_rect.h"
 
 #include "renderer/mojo/vivaldi_frame_service.mojom.h"
+
+// !!! NOTE !!! MUST be included after vivaldi_spatnav_quad.h due to it
+// including blink files that needs to be loaded with INSIDE_BLINK
+#include "content/public/renderer/render_frame_observer.h"
 
 namespace content {
 class RenderFrame;

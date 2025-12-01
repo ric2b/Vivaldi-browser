@@ -41,7 +41,7 @@ const UIStrings = {
   request: 'Request',
   /**
    *@description Title of a cell content in protocol monitor. A Network response refers to the act of acknowledging a
-  network request. Should not be confused with answer.
+   * network request. Should not be confused with answer.
    */
   response: 'Response',
   /**
@@ -204,7 +204,7 @@ export const DEFAULT_VIEW: View = (input, output, target) => {
                              sidebar-initial-size="400"
                              sidebar-visibility=${input.sidebarVisible ? 'visible' : 'hidden'}
                              @change=${input.onSplitChange}>
-          <div slot="main" class="vbox">
+          <div slot="main" class="vbox protocol-monitor-main">
             <devtools-toolbar class="protocol-monitor-toolbar"
                                jslog=${VisualLogging.toolbar('top')}>
                <devtools-button title=${i18nString(UIStrings.record)}
@@ -237,7 +237,8 @@ export const DEFAULT_VIEW: View = (input, output, target) => {
                 </datalist>
               </devtools-toolbar-input>
             </devtools-toolbar>
-            <devtools-split-view direction="column" sidebar-position="second" name="protocol-monitor-panel-split" sidebar-initial-size="250">
+            <devtools-split-view direction="column" sidebar-position="second"
+                                 name="protocol-monitor-panel-split" sidebar-initial-size="250">
               <devtools-data-grid
                   striped
                   slot="main"
@@ -246,14 +247,30 @@ export const DEFAULT_VIEW: View = (input, output, target) => {
                   .filters=${input.parseFilter(input.filter)}>
                 <table>
                     <tr>
-                      <th id="type" sortable style="text-align: center" hideable weight="1">${i18nString(UIStrings.type)}</th>
-                      <th id="method" weight="5">${i18nString(UIStrings.method)}</th>
-                      <th id="request" hideable weight="5">${i18nString(UIStrings.request)}</th>
-                      <th id="response" hideable weight="5">${i18nString(UIStrings.response)}</th>
-                      <th id="elapsed-time" sortable hideable weight="2">${i18nString(UIStrings.elapsedTime)}</th>
-                      <th id="timestamp" sortable hideable weight="5">${i18nString(UIStrings.timestamp)}</th>
-                      <th id="target" sortable hideable weight="5">${i18nString(UIStrings.target)}</th>
-                      <th id="session" sortable hideable weight="5">${i18nString(UIStrings.session)}</th>
+                      <th id="type" sortable style="text-align: center" hideable weight="1">
+                        ${i18nString(UIStrings.type)}
+                      </th>
+                      <th id="method" weight="5">
+                        ${i18nString(UIStrings.method)}
+                      </th>
+                      <th id="request" hideable weight="5">
+                        ${i18nString(UIStrings.request)}
+                      </th>
+                      <th id="response" hideable weight="5">
+                        ${i18nString(UIStrings.response)}
+                      </th>
+                      <th id="elapsed-time" sortable hideable weight="2">
+                        ${i18nString(UIStrings.elapsedTime)}
+                      </th>
+                      <th id="timestamp" sortable hideable weight="5">
+                        ${i18nString(UIStrings.timestamp)}
+                      </th>
+                      <th id="target" sortable hideable weight="5">
+                        ${i18nString(UIStrings.target)}
+                      </th>
+                      <th id="session" sortable hideable weight="5">
+                        ${i18nString(UIStrings.session)}
+                      </th>
                     </tr>
                     ${
             input.messages.map(
@@ -337,8 +354,7 @@ export const DEFAULT_VIEW: View = (input, output, target) => {
               ${widgetRef(JSONEditor, e => {output.editorWidget = e;})}>
           </devtools-widget>
         </devtools-split-view>`,
-        target,
-        {host: input}
+        target
     );
   // clang-format on
 };
@@ -651,7 +667,7 @@ export class InfoWidget extends UI.Widget.VBox {
   type: 'sent'|'received'|undefined;
   selectedTab: 'request'|'response'|undefined;
   constructor(element: HTMLElement) {
-    super(undefined, undefined, element);
+    super(element);
     this.tabbedPane = new UI.TabbedPane.TabbedPane();
     this.tabbedPane.appendTab('request', i18nString(UIStrings.request), new UI.Widget.Widget());
     this.tabbedPane.appendTab('response', i18nString(UIStrings.response), new UI.Widget.Widget());

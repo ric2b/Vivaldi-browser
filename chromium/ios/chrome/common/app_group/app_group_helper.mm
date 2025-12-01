@@ -42,7 +42,7 @@
 
   // On a device, the entitlements should always provide an application group to
   // the application. This is not the case on simulator.
-  DCHECK(TARGET_IPHONE_SIMULATOR);
+  DCHECK(TARGET_OS_SIMULATOR);
   return [NSUserDefaults standardUserDefaults];
 }
 

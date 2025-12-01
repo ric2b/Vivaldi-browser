@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 /// Consumer protocol for the TabStrip.
+@MainActor
 @objc protocol TabStripConsumer {
 
   /// Tells the consumer to replace its current set of items with `items`, item data with `itemData`
@@ -68,4 +69,18 @@
   /// Expands `group` so as to make its children visible.
   func expandGroup(_ group: TabGroupItem)
 
+  // Vivaldi
+  /// Tells the consumer that prefs for showing close button for background
+  /// tabs is changed.
+  func setCloseButtonVisible(_ visible: Bool)
+
+  /// Tells the consumer that tab enabled/disabled state is changed.
+  func setTabBarEnabled(_ enabled: Bool)
+
+  /// Tells the consumer that dynamic accent color settings is enabled/disabled.
+  func setDynamicAccentColorEnabled(_ enabled: Bool)
+
+  /// Updates the consumer with user configured custom accent color.
+  func setCustomAccentColor(_ accentColor: String?)
+  // End Vivaldi
 }

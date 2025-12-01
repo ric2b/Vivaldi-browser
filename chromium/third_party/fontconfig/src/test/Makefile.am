@@ -21,7 +21,6 @@
 #  TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 #  PERFORMANCE OF THIS SOFTWARE.
 
-check_SCRIPTS=run-test.sh
 TEST_EXTENSIONS = \
 	.sh \
 	$(NULL)
@@ -38,7 +37,7 @@ SH_LOG_COMPILER = sh
 if OS_WIN32
 LOG_COMPILER = ${srcdir}/wrapper-script.sh
 endif
-TESTS=run-test.sh
+TESTS=
 
 TESTDATA =			\
 	4x6.pcf			\
@@ -108,7 +107,6 @@ check_PROGRAMS += test-conf
 test_conf_CFLAGS = $(JSONC_CFLAGS)
 test_conf_LDADD = $(top_builddir)/src/libfontconfig.la $(JSONC_LIBS)
 endif
-TESTS += run-test-conf.sh
 
 check_PROGRAMS += test-bz106618
 test_bz106618_LDADD = $(top_builddir)/src/libfontconfig.la
@@ -180,7 +178,7 @@ TESTS += test-family-matching
 check_PROGRAMS += test-filter
 test_filter_LDADD = $(top_builddir)/src/libfontconfig.la
 
-EXTRA_DIST=run-test.sh run-test-conf.sh wrapper-script.sh $(TESTDATA) out.expected-long-family-names out.expected-no-long-family-names
+EXTRA_DIST=wrapper-script.sh $(TESTDATA) out.expected-long-family-names out.expected-no-long-family-names
 
 CLEANFILES =		\
 	fonts.conf	\

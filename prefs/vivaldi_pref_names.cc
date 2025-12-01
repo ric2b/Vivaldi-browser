@@ -9,10 +9,28 @@ namespace vivaldiprefs {
 const char kAutoUpdateEnabled[] = "vivaldi.autoupdate_enabled";
 const char kVivaldiAccountPendingRegistration[] =
     "vivaldi.vivaldi_account.pending_registration";
-const char kVivaldiExperiments[] = "vivaldi.experiments";
 const char kVivaldiLastTopSitesVacuumDate[] =
     "vivaldi.last_topsites_vacuum_date";
 const char kVivaldiPIPPlacement[] = "vivaldi.pip_placement";
+
+// Depracated profile prefs go here.
+// DEPRECATED 06/2025
+const char kVivaldiExperiments[] = "vivaldi.experiments";
+
+// DEPRECATED 08/2025
+const char kSyncedDefaultPrivateSearchProviderGUID[] =
+    "default_search_provider.synced_guid_private";
+const char kSyncedDefaultSearchFieldProviderGUID[] =
+    "default_search_provider.synced_guid_search_field";
+const char kSyncedDefaultPrivateSearchFieldProviderGUID[] =
+    "default_search_provider.synced_guid_search_field_private";
+const char kSyncedDefaultSpeedDialsSearchProviderGUID[] =
+    "default_search_provider.synced_guid_speeddials";
+const char kSyncedDefaultSpeedDialsPrivateSearchProviderGUID[] =
+    "default_search_provider.synced_guid_speeddials_private";
+const char kSyncedDefaultImageSearchProviderGUID[] =
+    "default_search_provider.synced_guid_image";
+
 
 // Local state prefs go here
 const char kVivaldiAutoUpdateStandalone[] = "vivaldi.autoupdate.standalone";
@@ -121,6 +139,9 @@ const char kVivaldiHomepageURL[] = "vivaldi.general.homepage.url";
 const char kVivaldiHomepageEnabled[] = "vivaldi.general.homepage.enabled";
 const char kVivaldiBackgroundAudioEnabled[] = "vivaldi.general.backgroundaudio.enabled";
 
+const char kVivaldiTranslateInfobarBannerDisabled[] =
+    "vivaldi.translate.infobar_banner.disabled";
+
 // Apearance
 const char kVivaldiAppearanceMode[] = "vivaldi.appearance.selected.mode";
 const char kVivaldiWebsiteAppearanceStyle[] =
@@ -166,6 +187,16 @@ const char kVivaldiPageZoomLevel[] =
 // Privacy & Security Settings
 const char kVivaldiBlockExternalApps[] =
     "vivaldi.privacy.block_external_apps";
+
+// Reader Mode [iOS]
+const char kVivaldiReaderModeEnabled[] =
+    "vivaldi.content_setting.reader_mode.enabled";
+const char kReaderModeFontSize[] =
+    "vivaldi.content_setting.reader_mode.font_size";
+const char kReaderModeFontFamily[] =
+    "vivaldi.content_setting.reader_mode.font_family";
+const char kReaderModeTheme[] =
+    "vivaldi.content_setting.reader_mode.theme";
 #endif
 
 #if BUILDFLAG(IS_ANDROID)

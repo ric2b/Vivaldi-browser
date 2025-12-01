@@ -9,6 +9,7 @@
 #import "base/check.h"
 #import "base/memory/raw_ptr.h"
 #import "components/signin/public/base/signin_metrics.h"
+#import "components/signin/public/base/signin_switches.h"
 #import "components/signin/public/identity_manager/objc/identity_manager_observer_bridge.h"
 #import "components/strings/grit/components_strings.h"
 #import "components/sync/base/user_selectable_type.h"
@@ -158,6 +159,13 @@ NSString* GetPromoLabelString(
     case signin_metrics::AccessPoint::kManagedProfileAutoSigninIos:
     case signin_metrics::AccessPoint::kNonModalSigninPasswordPromo:
     case signin_metrics::AccessPoint::kNonModalSigninBookmarkPromo:
+    case signin_metrics::AccessPoint::kUserManagerWithPrefilledEmail:
+    case signin_metrics::AccessPoint::kEnterpriseManagementDisclaimerAtStartup:
+    case signin_metrics::AccessPoint::
+        kEnterpriseManagementDisclaimerAfterBrowserFocus:
+    case signin_metrics::AccessPoint::
+        kEnterpriseManagementDisclaimerAfterSignin:
+    case signin_metrics::AccessPoint::kNtpFeaturePromo:
       // Nothing prevents instantiating ConsistencyDefaultAccountViewController
       // with an arbitrary entry point, API-wise. In doubt, no label is a good,
       // generic default that fits all entry points.
@@ -215,6 +223,8 @@ NSString* GetPromoLabelString(
   DCHECK(!_accountManagerService);
   DCHECK(!_syncService);
 }
+
+#pragma mark - Public
 
 - (void)disconnect {
   _identityManager = nullptr;
@@ -337,7 +347,16 @@ NSString* GetPromoLabelString(
 #pragma mark -  IdentityManagerObserver
 
 - (void)onAccountsOnDeviceChanged {
-  [self selectSelectedIdentity];
+  if (base::FeatureList::IsEnabled(switches::kEnableIdentityInAuthError)) {
+    if (_accountManagerService &&
+        !_accountManagerService->IsValidIdentity(self.selectedIdentity)) {
+      // The currently selected identity is not valid anymore. Let’s select the
+      // default identity instead.
+      [self selectSelectedIdentity];
+    }
+  } else {
+    [self selectSelectedIdentity];
+  }
 }
 
 - (void)onExtendedAccountInfoUpdated:(const AccountInfo&)info {

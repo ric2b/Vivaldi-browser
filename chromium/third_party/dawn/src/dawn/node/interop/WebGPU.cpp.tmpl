@@ -48,6 +48,7 @@ See:
 #include <unordered_map>
 
 #include "src/dawn/node/utils/Debug.h"
+#include "src/dawn/node/binding/Errors.h"
 
 namespace wgpu {
 namespace interop {
@@ -63,12 +64,13 @@ static void* kInternalConstructionMarker = nullptr;
 
 }  // namespace
 
+const Constructors* ConstructorsFor(Napi::Env env) {
+  return Wrappers::For(env);
+}
+
 {{ range $ := .Declarations}}
 {{-        if IsDictionary $}}{{template "Dictionary" $}}
-{{-   else if IsInterface  $}}
-{{-     if not (HasAnnotation $ "ManualImplementation")}}
-  {{template "Interface"  $}}
-{{-     end}}
+{{-   else if IsInterface  $}}{{template "Interface"  $}}
 {{-   else if IsEnum       $}}{{template "Enum"       $}}
 {{-   end}}
 {{- end}}
@@ -207,12 +209,33 @@ Wrappers* Wrappers::instance = nullptr;
     }
 
     W{{$.Name}}(const Napi::CallbackInfo& info) : ObjectWrap(info) {
-{{-   if and (IsInterface $) (not (HasConstructor $))}}
+{{-   if IsInterface $}}
+{{-     if HasConstructor $}}
+
+{{-  range $m := $.Members}}
+{{-    if IsInitializer $m}}
+      {
+        {{template "ParameterTupleDecl" $m}}
+        auto res = FromJS(info, args);
+        if (res) {
+          impl = std::make_unique<wgpu::binding::{{$.Name}}>(args);
+        }
+      }
+      // No constructor matched.
+      if (impl == nullptr) {
+        Napi::TypeError::New(info.Env(), "No constructor matched.").ThrowAsJavaScriptException();
+      }
+{{-      end}}
+{{-  end}}
+
+
+{{-     else}}
         // Check if the first argument is our internal Napi::External<void> marker
         // to prevent JavaScript from constructing this non-constructable object.
         if (info.Length() < 1 || !info[0].IsExternal() || info[0].As<Napi::External<void>>().Data() != &kInternalConstructionMarker) {
            Napi::TypeError::New(info.Env(), "Failed to construct '{{$.Name}}': Illegal constructor").ThrowAsJavaScriptException();
          }
+{{-     end}}
 {{-   end}}
     }
 
@@ -249,21 +272,7 @@ Wrappers* Wrappers::instance = nullptr;
 {{-    range $overload_idx, $o := $m.Overloads}}
 {{- $overloaded := gt (len $m.Overloads) 1}}
       { {{if $overloaded}}// Overload {{$overload_idx}}{{end}}
-        std::tuple<
-{{-        range $i, $p := $o.Parameters}}
-{{-          if $i}}, {{end}}
-{{-          if      $p.Init    }}DefaultedParameter<{{template "Type" $p.Type}}>
-{{-          else if $p.Optional}}std::optional<{{template "Type" $p.Type}}>
-{{-          else               }}{{template "Type" $p.Type}}
-{{-          end}}
-{{-        end}}> args;
-
-{{-        range $i, $p := $o.Parameters}}
-{{-          if $p.Init}}
-        std::get<{{$i}} /* {{$p.Name}} */>(args).default_value = {{Eval "Literal" "Value" $p.Init "Type" $p.Type}};
-{{-          end}}
-{{-        end}}
-
+        {{template "ParameterTupleDecl" $o}}
         auto res = FromJS(info, args);
         if (res) {
           {{/* indent */}}INTEROP_LOG(
@@ -308,6 +317,29 @@ Wrappers* Wrappers::instance = nullptr;
   };
 {{end}}
 
+{{- /*
+--------------------------------------------------------------------------------
+-- Emits a tuple "args" for function argument conversion from JS to C++
+--------------------------------------------------------------------------------
+
+*/ -}}
+{{- define "ParameterTupleDecl"}}
+        std::tuple<
+{{-        range $i, $p := $.Parameters}}
+{{-          if $i}}, {{end}}
+{{-          if      $p.Init    }}DefaultedParameter<{{template "Type" $p.Type}}>
+{{-          else if $p.Optional}}std::optional<{{template "Type" $p.Type}}>
+{{-          else               }}{{template "Type" $p.Type}}
+{{-          end}}
+{{-        end}}> args;
+
+{{-        range $i, $p := $.Parameters}}
+{{-          if $p.Init}}
+        std::get<{{$i}} /* {{$p.Name}} */>(args).default_value = {{Eval "Literal" "Value" $p.Init "Type" $p.Type}};
+{{-          end}}
+{{-        end}}
+
+{{- end}}
 
 {{- /*
 --------------------------------------------------------------------------------
@@ -319,7 +351,7 @@ Wrappers* Wrappers::instance = nullptr;
 Result Converter<{{$.Name}}>::FromJS(Napi::Env env, Napi::Value value, {{$.Name}}& out) {
   auto object = value.ToObject();
   Result res;
-{{- template "DictionaryMembersFromJS" $}};
+{{- template "DictionaryMembersFromJS" $}}
   return Success;
 }
 
@@ -359,6 +391,8 @@ std::ostream& operator<<(std::ostream& o, const {{$.Name}}& dict) {
   if (!res) {
     return res.Append("while converting member '{{$m.Name}}'");
   }
+{{-    else}}
+  (void)object;
 {{-    end}}
 {{- end}}
 
@@ -388,6 +422,7 @@ std::ostream& operator<<(std::ostream& o, const {{$.Name}}& dict) {
 {{- define "Interface"}}
 {{$.Name}}::{{$.Name}}() = default;
 
+{{-  if not (HasAnnotation $ "ManualImplementation")}}
 {{$.Name}}* {{$.Name}}::Unwrap(Napi::Object object) {
   auto* wrappers = Wrappers::For(object.Env());
   if (!object.InstanceOf(wrappers->{{$.Name}}_ctor.Value())) {
@@ -416,6 +451,7 @@ Interface<{{$.Name}}> {{$.Name}}::Bind(Napi::Env env, std::unique_ptr<{{$.Name}}
 
   return Interface<{{$.Name}}>(object);
 }
+{{-  end}}
 
 {{$.Name}}::~{{$.Name}}() = default;
 {{ end}}

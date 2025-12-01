@@ -5,13 +5,13 @@
 #include "base/no_destructor.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "browser/ad_blocker/adblock_rule_service_factory.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
+#include "components/ad_blocker/public/content/adblock_rule_service.h"
 #include "components/country_codes/country_codes.h"
 #include "components/prefs/pref_service.h"
-#include "components/request_filter/adblock_filter/adblock_rule_service_content.h"
-#include "components/request_filter/adblock_filter/adblock_rule_service_factory.h"
 #include "components/search_engines/search_engines_manager.h"
 #include "components/search_engines/search_engines_managers_factory.h"
 #include "components/search_engines/search_engines_prompt_manager.h"
@@ -78,6 +78,8 @@ vivaldi::search_engines::TemplateURL TemplateURLToJSType(
   result_turl.image_post_params =
       ToDisplay(template_url->image_url_post_params());
   result_turl.prepopulate_id = template_url->prepopulate_id();
+  result_turl.starter_pack_id = template_url->starter_pack_id();
+  result_turl.is_active = static_cast<int>(template_url->is_active());
 
   return result_turl;
 }
@@ -198,8 +200,13 @@ ExtensionFunction::ResponseAction SearchEnginesGetTemplateUrlsFunction::Run() {
                      });
     for (const TemplateURL* template_url : template_urls) {
       // We abuse is_active to hide "removed" prepopulated searches.
-      if (template_url->is_active() != TemplateURLData::ActiveStatus::kFalse)
+      if (template_url->is_active() != TemplateURLData::ActiveStatus::kFalse &&
+          template_url->starter_pack_id() == 0) {
         AddTemplateURLToResult(template_url, false, result.template_urls);
+      } else if (template_url->starter_pack_id() > 0) {
+        AddTemplateURLToResult(template_url, false,
+                               result.starter_pack_engines);
+      }
     }
   }
 
@@ -630,6 +637,26 @@ SearchEnginesAcknowledgeSwitchPromptFunction::Run() {
       ->GetSearchEnginesPromptManager()
       ->MarkCurrentPromptAsSeen(prefs);
 
+  return RespondNow(NoArguments());
+}
+
+ExtensionFunction::ResponseAction SearchEnginesSetIsActiveFunction::Run() {
+  std::optional<vivaldi::search_engines::SetIsActive::Params> params(
+      vivaldi::search_engines::SetIsActive::Params::Create(args()));
+
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  TemplateURLService* service = TemplateURLServiceFactory::GetForProfile(
+      Profile::FromBrowserContext(browser_context()));
+  if (!service) {
+    return RespondNow(Error(kTemplateServiceNotAvailable));
+  }
+
+  TemplateURL* turl_to_update = service->GetTemplateURLForGUID(params->guid);
+  if (!turl_to_update || turl_to_update->starter_pack_id() == 0) {
+    return RespondNow(NoArguments());
+  }
+  service->SetIsActiveTemplateURL(turl_to_update, params->is_active);
   return RespondNow(NoArguments());
 }
 

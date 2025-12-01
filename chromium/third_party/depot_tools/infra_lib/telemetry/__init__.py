@@ -2,19 +2,15 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 from typing import Optional
-import os
 import socket
 import sys
-import pathlib
 
-from opentelemetry import context as otel_context_api
 from opentelemetry import trace as otel_trace_api
 from opentelemetry.sdk import (
     resources as otel_resources,
     trace as otel_trace_sdk,
 )
 from opentelemetry.sdk.trace import export as otel_export
-from opentelemetry.util import types as otel_types
 
 from . import config
 from . import clearcut_span_exporter
@@ -49,12 +45,11 @@ def get_host_name(fully_qualified: bool = False) -> str:
     try:
         hostname = socket.gethostbyaddr(hostname)[0]
     except (socket.gaierror, socket.herror) as e:
-        logging.warning(
-            'please check your /etc/hosts file; resolving your hostname'
-            ' (%s) failed: %s',
-            hostname,
-            e,
-        )
+        if sys.platform.startswith('linux'):
+            print(
+                'please check your /etc/hosts file; resolving your hostname'
+                f' ({hostname}) failed: {e}',
+                file=sys.stderr)
 
     if fully_qualified:
         return hostname
@@ -71,14 +66,15 @@ def is_google_host() -> bool:
 def initialize(service_name,
                notice=DEFAULT_BANNER,
                cfg_file=config.DEFAULT_CONFIG_FILE):
-    if not is_google_host():
-        return
-
-    # TODO(326277821): Add support for other platforms
-    if not sys.platform == 'linux':
-        return
 
     cfg = config.Config(cfg_file)
+    if cfg.trace_config.disabled():
+        return
+
+    bot_enabled = (cfg.trace_config.has_enabled()
+                   and cfg.trace_config.enabled_reason == 'BOT_USER')
+    if not is_google_host() and not bot_enabled:
+        return
 
     if not cfg.trace_config.has_enabled():
         if cfg.root_config.notice_countdown > -1:
@@ -91,9 +87,6 @@ def initialize(service_name,
             cfg.trace_config.update(enabled=True, reason='AUTO')
 
         cfg.flush()
-
-    if not cfg.trace_config.enabled:
-        return
 
     default_resource = otel_resources.Resource.create({
         otel_resources.SERVICE_NAME:
@@ -120,3 +113,23 @@ def initialize(service_name,
 
 def get_tracer(name: str, version: Optional[str] = None):
     return otel_trace_api.get_tracer(name, version)
+
+
+def opted_in(cfg_file=config.DEFAULT_CONFIG_FILE):
+    """Get if the user is opted-in
+
+    Unlike initialize which continues when not explicitly opted out this will
+    return if the user is opted in, either by user or automatically after the
+    banner display period.
+    """
+    cfg = config.Config(cfg_file)
+    if cfg.trace_config.disabled():
+        return False
+
+    bot_enabled = (cfg.trace_config.has_enabled()
+                   and cfg.trace_config.enabled_reason == 'BOT_USER')
+    if not is_google_host() and not bot_enabled:
+        return False
+
+    cfg = config.Config(cfg_file)
+    return cfg.trace_config.enabled

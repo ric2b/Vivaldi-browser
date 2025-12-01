@@ -14,7 +14,6 @@ import android.text.format.DateUtils;
 import androidx.annotation.Nullable;
 
 import org.chromium.base.IntentUtils;
-import org.chromium.base.ObserverList;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.supplier.Supplier;
@@ -38,7 +37,6 @@ import org.chromium.build.BuildConfig;
 /** Implementation of {@link BookmarkOpener} which relies on intents. */
 @NullMarked
 public class BookmarkOpenerImpl implements BookmarkOpener {
-    private final ObserverList<BookmarkOpener.Observer> mObservers = new ObserverList<>();
     private final Supplier<BookmarkModel> mBookmarkModelSupplier;
     private final Context mContext;
     private final @Nullable ComponentName mComponentName;
@@ -56,21 +54,6 @@ public class BookmarkOpenerImpl implements BookmarkOpener {
         mBookmarkModelSupplier = bookmarkModelSupplier;
         mContext = context;
         mComponentName = componentName;
-    }
-
-    @Override
-    public void destroy() {
-        mObservers.clear();
-    }
-
-    @Override
-    public void addObserver(Observer obs) {
-        mObservers.addObserver(obs);
-    }
-
-    @Override
-    public void removeObserver(Observer obs) {
-        mObservers.removeObserver(obs);
     }
 
     @Override

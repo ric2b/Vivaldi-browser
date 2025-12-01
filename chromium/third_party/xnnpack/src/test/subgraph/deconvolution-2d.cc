@@ -4,10 +4,8 @@
 // LICENSE file in the root directory of this source tree.
 
 #include <algorithm>
-#include <array>
 #include <cassert>
 #include <chrono>
-#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -18,10 +16,11 @@
 #include <gtest/gtest.h>
 #include "include/xnnpack.h"
 #include "src/xnnpack/buffer.h"
-#include "src/xnnpack/common.h"
 #include "src/xnnpack/datatype.h"
 #include "src/xnnpack/math.h"
 #include "test/replicable_random_device.h"
+#include "test/subgraph/calculate_quantization_params.h"
+#include "test/subgraph/fake-dynamic-quantize.h"
 #include "test/subgraph/stencil.h"
 #include "test/subgraph/subgraph-tester.h"
 
@@ -35,13 +34,13 @@ Tensor<float> ReferenceImpl(Tensor<Data> input, Tensor<Filter> filter,
                             const xnn_quantization_params& bias_quantization,
                             size_t groups, size_t group_input_channels,
                             size_t group_output_channels,
-                            const StencilParams& kh, const StencilParams& kw) {
-  Tensor<float> output({input.extent(0), kh.input_extent(input.extent(1)),
-                        kw.input_extent(input.extent(2)),
+                            const StencilParams& kh, const StencilParams& kw,
+                            const Adjustment& adjustment) {
+  Tensor<float> output({input.extent(0), kh.input_extent(input.extent(1), false,
+                                                         adjustment.height),
+                        kw.input_extent(input.extent(2), false,
+                                        adjustment.width),
                         groups * group_output_channels});
-
-  assert(kw.padding() == 0);
-  assert(kh.padding() == 0);
 
   input = input.split(3, {groups, group_input_channels});
   output = output.split(3, {groups, group_output_channels});
@@ -135,80 +134,6 @@ DeconvolutionParams StencilToDeconvolutionParams(const StencilParams& kh,
   return params;
 }
 
-template <typename T>
-xnn_quantization_params quantization_for_range(float min, float max) {
-  xnn_quantization_params result;
-  result.scale = (max - min) / (static_cast<float>(NumericLimits<T>::max()) -
-                                static_cast<float>(NumericLimits<T>::min()));
-  result.zero_point = NumericLimits<T>::min() - min / result.scale;
-  return result;
-}
-
-template <typename Input, typename Filter, typename Output>
-xnn_quantization_params CalculateDeconvolutionQuantizationParams(
-    size_t reduction_size, xnn_quantization_params input_quantization,
-    xnn_quantization_params filter_quantization) {
-  if (!xnn_datatype_is_quantized(xnn_datatype_of<Output>())) {
-    return {0, 1.0f};
-  }
-
-  // Get the dequantized input and filter ranges.
-  const float input_min =
-      dequantize(NumericLimits<Input>::min(), input_quantization);
-  const float input_max =
-      dequantize(NumericLimits<Input>::max(), input_quantization);
-  const float filter_min =
-      dequantize(NumericLimits<Filter>::min(), filter_quantization);
-  const float filter_max =
-      dequantize(NumericLimits<Filter>::max(), filter_quantization);
-
-  // Find the range of the product of an input and a filter value.
-  std::array<float, 4> corners = {
-      input_min * filter_min,
-      input_max * filter_min,
-      input_min * filter_max,
-      input_max * filter_max,
-  };
-  auto input_filter_minmax =
-      std::minmax_element(corners.begin(), corners.end());
-
-  const float output_min = *input_filter_minmax.first * reduction_size;
-  const float output_max = *input_filter_minmax.second * reduction_size;
-
-  // Now we want the output quantization to hold the range of the output.
-  return quantization_for_range<Output>(output_min, output_max);
-}
-
-// Dynamic quantization looks a lot like a float input/output, but the error is
-// hard to quantify and test well. Rather than do that, we can just generate
-// input data that has (close to) zero error when dynamically quantized, which
-// makes it easier to test.
-template <typename Data>
-void FakeDynamicQuantize(Tensor<Data> input, float qmin, float qmax) {
-  auto minmax = std::minmax_element(input.begin(), input.end());
-  const float rmin = *minmax.first;
-  const float rmax = *minmax.second;
-  const float scale = rmin == rmax ? 1.0f : (qmax - qmin) / (rmax - rmin);
-  const float inv_scale = 1.0f / scale;
-  for (auto& i : input) {
-    i = std::round((i - rmin) * scale) * inv_scale;
-  }
-}
-
-template <typename Data>
-void FakeDynamicQuantize(Tensor<Data> input, xnn_datatype datatype) {
-  if (datatype == xnn_datatype_qdint8) {
-    FakeDynamicQuantize(input, -128.0f, 127.0f);
-  } else if (datatype == xnn_datatype_qduint8) {
-    FakeDynamicQuantize(input, 0.0f, 255.0f);
-  } else {
-    XNN_UNREACHABLE;
-  }
-}
-
-template <typename Data>
-void FakeDynamicQuantize(const Tensor<quantized<Data>>& input, xnn_datatype) {}
-
 template <typename Data, typename Filter, typename Bias>
 void TestImpl(xnn_datatype convert_to = xnn_datatype_invalid) {
   const bool channelwise_quantization =
@@ -224,20 +149,33 @@ void TestImpl(xnn_datatype convert_to = xnn_datatype_invalid) {
     StencilParams kw = random_stencil_params(rng);
     StencilParams kh = random_stencil_params(rng);
 
-    // And no padding
-    kw.padding_min = 0;
-    kw.padding_max = 0;
-    kh.padding_min = 0;
-    kh.padding_max = 0;
+    // TODO: XNNPACK subgraph doesn't support padding for subconv deconvolution.
+    if (kw.dilation == 1 && kh.dilation == 1) {
+      kw.padding_min = 0;
+      kw.padding_max = 0;
+      kh.padding_min = 0;
+      kh.padding_max = 0;
+    }
 
     DeconvolutionParams params = StencilToDeconvolutionParams(kh, kw);
     std::uniform_int_distribution<> channels_dist{1, 10};
     std::uniform_int_distribution<> groups_dist{1, 3};
+    std::uniform_int_distribution<>
+        height_adjustment_dist{0, static_cast<int>(kh.stride) - 1};
+    std::uniform_int_distribution<>
+        width_adjustment_dist{0, static_cast<int>(kw.stride) - 1};
     params.groups = groups_dist(rng);
     params.group_input_channels = channels_dist(rng);
     params.group_output_channels = channels_dist(rng);
     params.adjustment.height = 0;
     params.adjustment.width = 0;
+
+    // Padding mode is `Valid`.
+    if (kw.padding_min == 0 && kw.padding_max == 0 &&
+        kh.padding_min == 0 && kh.padding_max == 0) {
+      params.adjustment.height = height_adjustment_dist(rng);
+      params.adjustment.width = width_adjustment_dist(rng);
+    }
 
     // Make a random filter.
     std::vector<size_t> filter_shape = {
@@ -284,8 +222,9 @@ void TestImpl(xnn_datatype convert_to = xnn_datatype_invalid) {
     // The output quantization is computed from the kernel size and input
     // quantization.
     xnn_quantization_params output_quantization =
-        CalculateDeconvolutionQuantizationParams<Data, Filter, Data>(
-            reduction_size, input_quantization, filter_quantization);
+        CalculateGEMMQuantizationParams<Data, Filter, Data>(
+            reduction_size, input_quantization, filter_quantization,
+            /*bias_quantization=*/{0, 1.0f});
     xnn_quantization_params bias_quantization = {
         0, input_quantization.scale * filter_quantization.scale};
 
@@ -341,8 +280,8 @@ void TestImpl(xnn_datatype convert_to = xnn_datatype_invalid) {
       std::vector<size_t> input_shape = random_shape(rng, 4);
       std::vector<size_t> output_shape = {
           input_shape[0],
-          kh.input_extent(input_shape[1]),
-          kw.input_extent(input_shape[2]),
+          kh.input_extent(input_shape[1], false, params.adjustment.height),
+          kw.input_extent(input_shape[2], false, params.adjustment.width),
           params.groups * params.group_output_channels,
       };
       input_shape[3] = params.groups * params.group_input_channels;
@@ -376,7 +315,7 @@ void TestImpl(xnn_datatype convert_to = xnn_datatype_invalid) {
           input, filter, bias, input_quantization,
           filter_quantization.zero_point, filter_scale, bias_quantization,
           params.groups, params.group_input_channels,
-          params.group_output_channels, kh, kw);
+          params.group_output_channels, kh, kw, params.adjustment);
       for (float& i : expected) {
         i = std::max(i, params.output_min);
         i = std::min(i, params.output_max);

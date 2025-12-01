@@ -41,6 +41,8 @@
 #include "third_party/blink/public/mojom/webshare/webshare.mojom.h"
 #endif  // BUILDFLAG(IS_MAC)
 
+#include "content/browser/renderer_host/vivaldi_overscroll_controller.h"
+
 namespace content {
 class CrossProcessFrameConnector;
 class RenderWidgetHost;
@@ -70,6 +72,9 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
       delete;
   RenderWidgetHostViewChildFrame& operator=(
       const RenderWidgetHostViewChildFrame&) = delete;
+
+  // Sets whether the overscroll controller should be enabled for this page.
+  void SetOverscrollControllerEnabled(bool enabled);
 
   void SetFrameConnector(CrossProcessFrameConnector* frame_connector);
 
@@ -239,6 +244,8 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
 
   RenderWidgetHostViewBase* GetRootRenderWidgetHostView() const;
 
+  VivaldiOverscrollController* overscroll_controller();
+
  protected:
   friend class RenderWidgetHostView;
   friend class RenderWidgetHostViewChildFrameTest;
@@ -271,6 +278,8 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
   void RequestSuccessfulPresentationTimeFromHostOrDelegate(
       blink::mojom::RecordContentToVisibleTimeRequestPtr) final;
   void CancelSuccessfulPresentationTimeRequestForHostAndDelegate() final;
+  void WheelEventAck(const blink::WebMouseWheelEvent& event,
+                     blink::mojom::InputEventResultState ack_result) override;
 
   void StopFlingingIfNecessary(
       const blink::WebGestureEvent& event,
@@ -343,6 +352,8 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
   // Whether a swipe-to-move-cursor gesture is activated.
   bool swipe_to_move_cursor_activated_ = false;
 #endif
+
+  std::unique_ptr<VivaldiOverscrollController> overscroll_controller_;
 
   std::vector<base::OnceClosure> frame_swapped_callbacks_;
 

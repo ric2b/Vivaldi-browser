@@ -21,7 +21,6 @@
 }
 
 :host,
-devtools-recording-view,
 devtools-create-recording-view {
   display: flex;
   flex-direction: column;
@@ -43,6 +42,7 @@ devtools-create-recording-view {
   border-bottom: 1px solid var(--sys-color-divider);
   padding: 0 5px;
   gap: 3px;
+  flex-shrink: 0;
 }
 
 .separator {
@@ -132,9 +132,9 @@ devtools-recording-list-view {
 .feedback .x-link {
   letter-spacing: 0.03em;
   text-decoration-line: underline;
-  font-size: 9px;
+  font-size: var(--sys-typescale-body4-size);
   line-height: 16px;
-  color: var(--sys-color-on-surface-subtle);
+  color: var(--sys-color-primary);
   outline-offset: 3px;
 }
 

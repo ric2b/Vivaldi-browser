@@ -47,7 +47,7 @@ type VBox = UI.Widget.VBox;
 
 const UIStrings = {
   /**
-   *@description Text that shows in the Applicaiton Panel if no value is selected for preview
+   *@description Text that shows in the Application Panel if no value is selected for preview
    */
   noPreviewSelected: 'No value selected',
   /**
@@ -163,10 +163,10 @@ export abstract class KeyValueStorageItemsView extends UI.Widget.VBox {
               </devtools-widget>
             </devtools-split-view>`,
             // clang-format on
-            target, {host: input});
+            target);
       };
     }
-    super(false);
+    super();
     this.metadataView = metadataView;
     this.#editable = editable;
     this.#view = view;
@@ -213,7 +213,7 @@ export abstract class KeyValueStorageItemsView extends UI.Widget.VBox {
         this.#isSortOrderAscending = event.detail.ascending;
       },
       onCreate: (event: CustomEvent<{key: string, value: string}>) => {
-        this.#createCallback(event.detail.key, event.detail.value);
+        this.#createCallback(event.detail.key, event.detail.value || '');
       },
       onEdit:
           (event: CustomEvent<{node: HTMLElement, columnId: string, valueBeforeEditing: string, newText: string}>) => {
@@ -294,7 +294,7 @@ export abstract class KeyValueStorageItemsView extends UI.Widget.VBox {
     }
     this.performUpdate();
     this.#toolbar?.setCanDeleteSelected(Boolean(this.#selectedKey));
-    ARIAUtils.alert(i18nString(UIStrings.numberEntries, {PH1: this.#items.length}));
+    ARIAUtils.LiveAnnouncer.alert(i18nString(UIStrings.numberEntries, {PH1: this.#items.length}));
   }
 
   deleteSelectedItem(): void {

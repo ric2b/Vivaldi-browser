@@ -4,6 +4,7 @@
 
 #import "ios/chrome/browser/first_run/ui_bundled/first_run_test_case_base.h"
 
+#import "base/strings/string_number_conversions.h"
 #import "base/strings/string_util.h"
 #import "base/strings/sys_string_conversions.h"
 #import "components/policy/core/common/policy_loader_ios_constants.h"
@@ -16,6 +17,7 @@
 #import "ios/chrome/browser/first_run/ui_bundled/first_run_constants.h"
 #import "ios/chrome/browser/metrics/model/metrics_app_interface.h"
 #import "ios/chrome/browser/policy/model/policy_util.h"
+#import "ios/chrome/browser/safari_data_import/test/safari_data_import_earl_grey_ui.h"
 #import "ios/chrome/common/ui/promo_style/constants.h"
 #import "ios/chrome/grit/ios_branded_strings.h"
 #import "ios/chrome/grit/ios_strings.h"
@@ -54,6 +56,7 @@
 
   [[[EarlGrey selectElementWithMatcher:bestFeaturesButtonMatcher]
       assertWithMatcher:grey_notNil()] performAction:grey_tap()];
+  DismissSafariDataImportEntryPoint(/*verify_visibility=*/false);
 }
 
 #pragma mark - XCTestCase
@@ -323,6 +326,14 @@
           grey_accessibilityID(
               first_run::kFirstRunDefaultBrowserScreenAccessibilityIdentifier)]
       assertWithMatcher:grey_sufficientlyVisible()];
+}
+
+- (void)verifyDefaultBrowserNotDisplayed {
+  [[EarlGrey
+      selectElementWithMatcher:
+          grey_accessibilityID(
+              first_run::kFirstRunDefaultBrowserScreenAccessibilityIdentifier)]
+      assertWithMatcher:grey_notVisible()];
 }
 
 @end

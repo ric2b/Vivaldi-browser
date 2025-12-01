@@ -38,6 +38,7 @@ import * as Root from '../../core/root/root.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as Bindings from '../../models/bindings/bindings.js';
 import * as Persistence from '../../models/persistence/persistence.js';
+import * as TextUtils from '../../models/text_utils/text_utils.js';
 import * as Workspace from '../../models/workspace/workspace.js';
 import * as Buttons from '../../ui/components/buttons/buttons.js';
 import * as IconButton from '../../ui/components/icon_button/icon_button.js';
@@ -211,7 +212,7 @@ export class NavigatorView extends UI.Widget.VBox implements SDK.TargetManager.O
   private groupByDomain?: boolean;
   private groupByFolder?: boolean;
   constructor(jslogContext: string, enableAuthoredGrouping?: boolean) {
-    super(true);
+    super({useShadowDom: true});
     this.registerRequiredCSS(navigatorViewStyles);
 
     this.placeholder = null;
@@ -243,7 +244,7 @@ export class NavigatorView extends UI.Widget.VBox implements SDK.TargetManager.O
       this.navigatorGroupByAuthoredExperiment = Root.Runtime.ExperimentName.AUTHORED_DEPLOYED_GROUPING;
     }
 
-    Bindings.IgnoreListManager.IgnoreListManager.instance().addChangeListener(this.ignoreListChanged.bind(this));
+    Workspace.IgnoreListManager.IgnoreListManager.instance().addChangeListener(this.ignoreListChanged.bind(this));
 
     this.initGrouping();
 
@@ -484,7 +485,7 @@ export class NavigatorView extends UI.Widget.VBox implements SDK.TargetManager.O
 
   private addUISourceCode(uiSourceCode: Workspace.UISourceCode.UISourceCode): void {
     if (Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.JUST_MY_CODE) &&
-        Bindings.IgnoreListManager.IgnoreListManager.instance().isUserOrSourceMapIgnoreListedUISourceCode(
+        Workspace.IgnoreListManager.IgnoreListManager.instance().isUserOrSourceMapIgnoreListedUISourceCode(
             uiSourceCode)) {
       return;
     }
@@ -1121,7 +1122,7 @@ export class NavigatorView extends UI.Widget.VBox implements SDK.TargetManager.O
         isKnownThirdParty: node.recursiveProperties.exclusivelyThirdParty || false,
         isCurrentlyIgnoreListed: node.recursiveProperties.exclusivelyIgnored || false,
       };
-      for (const {text, callback, jslogContext} of Bindings.IgnoreListManager.IgnoreListManager.instance()
+      for (const {text, callback, jslogContext} of Workspace.IgnoreListManager.IgnoreListManager.instance()
                .getIgnoreListFolderContextMenuItems(url, options)) {
         contextMenu.defaultSection().appendItem(text, callback, {jslogContext});
       }
@@ -1191,7 +1192,8 @@ export class NavigatorView extends UI.Widget.VBox implements SDK.TargetManager.O
       uiSourceCodeToCopy?: Workspace.UISourceCode.UISourceCode): Promise<void> {
     let content = '';
     if (uiSourceCodeToCopy) {
-      content = (await uiSourceCodeToCopy.requestContent()).content || '';
+      const contentDataOrError = await uiSourceCodeToCopy.requestContentData();
+      content = TextUtils.ContentData.ContentData.textOr(contentDataOrError, '');
     }
     const uiSourceCode = await project.createFile(path, null, content);
     if (!uiSourceCode) {
@@ -1451,7 +1453,7 @@ export class NavigatorSourceTreeElement extends UI.TreeOutline.TreeElement {
     const action = UI.ActionRegistry.ActionRegistry.instance().getAction('drjones.sources-floating-button');
     if (!this.aiButtonContainer) {
       this.aiButtonContainer = this.listItemElement.createChild('span', 'ai-button-container');
-      const floatingButton = Buttons.FloatingButton.create('smart-assistant', action.title());
+      const floatingButton = Buttons.FloatingButton.create('smart-assistant', action.title(), 'ask-ai');
       floatingButton.addEventListener('click', ev => {
         ev.stopPropagation();
         this.navigatorView.sourceSelected(this.uiSourceCode, false);
@@ -1756,7 +1758,7 @@ export class NavigatorUISourceCodeTreeNode extends NavigatorTreeNode {
 
   override updateTitle(ignoreIsDirty?: boolean): void {
     const isIgnoreListed =
-        Bindings.IgnoreListManager.IgnoreListManager.instance().isUserOrSourceMapIgnoreListedUISourceCode(
+        Workspace.IgnoreListManager.IgnoreListManager.instance().isUserOrSourceMapIgnoreListedUISourceCode(
             this.uiSourceCodeInternal);
     if (this.uiSourceCodeInternal.contentType().isScript() || isIgnoreListed) {
       this.recursiveProperties.exclusivelyIgnored = isIgnoreListed;

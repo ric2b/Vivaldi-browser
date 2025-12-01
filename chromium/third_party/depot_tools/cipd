@@ -80,6 +80,9 @@ if [ -z $ARCH ]; then
     riscv64)
       ARCH=riscv64
       ;;
+    loongarch64)
+      ARCH=loong64
+      ;;
     *)
       >&2 echo "UNKNOWN Machine architecture: ${UNAME}"
       exit 1
@@ -91,12 +94,6 @@ CIPD_BACKEND="https://chrome-infra-packages.appspot.com"
 VERSION_FILE="${DEPOT_TOOLS_DIR}/cipd_client_version"
 
 CIPD_ROOT="${DEPOT_TOOLS_DIR}"
-# value in .cipd_client_root file overrides the default root.
-CIPD_ROOT_OVERRIDE_FILE="${DEPOT_TOOLS_DIR}/.cipd_client_root"
-if [ -f "${CIPD_ROOT_OVERRIDE_FILE}" ]; then
-  CIPD_ROOT=$(<"${CIPD_ROOT_OVERRIDE_FILE}")
-  mkdir -p "${CIPD_ROOT}"
-fi
 CLIENT="${CIPD_ROOT}/.cipd_client"
 PLATFORM="${OS}-${ARCH}"
 

@@ -11,7 +11,7 @@ import * as UI from '../../ui/legacy/legacy.js';
 import {TestRunner} from '../test_runner/test_runner.js';
 
 /**
- * @fileoverview using private properties isn't a Closure violation in tests.
+ * @file using private properties isn't a Closure violation in tests.
  */
 
 export const ConsoleTestRunner = {};
@@ -387,7 +387,7 @@ ConsoleTestRunner.dumpConsoleClassesBrief = async function() {
 };
 
 ConsoleTestRunner.dumpConsoleCounters = async function() {
-  const counter = ConsoleCounters.WarningErrorCounter.WarningErrorCounter.instanceForTest;
+  const counter = ConsoleCounters.WarningErrorCounter.WarningErrorCounterWidget.instanceForTest;
   if (counter.updatingForTest) {
     await TestRunner.addSnifferPromise(counter, 'updatedForTest');
   }

@@ -1,0 +1,10 @@
+[package]
+name = "fcint-bindings"
+version = "0.1.0"
+
+[lib]
+path = "../../build/fc-fontations/fcint.rs"
+
+[dependencies]
+libc = "0.2"
+fontconfig-bindings = { path = "../fontconfig-bindings" }

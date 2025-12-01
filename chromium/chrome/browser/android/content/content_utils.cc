@@ -25,6 +25,8 @@ static void JNI_ContentUtils_SetUserAgentOverride(
   constexpr char kLinuxInfoStr[] = "X11; Linux x86_64; Mercedes-Benz";
 #endif
 
+  // Note: Any updates to desktop overrides here should also be applied to
+  // DESKTOP form factor defaults in embedder_support::GetUserAgentMetadata.
   const blink::UserAgentMetadata metadata =
       embedder_support::GetUserAgentMetadata();
 

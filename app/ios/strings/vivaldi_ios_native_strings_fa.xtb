@@ -50,7 +50,6 @@
 <translation id="2034405583989639424">ویرایش بخش دسترسی سریع</translation>
 <translation id="2048247880942380698">عربی (<ph name="ORIGIN" />)</translation>
 <translation id="2079545284768500474">بازگردانی تغییرات</translation>
-<translation id="2129408066358825297">سن</translation>
 <translation id="2148384276939959392">همگام‌سازی موارد انتخاب شده</translation>
 <translation id="2195713384412091023">با این کار تمامی اطلاعات همگام‌سازی شده بر روی سرورهای ما حذف خواهد شد، رمزعبوری که برای رمزگذاری تعیین نموده‌اید، بازنشانی شده، و شما نیز از حساب کاربری خارج خواهید شد.</translation>
 <translation id="2243210264130642074">یادداشت ذخیره شد</translation>
@@ -94,7 +93,6 @@
 <translation id="3270930591809084274">زبانه‌های همگام‌سازی شده</translation>
 <translation id="3335772982573114336">یادداشت جدید</translation>
 <translation id="33451081266695216">اتصال توسط سرور قطع شد.</translation>
-<translation id="3346386541263128307">آدرس‌های ایمیل باید باهم مطابقت داشته باشند.</translation>
 <translation id="3365991203476235715">انگلیسی (<ph name="ORIGIN" />)</translation>
 <translation id="3368960138304620657">لیتوانیایی (<ph name="ORIGIN" />)</translation>
 <translation id="3377025655491224618">زبانه‌ی خصوصی</translation>
@@ -184,7 +182,6 @@
 <translation id="5191012692655103305">درحال دریافت زبانه‌ها و تاریخچه...</translation>
 <translation id="5238642303473095117">حذف داده‌ها</translation>
 <translation id="5245732982828228444">یادداشت‌های خود را در این‌جا خواهید یافت</translation>
-<translation id="5249199221558969362">لطفاً سن واقعی خود را وارد نمایید.</translation>
 <translation id="5290452628447338707">یادداشتی وجود ندارد</translation>
 <translation id="5317780077021120954">ذخیره</translation>
 <translation id="5349678548463426691">بر اساس توضیحات</translation>
@@ -219,7 +216,6 @@
 <translation id="6365929278691047681">آلمانی (<ph name="ORIGIN" />)</translation>
 <translation id="6406506848690869874">همگام‌سازی</translation>
 <translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" /> یادداشت انتخاب شد</translation>
-<translation id="6468130661190228905">متأسفیم، به‌نظر می‌رسد قبل از پیوستن به انجمن ما باید کمی صبر کنید. زیرا اعضای ما باید حداقل ۱۶ سال سن داشته باشند.</translation>
 <translation id="6487150267908786236"><ph name="BEGIN_LINK" />وارد کردن<ph name="END_LINK" /></translation>
 <translation id="6517411226162529295">کلید رمزگذاری پشتیبان</translation>
 <translation id="6527303717912515753">اشتراک‌گذاری</translation>
@@ -280,14 +276,12 @@
 <translation id="7801204999757211519">از قبل حساب کاربری دارید؟ <ph name="BEGIN_LINK" />➔ ورود<ph name="END_LINK" /></translation>
 <translation id="7914995060146784406">ویرایش یادداشت</translation>
 <translation id="7925340978147141704">نمایش رمز عبور</translation>
-<translation id="8008214489230610096">تأیید ایمیل بازیابی</translation>
 <translation id="804786196054284061">توافق‌نامه‌ی مجوز کاربر نهایی</translation>
 <translation id="8053851743673939284">فرانسوی (<ph name="ORIGIN" />)</translation>
 <translation id="8066170816074394954">خطای سرور.</translation>
 <translation id="8076492880354921740">زبانه‌ها</translation>
 <translation id="8112996065264879835">این کد با کد ارسال شده برای شما مطابقت ندارد.
         شما به حداکثر حد مجاز تلاش اشتباه رسیده‌اید. لطفاً با استفاده از گزینه ارسال مجدد در زیر، یک کد جدید درخواست کنید.</translation>
-<translation id="8147118677117542370">لطفاً سن خود را وارد نمایید.</translation>
 <translation id="8165573437634525334">داده‌ها توسط رمز عبور رمزنگاری محافظت می‌شوند</translation>
 <translation id="8257908958623224237">بروز تداخل با سایر اطلاعات کاربر.</translation>
 <translation id="8261506727792406068">حذف</translation>

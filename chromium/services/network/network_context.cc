@@ -19,6 +19,8 @@
 #include "base/check.h"
 #include "base/check_op.h"
 #include "base/command_line.h"
+#include "base/containers/flat_set.h"
+#include "base/containers/to_vector.h"
 #include "base/containers/unique_ptr_adapters.h"
 #include "base/dcheck_is_on.h"
 #include "base/feature_list.h"
@@ -223,6 +225,21 @@ class WrappedTestingCertVerifier : public net::CertVerifier {
     }
     return g_cert_verifier_for_testing->Verify(
         params, verify_result, std::move(callback), out_req, net_log);
+  }
+  void Verify2QwacBinding(
+      const std::string& binding,
+      const std::string& hostname,
+      const scoped_refptr<net::X509Certificate>& tls_cert,
+      base::OnceCallback<void(const scoped_refptr<net::X509Certificate>&)>
+          callback,
+      const net::NetLogWithSource& net_log) override {
+    if (!g_cert_verifier_for_testing) {
+      base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+          FROM_HERE, base::BindOnce(std::move(callback), nullptr));
+      return;
+    }
+    g_cert_verifier_for_testing->Verify2QwacBinding(
+        binding, hostname, tls_cert, std::move(callback), net_log);
   }
   void SetConfig(const Config& config) override {
     if (!g_cert_verifier_for_testing) {
@@ -459,11 +476,12 @@ void TestVerifyCertCallback(
   std::move(callback).Run(result);
 }
 
-std::string HashesToBase64String(const net::HashValueVector& hashes) {
+std::string HashesToBase64String(
+    const absl::flat_hash_set<net::SHA256HashValue>& hashes) {
   std::vector<std::string> strings;
   strings.reserve(hashes.size());
   for (const auto& hash : hashes) {
-    strings.push_back(hash.ToString());
+    strings.push_back(net::HashValue(hash).ToString());
   }
   return base::JoinString(strings, ",");
 }
@@ -1933,6 +1951,7 @@ void NetworkContext::CreateWebTransport(
     const url::Origin& origin,
     const net::NetworkAnonymizationKey& key,
     std::vector<mojom::WebTransportCertificateFingerprintPtr> fingerprints,
+    const std::vector<std::string>& application_protocols,
     mojo::PendingRemote<mojom::WebTransportHandshakeClient>
         pending_handshake_client) {
   if (!IsNetworkForNonceAndUrlAllowed(
@@ -1943,9 +1962,9 @@ void NetworkContext::CreateWebTransport(
         net::WebTransportError(net::ERR_NETWORK_ACCESS_REVOKED));
     return;
   }
-  web_transports_.insert(
-      std::make_unique<WebTransport>(url, origin, key, fingerprints, this,
-                                     std::move(pending_handshake_client)));
+  web_transports_.insert(std::make_unique<WebTransport>(
+      url, origin, key, fingerprints, application_protocols, this,
+      std::move(pending_handshake_client)));
 }
 
 void NetworkContext::CreateNetLogExporter(
@@ -1971,8 +1990,8 @@ void NetworkContext::ResolveHost(
     remote_response_client->OnComplete(
         net::ERR_NETWORK_ACCESS_REVOKED,
         net::ResolveErrorInfo(net::ERR_NETWORK_ACCESS_REVOKED),
-        /*resolved_addresses=*/std::nullopt,
-        /*endpoint_results_with_metadata=*/std::nullopt);
+        /*resolved_addresses=*/{},
+        /*alternative_endpoints=*/{});
     return;
   }
 
@@ -2082,6 +2101,21 @@ void NetworkContext::VerifyCertForSignedExchange(
     VerifyCertCallback callback) {
   VerifyCertInternal(certificate, host_port, ocsp_result, sct_list,
                      CTVerificationMode::kSignedExchange, std::move(callback));
+}
+
+void NetworkContext::Verify2QwacCertBinding(
+    const std::string& binding,
+    const std::string& hostname,
+    const scoped_refptr<net::X509Certificate>& tls_certificate,
+    Verify2QwacCertBindingCallback callback) {
+  net::CertVerifier* cert_verifier =
+      g_cert_verifier_for_testing ? g_cert_verifier_for_testing
+                                  : url_request_context_->cert_verifier();
+  cert_verifier->Verify2QwacBinding(
+      binding, hostname, tls_certificate, std::move(callback),
+      net::NetLogWithSource::Make(
+          url_request_context_->net_log(),
+          net::NetLogSourceType::CERT_VERIFIER_2QWAC_JOB));
 }
 
 void NetworkContext::NotifyExternalCacheHit(const GURL& url,
@@ -2253,6 +2287,14 @@ void NetworkContext::VerifyCertificateForTesting(
       request,
       net::NetLogWithSource::Make(net::NetLog::Get(),
                                   net::NetLogSourceType::NONE));
+}
+
+void NetworkContext::GetTrustAnchorIDsForTesting(
+    GetTrustAnchorIDsForTestingCallback callback) {
+  std::move(callback).Run(
+      base::ToVector(url_request_context_->ssl_config_service()
+                         ->GetSSLContextConfig()
+                         .trust_anchor_ids));
 }
 
 void NetworkContext::PreconnectSockets(
@@ -2561,9 +2603,10 @@ void NetworkContext::OnHttpAuthDynamicParamsChanged(
       http_auth_dynamic_network_service_params->allow_gssapi_library_load);
 #endif  // BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
   if (http_auth_dynamic_network_service_params->allowed_schemes.has_value()) {
-    http_auth_merged_preferences_.set_allowed_schemes(std::set<std::string>(
-        http_auth_dynamic_network_service_params->allowed_schemes->begin(),
-        http_auth_dynamic_network_service_params->allowed_schemes->end()));
+    http_auth_merged_preferences_.set_allowed_schemes(
+        base::flat_set<std::string>(
+            http_auth_dynamic_network_service_params->allowed_schemes->begin(),
+            http_auth_dynamic_network_service_params->allowed_schemes->end()));
   } else {
     http_auth_merged_preferences_.set_allowed_schemes(std::nullopt);
   }
@@ -2752,7 +2795,12 @@ URLRequestContextOwner NetworkContext::MakeURLRequestContext(
     } else {
       // Network-bound NetworkContexts should not persist state on disk.
       CHECK(!is_network_bound);
+
       cache_params.path = params_->file_paths->http_cache_directory->path();
+      if (params_->file_paths->no_vary_search_directory) {
+        cache_params.no_vary_search_path =
+            params_->file_paths->no_vary_search_directory->path();
+      }
       cache_params.type = network_session_configurator::ChooseCacheType();
       if (params_->http_cache_file_operations_factory) {
         cache_params.file_operations_factory =

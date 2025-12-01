@@ -240,6 +240,8 @@ const char kChromeFeaturesServiceInterface[] =
     "org.chromium.ChromeFeaturesServiceInterface";
 const char kChromeFeaturesServiceIsFeatureEnabledMethod[] = "IsFeatureEnabled";
 const char kChromeFeaturesServiceGetFeatureParamsMethod[] = "GetFeatureParams";
+const char kChromeFeaturesServiceIsBruschettaEnabledMethod[] =
+    "IsBruschettaEnabled";
 const char kChromeFeaturesServiceIsCrostiniEnabledMethod[] =
     "IsCrostiniEnabled";
 const char kChromeFeaturesServiceIsCryptohomeDistributedModelEnabledMethod[] =

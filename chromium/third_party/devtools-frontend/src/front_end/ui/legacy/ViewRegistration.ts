@@ -154,6 +154,10 @@ export interface ViewRegistration {
    * Icon to be used next to view's title.
    */
   iconName?: string;
+  /**
+   * Whether a view needs to be promoted. A new badge is shown next to the menu items then.
+   */
+  featurePromotionId?: string;
 }
 
 const viewIdSet = new Set<string>();
@@ -164,6 +168,12 @@ export function registerViewExtension(registration: ViewRegistration): void {
   }
   viewIdSet.add(viewId);
   registeredViewExtensions.push(new PreRegisteredView(registration));
+}
+
+export function getRegisteredViewExtensionForID(id: string): PreRegisteredView|undefined {
+  return registeredViewExtensions.find(
+      view => view.viewId() === id &&
+          Root.Runtime.Runtime.isDescriptorEnabled({experiment: view.experiment(), condition: view.condition()}));
 }
 
 export function getRegisteredViewExtensions(): PreRegisteredView[] {

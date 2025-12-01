@@ -765,7 +765,17 @@
 ** ourselves.
 */
 #ifndef offsetof
-#define offsetof(STRUCTURE,FIELD) ((int)((char*)&((STRUCTURE*)0)->FIELD))
+#define offsetof(STRUCTURE,FIELD) ((size_t)((char*)&((STRUCTURE*)0)->FIELD))
+#endif
+
+/*
+** Work around C99 "flex-array" syntax for pre-C99 compilers, so as
+** to avoid complaints from -fsanitize=strict-bounds.
+*/
+#if defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 199901L)
+# define FLEXARRAY
+#else
+# define FLEXARRAY 1
 #endif
 
 /*
@@ -842,6 +852,11 @@ typedef UINT16_TYPE u16;           /* 2-byte unsigned integer */
 typedef INT16_TYPE i16;            /* 2-byte signed integer */
 typedef UINT8_TYPE u8;             /* 1-byte unsigned integer */
 typedef INT8_TYPE i8;              /* 1-byte signed integer */
+
+/* A bitfield type for use inside of structures.  Always follow with :N where
+** N is the number of bits.
+*/
+typedef unsigned bft;  /* Bit Field Type */
 
 /*
 ** SQLITE_MAX_U32 is a u64 constant that is the maximum u64 value
@@ -1010,6 +1025,14 @@ typedef INT16_TYPE LogEst;
 #define LARGEST_INT64  (0xffffffff|(((i64)0x7fffffff)<<32))
 #define LARGEST_UINT64 (0xffffffff|(((u64)0xffffffff)<<32))
 #define SMALLEST_INT64 (((i64)-1) - LARGEST_INT64)
+
+/*
+** Macro SMXV(n) return the maximum value that can be held in variable n,
+** assuming n is a signed integer type.  UMXV(n) is similar for unsigned
+** integer types.
+*/
+#define SMXV(n) ((((i64)1)<<(sizeof(n)-1))-1)
+#define UMXV(n) ((((i64)1)<<(sizeof(n)))-1)
 
 /*
 ** Round up a number to the next larger multiple of 8.  This is used
@@ -1748,6 +1771,10 @@ struct sqlite3 {
   Savepoint *pSavepoint;        /* List of active savepoints */
   int nAnalysisLimit;           /* Number of index rows to ANALYZE */
   int busyTimeout;              /* Busy handler timeout, in msec */
+#ifdef SQLITE_ENABLE_SETLK_TIMEOUT
+  int setlkTimeout;             /* Blocking lock timeout, in msec. -1 -> inf. */
+  int setlkFlags;               /* Flags passed to setlk_timeout() */
+#endif
   int nSavepoint;               /* Number of non-transaction savepoints */
   int nStatement;               /* Number of nested statement-transactions  */
   i64 nDeferredCons;            /* Net deferred constraints this transaction. */
@@ -2426,6 +2453,7 @@ struct Table {
   } u;
   Trigger *pTrigger;   /* List of triggers on this object */
   Schema *pSchema;     /* Schema that contains this table */
+  u8 aHx[16];          /* Column aHt[K%sizeof(aHt)] might have hash K */
 };
 
 /*
@@ -2559,8 +2587,12 @@ struct FKey {
   struct sColMap {      /* Mapping of columns in pFrom to columns in zTo */
     int iFrom;            /* Index of column in pFrom */
     char *zCol;           /* Name of column in zTo.  If NULL use PRIMARY KEY */
-  } aCol[1];            /* One entry for each of nCol columns */
+  } aCol[FLEXARRAY];      /* One entry for each of nCol columns */
 };
+
+/* The size (in bytes) of an FKey object holding N columns.  The answer
+** does NOT include space to hold the zTo name. */
+#define SZ_FKEY(N)  (offsetof(FKey,aCol)+(N)*sizeof(struct sColMap))
 
 /*
 ** SQLite supports many different ways to resolve a constraint
@@ -2623,8 +2655,11 @@ struct KeyInfo {
   u16 nAllField;      /* Total columns, including key plus others */
   sqlite3 *db;        /* The database connection */
   u8 *aSortFlags;     /* Sort order for each column. */
-  CollSeq *aColl[1];  /* Collating sequence for each term of the key */
+  CollSeq *aColl[FLEXARRAY]; /* Collating sequence for each term of the key */
 };
+
+/* The size (in bytes) of a KeyInfo object with up to N fields */
+#define SZ_KEYINFO(N)  (offsetof(KeyInfo,aColl) + (N)*sizeof(CollSeq*))
 
 /*
 ** Allowed bit values for entries in the KeyInfo.aSortFlags[] array.
@@ -2745,7 +2780,7 @@ struct Index {
   Pgno tnum;               /* DB Page containing root of this index */
   LogEst szIdxRow;         /* Estimated average row size in bytes */
   u16 nKeyCol;             /* Number of columns forming the key */
-  u16 nColumn;             /* Number of columns stored in the index */
+  u16 nColumn;             /* Nr columns in btree. Can be 2*Table.nCol */
   u8 onError;              /* OE_Abort, OE_Ignore, OE_Replace, or OE_None */
   unsigned idxType:2;      /* 0:Normal 1:UNIQUE, 2:PRIMARY KEY, 3:IPK */
   unsigned bUnordered:1;   /* Use this index for == or IN queries only */
@@ -2754,7 +2789,6 @@ struct Index {
   unsigned isCovering:1;   /* True if this is a covering index */
   unsigned noSkipScan:1;   /* Do not try to use skip-scan if true */
   unsigned hasStat1:1;     /* aiRowLogEst values come from sqlite_stat1 */
-  unsigned bLowQual:1;     /* sqlite_stat1 says this is a low-quality index */
   unsigned bNoQuery:1;     /* Do not use this index to optimize queries */
   unsigned bAscKeyBug:1;   /* True if the bba7b69f9849b5bf bug applies */
   unsigned bIdxRowid:1;    /* One or more of the index keys is the ROWID */
@@ -3084,10 +3118,10 @@ struct Expr {
 /* Macros can be used to test, set, or clear bits in the
 ** Expr.flags field.
 */
-#define ExprHasProperty(E,P)     (((E)->flags&(P))!=0)
-#define ExprHasAllProperty(E,P)  (((E)->flags&(P))==(P))
-#define ExprSetProperty(E,P)     (E)->flags|=(P)
-#define ExprClearProperty(E,P)   (E)->flags&=~(P)
+#define ExprHasProperty(E,P)     (((E)->flags&(u32)(P))!=0)
+#define ExprHasAllProperty(E,P)  (((E)->flags&(u32)(P))==(u32)(P))
+#define ExprSetProperty(E,P)     (E)->flags|=(u32)(P)
+#define ExprClearProperty(E,P)   (E)->flags&=~(u32)(P)
 #define ExprAlwaysTrue(E)   (((E)->flags&(EP_OuterON|EP_IsTrue))==EP_IsTrue)
 #define ExprAlwaysFalse(E)  (((E)->flags&(EP_OuterON|EP_IsFalse))==EP_IsFalse)
 #define ExprIsFullSize(E)   (((E)->flags&(EP_Reduced|EP_TokenOnly))==0)
@@ -3199,8 +3233,13 @@ struct ExprList {
       int iConstExprReg;   /* Register in which Expr value is cached. Used only
                            ** by Parse.pConstExpr */
     } u;
-  } a[1];                  /* One slot for each expression in the list */
+  } a[FLEXARRAY];          /* One slot for each expression in the list */
 };
+
+/* The size (in bytes) of an ExprList object that is big enough to hold
+** as many as N expressions. */
+#define SZ_EXPRLIST(N)  \
+             (offsetof(ExprList,a) + (N)*sizeof(struct ExprList_item))
 
 /*
 ** Allowed values for Expr.a.eEName
@@ -3229,8 +3268,11 @@ struct IdList {
   int nId;         /* Number of identifiers on the list */
   struct IdList_item {
     char *zName;      /* Name of the identifier */
-  } a[1];
+  } a[FLEXARRAY];
 };
+
+/* The size (in bytes) of an IdList object that can hold up to N IDs. */
+#define SZ_IDLIST(N)  (offsetof(IdList,a)+(N)*sizeof(struct IdList_item))
 
 /*
 ** Allowed values for IdList.eType, which determines which value of the a.u4
@@ -3351,10 +3393,18 @@ struct OnOrUsing {
 **
 */
 struct SrcList {
-  int nSrc;        /* Number of tables or subqueries in the FROM clause */
-  u32 nAlloc;      /* Number of entries allocated in a[] below */
-  SrcItem a[1];    /* One entry for each identifier on the list */
+  int nSrc;             /* Number of tables or subqueries in the FROM clause */
+  u32 nAlloc;           /* Number of entries allocated in a[] below */
+  SrcItem a[FLEXARRAY]; /* One entry for each identifier on the list */
 };
+
+/* Size (in bytes) of a SrcList object that can hold as many as N
+** SrcItem objects. */
+#define SZ_SRCLIST(N) (offsetof(SrcList,a)+(N)*sizeof(SrcItem))
+
+/* Size (in bytes( of a SrcList object that holds 1 SrcItem.  This is a
+** special case of SZ_SRCITEM(1) that comes up often. */
+#define SZ_SRCLIST_1  (offsetof(SrcList,a)+sizeof(SrcItem))
 
 /*
 ** Permitted values of the SrcList.a.jointype field
@@ -3824,25 +3874,32 @@ struct Parse {
   char *zErrMsg;       /* An error message */
   Vdbe *pVdbe;         /* An engine for executing database bytecode */
   int rc;              /* Return code from execution */
-  u8 colNamesSet;      /* TRUE after OP_ColumnName has been issued to pVdbe */
-  u8 checkSchema;      /* Causes schema cookie check after an error */
+  LogEst nQueryLoop;   /* Est number of iterations of a query (10*log2(N)) */
   u8 nested;           /* Number of nested calls to the parser/code generator */
   u8 nTempReg;         /* Number of temporary registers in aTempReg[] */
   u8 isMultiWrite;     /* True if statement may modify/insert multiple rows */
   u8 mayAbort;         /* True if statement may throw an ABORT exception */
   u8 hasCompound;      /* Need to invoke convertCompoundSelectToSubquery() */
-  u8 okConstFactor;    /* OK to factor out constants */
   u8 disableLookaside; /* Number of times lookaside has been disabled */
   u8 prepFlags;        /* SQLITE_PREPARE_* flags */
   u8 withinRJSubrtn;   /* Nesting level for RIGHT JOIN body subroutines */
-  u8 bHasWith;         /* True if statement contains WITH */
   u8 mSubrtnSig;       /* mini Bloom filter on available SubrtnSig.selId */
+  u8 eTriggerOp;       /* TK_UPDATE, TK_INSERT or TK_DELETE */
+  u8 bReturning;       /* Coding a RETURNING trigger */
+  u8 eOrconf;          /* Default ON CONFLICT policy for trigger steps */
+  u8 disableTriggers;  /* True to disable triggers */
 #if defined(SQLITE_DEBUG) || defined(SQLITE_COVERAGE_TEST)
   u8 earlyCleanup;     /* OOM inside sqlite3ParserAddCleanup() */
 #endif
 #ifdef SQLITE_DEBUG
   u8 ifNotExists;      /* Might be true if IF NOT EXISTS.  Assert()s only */
+  u8 isCreate;         /* CREATE TABLE, INDEX, or VIEW (but not TRIGGER)
+                       ** and ALTER TABLE ADD COLUMN. */
 #endif
+  bft colNamesSet :1;   /* TRUE after OP_ColumnName has been issued to pVdbe */
+  bft bHasWith :1;      /* True if statement contains WITH */
+  bft okConstFactor :1; /* OK to factor out constants */
+  bft checkSchema :1;   /* Causes schema cookie check after an error */
   int nRangeReg;       /* Size of the temporary register block */
   int iRangeReg;       /* First register in temporary register block */
   int nErr;            /* Number of errors seen */
@@ -3857,12 +3914,9 @@ struct Parse {
   ExprList *pConstExpr;/* Constant expressions */
   IndexedExpr *pIdxEpr;/* List of expressions used by active indexes */
   IndexedExpr *pIdxPartExpr; /* Exprs constrained by index WHERE clauses */
-  Token constraintName;/* Name of the constraint currently being parsed */
   yDbMask writeMask;   /* Start a write transaction on these databases */
   yDbMask cookieMask;  /* Bitmask of schema verified databases */
-  int regRowid;        /* Register holding rowid of CREATE TABLE entry */
-  int regRoot;         /* Register holding root page number for new objects */
-  int nMaxArg;         /* Max args passed to user function by sub-program */
+  int nMaxArg;         /* Max args to xUpdate and xFilter vtab methods */
   int nSelect;         /* Number of SELECT stmts. Counter for Select.selId */
 #ifndef SQLITE_OMIT_PROGRESS_CALLBACK
   u32 nProgressSteps;  /* xProgress steps taken during sqlite3_prepare() */
@@ -3876,17 +3930,6 @@ struct Parse {
   Table *pTriggerTab;  /* Table triggers are being coded for */
   TriggerPrg *pTriggerPrg;  /* Linked list of coded triggers */
   ParseCleanup *pCleanup;   /* List of cleanup operations to run after parse */
-  union {
-    int addrCrTab;         /* Address of OP_CreateBtree on CREATE TABLE */
-    Returning *pReturning; /* The RETURNING clause */
-  } u1;
-  u32 oldmask;         /* Mask of old.* columns referenced */
-  u32 newmask;         /* Mask of new.* columns referenced */
-  LogEst nQueryLoop;   /* Est number of iterations of a query (10*log2(N)) */
-  u8 eTriggerOp;       /* TK_UPDATE, TK_INSERT or TK_DELETE */
-  u8 bReturning;       /* Coding a RETURNING trigger */
-  u8 eOrconf;          /* Default ON CONFLICT policy for trigger steps */
-  u8 disableTriggers;  /* True to disable triggers */
 
   /**************************************************************************
   ** Fields above must be initialized to zero.  The fields that follow,
@@ -3898,6 +3941,19 @@ struct Parse {
   int aTempReg[8];        /* Holding area for temporary registers */
   Parse *pOuterParse;     /* Outer Parse object when nested */
   Token sNameToken;       /* Token with unqualified schema object name */
+  u32 oldmask;            /* Mask of old.* columns referenced */
+  u32 newmask;            /* Mask of new.* columns referenced */
+  union {
+    struct {  /* These fields available when isCreate is true */
+      int addrCrTab;        /* Address of OP_CreateBtree on CREATE TABLE */
+      int regRowid;         /* Register holding rowid of CREATE TABLE entry */
+      int regRoot;          /* Register holding root page for new objects */
+      Token constraintName; /* Name of the constraint currently being parsed */
+    } cr;
+    struct {  /* These fields available to all other statements */
+      Returning *pReturning; /* The RETURNING clause */
+    } d;
+  } u1;
 
   /************************************************************************
   ** Above is constant between recursions.  Below is reset before and after
@@ -4413,8 +4469,12 @@ struct With {
   int nCte;               /* Number of CTEs in the WITH clause */
   int bView;              /* Belongs to the outermost Select of a view */
   With *pOuter;           /* Containing WITH clause, or NULL */
-  Cte a[1];               /* For each CTE in the WITH clause.... */
+  Cte a[FLEXARRAY];       /* For each CTE in the WITH clause.... */
 };
+
+/* The size (in bytes) of a With object that can hold as many
+** as N different CTEs. */
+#define SZ_WITH(N)  (offsetof(With,a) + (N)*sizeof(Cte))
 
 /*
 ** The Cte object is not guaranteed to persist for the entire duration
@@ -4444,8 +4504,12 @@ struct DbClientData {
   DbClientData *pNext;        /* Next in a linked list */
   void *pData;                /* The data */
   void (*xDestructor)(void*); /* Destructor.  Might be NULL */
-  char zName[1];              /* Name of this client data. MUST BE LAST */
+  char zName[FLEXARRAY];      /* Name of this client data. MUST BE LAST */
 };
+
+/* The size (in bytes) of a DbClientData object that can has a name
+** that is N bytes long, including the zero-terminator. */
+#define SZ_DBCLIENTDATA(N) (offsetof(DbClientData,zName)+(N))
 
 #ifdef SQLITE_DEBUG
 /*
@@ -4889,7 +4953,7 @@ void sqlite3SubqueryColumnTypes(Parse*,Table*,Select*,char);
 Table *sqlite3ResultSetOfSelect(Parse*,Select*,char);
 void sqlite3OpenSchemaTable(Parse *, int);
 Index *sqlite3PrimaryKeyIndex(Table*);
-i16 sqlite3TableColumnToIndex(Index*, i16);
+int sqlite3TableColumnToIndex(Index*, int);
 #ifdef SQLITE_OMIT_GENERATED_COLUMNS
 # define sqlite3TableColumnToStorage(T,X) (X)  /* No-op pass-through */
 # define sqlite3StorageColumnToTable(T,X) (X)  /* No-op pass-through */
@@ -4987,7 +5051,7 @@ void sqlite3SrcListAssignCursors(Parse*, SrcList*);
 void sqlite3IdListDelete(sqlite3*, IdList*);
 void sqlite3ClearOnOrUsing(sqlite3*, OnOrUsing*);
 void sqlite3SrcListDelete(sqlite3*, SrcList*);
-Index *sqlite3AllocateIndexObject(sqlite3*,i16,int,char**);
+Index *sqlite3AllocateIndexObject(sqlite3*,int,int,char**);
 void sqlite3CreateIndex(Parse*,Token*,Token*,SrcList*,ExprList*,int,Token*,
                           Expr*, int, int, u8);
 void sqlite3DropIndex(Parse*, SrcList*, int);
@@ -5123,7 +5187,8 @@ Select *sqlite3SelectDup(sqlite3*,const Select*,int);
 FuncDef *sqlite3FunctionSearch(int,const char*);
 void sqlite3InsertBuiltinFuncs(FuncDef*,int);
 FuncDef *sqlite3FindFunction(sqlite3*,const char*,int,u8,u8);
-void sqlite3QuoteValue(StrAccum*,sqlite3_value*);
+void sqlite3QuoteValue(StrAccum*,sqlite3_value*,int);
+int sqlite3AppendOneUtf8Character(char*, u32);
 void sqlite3RegisterBuiltinFunctions(void);
 void sqlite3RegisterDateTimeFunctions(void);
 void sqlite3RegisterJsonFunctions(void);

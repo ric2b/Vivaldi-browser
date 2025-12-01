@@ -290,7 +290,7 @@ class SQLitePersistentCookieStoreTest : public TestWithTaskEnvironment {
                  const std::string& value,
                  const std::string& domain,
                  const std::string& path,
-                 const base::Time& creation) {
+                 base::Time creation) {
     store_->AddCookie(*CanonicalCookie::CreateUnsafeCookieForTesting(
         name, value, domain, path, creation, /*expiration=*/creation,
         /*last_access=*/base::Time(), /*last_update=*/base::Time(),
@@ -303,8 +303,8 @@ class SQLitePersistentCookieStoreTest : public TestWithTaskEnvironment {
                                const std::string& value,
                                const std::string& domain,
                                const std::string& path,
-                               const base::Time& creation,
-                               const base::Time& expiration) {
+                               base::Time creation,
+                               base::Time expiration) {
     store_->AddCookie(*CanonicalCookie::CreateUnsafeCookieForTesting(
         name, value, domain, path, creation, expiration,
         /*last_access=*/base::Time(), /*last_update=*/base::Time(),
@@ -1459,6 +1459,142 @@ TEST_F(SQLitePersistentCookieStoreTest, NoCoalesceUnrelated) {
   db_thread_event_.Signal();
 }
 
+// Test that cookies with __host-http- or __http- prefixes that are not httponly
+// are deleted during load.
+TEST_F(SQLitePersistentCookieStoreTest, TestInsecurePrefixedCookiesDeletion) {
+  InitializeStore(/*crypt=*/false, /*restore_old_session_cookies=*/false);
+
+  base::Time t = base::Time::Now();
+  base::Time future = t + base::Days(1);
+
+  // Add cookies that should be deleted (insecure prefixed cookies)
+  // __host-http- prefix without httponly
+  auto dom_host_http_cookie = CanonicalCookie::CreateUnsafeCookieForTesting(
+      "__host-http-test", "value1", "example.com", "/", t, future,
+      /*last_access=*/base::Time(), /*last_update=*/base::Time(),
+      /*secure=*/true, /*httponly=*/false, CookieSameSite::NO_RESTRICTION,
+      COOKIE_PRIORITY_DEFAULT);
+  store_->AddCookie(*dom_host_http_cookie);
+
+  // __http- prefix without httponly
+  auto dom_http_cookie = CanonicalCookie::CreateUnsafeCookieForTesting(
+      "__http-test", "value2", "example.com", "/", t, future,
+      /*last_access=*/base::Time(), /*last_update=*/base::Time(),
+      /*secure=*/true, /*httponly=*/false, CookieSameSite::NO_RESTRICTION,
+      COOKIE_PRIORITY_DEFAULT);
+  store_->AddCookie(*dom_http_cookie);
+
+  // __host-http- prefix without secure
+  auto insecure_host_http_cookie =
+      CanonicalCookie::CreateUnsafeCookieForTesting(
+          "__host-http-test2", "value1", "example.com", "/", t, future,
+          /*last_access=*/base::Time(), /*last_update=*/base::Time(),
+          /*secure=*/false, /*httponly=*/true, CookieSameSite::NO_RESTRICTION,
+          COOKIE_PRIORITY_DEFAULT);
+  store_->AddCookie(*insecure_host_http_cookie);
+
+  // __http- prefix without secure
+  auto insecure_http_cookie = CanonicalCookie::CreateUnsafeCookieForTesting(
+      "__http-test2", "value2", "example.com", "/", t, future,
+      /*last_access=*/base::Time(), /*last_update=*/base::Time(),
+      /*secure=*/false, /*httponly=*/true, CookieSameSite::NO_RESTRICTION,
+      COOKIE_PRIORITY_DEFAULT);
+  store_->AddCookie(*insecure_http_cookie);
+
+  // Mixed case __HOST-HTTP- prefix without httponly
+  auto insecure_mixed_case_cookie =
+      CanonicalCookie::CreateUnsafeCookieForTesting(
+          "__HOST-HTTP-mixed", "value3", "example.com", "/", t, future,
+          /*last_access=*/base::Time(), /*last_update=*/base::Time(),
+          /*secure=*/true, /*httponly=*/false, CookieSameSite::NO_RESTRICTION,
+          COOKIE_PRIORITY_DEFAULT);
+  store_->AddCookie(*insecure_mixed_case_cookie);
+
+  // __http- prefix WITHOUT httponly nor secure
+  auto insecure_edge_cookie = CanonicalCookie::CreateUnsafeCookieForTesting(
+      "__http-insecure", "value4", "example.com", "/", t, future,
+      /*last_access=*/base::Time(), /*last_update=*/base::Time(),
+      /*secure=*/false, /*httponly=*/false, CookieSameSite::NO_RESTRICTION,
+      COOKIE_PRIORITY_DEFAULT);
+  store_->AddCookie(*insecure_edge_cookie);
+
+  // Add cookies that should NOT be deleted
+  // __host-http- prefix WITH httponly and secure
+  auto secure_host_http_cookie = CanonicalCookie::CreateUnsafeCookieForTesting(
+      "__host-http-secure", "value5", "example.com", "/", t, future,
+      /*last_access=*/base::Time(), /*last_update=*/base::Time(),
+      /*secure=*/true, /*httponly=*/true, CookieSameSite::NO_RESTRICTION,
+      COOKIE_PRIORITY_DEFAULT);
+  store_->AddCookie(*secure_host_http_cookie);
+
+  // __http- prefix WITH httponly and secure
+  auto secure_http_cookie = CanonicalCookie::CreateUnsafeCookieForTesting(
+      "__http-secure", "value6", "example.com", "/", t, future,
+      /*last_access=*/base::Time(), /*last_update=*/base::Time(),
+      /*secure=*/true, /*httponly=*/true, CookieSameSite::NO_RESTRICTION,
+      COOKIE_PRIORITY_DEFAULT);
+  store_->AddCookie(*secure_http_cookie);
+
+  // __host- (without http-)
+  auto host_cookie = CanonicalCookie::CreateUnsafeCookieForTesting(
+      "__host-other", "value7", "example.com", "/", t, future,
+      /*last_access=*/base::Time(), /*last_update=*/base::Time(),
+      /*secure=*/true, /*httponly=*/false, CookieSameSite::NO_RESTRICTION,
+      COOKIE_PRIORITY_DEFAULT);
+  store_->AddCookie(*host_cookie);
+
+  // No prefix
+  auto normal_cookie = CanonicalCookie::CreateUnsafeCookieForTesting(
+      "normal", "value8", "example.com", "/", t, future,
+      /*last_access=*/base::Time(), /*last_update=*/base::Time(),
+      /*secure=*/false, /*httponly=*/false, CookieSameSite::NO_RESTRICTION,
+      COOKIE_PRIORITY_DEFAULT);
+  store_->AddCookie(*normal_cookie);
+
+  // "Prefix" in the middle of name
+  auto middle_prefix_cookie = CanonicalCookie::CreateUnsafeCookieForTesting(
+      "test__http-middle_name", "value9", "example.com", "/", t, future,
+      /*last_access=*/base::Time(), /*last_update=*/base::Time(),
+      /*secure=*/false, /*httponly=*/false, CookieSameSite::NO_RESTRICTION,
+      COOKIE_PRIORITY_DEFAULT);
+  store_->AddCookie(*middle_prefix_cookie);
+
+  DestroyStore();
+
+  // Reload the store - this should trigger the deletion of insecure prefixed
+  // cookies
+  store_ = base::MakeRefCounted<SQLitePersistentCookieStore>(
+      temp_dir_.GetPath().Append(kCookieFilename), client_task_runner_,
+      background_task_runner_, false, nullptr, false);
+
+  CanonicalCookieVector cookies = Load();
+
+  // Verify that only the secure cookies and non-prefixed cookies remain
+  // Should have 5 cookies remaining (6 insecure cookies deleted)
+  EXPECT_EQ(5u, cookies.size());
+
+  // Find cookies by name to verify correct ones remain
+  std::set<std::string> remaining_names;
+  for (const auto& cookie : cookies) {
+    remaining_names.insert(cookie->Name());
+  }
+
+  // Cookies that should have been deleted
+  EXPECT_EQ(0u, remaining_names.count("__host-http-test"));
+  EXPECT_EQ(0u, remaining_names.count("__http-test"));
+  EXPECT_EQ(0u, remaining_names.count("__host-http-test2"));
+  EXPECT_EQ(0u, remaining_names.count("__http-test2"));
+  EXPECT_EQ(0u, remaining_names.count("__HOST-HTTP-mixed"));
+  EXPECT_EQ(0u, remaining_names.count("__http-insecure"));
+
+  // Cookies that should remain
+  EXPECT_EQ(1u, remaining_names.count("__host-http-secure"));
+  EXPECT_EQ(1u, remaining_names.count("__http-secure"));
+  EXPECT_EQ(1u, remaining_names.count("__host-other"));
+  EXPECT_EQ(1u, remaining_names.count("normal"));
+  EXPECT_EQ(1u, remaining_names.count("test__http-middle_name"));
+}
+
 // Locking is only supported on Windows.
 #if BUILDFLAG(IS_WIN)
 
@@ -2305,25 +2441,12 @@ class SQLitePersistentCookieStorev24UpgradeTest
       public ::testing::WithParamInterface<
           std::tuple</*crypto_for_encrypt*/ bool,
                      /*crypto_for_decrypt*/ bool,
-                     /*place_unencrypted_too*/ bool,
-                     /*kEncryptedAndPlaintextValuesAreInvalid*/ bool>> {
- protected:
-  void SetUp() override {
-    features_.InitWithFeatureState(
-        features::kEncryptedAndPlaintextValuesAreInvalid,
-        std::get<3>(GetParam()));
-    SQLitePersistentCookieStoreTest::SetUp();
-  }
-
- private:
-  base::test::ScopedFeatureList features_;
-};
+                     /*place_unencrypted_too*/ bool>> {};
 
 TEST_P(SQLitePersistentCookieStorev24UpgradeTest, UpgradeToSchemaVersion24) {
   const bool crypto_for_encrypt = std::get<0>(GetParam());
   const bool crypto_for_decrypt = std::get<1>(GetParam());
   const bool place_unencrypted_too = std::get<2>(GetParam());
-  const bool drop_dup_values = std::get<3>(GetParam());
 
   const base::FilePath database_path =
       temp_dir_.GetPath().Append(kCookieFilename);
@@ -2367,7 +2490,7 @@ TEST_P(SQLitePersistentCookieStorev24UpgradeTest, UpgradeToSchemaVersion24) {
       // and above) with both plaintext and encrypted values is tested in the
       // `OverridePlaintextValue` test below.
       const base::Histogram::Sample32 expected_bucket =
-          drop_dup_values && place_unencrypted_too
+          place_unencrypted_too
               ? /*CookieLoadProblem::kValuesExistInBothEncryptedAndPlaintext*/ 8
               : /*CookieLoadProblem::kNoCrypto*/ 7;
       histogram_tester.ExpectBucketCount("Cookie.LoadProblem", expected_bucket,
@@ -2388,7 +2511,6 @@ TEST_P(SQLitePersistentCookieStorev24UpgradeTest, UpgradeToSchemaVersion24) {
 INSTANTIATE_TEST_SUITE_P(,
                          SQLitePersistentCookieStorev24UpgradeTest,
                          ::testing::Combine(::testing::Bool(),
-                                            ::testing::Bool(),
                                             ::testing::Bool(),
                                             ::testing::Bool()));
 
@@ -2933,34 +3055,12 @@ TEST_F(SQLitePersistentCookieStoreTest, NoCryptoForDecryption) {
   }
 }
 
-class SQLitePersistentCookieStoreTestWithDropDupDataFeature
-    : public ::testing::WithParamInterface<
-          /*features::kEncryptedAndPlaintextValuesAreInvalid*/ bool>,
-      public SQLitePersistentCookieStoreTest {
- public:
-  void SetUp() override {
-    features_.InitWithFeatureState(
-        features::kEncryptedAndPlaintextValuesAreInvalid,
-        IsDroppingCookiesEnabled());
-    SQLitePersistentCookieStoreTest::SetUp();
-  }
-
- protected:
-  bool IsDroppingCookiesEnabled() const { return GetParam(); }
-
- private:
-  base::test::ScopedFeatureList features_;
-};
-
 // This test verifies that if a plaintext value is in the store (e.g. written in
 // manually, or crypto was at some point not available in the past) and crypto
 // is now available, it can still be read fine, including if the value is empty.
 // It also tests the case where both a plaintext and encrypted value exist,
-// where the encrypted value should always take precedence except if
-// kEncryptedAndPlaintextValuesAreInvalid is enabled, in which case the cookie
-// is dropped.
-TEST_P(SQLitePersistentCookieStoreTestWithDropDupDataFeature,
-       OverridePlaintextValue) {
+// in which case the cookie should be dropped.
+TEST_F(SQLitePersistentCookieStoreTest, OverridePlaintextValue) {
   {
     CreateAndLoad(/*crypt_cookies=*/true,
                   /*restore_old_session_cookies=*/false);
@@ -3013,9 +3113,8 @@ TEST_P(SQLitePersistentCookieStoreTestWithDropDupDataFeature,
     histogram_tester.ExpectBucketCount("Cookie.EncryptedAndPlaintextValues",
                                        true, 1);
 
-    // Third cookie (example3.com) should be dropped if
-    // kEncryptedAndPlaintextValuesAreInvalid is enabled.
-    ASSERT_EQ(cookies.size(), IsDroppingCookiesEnabled() ? 2u : 3u);
+    // Third cookie (example3.com) should be dropped.
+    ASSERT_EQ(cookies.size(), 2u);
     // Cookie should load fine since it's been modified by writing plaintext and
     // clearing ciphertext.
     EXPECT_EQ(cookies[0]->Domain(), "example.com");
@@ -3025,29 +3124,12 @@ TEST_P(SQLitePersistentCookieStoreTestWithDropDupDataFeature,
     EXPECT_EQ(cookies[1]->Name(), "C");
     EXPECT_TRUE(cookies[1]->Value().empty());
 
-    if (IsDroppingCookiesEnabled()) {
-      // Cookie should be dropped and a metric recorded.
-      histogram_tester.ExpectBucketCount(
-          "Cookie.LoadProblem",
-          /*CookieLoadProblem::kValuesExistInBothEncryptedAndPlaintext*/ 8, 1u);
-    } else {
-      // If the kEncryptedAndPlaintextValuesAreInvalid feature is disabled (and
-      // the cookie was not dropped) then the final cookie should always use the
-      // encrypted value and not the plaintext value.
-      EXPECT_EQ(cookies[2]->Domain(), "example3.com");
-      EXPECT_EQ(cookies[2]->Name(), "E");
-      EXPECT_EQ(cookies[2]->Value(), "F");
-      histogram_tester.ExpectTotalCount("Cookie.LoadProblem", 0);
-    }
+    // Cookie should be dropped and a metric recorded.
+    histogram_tester.ExpectBucketCount(
+        "Cookie.LoadProblem",
+        /*CookieLoadProblem::kValuesExistInBothEncryptedAndPlaintext*/ 8, 1u);
     DestroyStore();
   }
 }
-
-INSTANTIATE_TEST_SUITE_P(,
-                         SQLitePersistentCookieStoreTestWithDropDupDataFeature,
-                         ::testing::Bool(),
-                         [](auto& info) {
-                           return info.param ? "Enabled" : "Disabled";
-                         });
 
 }  // namespace net

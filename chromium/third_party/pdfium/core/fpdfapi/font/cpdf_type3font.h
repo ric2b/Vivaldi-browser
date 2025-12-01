@@ -44,8 +44,8 @@ class CPDF_Type3Font final : public CPDF_SimpleFont {
   CFX_Matrix& GetFontMatrix() { return font_matrix_; }
 
  private:
-  CPDF_Type3Font(CPDF_Document* pDocument,
-                 RetainPtr<CPDF_Dictionary> pFontDict,
+  CPDF_Type3Font(CPDF_Document* document,
+                 RetainPtr<CPDF_Dictionary> font_dict,
                  FormFactoryIface* pFormFactory);
 
   // CPDF_Font:

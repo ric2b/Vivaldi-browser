@@ -225,6 +225,19 @@ void Convert8To16Plane(const uint8_t* src_y,
     }
   }
 #endif
+#if defined(HAS_CONVERT8TO16ROW_NEON)
+  if (TestCpuFlag(kCpuHasNEON)) {
+    Convert8To16Row = Convert8To16Row_Any_NEON;
+    if (IS_ALIGNED(width, 16)) {
+      Convert8To16Row = Convert8To16Row_NEON;
+    }
+  }
+#endif
+#if defined(HAS_CONVERT8TO16ROW_SME)
+  if (TestCpuFlag(kCpuHasSME)) {
+    Convert8To16Row = Convert8To16Row_SME;
+  }
+#endif
 
   // Convert plane
   for (y = 0; y < height; ++y) {

@@ -2,29 +2,24 @@ struct VertexOutputs {
   float clipDistance[8];
   float4 position;
 };
-struct tint_symbol {
-  float4 position : SV_Position;
-  float4 clip_distance_0 : SV_ClipDistance0;
-  float4 clip_distance_1 : SV_ClipDistance1;
+
+struct main_outputs {
+  float4 VertexOutputs_position : SV_Position;
+  float4 VertexOutputs_clipDistance0 : SV_ClipDistance0;
+  float4 VertexOutputs_clipDistance1 : SV_ClipDistance1;
 };
 
+
 VertexOutputs main_inner() {
-  VertexOutputs tint_symbol_1 = {(float[8])0, float4(1.0f, 2.0f, 3.0f, 4.0f)};
-  return tint_symbol_1;
+  VertexOutputs v = {(float[8])0, float4(1.0f, 2.0f, 3.0f, 4.0f)};
+  return v;
 }
 
-tint_symbol main() {
-  VertexOutputs inner_result = main_inner();
-  tint_symbol wrapper_result = (tint_symbol)0;
-  float tmp_inner_clip_distances[8] = inner_result.clipDistance;
-  wrapper_result.clip_distance_0[0u] = tmp_inner_clip_distances[0u];
-  wrapper_result.clip_distance_0[1u] = tmp_inner_clip_distances[1u];
-  wrapper_result.clip_distance_0[2u] = tmp_inner_clip_distances[2u];
-  wrapper_result.clip_distance_0[3u] = tmp_inner_clip_distances[3u];
-  wrapper_result.clip_distance_1[0u] = tmp_inner_clip_distances[4u];
-  wrapper_result.clip_distance_1[1u] = tmp_inner_clip_distances[5u];
-  wrapper_result.clip_distance_1[2u] = tmp_inner_clip_distances[6u];
-  wrapper_result.clip_distance_1[3u] = tmp_inner_clip_distances[7u];
-  wrapper_result.position = inner_result.position;
-  return wrapper_result;
+main_outputs main() {
+  VertexOutputs v_1 = main_inner();
+  float v_2[8] = v_1.clipDistance;
+  float4 v_3 = float4(v_2[0u], v_2[1u], v_2[2u], v_2[3u]);
+  main_outputs v_4 = {v_1.position, v_3, float4(v_2[4u], v_2[5u], v_2[6u], v_2[7u])};
+  return v_4;
 }
+

@@ -13,29 +13,25 @@
 
 namespace omnibox_feature_configs {
 
-constexpr auto enabled_by_default_desktop_only =
-#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT;
-#else
-    base::FEATURE_ENABLED_BY_DEFAULT;
-#endif
+namespace {
+constexpr bool IS_ANDROID = !!BUILDFLAG(IS_ANDROID);
+constexpr bool IS_IOS = !!BUILDFLAG(IS_IOS);
+constexpr bool IS_DESKTOP = !IS_ANDROID && !IS_IOS;
 
-BASE_FEATURE(AutocompleteControllerMetricsOptimization::
-                 kAutocompleteControllerMetricsOptimization,
-             "AutocompleteControllerMetricsOptimization",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-AutocompleteControllerMetricsOptimization::
-    AutocompleteControllerMetricsOptimization() {
-  enabled =
-      base::FeatureList::IsEnabled(kAutocompleteControllerMetricsOptimization);
+constexpr base::FeatureState DISABLED = base::FEATURE_DISABLED_BY_DEFAULT;
+constexpr base::FeatureState ENABLED = base::FEATURE_ENABLED_BY_DEFAULT;
+
+constexpr base::FeatureState enable_if(bool condition) {
+  return condition ? ENABLED : DISABLED;
 }
+}  // namespace
 
 // TODO(manukh): Enabled by default in m120. Clean up 12/5 when after m121
 //   branch cut.
 // static
 BASE_FEATURE(CalcProvider::kCalcProvider,
              "OmniboxCalcProvider",
-             enabled_by_default_desktop_only);
+             enable_if(IS_DESKTOP));
 CalcProvider::CalcProvider() {
   enabled = base::FeatureList::IsEnabled(kCalcProvider);
   score =
@@ -45,6 +41,45 @@ CalcProvider::CalcProvider() {
           .Get();
   num_non_calc_inputs =
       base::FeatureParam<int>(&kCalcProvider, "CalcProviderNumNonCalcInputs", 3)
+          .Get();
+}
+
+BASE_FEATURE(AiMode::kAllowAiModeMatches,
+             "AllowAiModeMatches",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(AiMode::kAiModeEligibility,
+             "kAiModeEligibility",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+AiMode::AiMode() {
+  allow_ai_mode_matches = base::FeatureList::IsEnabled(kAllowAiModeMatches);
+  do_not_dedupe_aim_suggestions =
+      base::FeatureParam<bool>(&kAllowAiModeMatches,
+                               "DoNotDedupeAimSuggestions",
+                               do_not_dedupe_aim_suggestions)
+          .Get();
+
+  do_not_show_historic_aim_suggestions =
+      base::FeatureParam<bool>(&kAllowAiModeMatches,
+                               "DoNotShowHistoricAimSuggestions",
+                               do_not_show_historic_aim_suggestions)
+          .Get();
+
+  check_ai_locale_client_side =
+      base::FeatureParam<bool>(&kAiModeEligibility, "CheckAiLocaleClientSide",
+                               check_ai_locale_client_side)
+          .Get();
+
+  check_ai_eligibility_gws_side =
+      base::FeatureParam<bool>(&kAiModeEligibility, "CheckAiEligibilityGWSSide",
+                               check_ai_eligibility_gws_side)
+          .Get();
+}
+
+AiModeOmniboxEntryPoint::AiModeOmniboxEntryPoint() {
+  enabled = base::FeatureList::IsEnabled(omnibox::kAiModeOmniboxEntryPoint);
+  hide_aim_hint_text_on_ntp_open =
+      base::FeatureParam<bool>(&omnibox::kAiModeOmniboxEntryPoint,
+                              "HideAimHintTextOnNtpOpen", false)
           .Get();
 }
 
@@ -114,6 +149,14 @@ BASE_FEATURE(ContextualSearch::kShowSuggestionsOnNoApc,
              "ShowSuggestionsOnNoApc",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+BASE_FEATURE(ContextualSearch::kOpenLensActionUITweaks,
+             "OpenLensActionUITweaks",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(ContextualSearch::kSuggestionsFulfilledByLensSupported,
+             "SuggestionsFulfilledByLensSupported",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 ContextualSearch::ContextualSearch() {
   // Meta-feature turns on/off other features, but only if it's overridden by
   // the user. If not then each feature is controlled separately.
@@ -165,6 +208,10 @@ ContextualSearch::ContextualSearch() {
   use_apc_paywall_signal = feature_enabled(kUseApcPaywallSignal);
   show_suggestions_on_no_apc =
       base::FeatureList::IsEnabled(kShowSuggestionsOnNoApc);
+  open_lens_action_ui_tweaks =
+      base::FeatureList::IsEnabled(kOpenLensActionUITweaks);
+  suggestions_fulfilled_by_lens_supported =
+      base::FeatureList::IsEnabled(kSuggestionsFulfilledByLensSupported);
 }
 
 ContextualSearch::ContextualSearch(const ContextualSearch&) = default;
@@ -182,7 +229,7 @@ bool ContextualSearch::IsEnabledWithPrefetch() const {
 
 BASE_FEATURE(MiaZPS::kOmniboxMiaZPS,
              "OmniboxMiaZPS",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 MiaZPS::MiaZPS() {
   enabled = base::FeatureList::IsEnabled(kOmniboxMiaZPS);
@@ -193,9 +240,87 @@ MiaZPS::MiaZPS() {
 
   suppress_psuggest_backfill_with_mia =
       base::FeatureParam<bool>(&kOmniboxMiaZPS,
-                               "SuppressPsuggestBackfillWithMIA", false)
+                               "SuppressPsuggestBackfillWithMIA",
+                               enable_if(IS_ANDROID || IS_IOS))
           .Get();
 }
+
+BASE_FEATURE(Toolbelt::kOmniboxToolbelt,
+             "OmniboxToolbelt",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+Toolbelt::Toolbelt() {
+  enabled = base::FeatureList::IsEnabled(kOmniboxToolbelt);
+  keep_toolbelt_after_input =
+      base::FeatureParam<bool>(&kOmniboxToolbelt, "KeepToolbeltAfterInput",
+                               false)
+          .Get();
+  keep_toolbelt_in_keyword_mode =
+      base::FeatureParam<bool>(&kOmniboxToolbelt, "KeepToolbeltInKeywordMode",
+                               false)
+          .Get();
+
+  always_include_lens_action =
+      base::FeatureParam<bool>(&kOmniboxToolbelt, "AlwaysIncludeLensAction",
+                               false)
+          .Get();
+
+  show_lens_action_on_non_ntp =
+      base::FeatureParam<bool>(&kOmniboxToolbelt, "ShowLensActionOnNonNtp",
+                               enabled)
+          .Get();
+  show_lens_action_on_ntp =
+      base::FeatureParam<bool>(&kOmniboxToolbelt, "ShowLensActionOnNtp", false)
+          .Get();
+  show_ai_mode_action_on_non_ntp =
+      base::FeatureParam<bool>(&kOmniboxToolbelt, "ShowAiModeActionOnNonNtp",
+                               false)
+          .Get();
+  show_ai_mode_action_on_ntp =
+      base::FeatureParam<bool>(&kOmniboxToolbelt, "ShowAiModeActionOnNtp",
+                               false)
+          .Get();
+  show_history_action_on_non_ntp =
+      base::FeatureParam<bool>(&kOmniboxToolbelt, "ShowHistoryActionOnNonNtp",
+                               enabled)
+          .Get();
+  show_history_action_on_ntp =
+      base::FeatureParam<bool>(&kOmniboxToolbelt, "ShowHistoryActionOnNtp",
+                               enabled)
+          .Get();
+  show_bookmarks_action_on_non_ntp =
+      base::FeatureParam<bool>(&kOmniboxToolbelt, "ShowBookmarksActionOnNonNtp",
+                               enabled)
+          .Get();
+  show_bookmarks_action_on_ntp =
+      base::FeatureParam<bool>(&kOmniboxToolbelt, "ShowBookmarksActionOnNtp",
+                               enabled)
+          .Get();
+  show_tabs_action_on_non_ntp =
+      base::FeatureParam<bool>(&kOmniboxToolbelt, "ShowTabsActionOnNonNtp",
+                               enabled)
+          .Get();
+  show_tabs_action_on_ntp =
+      base::FeatureParam<bool>(&kOmniboxToolbelt, "ShowTabsActionOnNtp",
+                               enabled)
+          .Get();
+  rebuild_button_row_views =
+      base::FeatureParam<bool>(&kOmniboxToolbelt, "RebuildButtonRowViews",
+                               enabled)
+          .Get();
+  use_action_icons_in_location_bar =
+      base::FeatureParam<bool>(&kOmniboxToolbelt, "UseActionIconsInLocationBar",
+                               enabled)
+          .Get();
+  select_toolbelt_before_opening =
+      base::FeatureParam<bool>(&kOmniboxToolbelt, "SelectToolbeltBeforeOpening",
+                               enabled)
+          .Get();
+}
+
+Toolbelt::Toolbelt(const Toolbelt&) = default;
+Toolbelt& Toolbelt::operator=(const Toolbelt&) = default;
+Toolbelt::~Toolbelt() = default;
 
 DocumentProvider::DocumentProvider() {
   enabled = base::FeatureList::IsEnabled(omnibox::kDocumentProvider);
@@ -353,6 +478,10 @@ SearchAggregatorProvider::SearchAggregatorProvider() {
   scoring_people_score_boost =
       base::FeatureParam<int>(&kSearchAggregatorProvider,
                               "scoring_people_score_boost", 100)
+          .Get();
+  scoring_people_email_match_score_boost =
+      base::FeatureParam<int>(&kSearchAggregatorProvider,
+                              "scoring_people_email_match_score_boost", 400)
           .Get();
   scoring_prefer_contents_over_queries =
       base::FeatureParam<bool>(&kSearchAggregatorProvider,

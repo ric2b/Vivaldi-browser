@@ -17,50 +17,50 @@ import networkConfigViewStyles from './networkConfigView.css.js';
 
 const UIStrings = {
   /**
-   *@description Text in Network Config View of the Network panel
+   *@description Text in the Network conditions panel shown in the dropdown where the user chooses the user agent.
    */
   custom: 'Custom…',
   /**
-   *@description Other user agent element placeholder in Network Config View of the Network panel
+   *@description Placeholder text shown in the input box where a user is expected to add a custom user agent.
    */
   enterACustomUserAgent: 'Enter a custom user agent',
   /**
-   *@description Error message for empty custom user agent input
+   *@description Error message when the custom user agent field is empty.
    */
   customUserAgentFieldIsRequired: 'Custom user agent field is required',
   /**
-   *@description Text in Network Config View of the Network panel
+   *@description Header for the caching settings within the network conditions panel.
    */
   caching: 'Caching',
   /**
-   *@description Text in Network Config View of the Network panel
+   *@description Option in the network conditions panel to disable the cache.
    */
   disableCache: 'Disable cache',
   /**
-   *@description Text in Network Config View of the Network panel
+   *@description Header in Network conditions panel for the network throttling and emulation settings.
    */
-  networkThrottling: 'Network throttling',
+  networkThrottling: 'Network',
   /**
-   *@description Text in Network Config View of the Network panel
+   *@description Header in the network conditions panel for the user agent settings.
    */
   userAgent: 'User agent',
   /**
-   *@description Text in Network Config View of the Network panel
+   *@description User agent setting in the network conditions panel to use the browser's default value.
    */
   selectAutomatically: 'Use browser default',
   /**
-   * @description Title of a section in the Network conditions view that includes
+   * @description Title of a section in the Network conditions panel that includes
    * a set of checkboxes to override the content encodings supported by the browser.
    */
   acceptedEncoding: 'Accepted `Content-Encoding`s',
   /**
-   * @description Status text for successful update of client hints.
+   * @description Status text displayed after updating user agent client hints.
    */
   clientHintsStatusText: 'User agent updated.',
   /**
    * @description The aria alert message when the Network conditions panel is shown.
    */
-  networkConditionsPanelShown: 'Network conditions shown',
+  networkConditionsPanelShown: 'Network conditions shown.',
 } as const;
 const str_ = i18n.i18n.registerUIStrings('panels/network/NetworkConfigView.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
@@ -69,10 +69,11 @@ let networkConfigViewInstance: NetworkConfigView;
 
 export class NetworkConfigView extends UI.Widget.VBox {
   constructor() {
-    super(true);
+    super({
+      jslog: `${VisualLogging.panel('network-conditions').track({resize: true})}`,
+      useShadowDom: true,
+    });
     this.registerRequiredCSS(networkConfigViewStyles);
-
-    this.element.setAttribute('jslog', `${VisualLogging.panel('network-conditions').track({resize: true})}`);
 
     this.contentElement.classList.add('network-config');
 
@@ -217,6 +218,9 @@ export class NetworkConfigView extends UI.Widget.VBox {
     const networkThrottlingSelect = section.createChild('select');
     MobileThrottling.ThrottlingManager.throttlingManager().createNetworkThrottlingSelector(networkThrottlingSelect);
     UI.ARIAUtils.setLabel(networkThrottlingSelect, title);
+    const saveDataSelect =
+        MobileThrottling.ThrottlingManager.throttlingManager().createSaveDataOverrideSelector('chrome-select').element;
+    section.appendChild(saveDataSelect);
   }
 
   private createUserAgentSection(): void {
@@ -363,7 +367,7 @@ export class NetworkConfigView extends UI.Widget.VBox {
   }
   override wasShown(): void {
     super.wasShown();
-    UI.ARIAUtils.alert(i18nString(UIStrings.networkConditionsPanelShown));
+    UI.ARIAUtils.LiveAnnouncer.alert(i18nString(UIStrings.networkConditionsPanelShown));
   }
 }
 

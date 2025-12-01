@@ -28,9 +28,6 @@ NSString* const vTabGridEmptyStateLoginButtonBGColor =
 
 // Assets for the empty state
 NSString* vTabGridEmptyStateRegularTabsImage = @"tab_grid_regular_tabs_empty";
-NSString* vTabGridEmptyStatePrivateTabsImage = @"tab_grid_incognito_tabs_empty";
-NSString* vTabGridEmptyStateSyncedTabsImage = @"tab_grid_remote_tabs_empty";
-NSString* vTabGridEmptyStateClosedTabsImage = @"tab_grid_closed_tabs_empty";
 
 // Assets for inactive tabs
 NSString* vTabGridInactiveTabsEduIcon = @"vivaldi_inactive_tabs_edu_icon";

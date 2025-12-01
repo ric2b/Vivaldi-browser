@@ -17,7 +17,7 @@
 
 import $ from "../$.js";
 
-let {Math, setInterval, chrome, isExtensionContext, performance} = $(window);
+let {Math, setInterval, performance} = $(window);
 
 /**
  * Default profile("...") returned object when profile mode is disabled.
@@ -86,24 +86,16 @@ export function setProfile() {
  * @private
  */
 export function profile(id, rate = 10) {
-  if (inactive || !isExtensionContext)
+  if (inactive)
     return noopProfile;
-
   function processSamples() {
     let samples = $([]);
 
     for (let {name, duration} of performance.getEntriesByType("measure"))
       samples.push({name, duration});
 
-    if (samples.length) {
+    if (samples.length)
       performance.clearMeasures();
-
-      chrome.runtime.sendMessage({
-        type: "ewe:profiler.sample",
-        category: "snippets",
-        samples
-      });
-    }
   }
 
   // avoid creation of N intervals when the same id is used
@@ -119,6 +111,10 @@ export function profile(id, rate = 10) {
     },
     end(clear = false) {
       performance.measure(id, id);
+      const measures = performance.getEntriesByName(id, "measure");
+      const measureObj = measures.length > 0 ?
+                         measures[measures.length - 1] : null;
+      console.log("PROFILER:", measureObj);
       performance.clearMarks(id);
       if (clear) {
         clearInterval(profile[id]);

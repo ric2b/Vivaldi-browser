@@ -8,11 +8,17 @@
 <translation id="1158211211994409885"><ph name="HOST_NAME" />、意外やけど途中で接続切ってきたわ。</translation>
 <translation id="1161325031994447685">Wi-Fiにもっかい接ぐ</translation>
 <translation id="1175364870820465910">刷るわ... (&amp;P)</translation>
+<translation id="1204778305310783648">「インターネットを監視経済に変えるんは間違うとる」: ヨン・フォン・テッツナー、Web Summit 2023にて。</translation>
 <translation id="1285320974508926690">このサイトは訳さへん</translation>
 <translation id="1375198122581997741">バージョン情報</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" />からデータ送信されへんかったわ。</translation>
+<translation id="1489123210863708132">トラッカー・広告ブロッカー有効にして、自分のブラウジング守って、プライバシー統計作ろうや。</translation>
+<translation id="1500787357908295021">あんたのプライバシー統計</translation>
 <translation id="1555191101192706055">アクセスしようとしたサイトな、ユーザー騙してブラウジングに影響出る（あんたがホームにしてるページ勝手に変えたり、行く先々のサイトで余計な広告出したり）有害ソフトウェアをインストールしてきよるかもしれへんで。</translation>
 <translation id="1559528461873125649">そんなファイルとかフォルダーないみたいやわ</translation>
+<translation id="16328381871867323">議員さんはようやく、うちらのデジタルデータがどうやって追跡、収集、保存されてるか注目し始めたわ。
+
+形成が一変する判決の意味と、うちらにどんな影響があるか、確認してみて。</translation>
 <translation id="1640244768702815859"><ph name="BEGIN_LINK" />サイトのトップページにアクセス<ph name="END_LINK" />してみて。</translation>
 <translation id="1645368109819982629">対応してへんプロトコル</translation>
 <translation id="1662550410081243962">支払方法保存して自動入力</translation>
@@ -20,6 +26,8 @@
 <translation id="1728677426644403582">ウェブページのソースが表示されてるで</translation>
 <translation id="1734878702283171397">システム管理者に聞いてみて。</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Windowsのネットワーク診断試してみて<ph name="END_LINK" />。</translation>
+<translation id="1919345977826869612">広告</translation>
+<translation id="1970180444859658569">‘Do-Not-Track’ プライバシー設定はドイツで法的支援あるで</translation>
 <translation id="1974060860693918893">詳細</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />プロキシーとファイアウォール確認する<ph name="END_LINK" /></translation>
 <translation id="2048261947532620704">ページ訳してるで</translation>
@@ -28,6 +36,7 @@
 <translation id="2178904466768126352">アクセスしようとしたサイトな、パスワード、写真、メッセージ、クレジットカード番号盗んだり消したりする有害ソフトウェアをインストールしてきよるかもしれへんで。</translation>
 <translation id="2187317261103489799">検出（デフォルト）</translation>
 <translation id="2224337661447660594">ネット繋がってへん</translation>
+<translation id="2225863440766607138">トラッカー</translation>
 <translation id="2283340219607151381">住所保存して自動入力</translation>
 <translation id="2292556288342944218">インターネットアクセスがブロックされてるわ</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" />にはユーザー名とパスワードが要るねん。</translation>
@@ -43,8 +52,11 @@
 <translation id="2634124572758952069"><ph name="HOST_NAME" /> のサーバーのIPアドレス見つからへんかったわ。</translation>
 <translation id="2649204054376361687"><ph name="COUNTRY" /> <ph name="CITY" /></translation>
 <translation id="2650446666397867134">ファイルへのアクセス、断られたわ</translation>
+<translation id="2690699652723742414">直近30日</translation>
 <translation id="2705137772291741111">このサイトの保存(キャッシュ)されたコピー、読み取られへんかったわ。</translation>
 <translation id="2730326759066348565"><ph name="BEGIN_LINK" />接続診断ツール使う<ph name="END_LINK" /></translation>
+<translation id="2741210449864955442">https://vivaldi.com/blog/technology/vivaldi-browser-at-the-web-summit/</translation>
+<translation id="2765309692777226484">トラッカー・広告ブロッカーが無効になってるで。</translation>
 <translation id="2784949926578158345">接続リセットされたわ。</translation>
 <translation id="2826760142808435982"><ph name="CIPHER" /> で接続が暗号化・認証されてて、<ph name="KX" /> が鍵交換メカニズムとして使われてるわ。</translation>
 <translation id="290376772003165898">ページに<ph name="LANGUAGE" />ない？</translation>
@@ -57,12 +69,16 @@
 <translation id="3037605927509011580">あ、あかんわ！</translation>
 <translation id="3041612393474885105">証明書情報</translation>
 <translation id="3109728660330352905">このページ表示する権限がないねん。</translation>
+<translation id="3119245580849443327">Vivaldiプライバシーレポート</translation>
 <translation id="31207688938192855"><ph name="BEGIN_LINK" />接続診断ツール使ってみて<ph name="END_LINK" />。</translation>
+<translation id="3126903660515914763">https://vivaldi.com/blog/news/alert-no-google-topics-in-vivaldi/</translation>
 <translation id="3154506275960390542">このページのフォーム、安全に送信されへん可能性あるで。送信したデータを途中で他の人に見られたり、悪さしよるユーザーがサーバーの受信するデータ書き換えてきよるかもしれへんで。</translation>
+<translation id="3156779787905856989">Manifest V3、webRequestと広告ブロッカーについて</translation>
 <translation id="3176929007561373547">プロキシーの設定確認するか、ネットワーク管理者に問い合わせて、プロキシーサーバーが正常に
       動作してるか確認してもうてもええかな。プロキシーサーバー使ってないんやったら
       次の方法試してみて。
       <ph name="PLATFORM_TEXT" /></translation>
+<translation id="3191389212681074619">https://help.vivaldi.com/android/android-privacy/android-tracker-and-ad-blocker/</translation>
 <translation id="3226128629678568754">ページ読み込むんやったらデータ再送信せなあかんから、再読み込みボタンを押したって。</translation>
 <translation id="3234666976984236645">このサイトの重要なコンテンツを常に検出</translation>
 <translation id="3384522979010096022">このサイトの表示、あんたの組織が許可してへんわ</translation>
@@ -80,6 +96,8 @@
       リストから外して、もっかい追加し直してみて。</translation>
 <translation id="3658742229777143148">変更履歴</translation>
 <translation id="3681007416295224113">証明書情報</translation>
+<translation id="3694122362646626770">ウェブサイト</translation>
+<translation id="3716128635228495027">Vivaldiに戻る</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />プロキシー、ファイアウォール、DNSの設定確認する<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">プロキシーサーバー使ってるんやったら...</translation>
 <translation id="3861977424605124250">起動時に出す</translation>
@@ -99,9 +117,11 @@
 <translation id="4250431568374086873">このサイトへの接続、完全には保護されてへんで</translation>
 <translation id="4265872034478892965">管理者に許可されとる</translation>
 <translation id="4305666528087210886">ファイルにアクセスできへんかったわ</translation>
+<translation id="430967081421617822">全期間</translation>
 <translation id="4312866146174492540">ブロック（デフォルト）</translation>
 <translation id="4408413947728134509">Cookie <ph name="NUM_COOKIES" /></translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" />でログイン証明書が承認されなかったか、ログイン証明書が提示されていない可能性があるわ。</translation>
+<translation id="4474776280324528449">https://vivaldi.com/blog/do-no-track-gets-legal-backing-in-germany/</translation>
 <translation id="4506599922270137252">システム管理者に問い合わせる</translation>
 <translation id="4522570452068850558">細かいこと</translation>
 <translation id="4558551763791394412">拡張機能、無効にしてみて。</translation>
@@ -121,8 +141,11 @@
 <translation id="5068778127327928576">{NUM_COOKIES,plural, =1{（1 個が使用中）}other{（# 個が使用中）}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />プロキシーアドレス確認する<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64-bit)</translation>
+<translation id="5216593085343845370">Vivaldiのゼロトラッキングに加わって、自分のオンラインプライバシー取り戻そ。
+下の記事で、うちらがユーザーの権利守るためにどうに戦っているか見てみて。</translation>
 <translation id="5355557959165512791"><ph name="SITE" />は証明書が失効してるから、今アクセスできへんで。ネットワークエラーとかネットワーク攻撃って大抵一時的なもんやから、時間置いたらアクセスできるようになるんちゃう。</translation>
 <translation id="5386426401304769735">このサイトの証明書チェーンには SHA-1 使て署名された証明書が含まれてるわ。</translation>
+<translation id="5398772614898833570">ブロックした広告数</translation>
 <translation id="5452270690849572955">この<ph name="HOST_NAME" />ページ、どこにも見当たらへん</translation>
 <translation id="5457113250005438886">無効</translation>
 <translation id="5492298309214877701">このサイトは企業、団体か学校のイントラネット上にあるんやけどな、外部のウェブサイトと同じURLが使われてるねん。
@@ -130,9 +153,12 @@
     システム管理者に聞いてみて。</translation>
 <translation id="5510766032865166053">別んとこ行ったか消されたかも知れへん。</translation>
 <translation id="5556459405103347317">再読み込み</translation>
+<translation id="5583322400766491358">パーソナルインサイトのデータはあんたのデバイスに安全に保存されて、第三者と共有されることはないで。</translation>
 <translation id="5610142619324316209">接続を確認する</translation>
 <translation id="5617949217645503996"><ph name="HOST_NAME" />でリダイレクト何回もあったわ。</translation>
+<translation id="5648166631817621825">直近7日</translation>
 <translation id="5675650730144413517">このページ動いてへんわ</translation>
+<translation id="5741670635761443575">言うとくけど、VivaldiにはGoogle Topicsないで。</translation>
 <translation id="5785756445106461925">ほんで、このページには安全ちゃう他のリソースがあんねん。このリソースは受信中に他のユーザーから見られる可能性あるし、悪意のあるユーザーに改変されたらページの見た目も変わるかも知れへん。</translation>
 <translation id="5799902971440853357"><ph name="SITE" />から送信された暗号化済みの認証情報がVivaldiで処理できへんから、今このウェブサイトにアクセスできへんわ。ネットワークエラーとかネットワーク攻撃って大抵一時的なもんやから、時間置いたらアクセスできるようになるんちゃう。</translation>
 <translation id="5810442152076338065"><ph name="DOMAIN" /> への接続は昔の暗号スイートで暗号化されてるで。</translation>
@@ -144,7 +170,7 @@
 <translation id="6146055958333702838">ケーブル見てな、使ってる可能性があるネットワークデバイス（ルーターとかモデムとか）
     再起動してみて。</translation>
 <translation id="614940544461990577">これやってみ：</translation>
-<translation id="6165508094623778733">詳しく見るわ</translation>
+<translation id="6165508094623778733">もっと詳しく</translation>
 <translation id="6177128806592000436">このサイトへの接続、保護されてへんで</translation>
 <translation id="6203231073485539293">インターネット接続確認してもうてもええかな</translation>
 <translation id="6225522625585012689">&lt;strong&gt;vivaldi://policy&lt;/strong&gt; で、ブロックされた URL のリストとシステム管理者が設定した他のポリシー確認できるで。</translation>
@@ -162,11 +188,13 @@
 <translation id="6653655836861174026">プロファイル使えば、Vivaldiのデータ分けて管理できるで。家族や友人用にプロファイル作ったり、仕事用とプライベート用で使い分けたりできるで。</translation>
 <translation id="6657585470893396449">パスワード</translation>
 <translation id="6711464428925977395">プロキシーサーバーに問題があるか、アドレスが合ってないかも。</translation>
+<translation id="6736243959894955139">アドレス</translation>
 <translation id="6757797048963528358">あんたのデバイス、さっきまで寝とったで。</translation>
 <translation id="6890956352250146925">Cookieとサイトデータのオプション</translation>
 <translation id="6897140037006041989">ユーザーエージェント</translation>
 <translation id="6935179587384421592"><ph name="SIZE" />。一部のサイトは、次回訪問時に読み込み遅なる可能性あるで。</translation>
 <translation id="6957624206566198865">さらのプライベートタブでページ開く</translation>
+<translation id="7013466836883158999">ユーザー監視せんでも、持続可能な製品作れんの？ブラウジングの未来ってどんな感じ？2023年のウェブサミットでVivaldiのCEO、ヨン・フォン・テッツナーがそんな質問に答えてるで。</translation>
 <translation id="7053983685419859001">ブロック</translation>
 <translation id="7066262000446496119">誰がVivaldi使うてんの？</translation>
 <translation id="7096937462164235847">このウェブサイトのID認証されてへんで。</translation>
@@ -176,15 +204,19 @@
 <translation id="7210863904660874423"><ph name="HOST_NAME" />、セキュリティ規格遵守しとらへんわ。</translation>
 <translation id="7219179957768738017">この接続には <ph name="SSL_VERSION" /> を使うてんで。</translation>
 <translation id="7221855153210829124">通知出す</translation>
+<translation id="7277237102285741596">https://vivaldi.com/blog/manifest-v3-webrequest-and-ad-blockers/</translation>
 <translation id="7283555985781738399">ゲストモード</translation>
 <translation id="7353601530677266744">コマンドライン</translation>
 <translation id="7419106976560586862">プロファイルのパス</translation>
+<translation id="7421665776469827022">保存したデータ</translation>
+<translation id="7454640759045234067">ブロックしたトラッカー数</translation>
 <translation id="7455133967321480974">グローバルのデフォルト値（つまりブロック）にしとく</translation>
 <translation id="7518003948725431193">次のウェブページアドレス見つからへんかったわ: <ph name="URL" /></translation>
 <translation id="7549584377607005141">このウェブページちゃんと表示するんやったら、さっき入れたデータが要るで。データ再送信できるけど、このページでさっきやったこと、もっかいやらなあかんで。</translation>
 <translation id="759889825892636187"><ph name="HOST_NAME" />、今このリクエスト処理できへんねんて。</translation>
 <translation id="7662298039739062396">拡張機能に指定される設定</translation>
 <translation id="7663736086183791259">証明書 <ph name="CERTIFICATE_VALIDITY" /></translation>
+<translation id="7698231949697067951">オンラインで何するかはあんたの自由や！下で、うちらがどうやってあんたの保護に貢献してきたか見てみて。</translation>
 <translation id="7714464543167945231">証明書</translation>
 <translation id="7716147886133743102">管理者にブロックされたわ</translation>
 <translation id="7716424297397655342">このサイト、キャッシュから読み込まれへんわ</translation>
@@ -193,8 +225,11 @@
 <translation id="7800304661137206267"><ph name="CIPHER" /> で接続が暗号化されてて、メッセージ認証に <ph name="MAC" />、鍵交換メカニズムに <ph name="KX" /> が使われてるわ。</translation>
 <translation id="7834399512844817676"><ph name="SITE" />は普段な、暗号化して情報を保護してるねん。今回Vivaldiから<ph name="SITE" />に接続しよう思った時に、いつものとちゃう誤った認証情報が返ってきてん。悪さしよるユーザーが<ph name="SITE" />になりすまそうとしているか、Wi-Fiログイン画面で接続が中断された可能性があるわ。データのやり取りが行われる前にVivaldiが接続止めたから、情報は保護されたままやで。</translation>
 <translation id="7878562273885520351">パスワード、不正利用されるかも知れへんで</translation>
+<translation id="788493840831967104">節約できた時間</translation>
 <translation id="7951415247503192394">(32-bit)</translation>
 <translation id="7953236668995583915">このサイトでさらの設定反映させるんやったら、ページもっかい読み込んでな</translation>
+<translation id="7981965265950405093">Vivaldiには自前の広告・トラッカーブロッカー、多彩なカスタマイズオプション、内蔵型メール・カレンダー機能などが入ってるねん。それがGoogleのManifest V3に合うとるか？Vivaldiの開発者、ジュリアン・ピカラウサがこの問題について解説するで。</translation>
+<translation id="8034402064393340023">みんなのプライバシーに対するうちらの取り組み</translation>
 <translation id="8037357227543935929">確認して（デフォルト）</translation>
 <translation id="8041940743680923270">グローバルのデフォルト値（つまり確認）にしとく</translation>
 <translation id="808894953321890993">パスワード変更</translation>
@@ -204,6 +239,7 @@
 <translation id="8211406090763984747">この接続、保護されてるわ</translation>
 <translation id="8241707690549784388">今行こうとしてるページ、あんたが入力した情報使ってるやん。そのページ戻ったら、もっかい同じことせなあかんかもしれんけど、行ってみる？</translation>
 <translation id="8241712895048303527">このサイトでブロック</translation>
+<translation id="8248593573177859437">プライバシーレポート</translation>
 <translation id="8286036467436129157">ログイン</translation>
 <translation id="8288807391153049143">証明書出す</translation>
 <translation id="8289355894181816810">確認方法わからへんかったら、ネットワーク管理者に聞いてみ。</translation>
@@ -223,9 +259,11 @@
 <translation id="9062620674789239642">他のとこ行ったか、編集されたか、消された可能性あるわ。</translation>
 <translation id="9069693763241529744">拡張機能にブロックされたわ</translation>
 <translation id="9073799351042754113">このサイトに対するセキュリティ警告無効にしたで。</translation>
+<translation id="9118360612142967597">ユーザーの行動監視してプロファイリングするんは間違うとるわ。せやから、VivaldiブラウザではGoogleのTopicsを二重に無効化してるねん。</translation>
 <translation id="9168814207360376865">支払方法保存しているかの確認をサイトに許可する</translation>
 <translation id="9169664750068251925">このサイトではいつもブロック</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" />、サポートされていないプロトコル使っとるわ。</translation>
+<translation id="9188210215803842004">ウェブサイトとトラッカーの詳細</translation>
 <translation id="936602727769022409">Googleアカウントにアクセスできへんようになるかも。パスワード変えた方がええかも。変えるんやったら要ログインな。</translation>
 <translation id="969892804517981540">公式ビルド</translation>
 <translation id="984275831282074731">支払方法</translation>

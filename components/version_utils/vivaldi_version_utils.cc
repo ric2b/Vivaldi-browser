@@ -31,7 +31,7 @@ int CompareVivaldiMajorVersions(const base::Version& lhs,
 bool HasMajorVersionChanged(const base::Version& version) {
   DCHECK(version.IsValid());
   const base::Version static_version = ::vivaldi::GetVivaldiVersion();
-  return CompareVivaldiMajorVersions(version, version) != 0;
+  return CompareVivaldiMajorVersions(static_version, version) != 0;
 }
 
 bool HasVersionChanged(const base::Version& version) {
@@ -39,7 +39,7 @@ bool HasVersionChanged(const base::Version& version) {
   const base::Version static_version = ::vivaldi::GetVivaldiVersion();
   // Version changed when the version is lower that the
   // static version.
-  return version.CompareTo(version) < 0;
+  return version.CompareTo(static_version) != 0;
 }
 
 bool HasCrashDetectionVersionChanged(PrefService* prefs) {

@@ -196,6 +196,8 @@ struct BeginNavigationParams {
   // True if the initiator explicitly asked for opener relationships to be
   // preserved, via rel="opener".
   bool has_rel_opener = false;
+
+  bool vivaldi_from_trusted_event = false;
 };
 
 // Provided by the browser or the renderer -------------------------------------

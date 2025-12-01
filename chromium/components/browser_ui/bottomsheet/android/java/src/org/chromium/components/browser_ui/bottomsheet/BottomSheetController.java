@@ -4,6 +4,7 @@
 
 package org.chromium.components.browser_ui.bottomsheet;
 
+import androidx.annotation.ColorInt;
 import androidx.annotation.IntDef;
 
 import org.chromium.build.annotations.NullMarked;
@@ -215,6 +216,13 @@ public interface BottomSheetController {
      * controls UI.
      */
     boolean isAnchoredToBottomControls();
+
+    /**
+     * Get the current background color for the bottom sheet. If the sheet does not have a solid
+     * background color, this will return null.
+     */
+    @ColorInt
+    @Nullable Integer getSheetBackgroundColor();
 
     /** Vivaldi
      * Set to make sheet swipe only using toolbar

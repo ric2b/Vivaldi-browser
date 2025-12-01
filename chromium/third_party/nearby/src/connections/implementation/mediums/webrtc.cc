@@ -102,15 +102,14 @@ bool WebRtc::StartAcceptingConnections(const std::string& service_id,
                                        bool non_cellular) {
   MutexLock lock(&mutex_);
   if (!IsAvailable()) {
-    NEARBY_LOGS(WARNING) << "Cannot start accepting WebRTC connections because "
-                            "WebRTC is not available.";
+    LOG(WARNING) << "Cannot start accepting WebRTC connections because "
+                    "WebRTC is not available.";
     return false;
   }
 
   if (IsAcceptingConnectionsLocked(service_id)) {
-    NEARBY_LOGS(WARNING)
-        << "Cannot start accepting WebRTC connections because service "
-        << service_id << "is already accepting WebRTC connections.";
+    LOG(WARNING) << "Cannot start accepting WebRTC connections because service "
+                 << service_id << "is already accepting WebRTC connections.";
     return false;
   }
 
@@ -150,17 +149,16 @@ bool WebRtc::StartAcceptingConnections(const std::string& service_id,
   // Now that we're set up to receive messages, we'll save our state and return
   // a successful result.
   accepting_connections_info_.emplace(service_id, std::move(info));
-  NEARBY_LOGS(INFO) << "Started listening for WebRTC connections as "
-                    << self_peer_id.GetId() << " on service " << service_id;
+  LOG(INFO) << "Started listening for WebRTC connections as "
+            << self_peer_id.GetId() << " on service " << service_id;
   return true;
 }
 
 void WebRtc::StopAcceptingConnections(const std::string& service_id) {
   MutexLock lock(&mutex_);
   if (!IsAcceptingConnectionsLocked(service_id)) {
-    NEARBY_LOGS(WARNING)
-        << "Cannot stop accepting WebRTC connections because service  "
-        << service_id << "is not accepting WebRTC connections.";
+    LOG(WARNING) << "Cannot stop accepting WebRTC connections because service  "
+                 << service_id << "is not accepting WebRTC connections.";
     return;
   }
 
@@ -205,8 +203,8 @@ void WebRtc::StopAcceptingConnections(const std::string& service_id) {
 
   // Clean up our state. We're now no longer listening for connections.
   accepting_connections_info_.erase(service_id);
-  NEARBY_LOGS(INFO) << "Stopped listening for WebRTC connections for service "
-                    << service_id;
+  LOG(INFO) << "Stopped listening for WebRTC connections for service "
+            << service_id;
 }
 
 ErrorOr<WebRtcSocketWrapper> WebRtc::Connect(
@@ -220,18 +218,17 @@ ErrorOr<WebRtcSocketWrapper> WebRtc::Connect(
   while (service_id_to_connect_attempts_count_map_[service_id] <=
          kConnectAttemptsLimit) {
     if (cancellation_flag->Cancelled()) {
-      NEARBY_LOGS(WARNING)
-          << "Attempt #"
-          << service_id_to_connect_attempts_count_map_[service_id]
-          << ": Cannot Connect with WebRtc due to cancel.";
+      LOG(WARNING) << "Attempt #"
+                   << service_id_to_connect_attempts_count_map_[service_id]
+                   << ": Cannot Connect with WebRtc due to cancel.";
       return {
           Error(OperationResultCode::
                     CLIENT_CANCELLATION_CANCEL_WEB_RTC_OUTGOING_CONNECTION)};
     }
 
-    NEARBY_LOGS(INFO) << "Attempt #"
-                      << service_id_to_connect_attempts_count_map_[service_id]
-                      << ": Beginning connection.";
+    LOG(INFO) << "Attempt #"
+              << service_id_to_connect_attempts_count_map_[service_id]
+              << ": Beginning connection.";
     wrapper_result = AttemptToConnect(service_id, remote_peer_id, location_hint,
                                       cancellation_flag);
     if (wrapper_result.has_value()) {
@@ -241,8 +238,7 @@ ErrorOr<WebRtcSocketWrapper> WebRtc::Connect(
     service_id_to_connect_attempts_count_map_[service_id]++;
   }
 
-  NEARBY_LOGS(WARNING) << "Giving up after " << kConnectAttemptsLimit
-                       << " attempts";
+  LOG(WARNING) << "Giving up after " << kConnectAttemptsLimit << " attempts";
   return {Error(wrapper_result.error().operation_result_code().value())};
 }
 
@@ -259,19 +255,17 @@ ErrorOr<WebRtcSocketWrapper> WebRtc::AttemptToConnect(
   // is complete.
   CancellationFlagListener listener(
       cancellation_flag, [this, &service_id, &socket_future]() {
-        NEARBY_LOGS(WARNING)
-            << "Attempt # "
-            << service_id_to_connect_attempts_count_map_[service_id]
-            << " to connect with WebRtc stopped due to cancel.";
+        LOG(WARNING) << "Attempt # "
+                     << service_id_to_connect_attempts_count_map_[service_id]
+                     << " to connect with WebRtc stopped due to cancel.";
         socket_future.SetException({Exception::kFailed});
       });
 
   {
     MutexLock lock(&mutex_);
     if (!IsAvailable()) {
-      NEARBY_LOGS(WARNING) << "Cannot connect to WebRTC peer "
-                           << remote_peer_id.GetId()
-                           << " because WebRTC is not available.";
+      LOG(WARNING) << "Cannot connect to WebRTC peer " << remote_peer_id.GetId()
+                   << " because WebRTC is not available.";
       return {
           Error(OperationResultCode::MEDIUM_UNAVAILABLE_WEB_RTC_NOT_AVAILABLE)};
     }
@@ -280,9 +274,8 @@ ErrorOr<WebRtcSocketWrapper> WebRtc::AttemptToConnect(
     std::unique_ptr<ConnectionFlow> connection_flow =
         CreateConnectionFlow(service_id, remote_peer_id);
     if (!connection_flow) {
-      NEARBY_LOGS(INFO) << "Cannot connect to WebRTC peer "
-                        << remote_peer_id.GetId()
-                        << " because we failed to create a ConnectionFlow.";
+      LOG(INFO) << "Cannot connect to WebRTC peer " << remote_peer_id.GetId()
+                << " because we failed to create a ConnectionFlow.";
       return {Error(OperationResultCode::NEARBY_WEB_RTC_CONNECTION_FLOW_NULL)};
     }
 
@@ -290,9 +283,8 @@ ErrorOr<WebRtcSocketWrapper> WebRtc::AttemptToConnect(
     info.signaling_messenger = medium_->GetSignalingMessenger(
         info.self_peer_id.GetId(), location_hint);
     if (!info.signaling_messenger->IsValid()) {
-      NEARBY_LOGS(INFO) << "Cannot connect to WebRTC peer "
-                        << remote_peer_id.GetId()
-                        << " because we failed to create a SignalingMessenger.";
+      LOG(INFO) << "Cannot connect to WebRTC peer " << remote_peer_id.GetId()
+                << " because we failed to create a SignalingMessenger.";
       return {
           Error(OperationResultCode::
                     MISCELLEANEOUS_WEB_RTC_TACHYON_SIGNALING_MESSENGER_NULL)};
@@ -308,7 +300,7 @@ ErrorOr<WebRtcSocketWrapper> WebRtc::AttemptToConnect(
     if (!info.signaling_messenger->StartReceivingMessages(
             absl::bind_front(&WebRtc::OnSignalingMessage, this, service_id),
             signaling_complete_callback)) {
-      NEARBY_LOGS(INFO)
+      LOG(INFO)
           << "Cannot connect to WebRTC peer " << remote_peer_id.GetId()
           << " because we failed to start receiving messages over Tachyon.";
       info.signaling_messenger.reset();
@@ -320,9 +312,8 @@ ErrorOr<WebRtcSocketWrapper> WebRtc::AttemptToConnect(
     if (!info.signaling_messenger->SendMessage(
             remote_peer_id.GetId(),
             webrtc_frames::EncodeReadyForSignalingPoke(info.self_peer_id))) {
-      NEARBY_LOGS(INFO) << "Cannot connect to WebRTC peer "
-                        << remote_peer_id.GetId()
-                        << " because we failed to poke the peer over Tachyon.";
+      LOG(INFO) << "Cannot connect to WebRTC peer " << remote_peer_id.GetId()
+                << " because we failed to poke the peer over Tachyon.";
       info.signaling_messenger.reset();
       return {Error(OperationResultCode::
                         CONNECTIVITY_WEB_RTC_CONNECT_TO_TACHYON_FAILURE)};
@@ -351,8 +342,8 @@ ErrorOr<WebRtcSocketWrapper> WebRtc::AttemptToConnect(
 
     // Verify that the connection went through.
     if (!socket_result.ok()) {
-      NEARBY_LOGS(INFO) << "Failed to connect to WebRTC peer "
-                        << remote_peer_id.GetId();
+      LOG(INFO) << "Failed to connect to WebRTC peer "
+                << remote_peer_id.GetId();
       RemoveConnectionFlow(remote_peer_id);
       info.signaling_messenger.reset();
       requesting_connections_info_.erase(remote_peer_id.GetId());
@@ -385,11 +376,10 @@ void WebRtc::ProcessLocalIceCandidate(
             webrtc_frames::EncodeIceCandidates(
                 connection_request_entry->second.self_peer_id,
                 {ice_candidate}))) {
-      NEARBY_LOGS(INFO) << "Failed to send ice candidate to "
-                        << remote_peer_id.GetId();
+      LOG(INFO) << "Failed to send ice candidate to " << remote_peer_id.GetId();
     }
 
-    NEARBY_LOGS(INFO) << "Sent ice candidate to " << remote_peer_id.GetId();
+    LOG(INFO) << "Sent ice candidate to " << remote_peer_id.GetId();
     return;
   }
 
@@ -405,17 +395,16 @@ void WebRtc::ProcessLocalIceCandidate(
             webrtc_frames::EncodeIceCandidates(
                 accepting_connection_entry->second.self_peer_id,
                 {ice_candidate}))) {
-      NEARBY_LOGS(INFO) << "Failed to send ice candidate to "
-                        << remote_peer_id.GetId();
+      LOG(INFO) << "Failed to send ice candidate to " << remote_peer_id.GetId();
     }
 
-    NEARBY_LOGS(INFO) << "Sent ice candidate to " << remote_peer_id.GetId();
+    LOG(INFO) << "Sent ice candidate to " << remote_peer_id.GetId();
     return;
   }
 
-  NEARBY_LOGS(INFO) << "Skipping restart listening for tachyon inbox messages "
-                       "since we are not accepting connections for service "
-                    << service_id;
+  LOG(INFO) << "Skipping restart listening for tachyon inbox messages "
+               "since we are not accepting connections for service "
+            << service_id;
 }
 
 void WebRtc::OnSignalingMessage(const std::string& service_id,
@@ -426,7 +415,7 @@ void WebRtc::OnSignalingMessage(const std::string& service_id,
 }
 
 void WebRtc::OnSignalingComplete(const std::string& service_id, bool success) {
-  NEARBY_LOGS(INFO) << "Signaling completed with status: " << success;
+  LOG(INFO) << "Signaling completed with status: " << success;
   if (success) {
     return;
   }
@@ -456,13 +445,13 @@ void WebRtc::ProcessTachyonInboxMessage(const std::string& service_id,
   // Attempt to parse the incoming message as a WebRtcSignalingFrame.
   location::nearby::mediums::WebRtcSignalingFrame frame;
   if (!frame.ParseFromString(std::string(message))) {
-    NEARBY_LOGS(WARNING) << "Failed to parse signaling message.";
+    LOG(WARNING) << "Failed to parse signaling message.";
     return;
   }
 
   // Ensure that the frame is valid (no missing fields).
   if (!frame.has_sender_id()) {
-    NEARBY_LOGS(WARNING) << "Invalid WebRTC frame: Sender ID is missing.";
+    LOG(WARNING) << "Invalid WebRTC frame: Sender ID is missing.";
     return;
   }
   WebrtcPeerId remote_peer_id = WebrtcPeerId(frame.sender_id().id());
@@ -480,7 +469,7 @@ void WebRtc::ProcessTachyonInboxMessage(const std::string& service_id,
       ReceiveIceCandidates(remote_peer_id,
                            webrtc_frames::DecodeIceCandidates(frame));
     } else {
-      NEARBY_LOGS(INFO) << "Received unknown WebRTC frame: ignoring.";
+      LOG(INFO) << "Received unknown WebRTC frame: ignoring.";
     }
   } else if (IsAcceptingConnectionsLocked(service_id)) {
     // We don't have an outgoing connection request with this peer, but we are
@@ -495,10 +484,10 @@ void WebRtc::ProcessTachyonInboxMessage(const std::string& service_id,
       ReceiveIceCandidates(remote_peer_id,
                            webrtc_frames::DecodeIceCandidates(frame));
     } else {
-      NEARBY_LOGS(INFO) << "Received unknown WebRTC frame: ignoring.";
+      LOG(INFO) << "Received unknown WebRTC frame: ignoring.";
     }
   } else {
-    NEARBY_LOGS(INFO)
+    LOG(INFO)
         << "Ignoring Tachyon message since we are not accepting connections.";
   }
 }
@@ -508,23 +497,20 @@ void WebRtc::SendOffer(const std::string& service_id,
   std::unique_ptr<ConnectionFlow> connection_flow =
       CreateConnectionFlow(service_id, remote_peer_id);
   if (!connection_flow) {
-    NEARBY_LOGS(INFO)
-        << "Unable to send offer. Failed to create a ConnectionFlow.";
+    LOG(INFO) << "Unable to send offer. Failed to create a ConnectionFlow.";
     return;
   }
 
   SessionDescriptionWrapper offer = connection_flow->CreateOffer();
   if (!offer.IsValid()) {
-    NEARBY_LOGS(INFO)
-        << "Unable to send offer. Failed to create our offer locally.";
+    LOG(INFO) << "Unable to send offer. Failed to create our offer locally.";
     RemoveConnectionFlow(remote_peer_id);
     return;
   }
 
   const webrtc::SessionDescriptionInterface& sdp = offer.GetSdp();
   if (!connection_flow->SetLocalSessionDescription(offer)) {
-    NEARBY_LOGS(INFO)
-        << "Unable to send offer. Failed to register our offer locally.";
+    LOG(INFO) << "Unable to send offer. Failed to register our offer locally.";
     RemoveConnectionFlow(remote_peer_id);
     return;
   }
@@ -536,7 +522,7 @@ void WebRtc::SendOffer(const std::string& service_id,
   if (!info.signaling_messenger->SendMessage(
           remote_peer_id.GetId(),
           webrtc_frames::EncodeOffer(info.self_peer_id, sdp))) {
-    NEARBY_LOGS(INFO)
+    LOG(INFO)
         << "Unable to send offer. Failed to write the offer to the remote peer "
         << remote_peer_id.GetId();
     RemoveConnectionFlow(remote_peer_id);
@@ -545,21 +531,19 @@ void WebRtc::SendOffer(const std::string& service_id,
 
   // Store the ConnectionFlow so that other methods can use it later.
   connection_flows_.emplace(remote_peer_id.GetId(), std::move(connection_flow));
-  NEARBY_LOGS(INFO) << "Sent offer to " << remote_peer_id.GetId();
+  LOG(INFO) << "Sent offer to " << remote_peer_id.GetId();
 }
 
 void WebRtc::ReceiveOffer(const WebrtcPeerId& remote_peer_id,
                           SessionDescriptionWrapper offer) {
   const auto& entry = connection_flows_.find(remote_peer_id.GetId());
   if (entry == connection_flows_.end()) {
-    NEARBY_LOGS(INFO)
-        << "Unable to receive offer. Failed to create a ConnectionFlow.";
+    LOG(INFO) << "Unable to receive offer. Failed to create a ConnectionFlow.";
     return;
   }
 
   if (!entry->second->OnOfferReceived(offer)) {
-    NEARBY_LOGS(INFO)
-        << "Unable to receive offer. Failed to process the offer.";
+    LOG(INFO) << "Unable to receive offer. Failed to process the offer.";
     RemoveConnectionFlow(remote_peer_id);
   }
 }
@@ -567,22 +551,20 @@ void WebRtc::ReceiveOffer(const WebrtcPeerId& remote_peer_id,
 void WebRtc::SendAnswer(const WebrtcPeerId& remote_peer_id) {
   const auto& entry = connection_flows_.find(remote_peer_id.GetId());
   if (entry == connection_flows_.end()) {
-    NEARBY_LOGS(INFO)
-        << "Unable to send answer. Failed to create a ConnectionFlow.";
+    LOG(INFO) << "Unable to send answer. Failed to create a ConnectionFlow.";
     return;
   }
 
   SessionDescriptionWrapper answer = entry->second->CreateAnswer();
   if (!answer.IsValid()) {
-    NEARBY_LOGS(INFO)
-        << "Unable to send answer. Failed to create our answer locally.";
+    LOG(INFO) << "Unable to send answer. Failed to create our answer locally.";
     RemoveConnectionFlow(remote_peer_id);
     return;
   }
 
   const webrtc::SessionDescriptionInterface& sdp = answer.GetSdp();
   if (!entry->second->SetLocalSessionDescription(answer)) {
-    NEARBY_LOGS(INFO)
+    LOG(INFO)
         << "Unable to send answer. Failed to register our answer locally.";
     RemoveConnectionFlow(remote_peer_id);
     return;
@@ -592,8 +574,8 @@ void WebRtc::SendAnswer(const WebrtcPeerId& remote_peer_id) {
   const auto& connection_request_entry =
       requesting_connections_info_.find(remote_peer_id.GetId());
   if (connection_request_entry == requesting_connections_info_.end()) {
-    NEARBY_LOGS(INFO) << "Unable to send answer. Failed to find an outgoing "
-                         "connection request.";
+    LOG(INFO) << "Unable to send answer. Failed to find an outgoing "
+                 "connection request.";
     RemoveConnectionFlow(remote_peer_id);
     return;
   }
@@ -603,7 +585,7 @@ void WebRtc::SendAnswer(const WebrtcPeerId& remote_peer_id) {
           remote_peer_id.GetId(),
           webrtc_frames::EncodeAnswer(
               connection_request_entry->second.self_peer_id, sdp))) {
-    NEARBY_LOGS(INFO)
+    LOG(INFO)
         << "Unable to send answer. Failed to write the answer to the remote "
            "peer "
         << remote_peer_id.GetId();
@@ -611,21 +593,19 @@ void WebRtc::SendAnswer(const WebrtcPeerId& remote_peer_id) {
     return;
   }
 
-  NEARBY_LOGS(INFO) << "Sent answer to " << remote_peer_id.GetId();
+  LOG(INFO) << "Sent answer to " << remote_peer_id.GetId();
 }
 
 void WebRtc::ReceiveAnswer(const WebrtcPeerId& remote_peer_id,
                            SessionDescriptionWrapper answer) {
   const auto& entry = connection_flows_.find(remote_peer_id.GetId());
   if (entry == connection_flows_.end()) {
-    NEARBY_LOGS(INFO)
-        << "Unable to receive answer. Failed to create a ConnectionFlow.";
+    LOG(INFO) << "Unable to receive answer. Failed to create a ConnectionFlow.";
     return;
   }
 
   if (!entry->second->OnAnswerReceived(answer)) {
-    NEARBY_LOGS(INFO)
-        << "Unable to receive answer. Failed to process the answer.";
+    LOG(INFO) << "Unable to receive answer. Failed to process the answer.";
     RemoveConnectionFlow(remote_peer_id);
   }
 }
@@ -636,8 +616,8 @@ void WebRtc::ReceiveIceCandidates(
         ice_candidates) {
   const auto& entry = connection_flows_.find(remote_peer_id.GetId());
   if (entry == connection_flows_.end()) {
-    NEARBY_LOGS(INFO) << "Unable to receive ice candidates. Failed to create a "
-                         "ConnectionFlow.";
+    LOG(INFO) << "Unable to receive ice candidates. Failed to create a "
+                 "ConnectionFlow.";
     return;
   }
 
@@ -652,7 +632,7 @@ void WebRtc::ProcessRestartTachyonReceiveMessages(
 
 void WebRtc::RestartTachyonReceiveMessages(const std::string& service_id) {
   if (!IsAcceptingConnectionsLocked(service_id)) {
-    NEARBY_LOGS(INFO)
+    LOG(INFO)
         << "Skipping restart listening for tachyon inbox messages since we are "
            "not accepting connections for service "
         << service_id;
@@ -669,16 +649,16 @@ void WebRtc::RestartTachyonReceiveMessages(const std::string& service_id) {
   if (!info.signaling_messenger->StartReceivingMessages(
           absl::bind_front(&WebRtc::OnSignalingMessage, this, service_id),
           absl::bind_front(&WebRtc::OnSignalingComplete, this, service_id))) {
-    NEARBY_LOGS(WARNING)
+    LOG(WARNING)
         << "Failed to restart listening for tachyon inbox messages for "
            "service "
         << service_id << " since we failed to reach Tachyon.";
     return;
   }
 
-  NEARBY_LOGS(INFO) << "Successfully restarted listening for tachyon inbox "
-                       "messages on service "
-                    << service_id;
+  LOG(INFO) << "Successfully restarted listening for tachyon inbox "
+               "messages on service "
+            << service_id;
 }
 
 void WebRtc::ProcessDataChannelOpen(const std::string& service_id,
@@ -705,16 +685,15 @@ void WebRtc::ProcessDataChannelOpen(const std::string& service_id,
 
   // No one to handle the newly created DataChannel, so we'll just close it.
   socket_wrapper.Close();
-  NEARBY_LOGS(INFO) << "Ignoring new DataChannel because we are not accepting "
-                       "connections for service "
-                    << service_id;
+  LOG(INFO) << "Ignoring new DataChannel because we are not accepting "
+               "connections for service "
+            << service_id;
 }
 
 void WebRtc::ProcessDataChannelClosed(const WebrtcPeerId& remote_peer_id) {
   MutexLock lock(&mutex_);
-  NEARBY_LOGS(INFO)
-      << "Data channel has closed, removing connection flow for peer "
-      << remote_peer_id.GetId();
+  LOG(INFO) << "Data channel has closed, removing connection flow for peer "
+            << remote_peer_id.GetId();
 
   RemoveConnectionFlow(remote_peer_id);
 }

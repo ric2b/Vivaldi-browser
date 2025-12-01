@@ -50,4 +50,4 @@ Once your nomination is approved, you will receive a follow-up email with
 instructions for enabling your new permissions.
 
 **Googler?** You can request a Chromium account or join the
-*edit-bug-access* group.
+[edit-bug-access group](https://groups.google.com/a/chromium.org/g/edit-bug-access).

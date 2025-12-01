@@ -13,6 +13,13 @@ class ScopedClosureRunner;
 }
 @protocol BadgeItem;
 class GURL;
+enum class NotificationOptInAccessPoint;
+namespace signin_metrics {
+enum class AccessPoint;
+}  // namespace signin_metrics
+namespace syncer {
+enum class TrustedVaultUserActionTriggerForUMA;
+}
 
 // Protocol for commands that will be handled by the BrowserCoordinator.
 // TODO(crbug.com/41427057) : Rename this protocol to one that is more
@@ -47,9 +54,16 @@ class GURL;
 - (void)dismissPanel;
 - (void)setToolbarHidden:(BOOL)hidden;
 - (void)showHomePage;
+- (void)exitFullScreen;
 
 // Show In App Default Rating Prompt
 - (void)showDefaultReviewPrompt;
+
+// Sets browser object for reader mode.
+// kind of Fire and forget
+// TODO: praveen@vivaldi.com `setBrowserForReaderMode` will need refactor
+- (void)setBrowserForReaderMode;
+
 // End Vivaldi
 
 // Shows recent tabs.
@@ -127,6 +141,23 @@ class GURL;
 // Shows and dismisses the Search What You See promo.
 - (void)showSearchWhatYouSeePromo;
 - (void)dismissSearchWhatYouSeePromo;
+
+// Shows the notifications opt-in view from `accessPoint`.
+- (void)showNotificationsOptInFromAccessPoint:
+            (NotificationOptInAccessPoint)accessPoint
+                           baseViewController:
+                               (UIViewController*)baseViewController;
+
+// Dismisses the notifications opt-in view.
+- (void)dismissNotificationsOptIn;
+
+// Show the add account view
+- (void)showAddAccountWithAccessPoint:(signin_metrics::AccessPoint)accessPoint;
+
+// Presents the Trusted Vault reauthentication dialog. `trigger` indicates an
+// entry point from which the trusted vault reauth has been triggered.
+- (void)performReauthToRetrieveTrustedVaultKey:
+    (syncer::TrustedVaultUserActionTriggerForUMA)trigger;
 
 @end
 

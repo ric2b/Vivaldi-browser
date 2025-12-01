@@ -10,19 +10,21 @@
 
 #include "base/containers/span.h"
 #include "base/functional/callback.h"
+#include "base/memory/raw_ptr.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "base/time/time.h"
 #include "chrome/browser/lens/core/mojom/lens.mojom.h"
 #include "chrome/browser/lens/core/mojom/overlay_object.mojom.h"
 #include "chrome/browser/lens/core/mojom/text.mojom.h"
 #include "chrome/browser/ui/lens/lens_overlay_gen204_controller.h"
-#include "chrome/browser/ui/lens/lens_overlay_request_id_generator.h"
+#include "chrome/browser/ui/lens/lens_overlay_image_helper.h"
 #include "chrome/browser/ui/lens/lens_overlay_url_builder.h"
-#include "chrome/browser/ui/lens/ref_counted_lens_overlay_client_logs.h"
 #include "components/endpoint_fetcher/endpoint_fetcher.h"
 #include "components/lens/lens_overlay_invocation_source.h"
 #include "components/lens/lens_overlay_mime_type.h"
+#include "components/lens/lens_overlay_request_id_generator.h"
 #include "components/lens/proto/server/lens_overlay_response.pb.h"
+#include "components/lens/ref_counted_lens_overlay_client_logs.h"
 #include "services/network/public/cpp/simple_url_loader.h"
 #include "third_party/lens_server_proto/lens_overlay_client_context.pb.h"
 #include "third_party/lens_server_proto/lens_overlay_cluster_info.pb.h"
@@ -46,6 +48,8 @@ class VariationsClient;
 }  // namespace variations
 
 namespace lens {
+
+class LensComposeboxController;
 
 // Data struct representing content data to be sent to the Lens server.
 struct PageContent {
@@ -75,7 +79,7 @@ using LensOverlaySuggestInputsCallback =
     base::RepeatingCallback<void(lens::proto::LensOverlaySuggestInputs)>;
 // Callback type alias for the thumbnail image creation.
 using LensOverlayThumbnailCreatedCallback =
-    base::RepeatingCallback<void(const std::string&)>;
+    base::RepeatingCallback<void(const std::string&, const SkBitmap&)>;
 // Callback type alias for the OAuth headers created.
 using OAuthHeadersCreatedCallback =
     base::OnceCallback<void(std::vector<std::string>)>;
@@ -203,6 +207,11 @@ class LensOverlayQueryController {
 
   uint64_t gen204_id() const { return gen204_id_; }
 
+  // Returns the search session id for the current query flow.
+  std::string search_session_id() const {
+    return cluster_info_->search_session_id();
+  }
+
   // Testing method to reset the cluster info state.
   void ResetRequestClusterInfoStateForTesting();
 
@@ -222,6 +231,8 @@ class LensOverlayQueryController {
   lens::proto::LensOverlaySuggestInputs suggest_inputs_for_testing() {
     return suggest_inputs_;
   }
+
+  friend class lens::LensComposeboxController;
 
  protected:
   // Returns the EndpointFetcher to use with the given params. Protected to
@@ -261,6 +272,12 @@ class LensOverlayQueryController {
   virtual void SendSemanticEventGen204IfEnabled(
       lens::mojom::SemanticEvent event,
       std::optional<lens::LensOverlayRequestId> request_id);
+
+  // Updates the request id based on the given update mode and returns the
+  // request id proto. Also updates the suggest signals with the new request id
+  // and runs the suggest inputs callback.
+  std::unique_ptr<lens::LensOverlayRequestId> GetNextRequestId(
+      lens::RequestIdUpdateMode update_mode);
 
   // Updates the suggest inputs with the feature params and latest cluster info
   // response, then runs the callback. The request id in the suggest inputs will
@@ -339,12 +356,6 @@ class LensOverlayQueryController {
     // can be used to run some logic once the request has been sent.
     std::optional<base::OnceClosure> request_sent_callback_;
   };
-
-  // Updates the request id based on the given update mode and returns the
-  // request id proto. Also updates the suggest signals with the new request id
-  // and runs the suggest inputs callback.
-  std::unique_ptr<lens::LensOverlayRequestId> GetNextRequestId(
-      RequestIdUpdateMode update_mode);
 
   // Makes a LensOverlayServerClusterInfoRequest to get the cluster info. Will
   // continue to the FullImageRequest once a response is received.
@@ -505,7 +516,7 @@ class LensOverlayQueryController {
       std::optional<std::string> query_text,
       std::optional<std::string> object_id,
       scoped_refptr<lens::RefCountedLensOverlayClientLogs> ref_counted_logs,
-      std::optional<lens::ImageCrop> image_crop);
+      std::optional<lens::ImageCropAndBitmap> image_crop_and_bitmap);
 
   // Creates the OAuth headers that get attached to the interaction request to
   // authenticate the user. After, tries to perform the interaction request. If

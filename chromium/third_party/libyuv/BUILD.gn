@@ -236,6 +236,8 @@ if (libyuv_use_neon) {
 
     public_configs = [ ":libyuv_config" ]
 
+    # The -march arguments below are incompatible with libc++ modules.
+    use_libcxx_modules = false
     if (current_cpu == "arm64") {
       cflags = [ "-march=armv8-a+dotprod+i8mm" ]
     } else {
@@ -253,8 +255,10 @@ if (libyuv_use_sve) {
 
     public_configs = [ ":libyuv_config" ]
 
+    # The -march arguments below are incompatible with libc++ modules.
+    use_libcxx_modules = false
     # SVE2 is an Armv9-A feature.
-    cflags = [ "-march=armv9-a+sve2" ]
+    cflags = [ "-march=armv9-a+i8mm+sve2" ]
   }
 }
 
@@ -270,8 +274,10 @@ if (libyuv_use_sme) {
 
     public_configs = [ ":libyuv_config" ]
 
+    # The -march arguments below are incompatible with libc++ modules.
+    use_libcxx_modules = false
     # SME is an Armv9-A feature.
-    cflags = [ "-march=armv9-a+sme" ]
+    cflags = [ "-march=armv9-a+i8mm+sme" ]
   }
 }
 
@@ -487,4 +493,15 @@ if (libyuv_include_tests) {
     ]
     deps = [ ":libyuv" ]
   }
+}
+
+if (!build_with_chromium) {
+  # Write debug logs to gn_logs.txt.
+  # This is also required for Siso builds.
+  import("//build/gn_logs.gni")
+  lines = [
+            "Generated during 'gn gen' by //BUILD.gn.",
+            "",
+          ] + build_gn_logs
+  write_file("$root_build_dir/gn_logs.txt", lines)
 }

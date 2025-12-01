@@ -4,6 +4,8 @@
 
 package org.chromium.chrome.browser.dragdrop;
 
+import static org.chromium.build.NullUtil.assumeNonNull;
+
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
@@ -11,7 +13,6 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.SystemClock;
 
-import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.IntentUtils;
@@ -19,6 +20,8 @@ import org.chromium.base.ResettersForTesting;
 import org.chromium.base.TimeUtils;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
@@ -31,6 +34,7 @@ import org.chromium.ui.dragdrop.DragDropMetricUtils.UrlIntentSource;
 
 /** A helper activity for routing Chrome tab, tab group and link drag & drop launcher intents. */
 // TODO (crbug/331865433): Consider removing use of this trampoline activity.
+@NullMarked
 public class DragAndDropLauncherActivity extends Activity {
     static final String ACTION_DRAG_DROP_VIEW = "org.chromium.chrome.browser.dragdrop.action.VIEW";
     static final String LAUNCHED_FROM_LINK_USER_ACTION = "MobileNewInstanceLaunchedFromDraggedLink";
@@ -39,11 +43,11 @@ public class DragAndDropLauncherActivity extends Activity {
             "MobileNewInstanceLaunchedFromDraggedTabGroup";
 
     private static final long DROP_TIMEOUT_MS = 5 * TimeUtils.MILLISECONDS_PER_MINUTE;
-    private static Long sIntentCreationTimestampMs;
-    private static Long sDropTimeoutForTesting;
+    private static @Nullable Long sIntentCreationTimestampMs;
+    private static @Nullable Long sDropTimeoutForTesting;
 
     @Override
-    public void onCreate(Bundle savedInstanceState) {
+    public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
         var intent = getIntent();
@@ -135,9 +139,9 @@ public class DragAndDropLauncherActivity extends Activity {
      * @return The intent that will be used to move a dragged tab to a new Chrome instance.
      */
     @VisibleForTesting
-    static Intent getTabIntent(Intent intent, Tab tab) {
+    static Intent getTabIntent(Intent intent, @Nullable Tab tab) {
         intent.putExtra(IntentHandler.EXTRA_URL_DRAG_SOURCE, UrlIntentSource.TAB_IN_STRIP);
-        intent.putExtra(IntentHandler.EXTRA_DRAGGED_TAB_ID, tab.getId());
+        intent.putExtra(IntentHandler.EXTRA_DRAGGED_TAB_ID, assumeNonNull(tab).getId());
         intent.setData(Uri.parse(tab.getUrl().getSpec()));
         return intent;
     }
@@ -150,7 +154,7 @@ public class DragAndDropLauncherActivity extends Activity {
      * @return The intent that will be used to move a dragged tab group to a new Chrome instance.
      */
     @VisibleForTesting
-    static Intent getTabGroupIntent(Intent intent, TabGroupMetadata tabGroupMetadata) {
+    static Intent getTabGroupIntent(Intent intent, @Nullable TabGroupMetadata tabGroupMetadata) {
         intent.putExtra(IntentHandler.EXTRA_URL_DRAG_SOURCE, UrlIntentSource.TAB_GROUP_IN_STRIP);
         IntentHandler.setTabGroupMetadata(intent, tabGroupMetadata);
         return intent;
@@ -200,7 +204,7 @@ public class DragAndDropLauncherActivity extends Activity {
     /**
      * @return The dragged link/tab intent creation timestamp in milliseconds.
      */
-    static Long getIntentCreationTimestampMs() {
+    static @Nullable Long getIntentCreationTimestampMs() {
         return sIntentCreationTimestampMs;
     }
 

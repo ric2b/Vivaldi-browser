@@ -5,19 +5,11 @@
 
 import contextlib
 from typing import Any, Iterator, Optional, Sequence
-import logging
-import pathlib
-import sys
 
 from opentelemetry import context as otel_context_api
 from opentelemetry import trace as otel_trace_api
 from opentelemetry.sdk import trace as otel_trace_sdk
 from opentelemetry.util import types as otel_types
-
-from . import config
-from . import clearcut_span_exporter
-from . import detector
-
 
 @contextlib.contextmanager
 def use_span(

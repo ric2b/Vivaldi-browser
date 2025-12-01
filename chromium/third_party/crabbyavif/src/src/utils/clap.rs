@@ -67,7 +67,12 @@ impl CleanAperture {
 }
 
 impl CropRect {
-    fn is_valid(&self, image_width: u32, image_height: u32, pixel_format: PixelFormat) -> bool {
+    pub(crate) fn is_valid(
+        &self,
+        image_width: u32,
+        image_height: u32,
+        pixel_format: PixelFormat,
+    ) -> bool {
         let x_plus_width = checked_add!(self.x, self.width);
         let y_plus_height = checked_add!(self.y, self.height);
         if self.width == 0

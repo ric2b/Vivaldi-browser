@@ -41,7 +41,7 @@ impl JpegReader {
 }
 
 impl Reader for JpegReader {
-    fn read_frame(&mut self, config: &Config) -> AvifResult<Image> {
+    fn read_frame(&mut self, config: &Config) -> AvifResult<(Image, u64)> {
         let mut reader = BufReader::new(File::open(self.filename.clone()).or(Err(
             AvifError::UnknownError("error opening input file".into()),
         ))?);
@@ -51,8 +51,7 @@ impl Reader for JpegReader {
         let color_type = decoder.color_type();
         if color_type != ColorType::Rgb8 {
             return Err(AvifError::UnknownError(format!(
-                "jpeg color type was something other than rgb8: {:#?}",
-                color_type
+                "jpeg color type was something other than rgb8: {color_type:#?}"
             )));
         }
         let (width, height) = decoder.dimensions();
@@ -84,7 +83,7 @@ impl Reader for JpegReader {
             ..Default::default()
         };
         rgb.convert_to_yuv(&mut yuv)?;
-        Ok(yuv)
+        Ok((yuv, 0))
     }
 
     fn has_more_frames(&mut self) -> bool {

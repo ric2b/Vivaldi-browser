@@ -48,6 +48,11 @@ enum TargetOsType {
   WRITER_TARGET_OS_MACOS,
 };
 
+enum TargetXcodePlatformType {
+  WRITER_TARGET_XCODE_PLATFORM_IPHONEOS,
+  WRITER_TARGET_XCODE_PLATFORM_TVOS,
+};
+
 const char* kXCTestFileSuffixes[] = {
     "egtest.m",     "egtest.mm", "egtest.swift", "xctest.m",      "xctest.mm",
     "xctest.swift", "UITests.m", "UITests.mm",   "UITests.swift",
@@ -79,6 +84,37 @@ TargetOsType GetTargetOs(const Args& args) {
     }
   }
   return WRITER_TARGET_OS_MACOS;
+}
+
+std::optional<TargetXcodePlatformType>
+GetTargetXcodePlatform(const Args& args, const ParseNode* node, Err* err) {
+  std::optional<Value> target_xcode_platform_value =
+      args.GetArgFromAllArguments(variables::kTargetXcodePlatform);
+
+  if (!target_xcode_platform_value) {
+    return WRITER_TARGET_XCODE_PLATFORM_IPHONEOS;
+  }
+
+  if (target_xcode_platform_value->type() != Value::STRING) {
+    *err = Err(node, "target_xcode_platform value should be a string",
+               target_xcode_platform_value->ToString(false));
+    return std::nullopt;
+  }
+
+  const std::string& target_xcode_platform =
+      target_xcode_platform_value->string_value();
+
+  if (target_xcode_platform == "tvos") {
+    return WRITER_TARGET_XCODE_PLATFORM_TVOS;
+  }
+
+  if (target_xcode_platform == "iphoneos") {
+    return WRITER_TARGET_XCODE_PLATFORM_IPHONEOS;
+  }
+
+  *err =
+      Err(node, "Unknown target_xcode_platform value", target_xcode_platform);
+  return std::nullopt;
 }
 
 std::string GetBuildScript(const std::string& target_name,
@@ -396,15 +432,26 @@ std::string SourcePathFromBuildSettings(const BuildSettings* build_settings) {
 
 // Returns the default attributes for the project from settings.
 PBXAttributes ProjectAttributesFromBuildSettings(
-    const BuildSettings* build_settings) {
+    const BuildSettings* build_settings,
+    const ParseNode* node,
+    Err* err) {
   const TargetOsType target_os = GetTargetOs(build_settings->build_args());
 
   PBXAttributes attributes;
   switch (target_os) {
-    case WRITER_TARGET_OS_IOS:
-      attributes["SDKROOT"] = "iphoneos";
-      attributes["TARGETED_DEVICE_FAMILY"] = "1,2";
-      break;
+    case WRITER_TARGET_OS_IOS: {
+      const std::optional<TargetXcodePlatformType> target_xcode_platform =
+          GetTargetXcodePlatform(build_settings->build_args(), node, err);
+      if (!target_xcode_platform)
+        return {};
+      if (*target_xcode_platform == WRITER_TARGET_XCODE_PLATFORM_TVOS) {
+        attributes["SDKROOT"] = "appletvos";
+        attributes["TARGETED_DEVICE_FAMILY"] = "3";
+      } else {
+        attributes["SDKROOT"] = "iphoneos";
+        attributes["TARGETED_DEVICE_FAMILY"] = "1,2";
+      }
+    } break;
     case WRITER_TARGET_OS_MACOS:
       attributes["SDKROOT"] = "macosx";
       break;
@@ -677,7 +724,9 @@ XcodeProject::XcodeProject(const BuildSettings* build_settings,
       project_(options.project_name,
                ConfigListFromOptions(options.configurations),
                SourcePathFromBuildSettings(build_settings),
-               ProjectAttributesFromBuildSettings(build_settings)) {}
+               ProjectAttributesFromBuildSettings(build_settings,
+                                                  /*node=*/nullptr,
+                                                  /*err=*/nullptr)) {}
 
 XcodeProject::~XcodeProject() = default;
 

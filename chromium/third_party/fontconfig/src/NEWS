@@ -1,11 +1,134 @@
                               Fontconfig
              Font configuration and customization library
-                            Version 2.16.2
-                              2025-04-11
+                            Version 2.17.1
+                              2025-07-02
 
 
 Check INSTALL for compilation and installation instructions.
 Report bugs to https://gitlab.freedesktop.org/fontconfig/fontconfig/issues/new.
+
+2.17.1
+
+Akira TAGOH (3):
+      Fix a heap buffer overflow
+      meson: Add 'noinstall' to default-hinting, default-sub-pixel-rendering, bitmap-conf build options
+      Bump the libtool version
+
+2.17
+
+Akira TAGOH (48):
+      ci: Add a subproject test case for meson
+      test: Set sys-root to WINEPATH for MinGW
+      ci: Correct reference to not trigger fetching a branch for main
+      ci: clean up and add changelog to the release note through changelog API
+      meson: don't try to call run_command for gperf on --wrap-mode=forcefallback
+      Make sure that the debugging facilities are initialized at loading config phase
+      Add FcConfigPerferAppFont() to allow changing the order of application fonts
+      conf.d/65-nonlatin.conf: Rename Lohit Oriya to Lohit Odia
+      ci: disable meson static fontations build tentatively
+      conf.d/65-nonlatin.conf: drop the leading extra white spaces
+      ci: quote pip's requirement specifier in the build script
+      ci: Add -O option to the build script for convenience
+      ci: add installation test
+      Add a test case for FcPtrList
+      Improve performance of FcPtrListIterInitAtLast
+      test: make sure we have fcstdint.h before building test programs
+      Drop FcDefaultFini() from FcFini() to fix memory leaks
+      test: do not free FcFontSet From FcConfigGetFonts
+      Drop the configuration path migration code
+      Drop FcObjectFini() from FcFini() to fix memory leaks
+      Free the mutex object only when all cache objects isn't referenced
+      Free the mutex object only when there are no references to the default FcConfig instance
+      Increase a reference count for default FcConfig instance with FcInit()
+      conf.d: Add a conf to guess a generic-family for substitution
+      test: add a pattern test
+      test: add a test scenario for 48-guessfamily.conf
+      test-crbug1004254: hold FcConfig during running a test in a thread
+      Simplify FcConfigFini()
+      Revert "test-crbug1004254: hold FcConfig during running a test in a thread"
+      Call FcMutexUnlock only when valid instance is available
+      Fix a memory leak in default_langs
+      Avoid possibly invalid access on MT
+      Add bitmap-conf build option to choose default bitmap conf
+      doc: rewrite check-missing-doc in Python
+      Do not hardcode a cache version
+      Add default font paths for Android in configure script
+      meson: Fix additional-fonts-dirs build option that not taking effect
+      meson: rename meson_options.txt to meson.options
+      Allow dotfiles to scan for caching
+      Trim trailing newline in string in cache
+      Fix a crash with broken cache
+      ci: cleanup builddir
+      Do not fallback decoding with UTF-16BE if no iconv support
+      Fix padding with "und" in pattern elements
+      ci: fix pipeline fail of subproject build on forked project
+      ci: add some usage text to build script
+      Bump libtool version for autotools build
+      Fix release script
+
+Albert Lee (1):
+      Avoid conflict between dgettext macro and declaration in fcint.h
+
+ComixHe (1):
+      fix: Skip empty entries in XDG_DATA_DIRS parsing
+
+Dominik Röttsches (40):
+      [Fontations] Factor out fcpat.c - add Fontations dependencies
+      Add FcPatternObjectGet* impl for CharSet and LangSet
+      [Fontations] Improve resolution of Rust crate features
+      [Fontations] Roll Skrifa, Read-Fonts, Font-Types
+      [Fontations] Pattern Bindings for CharSet and LangSet
+      [Fontations] Container and local download of testfiles
+      Add Pytest status to Meson Summary
+      Add Roboto Flex to font downloading script
+      Migrate pytest testcase 431 to pre-downloaded fonts
+      [Fontations] Enable fc-query indexing through Fontations
+      Revert "ci: disable meson static fontations build tentatively"
+      [Fontations] Fix Rust edition, do not require extern crate
+      [Fontations] Add support for "foundry" pattern element
+      [Fontations] Add support for "version" pattern element
+      [Fontations] Clippy fix for foundries mapping
+      [Fontations] Add attributes weight, width, slant to Pattern
+      Cargo build improvements
+      [Fontations] Iterate over TrueType collections and named instances
+      Amend license headers
+      [Fontations] Process and append font capabilities to Pattern
+      Speculative fix for uninitialised value used in FcFontSort
+      [Fontations] Add charset pattern element
+      [Fontations] Add langset pattern element
+      [Fontations] Add fontwrapper, filename and symbol elements to pattern
+      [Fontations] Add woff wrapper and filename if file is woff or woff2
+      [Fontations] Roll Fontations, Skrifa to 0.31.3
+      [Fontations] Match name id append order to FreeType indexer
+      Sort test pattern elements
+      [Fontations] Add pixel size information
+      [Fontations] Fix size element and enable more element tests
+      [Fontations] Add spacing property
+      [Fontations] No style element for variable instance
+      [Fontations] Remove pattern filter from tests
+      Parse foundry from OS/2 for table version 0
+      [Fontations] Assorted fixes to match FreeType indexing
+      [Fontations] Do not combine bindings into one crate
+      Make "retry:" label conditional on ICONV
+      [Fontations] Clarify import of FcLangSet
+      Rename FcFreeTypeLangSet to FcLangSetFromCharset
+      [Fontations] Fix downstream build of indexing with Fontations
+
+Federico Gallo Herosa (2):
+      fccharset.c Avoid use-after-free warning
+      fccharset.c Avoid use-after-free warning
+
+Sam James (1):
+      configure.ac: drop -fno-strict-aliasing
+
+Thomas Anderson (1):
+      Fix heap buffer underflow in FcConfigXdgDataDirs
+
+Tom Anderson (1):
+      Fix use-after-free in FcConfigGetPrgname
+
+Xi Ruoyao (1):
+      meson: don't force installation of a static library
 
 2.16.2
 

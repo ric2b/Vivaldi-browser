@@ -533,8 +533,15 @@ impl MediaCodec {
                     }
                     image.row_bytes[i] = plane_info.row_stride[i];
                     let plane_height = if i == 0 { image.height } else { (image.height + 1) / 2 };
+                    let offset_index = if i == 1 && image.yuv_format == PixelFormat::AndroidNv21 {
+                        // For Nv21, V plane comes before the U plane, so the UV plane offset
+                        // should point to the V plane.
+                        2
+                    } else {
+                        i
+                    };
                     image.planes[i] = Some(Pixels::from_raw_pointer(
-                        unsafe { buffer.offset(plane_info.offset[i]) },
+                        unsafe { buffer.offset(plane_info.offset[offset_index]) },
                         image.depth as u32,
                         plane_height,
                         image.row_bytes[i],

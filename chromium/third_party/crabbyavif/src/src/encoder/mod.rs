@@ -27,12 +27,14 @@ use crate::internal_utils::*;
 use crate::parser::exif;
 use crate::parser::mp4box::*;
 use crate::parser::obu::Av1SequenceHeader;
+use crate::utils::clap::CropRect;
 use crate::utils::IFraction;
 use crate::*;
 
 #[cfg(feature = "aom")]
 use crate::codecs::aom::Aom;
 
+use std::collections::HashMap;
 use std::fmt;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
@@ -88,28 +90,56 @@ impl TilingMode {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug)]
 pub struct MutableSettings {
     pub quality: i32,
     pub tiling_mode: TilingMode,
     pub scaling_mode: ScalingMode,
 }
 
-#[derive(Clone, Copy, Debug, Default)]
+impl Default for MutableSettings {
+    fn default() -> Self {
+        Self {
+            quality: 60,
+            tiling_mode: Default::default(),
+            scaling_mode: Default::default(),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
 pub struct Settings {
     pub threads: u32,
     pub speed: Option<u32>,
     pub keyframe_interval: i32,
     pub timescale: u64,
-    pub repetition_count: i32,
+    pub repetition_count: RepetitionCount,
     pub extra_layer_count: u32,
     pub mutable: MutableSettings,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Settings {
+            threads: 1,
+            speed: None,
+            keyframe_interval: 0,
+            timescale: 1,
+            repetition_count: RepetitionCount::Infinite,
+            extra_layer_count: 0,
+            mutable: Default::default(),
+        }
+    }
 }
 
 impl Settings {
     pub(crate) fn quantizer(&self) -> i32 {
         // TODO: account for category here.
         ((100 - self.mutable.quality) * 63 + 50) / 100
+    }
+
+    pub(crate) fn is_valid(&self) -> bool {
+        self.extra_layer_count < MAX_AV1_LAYER_COUNT as u32 && self.timescale > 0
     }
 }
 
@@ -121,7 +151,7 @@ pub(crate) struct Sample {
 
 impl Sample {
     // This function is not used in all configurations.
-    #[allow(unused)]
+    #[allow(dead_code)]
     pub(crate) fn create_from(data: &[u8], sync: bool) -> AvifResult<Self> {
         let mut copied_data: Vec<u8> = create_vec_exact(data.len())?;
         copied_data.extend_from_slice(data);
@@ -134,8 +164,12 @@ impl Sample {
 
 pub(crate) type Codec = Box<dyn crate::codecs::Encoder>;
 
+// If Category is None, the option applies to all categories. If Category is some, it only
+// applies to that category.
+pub(crate) type CodecSpecificOptions = HashMap<(Option<Category>, String), String>;
+
 #[derive(Default)]
-#[allow(unused)]
+#[allow(dead_code)]
 pub struct Encoder {
     settings: Settings,
     items: Vec<Item>,
@@ -150,11 +184,12 @@ pub struct Encoder {
     image_item_type: String,
     config_property_name: String,
     duration_in_timescales: Vec<u64>,
+    codec_specific_options: CodecSpecificOptions,
 }
 
 impl Encoder {
     pub fn create_with_settings(settings: &Settings) -> AvifResult<Self> {
-        if settings.extra_layer_count >= MAX_AV1_LAYER_COUNT as u32 {
+        if !settings.is_valid() {
             return Err(AvifError::InvalidArgument);
         }
         Ok(Self {
@@ -166,6 +201,15 @@ impl Encoder {
     pub fn update_settings(&mut self, mutable: &MutableSettings) -> AvifResult<()> {
         self.settings.mutable = *mutable;
         Ok(())
+    }
+
+    pub fn set_codec_specific_option(
+        &mut self,
+        category: Option<Category>,
+        key: String,
+        value: String,
+    ) {
+        self.codec_specific_options.insert((category, key), value);
     }
 
     pub(crate) fn is_sequence(&self) -> bool {
@@ -294,14 +338,14 @@ impl Encoder {
                 return Err(AvifError::InvalidArgument);
             }
             let expected_width = if grid.is_last_column(index as u32) {
-                first_image.width
-            } else {
                 last_image.width
+            } else {
+                first_image.width
             };
             let expected_height = if grid.is_last_row(index as u32) {
-                first_image.height
-            } else {
                 last_image.height
+            } else {
+                first_image.height
             };
             if image.width != expected_width
                 || image.height != expected_height
@@ -329,6 +373,13 @@ impl Encoder {
         }
         if images.len() > 1 {
             validate_grid_image_dimensions(first_image, grid)?;
+        }
+        if let Some(clap) = &first_image.clap {
+            if !CropRect::create_from(clap, grid.width, grid.height, first_image.yuv_format)?
+                .is_valid(grid.width, grid.height, first_image.yuv_format)
+            {
+                return Err(AvifError::InvalidArgument);
+            }
         }
         Ok(())
     }
@@ -362,7 +413,7 @@ impl Encoder {
         grid_columns: u32,
         grid_rows: u32,
         cell_images: &[&Image],
-        mut duration: u32,
+        mut duration: u64,
         is_single_image: bool,
         gainmaps: Option<&[&GainMap]>,
     ) -> AvifResult<()> {
@@ -374,7 +425,6 @@ impl Encoder {
             duration = 1;
         }
         if self.items.is_empty() {
-            // TODO: validate clap.
             let first_image = cell_images[0];
             let last_image = cell_images.last().unwrap();
             let grid = Grid {
@@ -450,7 +500,10 @@ impl Encoder {
             let first_image = cell_images[0];
             if !first_image.has_same_cicp(&self.image_metadata)
                 || first_image.alpha_premultiplied != self.image_metadata.alpha_premultiplied
-                || first_image.alpha_present != self.image_metadata.alpha_present
+                // If the previously added image had an alpha channel, then this image should have
+                // it too. The reverse need not be true as we will simply ignore the alpha channel
+                // of the current image in that case.
+                || (self.image_metadata.alpha_present && !first_image.alpha_present)
             {
                 return Err(AvifError::InvalidArgument);
             }
@@ -466,7 +519,7 @@ impl Encoder {
             if item.codec.is_none() {
                 continue;
             }
-            let image = match item.category {
+            let mut image = match item.category {
                 Category::Gainmap => &gainmaps.unwrap()[item.cell_index].image,
                 _ => cell_images[item.cell_index],
             };
@@ -474,8 +527,11 @@ impl Encoder {
                 Category::Gainmap => &gainmaps.unwrap()[0].image,
                 _ => cell_images[0],
             };
+            let mut padded_image;
             if image.width != first_image.width || image.height != first_image.height {
-                // TODO: pad the image so that the dimensions of all cells are equal.
+                padded_image = first_image.shallow_clone();
+                padded_image.copy_and_pad(image)?;
+                image = &padded_image;
             }
             let encoder_config = EncoderConfig {
                 tile_rows_log2,
@@ -487,6 +543,7 @@ impl Encoder {
                 extra_layer_count: self.settings.extra_layer_count,
                 threads: self.settings.threads,
                 scaling_mode: self.settings.mutable.scaling_mode,
+                codec_specific_options: self.codec_specific_options.clone(),
             };
             item.codec.unwrap_mut().encode_image(
                 image,
@@ -495,7 +552,7 @@ impl Encoder {
                 &mut item.samples,
             )?;
         }
-        self.duration_in_timescales.push(duration as u64);
+        self.duration_in_timescales.push(duration);
         Ok(())
     }
 
@@ -510,7 +567,10 @@ impl Encoder {
         )
     }
 
-    pub fn add_image_for_sequence(&mut self, image: &Image, duration: u32) -> AvifResult<()> {
+    pub fn add_image_for_sequence(&mut self, image: &Image, duration: u64) -> AvifResult<()> {
+        if self.settings.extra_layer_count != 0 {
+            return Err(AvifError::InvalidArgument);
+        }
         // TODO: this and add_image cannot be used on the same instance.
         self.add_image_impl(1, 1, &[image], duration, false, None)
     }
@@ -561,7 +621,6 @@ impl Encoder {
         if self.items.is_empty() {
             return Err(AvifError::NoContent);
         }
-        self.settings.timescale = 10000;
         for item in &mut self.items {
             if item.codec.is_none() {
                 continue;

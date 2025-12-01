@@ -4,8 +4,8 @@
 // LICENSE file in the root directory of this source tree.
 //
 
-#ifndef __XNNPACK_SRC_XNNPACK_SIMD_S32_SSE41_H_
-#define __XNNPACK_SRC_XNNPACK_SIMD_S32_SSE41_H_
+#ifndef XNNPACK_SRC_XNNPACK_SIMD_S32_SSE41_H_
+#define XNNPACK_SRC_XNNPACK_SIMD_S32_SSE41_H_
 
 #include <assert.h>
 #include <smmintrin.h>
@@ -85,13 +85,18 @@ static XNN_INLINE xnn_simd_s32_t xnn_load_tail_safe_s32(const int32_t* input,
   switch (num_elements) {
     case 4:
       *dst++ = *input++;
+      XNN_FALLTHROUGH
     case 3:
       *dst++ = *input++;
+      XNN_FALLTHROUGH
     case 2:
       *dst++ = *input++;
+      XNN_FALLTHROUGH
     case 1:
       *dst++ = *input++;
-    default: ;
+      XNN_FALLTHROUGH
+    default:
+      break;
   }
   return _mm_loadu_si128((const __m128i*)padded);
 }
@@ -116,4 +121,4 @@ static XNN_INLINE __m128 xnn_cvt_f32_s32(xnn_simd_s32_t a) {
   return _mm_cvtepi32_ps(a);
 }
 
-#endif  // __XNNPACK_SRC_XNNPACK_SIMD_S32_SSE41_H_
+#endif  // XNNPACK_SRC_XNNPACK_SIMD_S32_SSE41_H_

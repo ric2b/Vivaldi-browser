@@ -9,7 +9,7 @@ import * as Common from '../../core/common/common.js';
 import * as Host from '../../core/host/host.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import * as Platform from '../../core/platform/platform.js';
-import type * as Root from '../../core/root/root.js';
+import * as Root from '../../core/root/root.js';
 import * as IconButton from '../components/icon_button/icon_button.js';
 import * as VisualLogging from '../visual_logging/visual_logging.js';
 
@@ -17,12 +17,13 @@ import * as ARIAUtils from './ARIAUtils.js';
 import type {ContextMenu} from './ContextMenu.js';
 import {type EventData, Events as TabbedPaneEvents, TabbedPane} from './TabbedPane.js';
 import {type ItemsProvider, type ToolbarItem, ToolbarMenuButton} from './Toolbar.js';
-import {createTextChild} from './UIUtils.js';
+import {createTextChild, PromotionManager} from './UIUtils.js';
 import type {TabbedViewLocation, View, ViewLocation} from './View.js';
 import viewContainersStyles from './viewContainers.css.js';
 import {
   getLocalizedViewLocationCategory,
   getRegisteredLocationResolvers,
+  getRegisteredViewExtensionForID,
   getRegisteredViewExtensions,
   maybeRemoveViewExtension,
   registerLocationResolver,
@@ -72,6 +73,10 @@ export class PreRegisteredView implements View {
 
   isPreviewFeature(): boolean {
     return Boolean(this.viewRegistration.isPreviewFeature);
+  }
+
+  featurePromotionId(): string|undefined {
+    return this.viewRegistration.featurePromotionId;
   }
 
   iconName(): string|undefined {
@@ -145,12 +150,27 @@ export class PreRegisteredView implements View {
 
 let viewManagerInstance: ViewManager|undefined;
 
-export class ViewManager {
+export const enum Events {
+  VIEW_VISIBILITY_CHANGED = 'ViewVisibilityChanged',
+}
+
+export interface ViewVisibilityEventData {
+  location: string;
+  revealedViewId: string|undefined;
+  hiddenViewId: string|undefined;
+}
+
+export interface EventTypes {
+  [Events.VIEW_VISIBILITY_CHANGED]: ViewVisibilityEventData;
+}
+
+export class ViewManager extends Common.ObjectWrapper.ObjectWrapper<EventTypes> {
   readonly views: Map<string, View>;
   private readonly locationNameByViewId: Map<string, string>;
   private readonly locationOverrideSetting: Common.Settings.Setting<Record<string, string>>;
 
   private constructor() {
+    super();
     this.views = new Map();
     this.locationNameByViewId = new Map();
 
@@ -305,6 +325,10 @@ export class ViewManager {
     return widgetForView.get(view) || null;
   }
 
+  hasView(viewId: string): boolean {
+    return this.views.has(viewId);
+  }
+
   async showView(viewId: string, userGesture?: boolean, omitFocus?: boolean): Promise<void> {
     const view = this.views.get(viewId);
     if (!view) {
@@ -318,6 +342,20 @@ export class ViewManager {
     }
     location.reveal();
     await location.showView(view, undefined, userGesture, omitFocus);
+  }
+
+  isViewVisible(viewId: string): boolean {
+    const view = this.views.get(viewId);
+    if (!view) {
+      return false;
+    }
+
+    const location = locationForView.get(view);
+    if (!location) {
+      return false;
+    }
+
+    return location.isViewVisible(view);
   }
 
   async resolveLocation(location?: string): Promise<Location|null> {
@@ -337,7 +375,7 @@ export class ViewManager {
   }
 
   createTabbedLocation(
-      revealCallback?: (() => void), location?: string, restoreSelection?: boolean, allowReorder?: boolean,
+      revealCallback: (() => void), location: string, restoreSelection?: boolean, allowReorder?: boolean,
       defaultTab?: string|null): TabbedViewLocation {
     return new TabbedLocation(this, revealCallback, location, restoreSelection, allowReorder, defaultTab);
   }
@@ -426,7 +464,7 @@ class ExpandableContainerWidget extends VBox {
   private materializePromise?: Promise<void>;
 
   constructor(view: View) {
-    super(true);
+    super({useShadowDom: true});
     this.element.classList.add('flex-none');
     this.registerRequiredCSS(viewContainersStyles);
 
@@ -573,6 +611,10 @@ class Location {
   removeView(_view: View): void {
     throw new Error('not implemented');
   }
+
+  isViewVisible(_view: View): boolean {
+    throw new Error('not implemented');
+  }
 }
 
 const locationForView = new WeakMap<View, Location>();
@@ -583,6 +625,7 @@ type TabOrderSetting = Record<string, number>;
 
 class TabbedLocation extends Location implements TabbedViewLocation {
   private tabbedPaneInternal: TabbedPane;
+  private readonly location: string;
   private readonly allowReorder: boolean|undefined;
   private readonly closeableTabSetting: Common.Settings.Setting<CloseableTabSetting>;
   private readonly tabOrderSetting: Common.Settings.Setting<TabOrderSetting>;
@@ -591,7 +634,7 @@ class TabbedLocation extends Location implements TabbedViewLocation {
   private readonly views = new Map<string, View>();
 
   constructor(
-      manager: ViewManager, revealCallback?: (() => void), location?: string, restoreSelection?: boolean,
+      manager: ViewManager, revealCallback: (() => void), location: string, restoreSelection?: boolean,
       allowReorder?: boolean, defaultTab?: string|null) {
     const tabbedPane = new TabbedPane();
     if (allowReorder) {
@@ -599,11 +642,14 @@ class TabbedLocation extends Location implements TabbedViewLocation {
     }
 
     super(manager, tabbedPane, revealCallback);
+    this.location = location;
     this.tabbedPaneInternal = tabbedPane;
     this.allowReorder = allowReorder;
 
     this.tabbedPaneInternal.addEventListener(TabbedPaneEvents.TabSelected, this.tabSelected, this);
     this.tabbedPaneInternal.addEventListener(TabbedPaneEvents.TabClosed, this.tabClosed, this);
+    this.tabbedPaneInternal.addEventListener(
+        TabbedPaneEvents.PaneVisibilityChanged, this.tabbedPaneVisibilityChanged, this);
 
     this.closeableTabSetting = Common.Settings.Settings.instance().createSetting('closeable-tabs', {});
     // As we give tabs the capability to be closed we also need to add them to the setting so they are still open
@@ -644,7 +690,6 @@ class TabbedLocation extends Location implements TabbedViewLocation {
     const moreTabsButton = new ToolbarMenuButton(
         this.appendTabsToMenu.bind(this), /* isIconDropdown */ true, undefined, 'more-tabs', 'dots-vertical');
     this.tabbedPaneInternal.leftToolbar().appendToolbarItem(moreTabsButton);
-    this.tabbedPaneInternal.disableOverflowMenu();
     return moreTabsButton;
   }
 
@@ -697,6 +742,32 @@ class TabbedLocation extends Location implements TabbedViewLocation {
   private appendTabsToMenu(contextMenu: ContextMenu): void {
     const views = Array.from(this.views.values());
     views.sort((viewa, viewb) => viewa.title().localeCompare(viewb.title()));
+
+    const freestylerView = views.find(view => view.viewId() === 'freestyler');
+    if (freestylerView) {
+      const featureName = Root.Runtime.hostConfig.devToolsFreestyler?.featureName;
+      const promotionId =
+          (freestylerView instanceof PreRegisteredView) ? freestylerView.featurePromotionId() : undefined;
+      // Register this with the PromotionManager and the back-end, in order to make sure that
+      // showing the general ai assistance panel new badge is synchronized.
+      const handler = (): void => {
+        void this.showView(freestylerView, undefined, true);
+        if (promotionId) {
+          PromotionManager.instance().recordFeatureInteraction(promotionId);
+        }
+      };
+      contextMenu.defaultSection().appendItem(freestylerView.title(), handler, {
+        isPreviewFeature: freestylerView.isPreviewFeature(),
+        jslogContext: freestylerView.viewId(),
+        // Request to show a new badge in the native context menu only if:
+        // 1. The promotion manager agrees that we may show it, or 2. the promotion manager doesn't track this badge.
+        // Note that this is only a request to show the new badge, the back-end will decide whether
+        // or not it will show it depending on the user education service.
+        featureName: !promotionId || PromotionManager.instance().maybeShowPromotion(promotionId) ? featureName :
+                                                                                                   undefined,
+      });
+    }
+
     for (const view of views) {
       const title = view.title();
 
@@ -705,6 +776,11 @@ class TabbedLocation extends Location implements TabbedViewLocation {
           Host.userMetrics.issuesPanelOpenedFrom(Host.UserMetrics.IssueOpener.HAMBURGER_MENU);
           void this.showView(view, undefined, true);
         }, {jslogContext: 'issues-pane'});
+        continue;
+      }
+
+      if (view.viewId() === 'freestyler') {
+        // We have already taken care of this.
         continue;
       }
 
@@ -793,11 +869,31 @@ class TabbedLocation extends Location implements TabbedViewLocation {
     this.views.delete(view.viewId());
   }
 
+  override isViewVisible(view: View): boolean {
+    return this.tabbedPaneInternal.isShowing() && this.tabbedPaneInternal?.selectedTabId === view.viewId();
+  }
+
+  private tabbedPaneVisibilityChanged(event: Common.EventTarget.EventTargetEvent<{isVisible: boolean}>): void {
+    if (!this.tabbedPaneInternal.selectedTabId) {
+      return;
+    }
+    this.manager.dispatchEventToListeners(Events.VIEW_VISIBILITY_CHANGED, {
+      location: this.location,
+      revealedViewId: event.data.isVisible ? this.tabbedPaneInternal.selectedTabId : undefined,
+      hiddenViewId: event.data.isVisible ? undefined : this.tabbedPaneInternal.selectedTabId,
+    });
+  }
+
   private tabSelected(event: Common.EventTarget.EventTargetEvent<EventData>): void {
-    const {tabId} = event.data;
-    if (this.lastSelectedTabSetting && event.data['isUserGesture']) {
+    const {tabId, prevTabId, isUserGesture} = event.data;
+    if (this.lastSelectedTabSetting && isUserGesture) {
       this.lastSelectedTabSetting.set(tabId);
     }
+    this.manager.dispatchEventToListeners(Events.VIEW_VISIBILITY_CHANGED, {
+      location: this.location,
+      revealedViewId: tabId,
+      hiddenViewId: prevTabId,
+    });
   }
 
   private tabClosed(event: Common.EventTarget.EventTargetEvent<EventData>): void {
@@ -900,6 +996,11 @@ class StackLocation extends Location implements ViewLocation {
     this.manager.views.delete(view.viewId());
   }
 
+  override isViewVisible(_view: View): boolean {
+    // TODO(crbug.com/435356108): Implement this
+    throw new Error('not implemented');
+  }
+
   appendApplicableItems(locationName: string): void {
     for (const view of this.manager.viewsForLocation(locationName)) {
       this.appendView(view);
@@ -911,6 +1012,7 @@ export {
   getLocalizedViewLocationCategory,
   getRegisteredLocationResolvers,
   getRegisteredViewExtensions,
+  getRegisteredViewExtensionForID,
   maybeRemoveViewExtension,
   registerLocationResolver,
   registerViewExtension,

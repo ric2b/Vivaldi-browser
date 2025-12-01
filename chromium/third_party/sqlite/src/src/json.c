@@ -23,8 +23,8 @@
 ** Beginning with version 3.45.0 (circa 2024-01-01), these routines also
 ** accept BLOB values that have JSON encoded using a binary representation
 ** called "JSONB".  The name JSONB comes from PostgreSQL, however the on-disk
-** format SQLite JSONB is completely different and incompatible with
-** PostgreSQL JSONB.
+** format for SQLite-JSONB is completely different and incompatible with
+** PostgreSQL-JSONB.
 **
 ** Decoding and interpreting JSONB is still O(N) where N is the size of
 ** the input, the same as text JSON.  However, the constant of proportionality
@@ -81,7 +81,7 @@
 **
 ** The payload size need not be expressed in its minimal form.  For example,
 ** if the payload size is 10, the size can be expressed in any of 5 different
-** ways: (1) (X>>4)==10, (2) (X>>4)==12 following by on 0x0a byte,
+** ways: (1) (X>>4)==10, (2) (X>>4)==12 following by one 0x0a byte,
 ** (3) (X>>4)==13 followed by 0x00 and 0x0a, (4) (X>>4)==14 followed by
 ** 0x00 0x00 0x00 0x0a, or (5) (X>>4)==15 followed by 7 bytes of 0x00 and
 ** a single byte of 0x0a.  The shorter forms are preferred, of course, but
@@ -91,7 +91,7 @@
 ** the size when it becomes known, resulting in a non-minimal encoding.
 **
 ** The value (X>>4)==15 is not actually used in the current implementation
-** (as SQLite is currently unable handle BLOBs larger than about 2GB)
+** (as SQLite is currently unable to handle BLOBs larger than about 2GB)
 ** but is included in the design to allow for future enhancements.
 **
 ** The payload follows the header.  NULL, TRUE, and FALSE have no payload and
@@ -151,23 +151,47 @@ static const char * const jsonbType[] = {
 ** increase for the text-JSON parser.  (Ubuntu14.10 gcc 4.8.4 x64 with -Os).
 */
 static const char jsonIsSpace[] = {
-  0, 0, 0, 0, 0, 0, 0, 0,  0, 1, 1, 0, 0, 1, 0, 0,
-  0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0,
-  1, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0,
-  0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0,
-  0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0,
-  0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0,
-  0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0,
-  0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0,
+#ifdef SQLITE_ASCII
+/*0  1  2  3  4  5  6  7   8  9  a  b  c  d  e  f  */
+  0, 0, 0, 0, 0, 0, 0, 0,  0, 1, 1, 0, 0, 1, 0, 0,  /* 0 */
+  0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0,  /* 1 */
+  1, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0,  /* 2 */
+  0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0,  /* 3 */
+  0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0,  /* 4 */
+  0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0,  /* 5 */
+  0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0,  /* 6 */
+  0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0,  /* 7 */
 
-  0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0,
-  0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0,
-  0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0,
-  0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0,
-  0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0,
-  0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0,
-  0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0,
-  0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0,  /* 8 */
+  0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0,  /* 9 */
+  0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0,  /* a */
+  0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0,  /* b */
+  0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0,  /* c */
+  0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0,  /* d */
+  0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0,  /* e */
+  0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0,  /* f */
+#endif
+#ifdef SQLITE_EBCDIC
+/*0  1  2  3  4  5  6  7   8  9  a  b  c  d  e  f  */
+  0, 0, 0, 0, 0, 1, 0, 0,  0, 0, 0, 0, 0, 1, 0, 0,  /* 0 */
+  0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0,  /* 1 */
+  0, 0, 0, 0, 0, 1, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0,  /* 2 */
+  0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0,  /* 3 */
+  1, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0,  /* 4 */
+  0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0,  /* 5 */
+  0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0,  /* 6 */
+  0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0,  /* 7 */
+
+  0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0,  /* 8 */
+  0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0,  /* 9 */
+  0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0,  /* a */
+  0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0,  /* b */
+  0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0,  /* c */
+  0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0,  /* d */
+  0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0,  /* e */
+  0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0,  /* f */
+#endif
+
 };
 #define jsonIsspace(x) (jsonIsSpace[(unsigned char)x])
 
@@ -175,7 +199,13 @@ static const char jsonIsSpace[] = {
 ** The set of all space characters recognized by jsonIsspace().
 ** Useful as the second argument to strspn().
 */
+#ifdef SQLITE_ASCII
 static const char jsonSpaces[] = "\011\012\015\040";
+#endif
+#ifdef SQLITE_EBCDIC
+static const char jsonSpaces[] = "\005\045\015\100";
+#endif
+
 
 /*
 ** Characters that are special to JSON.  Control characters,
@@ -184,23 +214,46 @@ static const char jsonSpaces[] = "\011\012\015\040";
 ** it in the set of special characters.
 */
 static const char jsonIsOk[256] = {
-  0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0,
-  0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0,
-  1, 1, 0, 1, 1, 1, 1, 0,  1, 1, 1, 1, 1, 1, 1, 1,
-  1, 1, 1, 1, 1, 1, 1, 1,  1, 1, 1, 1, 1, 1, 1, 1,
-  1, 1, 1, 1, 1, 1, 1, 1,  1, 1, 1, 1, 1, 1, 1, 1,
-  1, 1, 1, 1, 1, 1, 1, 1,  1, 1, 1, 1, 0, 1, 1, 1,
-  1, 1, 1, 1, 1, 1, 1, 1,  1, 1, 1, 1, 1, 1, 1, 1,
-  1, 1, 1, 1, 1, 1, 1, 1,  1, 1, 1, 1, 1, 1, 1, 1,
+#ifdef SQLITE_ASCII
+/*0  1  2  3  4  5  6  7   8  9  a  b  c  d  e  f  */
+  0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0,  /* 0 */
+  0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0,  /* 1 */
+  1, 1, 0, 1, 1, 1, 1, 0,  1, 1, 1, 1, 1, 1, 1, 1,  /* 2 */
+  1, 1, 1, 1, 1, 1, 1, 1,  1, 1, 1, 1, 1, 1, 1, 1,  /* 3 */
+  1, 1, 1, 1, 1, 1, 1, 1,  1, 1, 1, 1, 1, 1, 1, 1,  /* 4 */
+  1, 1, 1, 1, 1, 1, 1, 1,  1, 1, 1, 1, 0, 1, 1, 1,  /* 5 */
+  1, 1, 1, 1, 1, 1, 1, 1,  1, 1, 1, 1, 1, 1, 1, 1,  /* 6 */
+  1, 1, 1, 1, 1, 1, 1, 1,  1, 1, 1, 1, 1, 1, 1, 1,  /* 7 */
 
-  1, 1, 1, 1, 1, 1, 1, 1,  1, 1, 1, 1, 1, 1, 1, 1,
-  1, 1, 1, 1, 1, 1, 1, 1,  1, 1, 1, 1, 1, 1, 1, 1,
-  1, 1, 1, 1, 1, 1, 1, 1,  1, 1, 1, 1, 1, 1, 1, 1,
-  1, 1, 1, 1, 1, 1, 1, 1,  1, 1, 1, 1, 1, 1, 1, 1,
-  1, 1, 1, 1, 1, 1, 1, 1,  1, 1, 1, 1, 1, 1, 1, 1,
-  1, 1, 1, 1, 1, 1, 1, 1,  1, 1, 1, 1, 1, 1, 1, 1,
-  1, 1, 1, 1, 1, 1, 1, 1,  1, 1, 1, 1, 1, 1, 1, 1,
-  1, 1, 1, 1, 1, 1, 1, 1,  1, 1, 1, 1, 1, 1, 1, 1
+  1, 1, 1, 1, 1, 1, 1, 1,  1, 1, 1, 1, 1, 1, 1, 1,  /* 8 */
+  1, 1, 1, 1, 1, 1, 1, 1,  1, 1, 1, 1, 1, 1, 1, 1,  /* 9 */
+  1, 1, 1, 1, 1, 1, 1, 1,  1, 1, 1, 1, 1, 1, 1, 1,  /* a */
+  1, 1, 1, 1, 1, 1, 1, 1,  1, 1, 1, 1, 1, 1, 1, 1,  /* b */
+  1, 1, 1, 1, 1, 1, 1, 1,  1, 1, 1, 1, 1, 1, 1, 1,  /* c */
+  1, 1, 1, 1, 1, 1, 1, 1,  1, 1, 1, 1, 1, 1, 1, 1,  /* d */
+  1, 1, 1, 1, 1, 1, 1, 1,  1, 1, 1, 1, 1, 1, 1, 1,  /* e */
+  1, 1, 1, 1, 1, 1, 1, 1,  1, 1, 1, 1, 1, 1, 1, 1   /* f */
+#endif
+#ifdef SQLITE_EBCDIC
+/*0  1  2  3  4  5  6  7   8  9  a  b  c  d  e  f  */
+  0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0,  /* 0 */
+  0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0,  /* 1 */
+  0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0,  /* 2 */
+  1, 1, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 1, 0,  /* 3 */
+  1, 1, 1, 1, 1, 1, 1, 1,  1, 1, 1, 1, 1, 1, 1, 1,  /* 4 */
+  1, 1, 1, 1, 1, 1, 1, 1,  1, 1, 1, 1, 1, 1, 1, 1,  /* 5 */
+  1, 1, 1, 1, 1, 1, 1, 1,  1, 1, 1, 1, 1, 1, 1, 1,  /* 6 */
+  1, 1, 1, 1, 1, 1, 1, 1,  1, 1, 1, 1, 1, 0, 1, 0,  /* 7 */
+
+  1, 1, 1, 1, 1, 1, 1, 1,  1, 1, 1, 1, 1, 1, 1, 1,  /* 8 */
+  1, 1, 1, 1, 1, 1, 1, 1,  1, 1, 1, 1, 1, 1, 1, 1,  /* 9 */
+  1, 1, 1, 1, 1, 1, 1, 1,  1, 1, 1, 1, 1, 1, 1, 1,  /* a */
+  1, 1, 1, 1, 1, 1, 1, 1,  1, 1, 1, 1, 1, 1, 1, 1,  /* b */
+  1, 1, 1, 1, 1, 1, 1, 1,  1, 1, 1, 1, 1, 1, 1, 1,  /* c */
+  1, 1, 1, 1, 1, 1, 1, 1,  1, 1, 1, 1, 1, 1, 1, 1,  /* d */
+  0, 1, 1, 1, 1, 1, 1, 1,  1, 1, 1, 1, 1, 1, 1, 1,  /* e */
+  1, 1, 1, 1, 1, 1, 1, 1,  1, 1, 1, 1, 1, 1, 1, 1   /* f */
+#endif
 };
 
 /* Objects */
@@ -345,7 +398,7 @@ struct JsonParse {
 ** Forward references
 **************************************************************************/
 static void jsonReturnStringAsBlob(JsonString*);
-static int jsonFuncArgMightBeBinary(sqlite3_value *pJson);
+static int jsonArgIsJsonb(sqlite3_value *pJson, JsonParse *p);
 static u32 jsonTranslateBlobToText(const JsonParse*,u32,JsonString*);
 static void jsonReturnParse(sqlite3_context*,JsonParse*);
 static JsonParse *jsonParseFuncArg(sqlite3_context*,sqlite3_value*,u32);
@@ -419,7 +472,7 @@ static int jsonCacheInsert(
 ** most-recently used entry if it isn't so already.
 **
 ** The JsonParse object returned still belongs to the Cache and might
-** be deleted at any moment.  If the caller whants the JsonParse to
+** be deleted at any moment.  If the caller wants the JsonParse to
 ** linger, it needs to increment the nPJRef reference counter.
 */
 static JsonParse *jsonCacheSearch(
@@ -763,11 +816,9 @@ static void jsonAppendSqlValue(
       break;
     }
     default: {
-      if( jsonFuncArgMightBeBinary(pValue) ){
-        JsonParse px;
-        memset(&px, 0, sizeof(px));
-        px.aBlob = (u8*)sqlite3_value_blob(pValue);
-        px.nBlob = sqlite3_value_bytes(pValue);
+      JsonParse px;
+      memset(&px, 0, sizeof(px));
+      if( jsonArgIsJsonb(pValue, &px) ){
         jsonTranslateBlobToText(&px, 0, p);
       }else if( p->eErr==0 ){
         sqlite3_result_error(p->pCtx, "JSON cannot hold BLOB values", -1);
@@ -1086,7 +1137,7 @@ static void jsonWrongNumArgs(
 */
 static int jsonBlobExpand(JsonParse *pParse, u32 N){
   u8 *aNew;
-  u32 t;
+  u64 t;
   assert( N>pParse->nBlobAlloc );
   if( pParse->nBlobAlloc==0 ){
     t = 100;
@@ -1096,8 +1147,9 @@ static int jsonBlobExpand(JsonParse *pParse, u32 N){
   if( t<N ) t = N+100;
   aNew = sqlite3DbRealloc(pParse->db, pParse->aBlob, t);
   if( aNew==0 ){ pParse->oom = 1; return 1; }
+  assert( t<0x7fffffff );
   pParse->aBlob = aNew;
-  pParse->nBlobAlloc = t;
+  pParse->nBlobAlloc = (u32)t;
   return 0;
 }
 
@@ -1164,7 +1216,7 @@ static SQLITE_NOINLINE void jsonBlobExpandAndAppendNode(
 }
 
 
-/* Append an node type byte together with the payload size and
+/* Append a node type byte together with the payload size and
 ** possibly also the payload.
 **
 ** If aPayload is not NULL, then it is a pointer to the payload which
@@ -1704,7 +1756,12 @@ json_parse_restart:
            || c=='n' || c=='r' || c=='t'
            || (c=='u' && jsonIs4Hex(&z[j+1])) ){
           if( opcode==JSONB_TEXT ) opcode = JSONB_TEXTJ;
-        }else if( c=='\'' || c=='0' || c=='v' || c=='\n'
+        }else if( c=='\'' ||  c=='v' || c=='\n'
+#ifdef SQLITE_BUG_COMPATIBLE_20250510
+           || (c=='0')                            /* Legacy bug compatible */
+#else
+           || (c=='0' && !sqlite3Isdigit(z[j+1])) /* Correct implementation */
+#endif
            || (0xe2==(u8)c && 0x80==(u8)z[j+1]
                 && (0xa8==(u8)z[j+2] || 0xa9==(u8)z[j+2]))
            || (c=='x' && jsonIs2Hex(&z[j+1])) ){
@@ -2054,10 +2111,7 @@ static u32 jsonbPayloadSize(const JsonParse *pParse, u32 i, u32 *pSz){
   u8 x;
   u32 sz;
   u32 n;
-  if( NEVER(i>pParse->nBlob) ){
-    *pSz = 0;
-    return 0;
-  }
+  assert( i<=pParse->nBlob );
   x = pParse->aBlob[i]>>4;
   if( x<=11 ){
     sz = x;
@@ -2094,15 +2148,15 @@ static u32 jsonbPayloadSize(const JsonParse *pParse, u32 i, u32 *pSz){
       *pSz = 0;
       return 0;
     }
-    sz = (pParse->aBlob[i+5]<<24) + (pParse->aBlob[i+6]<<16) +
+    sz = ((u32)pParse->aBlob[i+5]<<24) + (pParse->aBlob[i+6]<<16) +
          (pParse->aBlob[i+7]<<8) + pParse->aBlob[i+8];
     n = 9;
   }
   if( (i64)i+sz+n > pParse->nBlob
    && (i64)i+sz+n > pParse->nBlob-pParse->delta
   ){
-    sz = 0;
-    n = 0;
+    *pSz = 0;
+    return 0;
   }
   *pSz = sz;
   return n;
@@ -2199,9 +2253,12 @@ static u32 jsonTranslateBlobToText(
     }
     case JSONB_TEXT:
     case JSONB_TEXTJ: {
-      jsonAppendChar(pOut, '"');
-      jsonAppendRaw(pOut, (const char*)&pParse->aBlob[i+n], sz);
-      jsonAppendChar(pOut, '"');
+      if( pOut->nUsed+sz+2<=pOut->nAlloc || jsonStringGrow(pOut, sz+2)==0 ){
+        pOut->zBuf[pOut->nUsed] = '"';
+        memcpy(pOut->zBuf+pOut->nUsed+1,(const char*)&pParse->aBlob[i+n],sz);
+        pOut->zBuf[pOut->nUsed+sz+1] = '"';
+        pOut->nUsed += sz+2;
+      }
       break;
     }
     case JSONB_TEXT5: {
@@ -2440,33 +2497,6 @@ static u32 jsonTranslateBlobToPrettyText(
   return i;
 }
 
-
-/* Return true if the input pJson
-**
-** For performance reasons, this routine does not do a detailed check of the
-** input BLOB to ensure that it is well-formed.  Hence, false positives are
-** possible.  False negatives should never occur, however.
-*/
-static int jsonFuncArgMightBeBinary(sqlite3_value *pJson){
-  u32 sz, n;
-  const u8 *aBlob;
-  int nBlob;
-  JsonParse s;
-  if( sqlite3_value_type(pJson)!=SQLITE_BLOB ) return 0;
-  aBlob = sqlite3_value_blob(pJson);
-  nBlob = sqlite3_value_bytes(pJson);
-  if( nBlob<1 ) return 0;
-  if( NEVER(aBlob==0) || (aBlob[0] & 0x0f)>JSONB_OBJECT ) return 0;
-  memset(&s, 0, sizeof(s));
-  s.aBlob = (u8*)aBlob;
-  s.nBlob = nBlob;
-  n = jsonbPayloadSize(&s, 0, &sz);
-  if( n==0 ) return 0;
-  if( sz+n!=(u32)nBlob ) return 0;
-  if( (aBlob[0] & 0x0f)<=JSONB_FALSE && sz>0 ) return 0;
-  return sz+n==(u32)nBlob;
-}
-
 /*
 ** Given that a JSONB_ARRAY object starts at offset i, return
 ** the number of entries in that array.
@@ -2500,6 +2530,82 @@ static void jsonAfterEditSizeAdjust(JsonParse *pParse, u32 iRoot){
 }
 
 /*
+** If the JSONB at aIns[0..nIns-1] can be expanded (by denormalizing the
+** size field) by d bytes, then write the expansion into aOut[] and
+** return true.  In this way, an overwrite happens without changing the
+** size of the JSONB, which reduces memcpy() operations and also make it
+** faster and easier to update the B-Tree entry that contains the JSONB
+** in the database.
+**
+** If the expansion of aIns[] by d bytes cannot be (easily) accomplished
+** then return false.
+**
+** The d parameter is guaranteed to be between 1 and 8.
+**
+** This routine is an optimization.  A correct answer is obtained if it
+** always leaves the output unchanged and returns false.
+*/
+static int jsonBlobOverwrite(
+  u8 *aOut,                 /* Overwrite here */
+  const u8 *aIns,           /* New content */
+  u32 nIns,                 /* Bytes of new content */
+  u32 d                     /* Need to expand new content by this much */
+){
+  u32 szPayload;       /* Bytes of payload */
+  u32 i;               /* New header size, after expansion & a loop counter */
+  u8 szHdr;            /* Size of header before expansion */
+
+  /* Lookup table for finding the upper 4 bits of the first byte of the
+  ** expanded aIns[], based on the size of the expanded aIns[] header:
+  **
+  **                             2     3  4     5  6  7  8     9 */
+  static const u8 aType[] = { 0xc0, 0xd0, 0, 0xe0, 0, 0, 0, 0xf0 };
+
+  if( (aIns[0]&0x0f)<=2 ) return 0;    /* Cannot enlarge NULL, true, false */
+  switch( aIns[0]>>4 ){
+    default: {                         /* aIns[] header size 1 */
+      if( ((1<<d)&0x116)==0 ) return 0;  /* d must be 1, 2, 4, or 8 */
+      i = d + 1;                         /* New hdr sz: 2, 3, 5, or 9 */
+      szHdr = 1;
+      break;
+    }
+    case 12: {                         /* aIns[] header size is 2 */
+      if( ((1<<d)&0x8a)==0) return 0;    /* d must be 1, 3, or 7 */
+      i = d + 2;                         /* New hdr sz: 2, 5, or 9 */
+      szHdr = 2;
+      break;
+    }
+    case 13: {                         /* aIns[] header size is 3 */
+      if( d!=2 && d!=6 ) return 0;       /* d must be 2 or 6 */
+      i = d + 3;                         /* New hdr sz: 5 or 9 */
+      szHdr = 3;
+      break;
+    }
+    case 14: {                         /* aIns[] header size is 5 */
+      if( d!=4 ) return 0;               /* d must be 4 */
+      i = 9;                             /* New hdr sz: 9 */
+      szHdr = 5;
+      break;
+    }
+    case 15: {                         /* aIns[] header size is 9 */
+      return 0;                          /* No solution */
+    }
+  }
+  assert( i>=2 && i<=9 && aType[i-2]!=0 );
+  aOut[0] = (aIns[0] & 0x0f) | aType[i-2];
+  memcpy(&aOut[i], &aIns[szHdr], nIns-szHdr);
+  szPayload = nIns - szHdr;
+  while( 1/*edit-by-break*/ ){
+    i--;
+    aOut[i] = szPayload & 0xff;
+    if( i==1 ) break;
+    szPayload >>= 8;
+  }
+  assert( (szPayload>>8)==0 );
+  return 1;
+}
+
+/*
 ** Modify the JSONB blob at pParse->aBlob by removing nDel bytes of
 ** content beginning at iDel, and replacing them with nIns bytes of
 ** content given by aIns.
@@ -2520,6 +2626,11 @@ static void jsonBlobEdit(
   u32 nIns               /* Bytes of content to insert */
 ){
   i64 d = (i64)nIns - (i64)nDel;
+  if( d<0 && d>=(-8) && aIns!=0
+   && jsonBlobOverwrite(&pParse->aBlob[iDel], aIns, nIns, (int)-d)
+  ){
+    return;
+  }
   if( d!=0 ){
     if( pParse->nBlob + d > pParse->nBlobAlloc ){
       jsonBlobExpand(pParse, pParse->nBlob+d);
@@ -2531,7 +2642,9 @@ static void jsonBlobEdit(
     pParse->nBlob += d;
     pParse->delta += d;
   }
-  if( nIns && aIns ) memcpy(&pParse->aBlob[iDel], aIns, nIns);
+  if( nIns && aIns ){
+    memcpy(&pParse->aBlob[iDel], aIns, nIns);
+  }
 }
 
 /*
@@ -2616,7 +2729,21 @@ static u32 jsonUnescapeOneChar(const char *z, u32 n, u32 *piOut){
     case 'r': {   *piOut = '\r';  return 2; }
     case 't': {   *piOut = '\t';  return 2; }
     case 'v': {   *piOut = '\v';  return 2; }
-    case '0': {   *piOut = 0;     return 2; }
+    case '0': {
+      /* JSON5 requires that the \0 escape not be followed by a digit.
+      ** But SQLite did not enforce this restriction in versions 3.42.0
+      ** through 3.49.2.  That was a bug.  But some applications might have
+      ** come to depend on that bug.  Use the SQLITE_BUG_COMPATIBLE_20250510
+      ** option to restore the old buggy behavior. */
+#ifdef SQLITE_BUG_COMPATIBLE_20250510
+      /* Legacy bug-compatible behavior */
+      *piOut = 0;
+#else
+      /* Correct behavior */
+      *piOut = (n>2 && sqlite3Isdigit(z[2])) ? JSON_INVALID_CHAR : 0;
+#endif
+      return 2;
+    }
     case '\'':
     case '"':
     case '/':
@@ -3116,7 +3243,7 @@ static void jsonReturnFromBlob(
       char *zOut;
       u32 nOut = sz;
       z = (const char*)&pParse->aBlob[i+n];
-      zOut = sqlite3DbMallocRaw(db, nOut+1);
+      zOut = sqlite3DbMallocRaw(db, ((u64)nOut)+1);
       if( zOut==0 ) goto returnfromblob_oom;
       for(iIn=iOut=0; iIn<sz; iIn++){
         char c = z[iIn];
@@ -3211,10 +3338,7 @@ static int jsonFunctionArgToBlob(
       return 0;
     }
     case SQLITE_BLOB: {
-      if( jsonFuncArgMightBeBinary(pArg) ){
-        pParse->aBlob = (u8*)sqlite3_value_blob(pArg);
-        pParse->nBlob = sqlite3_value_bytes(pArg);
-      }else{
+      if( !jsonArgIsJsonb(pArg, pParse) ){
         sqlite3_result_error(ctx, "JSON cannot hold BLOB values", -1);
         return 1;
       }
@@ -3294,7 +3418,7 @@ static char *jsonBadPathError(
 }
 
 /* argv[0] is a BLOB that seems likely to be a JSONB.  Subsequent
-** arguments come in parse where each pair contains a JSON path and
+** arguments come in pairs where each pair contains a JSON path and
 ** content to insert or set at that patch.  Do the updates
 ** and return the result.
 **
@@ -3365,27 +3489,46 @@ jsonInsertIntoBlob_patherror:
 /*
 ** If pArg is a blob that seems like a JSONB blob, then initialize
 ** p to point to that JSONB and return TRUE.  If pArg does not seem like
-** a JSONB blob, then return FALSE;
+** a JSONB blob, then return FALSE.
 **
-** This routine is only called if it is already known that pArg is a
-** blob.  The only open question is whether or not the blob appears
-** to be a JSONB blob.
+** For small BLOBs (having no more than 7 bytes of payload) a full
+** validity check is done.  So for small BLOBs this routine only returns
+** true if the value is guaranteed to be a valid JSONB.  For larger BLOBs
+** (8 byte or more of payload) only the size of the outermost element is
+** checked to verify that the BLOB is superficially valid JSONB.
+**
+** A full JSONB validation is done on smaller BLOBs because those BLOBs might
+** also be text JSON that has been incorrectly cast into a BLOB.
+** (See tag-20240123-a and https://sqlite.org/forum/forumpost/012136abd5)
+** If the BLOB is 9 bytes are larger, then it is not possible for the
+** superficial size check done here to pass if the input is really text
+** JSON so we do not need to look deeper in that case.
+**
+** Why we only need to do full JSONB validation for smaller BLOBs:
+**
+** The first byte of valid JSON text must be one of: '{', '[', '"', ' ', '\n',
+** '\r', '\t', '-', or a digit '0' through '9'.  Of these, only a subset
+** can also be the first byte of JSONB:  '{', '[', and digits '3'
+** through '9'.  In every one of those cases, the payload size is 7 bytes
+** or less.  So if we do full JSONB validation for every BLOB where the
+** payload is less than 7 bytes, we will never get a false positive for
+** JSONB on an input that is really text JSON.
 */
 static int jsonArgIsJsonb(sqlite3_value *pArg, JsonParse *p){
   u32 n, sz = 0;
+  u8 c;
+  if( sqlite3_value_type(pArg)!=SQLITE_BLOB ) return 0;
   p->aBlob = (u8*)sqlite3_value_blob(pArg);
   p->nBlob = (u32)sqlite3_value_bytes(pArg);
-  if( p->nBlob==0 ){
-    p->aBlob = 0;
-    return 0;
-  }
-  if( NEVER(p->aBlob==0) ){
-    return 0;
-  }
-  if( (p->aBlob[0] & 0x0f)<=JSONB_OBJECT
+  if( p->nBlob>0
+   && ALWAYS(p->aBlob!=0)
+   && ((c = p->aBlob[0]) & 0x0f)<=JSONB_OBJECT
    && (n = jsonbPayloadSize(p, 0, &sz))>0
    && sz+n==p->nBlob
-   && ((p->aBlob[0] & 0x0f)>JSONB_FALSE || sz==0)
+   && ((c & 0x0f)>JSONB_FALSE || sz==0)
+   && (sz>7 
+      || (c!=0x7b && c!=0x5b && !sqlite3Isdigit(c))
+      || jsonbValidityCheck(p, 0, p->nBlob, 1)==0)
   ){
     return 1;
   }
@@ -3463,7 +3606,7 @@ rebuild_from_cache:
     ** JSON functions were suppose to work.  From the beginning, blob was
     ** reserved for expansion and a blob value should have raised an error.
     ** But it did not, due to a bug.  And many applications came to depend
-    ** upon this buggy behavior, espeically when using the CLI and reading
+    ** upon this buggy behavior, especially when using the CLI and reading
     ** JSON text using readfile(), which returns a blob.  For this reason
     ** we will continue to support the bug moving forward.
     ** See for example https://sqlite.org/forum/forumpost/012136abd5292b8d
@@ -4478,21 +4621,17 @@ static void jsonValidFunc(
       return;
     }
     case SQLITE_BLOB: {
-      if( jsonFuncArgMightBeBinary(argv[0]) ){
+      JsonParse py;
+      memset(&py, 0, sizeof(py));
+      if( jsonArgIsJsonb(argv[0], &py) ){
         if( flags & 0x04 ){
           /* Superficial checking only - accomplished by the
-          ** jsonFuncArgMightBeBinary() call above. */
+          ** jsonArgIsJsonb() call above. */
           res = 1;
         }else if( flags & 0x08 ){
           /* Strict checking.  Check by translating BLOB->TEXT->BLOB.  If
           ** no errors occur, call that a "strict check". */
-          JsonParse px;
-          u32 iErr;
-          memset(&px, 0, sizeof(px));
-          px.aBlob = (u8*)sqlite3_value_blob(argv[0]);
-          px.nBlob = sqlite3_value_bytes(argv[0]);
-          iErr = jsonbValidityCheck(&px, 0, px.nBlob, 1);
-          res = iErr==0;
+          res = 0==jsonbValidityCheck(&py, 0, py.nBlob, 1);
         }
         break;
       }
@@ -4550,9 +4689,7 @@ static void jsonErrorFunc(
   UNUSED_PARAMETER(argc);
   memset(&s, 0, sizeof(s));
   s.db = sqlite3_context_db_handle(ctx);
-  if( jsonFuncArgMightBeBinary(argv[0]) ){
-    s.aBlob = (u8*)sqlite3_value_blob(argv[0]);
-    s.nBlob = sqlite3_value_bytes(argv[0]);
+  if( jsonArgIsJsonb(argv[0], &s) ){
     iErrPos = (i64)jsonbValidityCheck(&s, 0, s.nBlob, 1);
   }else{
     s.zJson = (char*)sqlite3_value_text(argv[0]);
@@ -4713,18 +4850,20 @@ static void jsonObjectStep(
   UNUSED_PARAMETER(argc);
   pStr = (JsonString*)sqlite3_aggregate_context(ctx, sizeof(*pStr));
   if( pStr ){
+    z = (const char*)sqlite3_value_text(argv[0]);
+    n = sqlite3Strlen30(z);
     if( pStr->zBuf==0 ){
       jsonStringInit(pStr, ctx);
       jsonAppendChar(pStr, '{');
-    }else if( pStr->nUsed>1 ){
+    }else if( pStr->nUsed>1 && z!=0 ){
       jsonAppendChar(pStr, ',');
     }
     pStr->pCtx = ctx;
-    z = (const char*)sqlite3_value_text(argv[0]);
-    n = sqlite3Strlen30(z);
-    jsonAppendString(pStr, z, n);
-    jsonAppendChar(pStr, ':');
-    jsonAppendSqlValue(pStr, argv[1]);
+    if( z!=0 ){
+      jsonAppendString(pStr, z, n);
+      jsonAppendChar(pStr, ':');
+      jsonAppendSqlValue(pStr, argv[1]);
+    }
   }
 }
 static void jsonObjectCompute(sqlite3_context *ctx, int isFinal){
@@ -5237,9 +5376,8 @@ static int jsonEachFilter(
   memset(&p->sParse, 0, sizeof(p->sParse));
   p->sParse.nJPRef = 1;
   p->sParse.db = p->db;
-  if( jsonFuncArgMightBeBinary(argv[0]) ){
-    p->sParse.nBlob = sqlite3_value_bytes(argv[0]);
-    p->sParse.aBlob = (u8*)sqlite3_value_blob(argv[0]);
+  if( jsonArgIsJsonb(argv[0], &p->sParse) ){
+    /* We have JSONB */
   }else{
     p->sParse.zJson = (char*)sqlite3_value_text(argv[0]);
     p->sParse.nJson = sqlite3_value_bytes(argv[0]);

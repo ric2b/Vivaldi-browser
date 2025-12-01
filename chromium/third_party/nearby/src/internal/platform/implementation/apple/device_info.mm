@@ -19,16 +19,16 @@
 #import <UIKit/UIKit.h>
 #endif
 
-#include <filesystem>  // NOLINT(build/c++17)
 #include <functional>
 #include <optional>
 #include <string>
 #include <utility>
 
 #include "absl/strings/string_view.h"
+#include "internal/base/file_path.h"
 #include "internal/platform/implementation/device_info.h"
 
-#import "GoogleToolboxForMac/GTMLogger.h"
+#import "internal/platform/implementation/apple/Log/GNCLogger.h"
 
 namespace nearby {
 namespace apple {
@@ -78,7 +78,7 @@ api::DeviceInfo::OsType DeviceInfo::GetOsType() const {
 #endif
 }
 
-std::optional<std::filesystem::path> DeviceInfo::GetDownloadPath() const {
+std::optional<FilePath> DeviceInfo::GetDownloadPath() const {
   NSFileManager *manager = [NSFileManager defaultManager];
 
   NSError *error = nil;
@@ -88,14 +88,14 @@ std::optional<std::filesystem::path> DeviceInfo::GetDownloadPath() const {
                                           create:YES
                                            error:&error];
   if (!downloadsURL) {
-    GTMLoggerError(@"Failed to get download path: %@", error);
+    GNCLoggerError(@"Failed to get download path: %@", error);
     return std::nullopt;
   }
 
-  return std::filesystem::path([downloadsURL.path cString]);
+  return FilePath(absl::string_view([downloadsURL.path cString]));
 }
 
-std::optional<std::filesystem::path> DeviceInfo::GetLocalAppDataPath() const {
+std::optional<FilePath> DeviceInfo::GetLocalAppDataPath() const {
   NSFileManager *manager = [NSFileManager defaultManager];
 
   NSError *error = nil;
@@ -105,22 +105,20 @@ std::optional<std::filesystem::path> DeviceInfo::GetLocalAppDataPath() const {
                                                    create:YES
                                                     error:&error];
   if (!applicationSupportURL) {
-    GTMLoggerError(@"Failed to get application support path: %@", error);
+    GNCLoggerError(@"Failed to get application support path: %@", error);
     return std::nullopt;
   }
 
-  return std::filesystem::path([applicationSupportURL.path cString]);
+  return FilePath(absl::string_view([applicationSupportURL.path cString]));
 }
 
-std::optional<std::filesystem::path> DeviceInfo::GetCommonAppDataPath() const {
-  return GetLocalAppDataPath();
+std::optional<FilePath> DeviceInfo::GetCommonAppDataPath() const { return GetLocalAppDataPath(); }
+
+std::optional<FilePath> DeviceInfo::GetTemporaryPath() const {
+  return FilePath(absl::string_view([NSTemporaryDirectory() cString]));
 }
 
-std::optional<std::filesystem::path> DeviceInfo::GetTemporaryPath() const {
-  return std::filesystem::path([NSTemporaryDirectory() cString]);
-}
-
-std::optional<std::filesystem::path> DeviceInfo::GetLogPath() const {
+std::optional<FilePath> DeviceInfo::GetLogPath() const {
   NSFileManager *manager = [NSFileManager defaultManager];
 
   NSError *error = nil;
@@ -130,7 +128,7 @@ std::optional<std::filesystem::path> DeviceInfo::GetLogPath() const {
                                                    create:YES
                                                     error:&error];
   if (!applicationSupportURL) {
-    GTMLoggerError(@"Failed to get application support path: %@", error);
+    GNCLoggerError(@"Failed to get application support path: %@", error);
     return std::nullopt;
   }
 
@@ -139,10 +137,10 @@ std::optional<std::filesystem::path> DeviceInfo::GetLogPath() const {
   NSURL *logsURL =
       [applicationSupportURL URLByAppendingPathComponent:@"Google/Nearby/Sharing/Logs"];
 
-  return std::filesystem::path([logsURL.path cString]);
+  return FilePath(absl::string_view([logsURL.path cString]));
 }
 
-std::optional<std::filesystem::path> DeviceInfo::GetCrashDumpPath() const {
+std::optional<FilePath> DeviceInfo::GetCrashDumpPath() const {
   NSFileManager *manager = [NSFileManager defaultManager];
 
   NSError *error = nil;
@@ -152,7 +150,7 @@ std::optional<std::filesystem::path> DeviceInfo::GetCrashDumpPath() const {
                                                    create:YES
                                                     error:&error];
   if (!applicationSupportURL) {
-    GTMLoggerError(@"Failed to get application support path: %@", error);
+    GNCLoggerError(@"Failed to get application support path: %@", error);
     return std::nullopt;
   }
 
@@ -161,7 +159,7 @@ std::optional<std::filesystem::path> DeviceInfo::GetCrashDumpPath() const {
   NSURL *crashDumpsURL =
       [applicationSupportURL URLByAppendingPathComponent:@"Google/Nearby/Sharing/CrashDumps"];
 
-  return std::filesystem::path([crashDumpsURL.path cString]);
+  return FilePath(absl::string_view([crashDumpsURL.path cString]));
 }
 
 bool DeviceInfo::IsScreenLocked() const { return false; }

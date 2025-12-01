@@ -14,6 +14,7 @@
 #include "base/check.h"
 #include "base/command_line.h"
 #include "base/containers/contains.h"
+#include "base/debug/crash_logging.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
@@ -58,7 +59,6 @@
 #include "content/public/common/result_codes.h"
 #include "crypto/secure_hash.h"
 #include "crypto/sha2.h"
-#include "ipc/ipc_message.h"
 #include "mojo/public/c/system/types.h"
 #include "net/base/net_errors.h"
 #include "net/cookies/site_for_cookies.h"
@@ -590,7 +590,7 @@ void ServiceWorkerVersion::StartWorker(ServiceWorkerMetrics::EventType purpose,
   // Ensure the live registration during starting worker so that the worker can
   // get associated with it in
   // ServiceWorkerHost::CompleteStartWorkerPreparation.
-  context_->registry()->FindRegistrationForId(
+  context_->registry().FindRegistrationForId(
       registration_id_, key_,
       base::BindOnce(
           &ServiceWorkerVersion::DidEnsureLiveRegistrationForStartWorker,
@@ -712,7 +712,7 @@ void ServiceWorkerVersion::StartUpdate() {
   if (!context_) {
     return;
   }
-  context_->registry()->FindRegistrationForId(
+  context_->registry().FindRegistrationForId(
       registration_id_, key_,
       base::BindOnce(&ServiceWorkerVersion::FoundRegistrationForUpdate,
                      weak_factory_.GetWeakPtr()));
@@ -1488,7 +1488,7 @@ void ServiceWorkerVersion::OnStarted(
 
   if (status == blink::ServiceWorkerStatusCode::kOk) {
     if (fetch_handler_type_ && fetch_handler_type_ != new_fetch_handler_type) {
-      context_->registry()->UpdateFetchHandlerType(
+      context_->registry().UpdateFetchHandlerType(
           registration_id_, key_, new_fetch_handler_type,
           // Ignore errors; bumping the update fetch handler type is
           // just best-effort.
@@ -1838,8 +1838,8 @@ void ServiceWorkerVersion::PostMessageToClient(
     return;
   }
   // As we don't track tasks between workers and renderers, we can nullify the
-  // message's parent task ID.
-  message.parent_task_id = std::nullopt;
+  // message's task state ID.
+  message.task_state_id = std::nullopt;
   service_worker_client->container_host()->PostMessageToClient(
       *this, std::move(message));
 }
@@ -2149,12 +2149,15 @@ ServiceWorkerVersion::BuildClientSecurityState() const {
   }
 
   const PolicyContainerPolicies& policies = policy_container_host_->policies();
+  // TODO(crbug.com/395895368): try replacing the below with
+  // DeriveClientSecurityState
   return network::mojom::ClientSecurityState::New(
       policies.cross_origin_embedder_policy, policies.is_web_secure_context,
       policies.ip_address_space,
-      DerivePrivateNetworkRequestPolicy(policies.ip_address_space,
-                                        policies.is_web_secure_context,
-                                        PrivateNetworkRequestContext::kWorker),
+      DerivePrivateNetworkRequestPolicy(
+          policies.ip_address_space, policies.is_web_secure_context,
+          policies.allow_non_secure_local_network_access,
+          PrivateNetworkRequestContext::kWorker),
       policies.document_isolation_policy);
 }
 
@@ -2556,20 +2559,23 @@ void ServiceWorkerVersion::OnTimeoutTimer() {
     return;
   }
 
-  // Are there requests that have not finished before their expiration.
-  bool has_kill_on_timeout = false;
-  bool has_continue_on_timeout = false;
-  // In case, `request_timeouts_` can be modified in the callbacks initiated
-  // in `MaybeTimeoutRequest`, we keep its contents locally during the
-  // following while loop.
-  std::set<InflightRequestTimeoutInfo> request_timeouts;
-  request_timeouts.swap(request_timeouts_);
-  auto timeout_iter = request_timeouts.begin();
-  while (timeout_iter != request_timeouts.end()) {
-    const InflightRequestTimeoutInfo& info = *timeout_iter;
-    if (!RequestExpired(info.expiration_time)) {
+  // 1. Identify timed-out requests and extract their info. This is done in a
+  // separate loop to avoid race conditions where a timeout callback adds a new
+  // request that could be immediately timed out.
+  std::vector<InflightRequestTimeoutInfo> timed_out_infos;
+  auto it = request_timeouts_.begin();
+  while (it != request_timeouts_.end()) {
+    if (!RequestExpired(it->expiration_time)) {
       break;
     }
+    timed_out_infos.push_back(*it);
+    it = request_timeouts_.erase(it);
+  }
+
+  // 2. Run the error callbacks for the timed-out requests.
+  bool has_kill_on_timeout = false;
+  bool has_continue_on_timeout = false;
+  for (const auto& info : timed_out_infos) {
     if (MaybeTimeoutRequest(info)) {
       switch (info.timeout_behavior) {
         case KILL_ON_TIMEOUT:
@@ -2580,14 +2586,12 @@ void ServiceWorkerVersion::OnTimeoutTimer() {
           break;
       }
     }
-    timeout_iter = request_timeouts.erase(timeout_iter);
   }
-  // Ensure the `request_timeouts_` won't be touched during the loop.
-  DCHECK(request_timeouts_.empty());
-  request_timeouts_.swap(request_timeouts);
-  // TODO(crbug.com/40864997): remove the following DCHECK when the cause
-  // identified.
-  DCHECK_EQ(request_timeouts_.size(), inflight_requests_.size());
+
+  // TODO(crbug.com/40864997): This was promoted from a DCHECK to validate
+  // the fix for this bug. If no crashes are observed by the next release
+  // cycle, this CHECK and other related DCHECKs in this file can be removed.
+  CHECK_EQ(request_timeouts_.size(), inflight_requests_.size());
 
   if (has_kill_on_timeout &&
       running_status() != blink::EmbeddedWorkerStatus::kStopping) {
@@ -2693,9 +2697,18 @@ bool ServiceWorkerVersion::MaybeTimeoutRequest(
   TRACE_EVENT_NESTABLE_ASYNC_END1("ServiceWorker",
                                   "ServiceWorkerVersion::Request",
                                   TRACE_ID_LOCAL(request), "Error", "Timeout");
-  std::move(request->error_callback)
-      .Run(blink::ServiceWorkerStatusCode::kErrorTimeout);
+
+  // Move the callback to a local variable before removing the request from the
+  // map, as the request object will be destroyed.
+  auto error_callback = std::move(request->error_callback);
+
+  // Remove the request from inflight_requests_ *before* running the callback.
+  // This restores the invariant that request_timeouts_ and inflight_requests_
+  // have the same size, preventing a DCHECK failure if the callback
+  // synchronously finishes another request.
   inflight_requests_.Remove(info.id);
+
+  std::move(error_callback).Run(blink::ServiceWorkerStatusCode::kErrorTimeout);
   return true;
 }
 

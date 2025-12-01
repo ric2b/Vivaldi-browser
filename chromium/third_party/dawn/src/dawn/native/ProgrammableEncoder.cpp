@@ -36,6 +36,7 @@
 #include "dawn/native/Commands.h"
 #include "dawn/native/Device.h"
 #include "dawn/native/ObjectType_autogen.h"
+#include "dawn/native/PhysicalDevice.h"
 #include "dawn/native/ValidationUtils_autogen.h"
 #include "dawn/native/utils/WGPUHelpers.h"
 

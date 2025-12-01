@@ -2,10 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #import "ios/chrome/browser/autocomplete/model/autocomplete_provider_client_impl.h"
 
 #import "base/notreached.h"
 #import "base/strings/utf_string_conversions.h"
+#import "components/application_locale_storage/application_locale_storage.h"
 #import "components/history/core/browser/history_service.h"
 #import "components/history/core/browser/top_sites.h"
 #import "components/keyed_service/core/service_access_type.h"
@@ -23,6 +29,7 @@
 #import "components/signin/public/identity_manager/identity_manager.h"
 #import "components/sync/service/sync_service.h"
 #import "components/unified_consent/url_keyed_data_collection_consent_helper.h"
+#import "ios/chrome/browser/aim/model/ios_chrome_aim_eligibility_service_factory.h"
 #import "ios/chrome/browser/autocomplete/model/autocomplete_classifier_factory.h"
 #import "ios/chrome/browser/autocomplete/model/autocomplete_scoring_model_service_factory.h"
 #import "ios/chrome/browser/autocomplete/model/in_memory_url_index_factory.h"
@@ -88,7 +95,7 @@ PrefService* AutocompleteProviderClientImpl::GetLocalState() {
 }
 
 std::string AutocompleteProviderClientImpl::GetApplicationLocale() const {
-  return GetApplicationContext()->GetApplicationLocale();
+  return GetApplicationContext()->GetApplicationLocaleStorage()->Get();
 }
 
 const AutocompleteSchemeClassifier&
@@ -204,6 +211,16 @@ AutocompleteProviderClientImpl::GetLensSuggestInputsWhenReady(
       << "GetLensSuggestInputsWhenReady is not implemented by default.";
 }
 
+tab_groups::TabGroupSyncService*
+AutocompleteProviderClientImpl::GetTabGroupSyncService() const {
+  return nullptr;
+}
+
+AimEligibilityService*
+AutocompleteProviderClientImpl::GetAimEligibilityService() const {
+  return IOSChromeAimEligibilityServiceFactory::GetForProfile(profile_);
+}
+
 std::string AutocompleteProviderClientImpl::GetAcceptLanguages() const {
   return profile_->GetPrefs()->GetString(language::prefs::kAcceptLanguages);
 }
@@ -239,11 +256,6 @@ AutocompleteProviderClientImpl::GetComponentUpdateService() {
 signin::IdentityManager* AutocompleteProviderClientImpl::GetIdentityManager()
     const {
   return IdentityManagerFactory::GetForProfile(profile_);
-}
-
-tab_groups::TabGroupSyncService*
-AutocompleteProviderClientImpl::GetTabGroupSyncService() const {
-  return nullptr;
 }
 
 bool AutocompleteProviderClientImpl::IsOffTheRecord() const {
@@ -314,6 +326,11 @@ bool AutocompleteProviderClientImpl::in_background_state() const {
 void AutocompleteProviderClientImpl::set_in_background_state(
     bool in_background_state) {
   in_background_state_ = in_background_state;
+}
+
+base::WeakPtr<AutocompleteProviderClient>
+AutocompleteProviderClientImpl::GetWeakPtr() {
+  return weak_factory_.GetWeakPtr();
 }
 
 #pragma mark - Vivaldi

@@ -7,6 +7,7 @@ License: MIT
 License File: LICENSE
 Security Critical: yes
 Shipped: yes
+Update Mechanism: Autoroll
 CPEPrefix: unknown
 Mitigated: CVE-2011-4061, CVE-2024-7255 ,CVE-2024-7256
 CVE-2011-4061: This copy of DependencyA only includes rainbows

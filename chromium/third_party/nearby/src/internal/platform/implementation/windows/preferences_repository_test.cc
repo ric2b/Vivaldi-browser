@@ -14,13 +14,14 @@
 
 #include "internal/platform/implementation/windows/preferences_repository.h"
 
-#include <filesystem>  // NOLINT(build/c++17)
 #include <fstream>
 #include <optional>
 
 #include "gtest/gtest.h"
 #include "nlohmann/json.hpp"
 #include "nlohmann/json_fwd.hpp"
+#include "internal/base/file_path.h"
+#include "internal/base/files.h"
 #include "internal/platform/implementation/device_info.h"
 #include "internal/platform/implementation/platform.h"
 
@@ -35,42 +36,43 @@ constexpr char kPreferencesBackupFileName[] = "preferences_bak.json";
 constexpr char kPreferencesPath[] = "Google/Nearby/Sharing";
 
 TEST(PreferencesRepository, LoadWithBadPath) {
-  PreferencesRepository preferences_repository{"c:\\users\\a\\b\\c\\d\\e\\f"};
+  PreferencesRepository preferences_repository{
+      FilePath{"c:\\users\\a\\b\\c\\d\\e\\f"}};
   json result = preferences_repository.LoadPreferences();
   EXPECT_TRUE(result.empty());
 }
 
 TEST(PreferencesRepository, RecoverFromBadPreferences) {
-  std::optional<std::filesystem::path> app_data_path =
+  std::optional<FilePath> app_data_path =
       api::ImplementationPlatform::CreateDeviceInfo()->GetLocalAppDataPath();
   ASSERT_TRUE(app_data_path.has_value());
-  std::filesystem::path full_path = *app_data_path / kPreferencesPath;
-  std::filesystem::path full_name = full_path / kPreferencesFileName;
+  FilePath full_path = app_data_path->append(FilePath(kPreferencesPath));
+  FilePath full_name = app_data_path->append(FilePath(kPreferencesFileName));
 
-  if (std::filesystem::exists(full_name)) {
-    std::filesystem::remove(full_name);
+  if (Files::FileExists(full_name)) {
+    Files::RemoveFile(full_name);
   }
 
-  std::ofstream pref_file(full_name.c_str());
+  std::ofstream pref_file(full_name.GetPath());
   pref_file << "\"Bad top level object\"";
   pref_file.close();
 
-  PreferencesRepository preferences_repository{full_path.string()};
+  PreferencesRepository preferences_repository{full_path};
   EXPECT_EQ(preferences_repository.LoadPreferences(), json::object());
 }
 
 TEST(PreferencesRepository, SaveAndLoadPreferences) {
-  std::optional<std::filesystem::path> app_data_path =
+  std::optional<FilePath> app_data_path =
       api::ImplementationPlatform::CreateDeviceInfo()->GetLocalAppDataPath();
   ASSERT_TRUE(app_data_path.has_value());
-  std::filesystem::path full_path = *app_data_path / kPreferencesPath;
-  std::filesystem::path full_name = full_path / kPreferencesFileName;
+  FilePath full_path = app_data_path->append(FilePath(kPreferencesPath));
+  FilePath full_name = app_data_path->append(FilePath(kPreferencesFileName));
 
-  if (std::filesystem::exists(full_name)) {
-    std::filesystem::remove(full_name);
+  if (Files::FileExists(full_name)) {
+    Files::RemoveFile(full_name);
   }
 
-  PreferencesRepository preferences_repository{full_path.string()};
+  PreferencesRepository preferences_repository{full_path};
   json data;
   data["key1"] = "value1";
   data["key2"] = "value2";
@@ -79,32 +81,32 @@ TEST(PreferencesRepository, SaveAndLoadPreferences) {
   EXPECT_EQ(result.size(), 2);
   EXPECT_EQ(result["key1"], "value1");
   EXPECT_EQ(result["key2"], "value2");
-  std::filesystem::remove(full_name);
+  Files::RemoveFile(full_name);
 }
 
 TEST(PreferencesRepository, LoadFromBackup) {
-  std::optional<std::filesystem::path> app_data_path =
+  std::optional<FilePath> app_data_path =
       api::ImplementationPlatform::CreateDeviceInfo()->GetLocalAppDataPath();
   ASSERT_TRUE(app_data_path.has_value());
-  std::filesystem::path full_path = *app_data_path / kPreferencesPath;
-  std::filesystem::path full_name = full_path / kPreferencesFileName;
-  std::filesystem::path full_name_backup =
-      full_path / kPreferencesBackupFileName;
+  FilePath full_path = app_data_path->append(FilePath(kPreferencesPath));
+  FilePath full_name = app_data_path->append(FilePath(kPreferencesFileName));
+  FilePath full_name_backup = full_path;
+  full_name_backup.append(FilePath(kPreferencesBackupFileName));
 
-  if (std::filesystem::exists(full_name)) {
-    std::filesystem::remove(full_name);
+  if (Files::FileExists(full_name)) {
+    Files::RemoveFile(full_name);
   }
 
-  if (std::filesystem::exists(full_name_backup)) {
-    std::filesystem::remove(full_name_backup);
+  if (Files::FileExists(full_name_backup)) {
+    Files::RemoveFile(full_name_backup);
   }
 
-  PreferencesRepository preferences_repository{full_path.string()};
+  PreferencesRepository preferences_repository{full_path};
   json data;
   data["key1"] = "value1";
   data["key2"] = "value2";
 
-  std::ofstream backup_file(full_name_backup.c_str());
+  std::ofstream backup_file(full_name_backup.GetPath());
   backup_file << data;
   backup_file.close();
 
@@ -115,45 +117,45 @@ TEST(PreferencesRepository, LoadFromBackup) {
   EXPECT_TRUE(result.has_value());
   EXPECT_EQ(result.value()["key1"], "value1");
   EXPECT_EQ(result.value()["key2"], "value2");
-  std::filesystem::remove(full_name);
-  EXPECT_FALSE(std::filesystem::exists(full_name_backup));
+  Files::RemoveFile(full_name);
+  EXPECT_FALSE(Files::FileExists(full_name_backup));
 }
 
 TEST(PreferencesRepository, RecoverFromCorruption) {
-  std::optional<std::filesystem::path> app_data_path =
+  std::optional<FilePath> app_data_path =
       api::ImplementationPlatform::CreateDeviceInfo()->GetLocalAppDataPath();
   ASSERT_TRUE(app_data_path.has_value());
-  std::filesystem::path full_path = *app_data_path / kPreferencesPath;
-  std::filesystem::path full_name = full_path / kPreferencesFileName;
-  std::filesystem::path full_name_backup =
-      full_path / kPreferencesBackupFileName;
+  FilePath full_path = app_data_path->append(FilePath(kPreferencesPath));
+  FilePath full_name = app_data_path->append(FilePath(kPreferencesFileName));
+  FilePath full_name_backup = full_path;
+  full_name_backup.append(FilePath(kPreferencesBackupFileName));
 
-  if (std::filesystem::exists(full_name)) {
-    std::filesystem::remove(full_name);
+  if (Files::FileExists(full_name)) {
+    Files::RemoveFile(full_name);
   }
 
-  if (std::filesystem::exists(full_name_backup)) {
-    std::filesystem::remove(full_name_backup);
+  if (Files::FileExists(full_name_backup)) {
+    Files::RemoveFile(full_name_backup);
   }
 
-  PreferencesRepository preferences_repository{full_path.string()};
+  PreferencesRepository preferences_repository{full_path};
   json data;
   data["key1"] = "value1";
   data["key2"] = "value2";
 
-  std::ofstream preferences_file(full_name_backup.c_str());
+  std::ofstream preferences_file(full_name_backup.GetPath());
   preferences_file << data;
   preferences_file.close();
 
-  std::ofstream backup_file(full_name.c_str());
+  std::ofstream backup_file(full_name.GetPath());
   backup_file << "[BAD JSON FILE]";
   backup_file.close();
 
   std::optional<json> result = preferences_repository.LoadPreferences();
   EXPECT_EQ(result.value()["key1"], "value1");
   EXPECT_EQ(result.value()["key2"], "value2");
-  std::filesystem::remove(full_name);
-  EXPECT_FALSE(std::filesystem::exists(full_name_backup));
+  Files::RemoveFile(full_name);
+  EXPECT_FALSE(Files::FileExists(full_name_backup));
 }
 
 }  // namespace

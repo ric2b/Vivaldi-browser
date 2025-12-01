@@ -1495,40 +1495,6 @@ EIGEN_STRONG_INLINE Packet8d pldexp<Packet8d>(const Packet8d& a, const Packet8d&
 #endif
 
 template <>
-EIGEN_STRONG_INLINE float predux<Packet16f>(const Packet16f& a) {
-#ifdef EIGEN_VECTORIZE_AVX512DQ
-  __m256 lane0 = _mm512_extractf32x8_ps(a, 0);
-  __m256 lane1 = _mm512_extractf32x8_ps(a, 1);
-  Packet8f x = _mm256_add_ps(lane0, lane1);
-  return predux<Packet8f>(x);
-#else
-  __m128 lane0 = _mm512_extractf32x4_ps(a, 0);
-  __m128 lane1 = _mm512_extractf32x4_ps(a, 1);
-  __m128 lane2 = _mm512_extractf32x4_ps(a, 2);
-  __m128 lane3 = _mm512_extractf32x4_ps(a, 3);
-  __m128 sum = _mm_add_ps(_mm_add_ps(lane0, lane1), _mm_add_ps(lane2, lane3));
-  return predux<Packet4f>(sum);
-#endif
-}
-template <>
-EIGEN_STRONG_INLINE double predux<Packet8d>(const Packet8d& a) {
-  __m256d lane0 = _mm512_extractf64x4_pd(a, 0);
-  __m256d lane1 = _mm512_extractf64x4_pd(a, 1);
-  __m256d sum = _mm256_add_pd(lane0, lane1);
-  return predux<Packet4d>(sum);
-}
-
-template <>
-EIGEN_STRONG_INLINE int64_t predux<Packet8l>(const Packet8l& a) {
-  return _mm512_reduce_add_epi64(a);
-}
-
-template <>
-EIGEN_STRONG_INLINE int predux<Packet16i>(const Packet16i& a) {
-  return _mm512_reduce_add_epi32(a);
-}
-
-template <>
 EIGEN_STRONG_INLINE Packet8f predux_half_dowto4<Packet16f>(const Packet16f& a) {
 #ifdef EIGEN_VECTORIZE_AVX512DQ
   __m256 lane0 = _mm512_extractf32x8_ps(a, 0);
@@ -1572,136 +1538,6 @@ EIGEN_STRONG_INLINE Packet4l predux_half_dowto4<Packet8l>(const Packet8l& a) {
   __m256i lane0 = _mm512_extracti64x4_epi64(a, 0);
   __m256i lane1 = _mm512_extracti64x4_epi64(a, 1);
   return _mm256_add_epi64(lane0, lane1);
-}
-
-template <>
-EIGEN_STRONG_INLINE float predux_mul<Packet16f>(const Packet16f& a) {
-// #ifdef EIGEN_VECTORIZE_AVX512DQ
-#if 0
-  Packet8f lane0 = _mm512_extractf32x8_ps(a, 0);
-  Packet8f lane1 = _mm512_extractf32x8_ps(a, 1);
-  Packet8f res = pmul(lane0, lane1);
-  res = pmul(res, _mm256_permute2f128_ps(res, res, 1));
-  res = pmul(res, _mm_permute_ps(res, _MM_SHUFFLE(0, 0, 3, 2)));
-  return pfirst(pmul(res, _mm_permute_ps(res, _MM_SHUFFLE(0, 0, 0, 1))));
-#else
-  __m128 lane0 = _mm512_extractf32x4_ps(a, 0);
-  __m128 lane1 = _mm512_extractf32x4_ps(a, 1);
-  __m128 lane2 = _mm512_extractf32x4_ps(a, 2);
-  __m128 lane3 = _mm512_extractf32x4_ps(a, 3);
-  __m128 res = pmul(pmul(lane0, lane1), pmul(lane2, lane3));
-  res = pmul(res, _mm_permute_ps(res, _MM_SHUFFLE(0, 0, 3, 2)));
-  return pfirst(pmul(res, _mm_permute_ps(res, _MM_SHUFFLE(0, 0, 0, 1))));
-#endif
-}
-template <>
-EIGEN_STRONG_INLINE double predux_mul<Packet8d>(const Packet8d& a) {
-  __m256d lane0 = _mm512_extractf64x4_pd(a, 0);
-  __m256d lane1 = _mm512_extractf64x4_pd(a, 1);
-  __m256d res = pmul(lane0, lane1);
-  res = pmul(res, _mm256_permute2f128_pd(res, res, 1));
-  return pfirst(pmul(res, _mm256_shuffle_pd(res, res, 1)));
-}
-template <>
-EIGEN_STRONG_INLINE int predux_mul<Packet16i>(const Packet16i& a) {
-  return _mm512_reduce_mul_epi32(a);
-}
-
-#if EIGEN_COMP_MSVC
-// MSVC's _mm512_reduce_mul_epi64 is borked, at least up to and including 1939.
-//    alignas(64) int64_t data[] = { 1,1,-1,-1,1,-1,-1,-1 };
-//    int64_t out = _mm512_reduce_mul_epi64(_mm512_load_epi64(data));
-// produces garbage: 4294967295.  It seems to happen whenever the output is supposed to be negative.
-// Fall back to a manual approach:
-template <>
-EIGEN_STRONG_INLINE int64_t predux_mul<Packet8l>(const Packet8l& a) {
-  Packet4l lane0 = _mm512_extracti64x4_epi64(a, 0);
-  Packet4l lane1 = _mm512_extracti64x4_epi64(a, 1);
-  Packet4l res = pmul(lane0, lane1);
-  res = pmul(res, Packet4l(_mm256_permute2x128_si256(res, res, 1)));
-  res = pmul(res, Packet4l(_mm256_shuffle_epi32(res, 0xE)));
-  return pfirst(res);
-}
-#else
-template <>
-EIGEN_STRONG_INLINE int64_t predux_mul<Packet8l>(const Packet8l& a) {
-  return _mm512_reduce_mul_epi64(a);
-}
-#endif
-
-template <>
-EIGEN_STRONG_INLINE float predux_min<Packet16f>(const Packet16f& a) {
-  __m128 lane0 = _mm512_extractf32x4_ps(a, 0);
-  __m128 lane1 = _mm512_extractf32x4_ps(a, 1);
-  __m128 lane2 = _mm512_extractf32x4_ps(a, 2);
-  __m128 lane3 = _mm512_extractf32x4_ps(a, 3);
-  __m128 res = _mm_min_ps(_mm_min_ps(lane0, lane1), _mm_min_ps(lane2, lane3));
-  res = _mm_min_ps(res, _mm_permute_ps(res, _MM_SHUFFLE(0, 0, 3, 2)));
-  return pfirst(_mm_min_ps(res, _mm_permute_ps(res, _MM_SHUFFLE(0, 0, 0, 1))));
-}
-template <>
-EIGEN_STRONG_INLINE double predux_min<Packet8d>(const Packet8d& a) {
-  __m256d lane0 = _mm512_extractf64x4_pd(a, 0);
-  __m256d lane1 = _mm512_extractf64x4_pd(a, 1);
-  __m256d res = _mm256_min_pd(lane0, lane1);
-  res = _mm256_min_pd(res, _mm256_permute2f128_pd(res, res, 1));
-  return pfirst(_mm256_min_pd(res, _mm256_shuffle_pd(res, res, 1)));
-}
-template <>
-EIGEN_STRONG_INLINE int predux_min<Packet16i>(const Packet16i& a) {
-  return _mm512_reduce_min_epi32(a);
-}
-template <>
-EIGEN_STRONG_INLINE int64_t predux_min<Packet8l>(const Packet8l& a) {
-  return _mm512_reduce_min_epi64(a);
-}
-
-template <>
-EIGEN_STRONG_INLINE float predux_max<Packet16f>(const Packet16f& a) {
-  __m128 lane0 = _mm512_extractf32x4_ps(a, 0);
-  __m128 lane1 = _mm512_extractf32x4_ps(a, 1);
-  __m128 lane2 = _mm512_extractf32x4_ps(a, 2);
-  __m128 lane3 = _mm512_extractf32x4_ps(a, 3);
-  __m128 res = _mm_max_ps(_mm_max_ps(lane0, lane1), _mm_max_ps(lane2, lane3));
-  res = _mm_max_ps(res, _mm_permute_ps(res, _MM_SHUFFLE(0, 0, 3, 2)));
-  return pfirst(_mm_max_ps(res, _mm_permute_ps(res, _MM_SHUFFLE(0, 0, 0, 1))));
-}
-
-template <>
-EIGEN_STRONG_INLINE double predux_max<Packet8d>(const Packet8d& a) {
-  __m256d lane0 = _mm512_extractf64x4_pd(a, 0);
-  __m256d lane1 = _mm512_extractf64x4_pd(a, 1);
-  __m256d res = _mm256_max_pd(lane0, lane1);
-  res = _mm256_max_pd(res, _mm256_permute2f128_pd(res, res, 1));
-  return pfirst(_mm256_max_pd(res, _mm256_shuffle_pd(res, res, 1)));
-}
-template <>
-EIGEN_STRONG_INLINE int predux_max<Packet16i>(const Packet16i& a) {
-  return _mm512_reduce_max_epi32(a);
-}
-template <>
-EIGEN_STRONG_INLINE int64_t predux_max<Packet8l>(const Packet8l& a) {
-  return _mm512_reduce_max_epi64(a);
-}
-
-template <>
-EIGEN_STRONG_INLINE bool predux_any(const Packet16f& a) {
-  return _mm512_reduce_or_epi32(_mm512_castps_si512(a)) != 0;
-}
-
-template <>
-EIGEN_STRONG_INLINE bool predux_any(const Packet16i& a) {
-  return _mm512_reduce_or_epi32(a) != 0;
-}
-
-template <>
-EIGEN_STRONG_INLINE bool predux_any(const Packet8d& a) {
-  return _mm512_reduce_or_epi64(_mm512_castpd_si512(a)) != 0;
-}
-
-template <>
-EIGEN_STRONG_INLINE bool predux_any(const Packet8l& a) {
-  return _mm512_reduce_or_epi64(a) != 0;
 }
 
 #define PACK_OUTPUT(OUTPUT, INPUT, INDEX, STRIDE) \
@@ -2467,36 +2303,10 @@ EIGEN_STRONG_INLINE Packet16h pnmsub<Packet16h>(const Packet16h& a, const Packet
 }
 
 template <>
-EIGEN_STRONG_INLINE half predux<Packet16h>(const Packet16h& from) {
-  Packet16f from_float = half2float(from);
-  return half(predux(from_float));
-}
-
-template <>
 EIGEN_STRONG_INLINE Packet8h predux_half_dowto4<Packet16h>(const Packet16h& a) {
   Packet8h lane0 = _mm256_extractf128_si256(a, 0);
   Packet8h lane1 = _mm256_extractf128_si256(a, 1);
   return padd<Packet8h>(lane0, lane1);
-}
-
-template <>
-EIGEN_STRONG_INLINE Eigen::half predux_max<Packet16h>(const Packet16h& a) {
-  Packet16f af = half2float(a);
-  float reduced = predux_max<Packet16f>(af);
-  return Eigen::half(reduced);
-}
-
-template <>
-EIGEN_STRONG_INLINE Eigen::half predux_min<Packet16h>(const Packet16h& a) {
-  Packet16f af = half2float(a);
-  float reduced = predux_min<Packet16f>(af);
-  return Eigen::half(reduced);
-}
-
-template <>
-EIGEN_STRONG_INLINE half predux_mul<Packet16h>(const Packet16h& from) {
-  Packet16f from_float = half2float(from);
-  return half(predux_mul(from_float));
 }
 
 template <>
@@ -3003,26 +2813,6 @@ EIGEN_STRONG_INLINE Packet8bf predux_half_dowto4<Packet16bf>(const Packet16bf& a
   Packet8bf lane0 = _mm256_extractf128_si256(a, 0);
   Packet8bf lane1 = _mm256_extractf128_si256(a, 1);
   return padd<Packet8bf>(lane0, lane1);
-}
-
-template <>
-EIGEN_STRONG_INLINE bfloat16 predux<Packet16bf>(const Packet16bf& p) {
-  return static_cast<bfloat16>(predux<Packet16f>(Bf16ToF32(p)));
-}
-
-template <>
-EIGEN_STRONG_INLINE bfloat16 predux_mul<Packet16bf>(const Packet16bf& from) {
-  return static_cast<bfloat16>(predux_mul<Packet16f>(Bf16ToF32(from)));
-}
-
-template <>
-EIGEN_STRONG_INLINE bfloat16 predux_min<Packet16bf>(const Packet16bf& from) {
-  return static_cast<bfloat16>(predux_min<Packet16f>(Bf16ToF32(from)));
-}
-
-template <>
-EIGEN_STRONG_INLINE bfloat16 predux_max<Packet16bf>(const Packet16bf& from) {
-  return static_cast<bfloat16>(predux_max<Packet16f>(Bf16ToF32(from)));
 }
 
 template <>

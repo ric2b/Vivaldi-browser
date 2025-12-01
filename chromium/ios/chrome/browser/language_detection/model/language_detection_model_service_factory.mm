@@ -45,18 +45,10 @@ LanguageDetectionModelServiceFactory::~LanguageDetectionModelServiceFactory() =
 std::unique_ptr<KeyedService>
 LanguageDetectionModelServiceFactory::BuildServiceInstanceFor(
     web::BrowserState* context) const {
-
-#if defined(VIVALDI_BUILD)
-  if (!optimization_guide::features::IsOptimizationTargetPredictionEnabled()) {
-    return nullptr;
-  }
-#else
   if (!translate::IsTFLiteLanguageDetectionEnabled() ||
       !optimization_guide::features::IsOptimizationTargetPredictionEnabled()) {
     return nullptr;
   }
-#endif // End Vivaldi
-
   ProfileIOS* profile = ProfileIOS::FromBrowserState(context);
   auto* opt_guide = OptimizationGuideServiceFactory::GetForProfile(profile);
   if (!opt_guide) {

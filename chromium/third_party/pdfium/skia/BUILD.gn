@@ -38,9 +38,9 @@ if (pdf_enable_fontations) {
     cxx_bindings = [ skia_fontations_bridge_root ]
     deps = [
       ":path_bridge",
-      "//third_party/rust/font_types/v0_8:lib",
-      "//third_party/rust/read_fonts/v0_27:lib",
-      "//third_party/rust/skrifa/v0_29:lib",
+      "//third_party/rust/font_types/v0_9:lib",
+      "//third_party/rust/read_fonts/v0_30:lib",
+      "//third_party/rust/skrifa/v0_32:lib",
     ]
     configs -= [ "//build/config/compiler:chromium_code" ]
     configs += [
@@ -185,6 +185,7 @@ component("skia") {
 
   # The skia sources values are relative to the skia_dir, so we need to rebase.
   sources += skia_core_public
+  sources += skia_pathops_sources
   sources += skia_sksl_pipeline_sources
   sources += skia_sksl_codegen_sources
   sources += skia_sksl_core_sources
@@ -300,7 +301,7 @@ component("skia") {
     ]
   }
 
-  if (is_clang && !is_nacl) {
+  if (is_clang) {
     # Skia won't compile with some of the more strict clang warnings.
     # e.g. it does:
     #  SkASSERT(!"sk_out_of_memory");

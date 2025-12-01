@@ -8,7 +8,7 @@
 <translation id="1222195720020481779">Iniciando o instalador...</translation>
 <translation id="1224683873953469764">Obtenha o Vivaldi para celular</translation>
 <translation id="1270785070369717623">Infelizmente, as configurações do Opera GX não estão disponíveis enquanto o navegador está em execução. Para importar essas configurações para o Vivaldi, salve seu trabalho e feche todas as janelas do Opera GX. Em seguida, clique em Continuar.</translation>
-<translation id="1276145862619442150">Discagem Rápida</translation>
+<translation id="1276145862619442150">Discagens rápidas</translation>
 <translation id="1281950884873973195">Animal 6</translation>
 <translation id="1411638389238344450">Enviar link por &amp;email</translation>
 <translation id="1454726940098520109">Não pedir confirmação novamente</translation>
@@ -75,7 +75,7 @@
 <translation id="3521635864657970829">Deseja realmente fechar esta janela?</translation>
 <translation id="3540597690227428180">Animal 9</translation>
 <translation id="3542768452570884558">Abrir link em nova &amp;janela</translation>
-<translation id="3586931643579894722">Escolher detalhes</translation>
+<translation id="3586931643579894722">Ocultar detalhes</translation>
 <translation id="3588820906588687999">Abrir imagem em nova &amp;aba</translation>
 <translation id="3601066750251199488">Monstro 3</translation>
 <translation id="3620979700683094848">Sites têm permissão para rodar vídeos automaticamente</translation>
@@ -200,7 +200,7 @@
 <translation id="8773635261052182196">Você não haverá notificações. Você pode ativá-las de novo nas configurações do Vivaldi.</translation>
 <translation id="8774017153185436870">Sites podem rodar vídeos automaticamente</translation>
 <translation id="8813277370772331957">Lembre-me depois</translation>
-<translation id="8837256239226739065">Inspecionar service worker em segundo plano</translation>
+<translation id="8837256239226739065">Inspecionar trabalhador de serviço em segundo plano</translation>
 <translation id="8894900864683381599">Criar pai&amp;nel web deste link</translation>
 <translation id="8912720443398351457">Deseja realmente fechar o Vivaldi?</translation>
 <translation id="8940028675168378100">Bloqueado pelo <ph name="BLOCKER_NAME" /></translation>

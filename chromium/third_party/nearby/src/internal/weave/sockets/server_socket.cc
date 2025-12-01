@@ -67,7 +67,7 @@ ServerSocket::ServerSocket(const Connection& connection,
     : BaseSocket(connection, std::move(socket_callback)) {}
 
 ServerSocket::~ServerSocket() {
-  NEARBY_LOGS(INFO) << "ServerSocket dtor";
+  LOG(INFO) << "ServerSocket dtor";
   ShutDown();
 }
 
@@ -79,27 +79,27 @@ void ServerSocket::DisconnectQuietly() {
 void ServerSocket::OnReceiveControlPacket(Packet packet) {
   if (packet.GetControlCommandNumber() ==
       Packet::ControlPacketType::kControlError) {
-    NEARBY_LOGS(WARNING) << "Received error control packet, disconnecting.";
+    LOG(WARNING) << "Received error control packet, disconnecting.";
     DisconnectQuietly();
     return;
   }
   // Control packets besides errors are not supposed to be sent or received
   // after the initial handshake.
   if (state_ != State::kClientConnectionRequest) {
-    NEARBY_LOGS(ERROR) << "Not in 'Connection Request' state, but "
-                          "incorrectly received control packet of type "
-                       << Packet::ControlPacketTypeToString(
-                              packet.GetControlCommandNumber());
+    LOG(ERROR) << "Not in 'Connection Request' state, but "
+                  "incorrectly received control packet of type "
+               << Packet::ControlPacketTypeToString(
+                      packet.GetControlCommandNumber());
     GetSocketCallback().on_error_cb(
         absl::InvalidArgumentError("Unexpected control packet"));
     return;
   }
   if (packet.GetControlCommandNumber() !=
       Packet::ControlPacketType::kControlConnectionRequest) {
-    NEARBY_LOGS(ERROR) << "Expected connection request control packet, "
-                          "received control packet of type "
-                       << Packet::ControlPacketTypeToString(
-                              packet.GetControlCommandNumber());
+    LOG(ERROR) << "Expected connection request control packet, "
+                  "received control packet of type "
+               << Packet::ControlPacketTypeToString(
+                      packet.GetControlCommandNumber());
     DisconnectInternal(
         absl::InvalidArgumentError("Unexpected control packet type."));
     return;
@@ -116,9 +116,8 @@ void ServerSocket::OnReceiveControlPacket(Packet packet) {
       ExtractMaxProtocolVersionFromConnRequest(packet_payload);
   if (min_protocol_version > kProtocolVersion ||
       max_protocol_version < kProtocolVersion) {
-    NEARBY_LOGS(ERROR) << "Received unexpected min/max protocol versions: "
-                       << min_protocol_version << " and "
-                       << max_protocol_version;
+    LOG(ERROR) << "Received unexpected min/max protocol versions: "
+               << min_protocol_version << " and " << max_protocol_version;
     DisconnectInternal(
         absl::InvalidArgumentError("unexpected protocol versions"));
     return;
@@ -144,8 +143,8 @@ void ServerSocket::WriteConnectionConfirm() {
   absl::StatusOr<Packet> packet = Packet::CreateConnectionConfirmPacket(
       kProtocolVersion, max_packet_size_, "");
   if (!packet.ok()) {
-    NEARBY_LOGS(ERROR) << "Failed to create connection confirm packet: "
-                       << packet.status();
+    LOG(ERROR) << "Failed to create connection confirm packet: "
+               << packet.status();
     DisconnectInternal(packet.status());
     return;
   }

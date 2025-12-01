@@ -32,10 +32,9 @@
 #include <string_view>
 #include <utility>
 
-#include "src/tint/lang/core/builtin_type.h"
 #include "src/tint/lang/core/constant/scalar.h"
+#include "src/tint/lang/core/enums.h"
 #include "src/tint/lang/core/fluent_types.h"
-#include "src/tint/lang/core/texel_format.h"
 #include "src/tint/lang/core/type/abstract_float.h"
 #include "src/tint/lang/core/type/abstract_int.h"
 #include "src/tint/lang/core/type/array.h"
@@ -45,6 +44,7 @@
 #include "src/tint/lang/core/type/depth_multisampled_texture.h"
 #include "src/tint/lang/core/type/depth_texture.h"
 #include "src/tint/lang/core/type/external_texture.h"
+#include "src/tint/lang/core/type/i8.h"
 #include "src/tint/lang/core/type/input_attachment.h"
 #include "src/tint/lang/core/type/memory_view.h"
 #include "src/tint/lang/core/type/multisampled_texture.h"
@@ -53,6 +53,7 @@
 #include "src/tint/lang/core/type/sampled_texture.h"
 #include "src/tint/lang/core/type/sampler.h"
 #include "src/tint/lang/core/type/storage_texture.h"
+#include "src/tint/lang/core/type/u8.h"
 #include "src/tint/lang/wgsl/ast/alias.h"
 #include "src/tint/lang/wgsl/ast/assignment_statement.h"
 #include "src/tint/lang/wgsl/ast/attribute.h"
@@ -991,8 +992,6 @@ sem::Function* Resolver::Function(const ast::Function* decl) {
 
     if (decl->IsEntryPoint()) {
         // Determine if the return type has a location
-        bool permissive = validator_.IsValidationDisabled(
-            decl->attributes, ast::DisabledValidation::kFunctionParameter);
         for (auto* attribute : decl->return_type_attributes) {
             Mark(attribute);
             enum Status { kSuccess, kErrored, kInvalid };
@@ -1006,17 +1005,6 @@ sem::Function* Resolver::Function(const ast::Function* decl) {
                     func->SetReturnLocation(value.Get());
                     return kSuccess;
                 },
-                [&](const ast::BlendSrcAttribute* attr) {
-                    if (!permissive) {
-                        return kInvalid;
-                    }
-                    auto value = BlendSrcAttribute(attr);
-                    if (value != Success) {
-                        return kErrored;
-                    }
-                    func->SetReturnIndex(value.Get());
-                    return kSuccess;
-                },
                 [&](const ast::BuiltinAttribute*) { return kSuccess; },
                 [&](const ast::InternalAttribute* attr) {
                     return InternalAttribute(attr) ? kSuccess : kErrored;
@@ -1024,18 +1012,6 @@ sem::Function* Resolver::Function(const ast::Function* decl) {
                 [&](const ast::InterpolateAttribute*) { return kSuccess; },
                 [&](const ast::InvariantAttribute* attr) {
                     return InvariantAttribute(attr) ? kSuccess : kErrored;
-                },
-                [&](const ast::BindingAttribute* attr) {
-                    if (!permissive) {
-                        return kInvalid;
-                    }
-                    return BindingAttribute(attr) == Success ? kSuccess : kErrored;
-                },
-                [&](const ast::GroupAttribute* attr) {
-                    if (!permissive) {
-                        return kInvalid;
-                    }
-                    return GroupAttribute(attr) == Success ? kSuccess : kErrored;
                 },
                 [&](Default) { return kInvalid; });
 
@@ -2555,6 +2531,10 @@ const core::type::Type* Resolver::BuiltinType(core::BuiltinType builtin_ty,
             return check_no_tmpl_args(F16(ident));
         case core::BuiltinType::kF32:
             return check_no_tmpl_args(b.create<core::type::F32>());
+        case core::BuiltinType::kI8:
+            return check_no_tmpl_args(I8(ident));
+        case core::BuiltinType::kU8:
+            return check_no_tmpl_args(U8(ident));
         case core::BuiltinType::kVec2:
             return VecT(ident, builtin_ty, 2);
         case core::BuiltinType::kVec3:
@@ -2698,6 +2678,8 @@ const core::type::Type* Resolver::BuiltinType(core::BuiltinType builtin_ty,
             return StorageTexture(ident, core::type::TextureDimension::k2dArray);
         case core::BuiltinType::kTextureStorage3D:
             return StorageTexture(ident, core::type::TextureDimension::k3d);
+        case core::BuiltinType::kTexelBuffer:
+            return TexelBuffer(ident);
         case core::BuiltinType::kInputAttachment:
             return InputAttachment(ident);
         case core::BuiltinType::kAtomicCompareExchangeResultI32:
@@ -2777,6 +2759,14 @@ const core::type::U32* Resolver::U32() {
 
 const core::type::F16* Resolver::F16(const ast::Identifier* ident) {
     return validator_.CheckF16Enabled(ident->source) ? b.create<core::type::F16>() : nullptr;
+}
+
+const core::type::I8* Resolver::I8(const ast::Identifier* ident) {
+    return validator_.CheckI8Enabled(ident->source) ? b.create<core::type::I8>() : nullptr;
+}
+
+const core::type::U8* Resolver::U8(const ast::Identifier* ident) {
+    return validator_.CheckU8Enabled(ident->source) ? b.create<core::type::U8>() : nullptr;
 }
 
 const core::type::Vector* Resolver::Vec(const ast::Identifier* ident,
@@ -3099,6 +3089,31 @@ const core::type::SubgroupMatrix* Resolver::SubgroupMatrix(const ast::Identifier
     }
 
     return validator_.SubgroupMatrix(out, ident->source) ? out : nullptr;
+}
+
+const core::type::TexelBuffer* Resolver::TexelBuffer(const ast::Identifier* ident) {
+    auto* tmpl_ident = TemplatedIdentifier(ident, 2);
+    if (DAWN_UNLIKELY(!tmpl_ident)) {
+        return nullptr;
+    }
+
+    auto format = sem_.GetTexelFormat(tmpl_ident->arguments[0]);
+    if (DAWN_UNLIKELY(format == core::TexelFormat::kUndefined)) {
+        return nullptr;
+    }
+
+    auto access = sem_.GetAccess(tmpl_ident->arguments[1]);
+    if (DAWN_UNLIKELY(access == core::Access::kUndefined)) {
+        return nullptr;
+    }
+
+    auto* out = b.Types().texel_buffer(format, access);
+
+    if (DAWN_UNLIKELY(!validator_.TexelBuffer(out, ident->source))) {
+        return nullptr;
+    }
+
+    return out;
 }
 
 const ast::TemplatedIdentifier* Resolver::TemplatedIdentifier(const ast::Identifier* ident,

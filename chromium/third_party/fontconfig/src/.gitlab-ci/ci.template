@@ -12,7 +12,7 @@
 # and run ci-fairy generate-template. For details, see
 # https://freedesktop.pages.freedesktop.org/ci-templates/ci-fairy.html#templating-gitlab-ci-yml
 
-.templates_sha: &template_sha ef5e4669b7500834a17ffe9277e15fbb6d977fff
+.templates_sha: &template_sha 32afe5644697e503af18a736587c8619fa036a72
 
 include:
   {% for distro in distributions|sort(attribute="name")|unique(attribute="name") %}
@@ -256,7 +256,7 @@ check-ci-script:
       buildopt+=(-s $FC_BUILDSYS)
       buildopt+=(-t $FC_BUILD_TYPE)
       buildopt+=(-X $FC_XML_BACKEND)
-      sh .gitlab-ci/build.sh ${buildopt[@]}
+      bash .gitlab-ci/build.sh ${buildopt[@]}
   variables:
     FC_BUILDSYS: autotools
     FC_XML_BACKEND: expat

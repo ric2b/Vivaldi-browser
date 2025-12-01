@@ -46,7 +46,11 @@ update_target("//content/browser:browser") {
     "//vivaldi/components/content/vivaldi_web_contents.cc",
     "//vivaldi/components/content/vivaldi_postponed_calls.cc",
     "//vivaldi/components/content/vivaldi_postponed_calls.h",
+    "//vivaldi/components/content/vivaldi_content_frame_tools.cc",
+    "//vivaldi/components/content/vivaldi_content_frame_tools.h",
     "//vivaldi/content/browser/renderer_host/vivaldi_render_widget_host_view_child_frame.cc",
+    "//vivaldi/content/browser/renderer_host/vivaldi_overscroll_controller.cc",
+    "//vivaldi/content/browser/renderer_host/vivaldi_overscroll_controller.h",
   ]
   if (is_mac) {
     sources += [
@@ -246,18 +250,18 @@ if (is_mac) {
 
 update_target("//third_party/blink/public:blink_headers") {
   sources += [
-    "//vivaldi/components/request_filter/adblock_filter/renderer/blink/web_cosmetic_filter_client.h",
+    "//vivaldi/components/ad_blocker/content/renderer/blink/web_cosmetic_filter_client.h",
   ]
 }
 
 update_template_instance(
     "//third_party/blink/renderer/modules/peerconnection:peerconnection") {
   sources += [
-    "//vivaldi/components/request_filter/adblock_filter/renderer/blink/web_cosmetic_filter_client.cc",
-    "//vivaldi/components/request_filter/adblock_filter/renderer/blink/web_cosmetic_filter_client.h",
+    "//vivaldi/components/ad_blocker/content/renderer/blink/web_cosmetic_filter_client.cc",
+    "//vivaldi/components/ad_blocker/content/renderer/blink/web_cosmetic_filter_client.h",
   ]
   public_deps += [
-    "//vivaldi/components/request_filter/adblock_filter/mojom:mojom_blink"
+    "//vivaldi/components/ad_blocker/public/content/mojom:mojom_blink"
   ]
 }
 
@@ -287,6 +291,9 @@ update_target("//components/embedder_support:user_agent"){
     "//vivaldi/base:edge_version",
     "//vivaldi/components:user_agent",
     "//vivaldi/prefs:prefs_strings",
+  ]
+  configs += [
+     "//vivaldi/gn/config:release_kind"
   ]
 }
 
@@ -346,8 +353,6 @@ update_target("//chrome/browser:browser") {
   sources += [
     "//vivaldi/components/request_filter/request_filter_manager_factory.cc",
     "//vivaldi/components/request_filter/request_filter_manager_factory.h",
-    "//vivaldi/components/request_filter/adblock_filter/adblock_rule_service_factory.cc",
-    "//vivaldi/components/request_filter/adblock_filter/adblock_rule_service_factory.h",
   ]
 }
 

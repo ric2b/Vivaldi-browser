@@ -162,16 +162,23 @@ using CombinedTextureSamplerInfo =
 /// Options used to specify a mapping of binding points to indices into a UBO
 /// from which to load texture builtin values.
 struct TextureBuiltinsFromUniformOptions {
-    /// The binding point to use to generate a uniform buffer from which to read
-    /// texture builtin values.
-    BindingPoint ubo_binding = {};
+    /// The binding point to use to generate a uniform buffer from which to read texture builtin
+    /// values. Note that this is a post-remapping binding.
+    binding::Uniform ubo_binding = {};
 
-    /// Ordered list of binding points in the uniform buffer for polyfilling `textureNumSamples` and
-    /// `textureNumLevels`
-    std::vector<BindingPoint> ubo_bindingpoint_ordering = {};
+    /// Ordered list of post-remapping bindings in the uniform buffer for polyfilling
+    /// `textureNumSamples` and `textureNumLevels`.
+    struct EmulatedBuiltin {
+        uint32_t offset;
+        uint32_t count;
+        binding::Texture binding;
+
+        TINT_REFLECT(EmulatedBuiltin, offset, count, binding);
+    };
+    std::vector<EmulatedBuiltin> ubo_contents = {};
 
     /// Reflect the fields of this class so that it can be used by tint::ForeachField()
-    TINT_REFLECT(TextureBuiltinsFromUniformOptions, ubo_binding, ubo_bindingpoint_ordering);
+    TINT_REFLECT(TextureBuiltinsFromUniformOptions, ubo_binding, ubo_contents);
 };
 
 /// Options used to specify a mapping of binding points to indices into a UBO

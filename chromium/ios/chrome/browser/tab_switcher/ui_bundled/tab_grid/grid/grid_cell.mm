@@ -12,6 +12,7 @@
 #import "base/check_op.h"
 #import "base/debug/dump_without_crashing.h"
 #import "base/notreached.h"
+#import "base/strings/sys_string_conversions.h"
 #import "ios/chrome/browser/shared/ui/elements/extended_touch_target_button.h"
 #import "ios/chrome/browser/shared/ui/elements/top_aligned_image_view.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
@@ -67,6 +68,7 @@ void PositionView(UIView* view, CGPoint point) {
 }  // namespace
 
 @interface GridCell ()
+
 // The constraints enabled under accessibility font size.
 @property(nonatomic, strong)
     NSArray<NSLayoutConstraint*>* accessibilityConstraints;
@@ -226,42 +228,22 @@ void PositionView(UIView* view, CGPoint point) {
     ];
     [NSLayoutConstraint activateConstraints:constraints];
 
-    if (@available(iOS 17, *)) {
-      NSArray<UITrait>* traits = TraitCollectionSetForTraits(
-          @[ UITraitPreferredContentSizeCategory.class ]);
-      __weak __typeof(self) weakSelf = self;
-      UITraitChangeHandler handler = ^(id<UITraitEnvironment> traitEnvironment,
-                                       UITraitCollection* previousCollection) {
-        [weakSelf updateUIOnTraitChange:previousCollection];
-      };
-      [self registerForTraitChanges:traits withHandler:handler];
-    }
+    NSArray<UITrait>* traits = TraitCollectionSetForTraits(
+        @[ UITraitPreferredContentSizeCategory.class ]);
+    __weak __typeof(self) weakSelf = self;
+    UITraitChangeHandler handler = ^(id<UITraitEnvironment> traitEnvironment,
+                                     UITraitCollection* previousCollection) {
+      [weakSelf updateUIOnTraitChange:previousCollection];
+    };
+    [self registerForTraitChanges:traits withHandler:handler];
   }
   return self;
 }
 
 #pragma mark - UIView
 
-#if !defined(__IPHONE_17_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_17_0
-- (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
-  [super traitCollectionDidChange:previousTraitCollection];
-  if (@available(iOS 17, *)) {
-    return;
-  }
-  [self updateUIOnTraitChange:previousTraitCollection];
-
-  // Vivaldi
-  // Reset the border color when theme is changed.
-  if ([self.traitCollection
-       hasDifferentColorAppearanceComparedToTraitCollection:
-         previousTraitCollection]) {
-    [self setSelected:self.isItemSelected];
-  } // End Vivaldi
-
-}
-#endif
-
 - (void)didMoveToWindow {
+  [super didMoveToWindow];
 
   // Note: (prio@vivaldi.com) - Do no override window since we only
   // override it with browser theme settings.
@@ -270,9 +252,7 @@ void PositionView(UIView* view, CGPoint point) {
   } // End Vivaldi
 
   if (self.theme == GridThemeLight) {
-    if (@available(iOS 17, *)) {
-      [self updateInterfaceStyleForWindow:self.window];
-    }
+    [self updateInterfaceStyleForWindow:self.window];
   }
 }
 
@@ -313,6 +293,8 @@ void PositionView(UIView* view, CGPoint point) {
   return YES;
 }
 
+#pragma mark - UIAccessibilityAction
+
 - (NSArray*)accessibilityCustomActions {
   if (self.isInSelectionMode) {
     // If the cell is in tab grid selection mode, only allow toggling the
@@ -342,11 +324,7 @@ void PositionView(UIView* view, CGPoint point) {
   // enough here.
   switch (theme) {
     case GridThemeLight:
-      if (@available(iOS 17, *)) {
-        [self updateInterfaceStyleForWindow:self.window];
-      } else {
-        self.overrideUserInterfaceStyle = UIUserInterfaceStyleLight;
-      }
+      [self updateInterfaceStyleForWindow:self.window];
       self.border.layer.borderColor =
           [UIColor colorNamed:kStaticBlue400Color].CGColor;
       break;
@@ -376,6 +354,11 @@ void PositionView(UIView* view, CGPoint point) {
   [self.iconView setHidden:NO];
 }
 
+- (CGRect)snapshotFrame {
+  return [self.snapshotView.superview convertRect:self.snapshotView.frame
+                                           toView:nil];
+}
+
 - (void)setSnapshot:(UIImage*)snapshot {
   self.snapshotView.image = snapshot;
   _snapshot = snapshot;
@@ -403,21 +386,13 @@ void PositionView(UIView* view, CGPoint point) {
 
 - (void)setPriceDrop:(NSString*)price previousPrice:(NSString*)previousPrice {
   [self.priceCardView setPriceDrop:price previousPrice:previousPrice];
-  // Only append PriceCardView accessibility text if it doesn't already exist in
-  // the accessibility label.
-  if ([self.accessibilityLabel
-          rangeOfString:self.priceCardView.accessibilityLabel]
-          .location == NSNotFound) {
-    self.accessibilityLabel =
-        [@[ self.accessibilityLabel, self.priceCardView.accessibilityLabel ]
-            componentsJoinedByString:@". "];
-  }
+  [self updateAccessibilityLabel];
 }
 
 - (void)setTitle:(NSString*)title {
   self.titleLabel.text = title;
-  self.accessibilityLabel = title;
   _title = title;
+  [self updateAccessibilityLabel];
 }
 
 - (void)setTitleHidden:(BOOL)titleHidden {
@@ -450,7 +425,29 @@ void PositionView(UIView* view, CGPoint point) {
                               underName:kSelectedRegularCellGuide];
 }
 
+- (void)setActivityLabelData:(ActivityLabelData*)activityLabelData {
+  [super setActivityLabelData:activityLabelData];
+  [self updateAccessibilityLabel];
+}
+
 #pragma mark - Private
+
+// Updates the accessibility label.
+- (void)updateAccessibilityLabel {
+  NSString* accessibilityLabel;
+  if (self.activityLabelData) {
+    accessibilityLabel = l10n_util::GetNSStringF(
+        IDS_IOS_TAB_GRID_CELL_UPDATED, base::SysNSStringToUTF16(self.title));
+  } else {
+    accessibilityLabel = self.title;
+  }
+  if (accessibilityLabel && self.priceCardView.accessibilityLabel) {
+    accessibilityLabel =
+        [@[ accessibilityLabel, self.priceCardView.accessibilityLabel ]
+            componentsJoinedByString:@". "];
+  }
+  self.accessibilityLabel = accessibilityLabel;
+}
 
 // Sets up the top bar with icon, title, and close button.
 - (UIView*)setupTopBar {
@@ -717,15 +714,13 @@ void PositionView(UIView* view, CGPoint point) {
   if (!window) {
     return;
   }
-  if (@available(iOS 17, *)) {
-    [self.window.windowScene
-        registerForTraitChanges:@[ UITraitUserInterfaceStyle.class ]
-                     withTarget:self
-                         action:@selector(interfaceStyleChangedForWindow:
-                                                         traitCollection:)];
-    self.overrideUserInterfaceStyle =
-        self.window.windowScene.traitCollection.userInterfaceStyle;
-  }
+  [self.window.windowScene
+      registerForTraitChanges:@[ UITraitUserInterfaceStyle.class ]
+                   withTarget:self
+                       action:@selector(interfaceStyleChangedForWindow:
+                                                       traitCollection:)];
+  self.overrideUserInterfaceStyle =
+      self.window.windowScene.traitCollection.userInterfaceStyle;
 }
 
 // Callback for the observation of the user interface style trait of the window

@@ -1149,6 +1149,11 @@ void NativeWidgetNSWindowBridge::OnAutohidingMenuBarHeightChanged(
   host_->OnAutohidingMenuBarHeightChanged(menu_bar_height);
 }
 
+base::WeakPtr<NativeWidgetNSWindowBridge>
+NativeWidgetNSWindowBridge::GetWeakPtr() {
+  return factory_.GetWeakPtr();
+}
+
 void NativeWidgetNSWindowBridge::SetCanGoBack(bool can_go_back) {
   can_go_back_ = can_go_back;
 }
@@ -1418,7 +1423,7 @@ bool NativeWidgetNSWindowBridge::RedispatchKeyEvent(NSEvent* event) {
   return [[window_ commandDispatcher] redispatchKeyEvent:event];
 }
 
-NSWindow* NativeWidgetNSWindowBridge::ns_window() {
+NativeWidgetMacNSWindow* NativeWidgetNSWindowBridge::ns_window() {
   return window_;
 }
 

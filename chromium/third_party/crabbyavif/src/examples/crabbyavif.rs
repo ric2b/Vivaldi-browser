@@ -15,7 +15,6 @@
 use clap::value_parser;
 use clap::Parser;
 
-use crabby_avif::decoder::track::RepetitionCount;
 use crabby_avif::decoder::*;
 #[cfg(feature = "encoder")]
 use crabby_avif::encoder::*;
@@ -25,6 +24,8 @@ use crabby_avif::utils::IFraction;
 use crabby_avif::utils::UFraction;
 use crabby_avif::*;
 
+#[cfg(all(feature = "encoder", feature = "gif"))]
+use crabby_avif::utils::reader::gif::GifReader;
 #[cfg(all(feature = "encoder", feature = "jpeg"))]
 use crabby_avif::utils::reader::jpeg::JpegReader;
 #[cfg(all(feature = "encoder", feature = "png"))]
@@ -59,6 +60,17 @@ fn depth_parser(s: &str) -> Result<u8, String> {
         Ok(12) => Ok(12),
         Ok(16) => Ok(16),
         _ => Err("Value must be one of 8, 10, 12 or 16".into()),
+    }
+}
+
+fn repetition_count_parser(s: &str) -> Result<RepetitionCount, String> {
+    if s == "infinite" {
+        Ok(RepetitionCount::Infinite)
+    } else {
+        match s.parse::<i32>() {
+            Ok(count) => Ok(RepetitionCount::create_from(count)),
+            _ => Err(format!("Invalid value for repetition count: {s}")),
+        }
     }
 }
 
@@ -267,6 +279,11 @@ struct CommandLineArgs {
     /// other cases, auto defaults to 444.
     #[arg(long = "yuv", value_parser = yuv_format_parser)]
     yuv_format: Option<PixelFormat>,
+
+    /// AVIF Encode only: Number of times an animated image sequence will be repeated, or
+    /// 'infinite' for infinite repetitions. (Default: infinite)
+    #[arg(long, default_value = "infinite", value_parser = repetition_count_parser)]
+    repetition_count: RepetitionCount,
 
     /// Input AVIF file
     #[arg(allow_hyphen_values = false)]
@@ -632,6 +649,8 @@ fn encode(args: &CommandLineArgs) -> AvifResult<()> {
         "jpg" | "jpeg" => Box::new(JpegReader::create(&args.input_file)?),
         #[cfg(feature = "png")]
         "png" => Box::new(PngReader::create(&args.input_file)?),
+        #[cfg(feature = "gif")]
+        "gif" => Box::new(GifReader::create(&args.input_file)?),
         _ => {
             return Err(AvifError::UnknownError(format!(
                 "Unknown input file extension ({extension})"
@@ -643,7 +662,7 @@ fn encode(args: &CommandLineArgs) -> AvifResult<()> {
         depth: args.depth,
         ..Default::default()
     };
-    let mut image = reader.read_frame(&reader_config)?;
+    let (mut image, mut duration_ms) = reader.read_frame(&reader_config)?;
     image.irot_angle = args.irot_angle;
     image.imir_axis = args.imir_axis;
     if let Some(clap) = args.clap {
@@ -676,6 +695,8 @@ fn encode(args: &CommandLineArgs) -> AvifResult<()> {
     let mut settings = encoder::Settings {
         extra_layer_count: if args.progressive { 1 } else { 0 },
         speed: args.speed,
+        timescale: 1000, // ms.
+        repetition_count: args.repetition_count,
         mutable: MutableSettings {
             quality: args.quality.unwrap_or(DEFAULT_ENCODE_QUALITY) as i32,
             tiling_mode: if args.autotiling {
@@ -703,12 +724,11 @@ fn encode(args: &CommandLineArgs) -> AvifResult<()> {
             return Err(AvifError::InvalidArgument);
         }
         loop {
-            // TODO: b/403090413 - Use a proper timestamp here.
-            encoder.add_image_for_sequence(&image, 1000)?;
+            encoder.add_image_for_sequence(&image, duration_ms)?;
             if !reader.has_more_frames() {
                 break;
             }
-            image = reader.read_frame(&reader_config)?;
+            (image, duration_ms) = reader.read_frame(&reader_config)?;
         }
     } else if args.progressive {
         // Encode the base layer with very low quality.
@@ -787,7 +807,7 @@ fn validate_args(args: &CommandLineArgs) -> AvifResult<()> {
 fn main() {
     let args = CommandLineArgs::parse();
     if let Err(err) = validate_args(&args) {
-        eprintln!("ERROR: {:#?}", err);
+        eprintln!("ERROR: {err:#?}");
         std::process::exit(1);
     }
     let res = if can_decode(&args.input_file) {
@@ -813,7 +833,7 @@ fn main() {
     match res {
         Ok(_) => std::process::exit(0),
         Err(err) => {
-            eprintln!("ERROR: {:#?}", err);
+            eprintln!("ERROR: {err:#?}");
             std::process::exit(1);
         }
     }

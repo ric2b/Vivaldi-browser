@@ -431,33 +431,32 @@ uint32_t CFX_DIBitmap::GetPixelForTesting(int x, int y) const {
     return 0;
   }
 
-  uint8_t* pos =
-      UNSAFE_TODO(buffer_.Get() + y * GetPitch() + offset.ValueOrDie());
+  auto pos = GetScanline(y).subspan(offset.ValueOrDie());
   switch (GetFormat()) {
     case FXDIB_Format::kInvalid:
       return 0;
     case FXDIB_Format::k1bppMask: {
-      if ((*pos) & (1 << (7 - x % 8))) {
+      if ((pos[0]) & (1 << (7 - x % 8))) {
         return 0xff000000;
       }
       return 0;
     }
     case FXDIB_Format::k1bppRgb: {
-      if ((*pos) & (1 << (7 - x % 8))) {
+      if ((pos[0]) & (1 << (7 - x % 8))) {
         return HasPalette() ? GetPaletteSpan()[1] : 0xffffffff;
       }
       return HasPalette() ? GetPaletteSpan()[0] : 0xff000000;
     }
     case FXDIB_Format::k8bppMask:
-      return (*pos) << 24;
+      return (pos[0]) << 24;
     case FXDIB_Format::k8bppRgb:
-      return HasPalette() ? GetPaletteSpan()[*pos]
-                          : ArgbEncode(0xff, *pos, *pos, *pos);
+      return HasPalette() ? GetPaletteSpan()[pos[0]]
+                          : ArgbEncode(0xff, pos[0], pos[0], pos[0]);
     case FXDIB_Format::kBgr:
     case FXDIB_Format::kBgrx:
-      return UNSAFE_TODO(FXARGB_GetDIB(pos) | 0xff000000);
+      return FXARGB_GetDIB(pos.first<4u>()) | 0xff000000;
     case FXDIB_Format::kBgra:
-      return UNSAFE_TODO(FXARGB_GetDIB(pos));
+      return FXARGB_GetDIB(pos.first<4u>());
     case FXDIB_Format::kBgraPremul: {
       // TODO(crbug.com/42271020): Consider testing with
       // `FXDIB_Format::kBgraPremul`
@@ -746,6 +745,7 @@ bool CFX_DIBitmap::CompositeRect(int left,
     return true;
   }
 
+  CHECK_GE(rect.left, 0);
   width = rect.Width();
   uint32_t dst_color = color;
   uint8_t* color_p = reinterpret_cast<uint8_t*>(&dst_color);
@@ -850,29 +850,30 @@ bool CFX_DIBitmap::CompositeRect(int left,
   }
   if (bAlpha) {
     for (int row = rect.top; row < rect.bottom; row++) {
-      UNSAFE_TODO({
-        uint8_t* dest_scan =
-            buffer_.Get() + row * GetPitch() + rect.left * bytes_per_pixel;
-        for (int col = 0; col < width; col++) {
-          uint8_t back_alpha = dest_scan[3];
-          if (back_alpha == 0) {
-            FXARGB_SetDIB(dest_scan, ArgbEncode(src_alpha, color_p[2],
-                                                color_p[1], color_p[0]));
-            dest_scan += 4;
-            continue;
-          }
-          uint8_t dest_alpha =
-              back_alpha + src_alpha - back_alpha * src_alpha / 255;
-          int alpha_ratio = src_alpha * 255 / dest_alpha;
-          *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, color_p[0], alpha_ratio);
-          dest_scan++;
-          *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, color_p[1], alpha_ratio);
-          dest_scan++;
-          *dest_scan = FXDIB_ALPHA_MERGE(*dest_scan, color_p[2], alpha_ratio);
-          dest_scan++;
-          *dest_scan++ = dest_alpha;
+      auto dest_span =
+          GetWritableScanlineAs<FX_BGRA_STRUCT<uint8_t>>(row).subspan(
+              static_cast<size_t>(rect.left));
+      for (int col = 0; col < width; col++) {
+        auto& dest = dest_span[col];
+        const uint8_t back_alpha = dest.alpha;
+        if (back_alpha == 0) {
+          dest.blue = UNSAFE_TODO(color_p[0]);
+          dest.green = UNSAFE_TODO(color_p[1]);
+          dest.red = UNSAFE_TODO(color_p[2]);
+          dest.alpha = src_alpha;
+          continue;
         }
-      });
+        const uint8_t dest_alpha =
+            back_alpha + src_alpha - back_alpha * src_alpha / 255;
+        const int alpha_ratio = src_alpha * 255 / dest_alpha;
+        dest.blue =
+            FXDIB_ALPHA_MERGE(dest.blue, UNSAFE_TODO(color_p[0]), alpha_ratio);
+        dest.green =
+            FXDIB_ALPHA_MERGE(dest.green, UNSAFE_TODO(color_p[1]), alpha_ratio);
+        dest.red =
+            FXDIB_ALPHA_MERGE(dest.red, UNSAFE_TODO(color_p[2]), alpha_ratio);
+        dest.alpha = dest_alpha;
+      }
     }
     return true;
   }

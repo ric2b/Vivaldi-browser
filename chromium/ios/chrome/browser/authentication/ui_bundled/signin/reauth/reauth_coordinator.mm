@@ -5,7 +5,9 @@
 #import "ios/chrome/browser/authentication/ui_bundled/signin/reauth/reauth_coordinator.h"
 
 #import <string>
+#import <variant>
 
+#import "absl/functional/overload.h"
 #import "base/logging.h"
 #import "base/strings/sys_string_conversions.h"
 #import "components/signin/public/base/signin_metrics.h"
@@ -21,7 +23,8 @@
 @implementation ReauthCoordinator {
   raw_ptr<Browser> _browser;
   CoreAccountInfo _account;
-  signin_metrics::AccessPoint _accessPoint;
+  std::variant<signin_metrics::ReauthAccessPoint, signin_metrics::AccessPoint>
+      _accessPoint;
   id<SystemIdentityInteractionManager> _identityInteractionManager;
 }
 
@@ -30,14 +33,31 @@
 - (instancetype)initWithBaseViewController:(UIViewController*)viewController
                                    browser:(Browser*)browser
                                    account:(const CoreAccountInfo&)account
-                               accessPoint:
-                                   (signin_metrics::AccessPoint)accessPoint {
+                         reauthAccessPoint:
+                             (signin_metrics::ReauthAccessPoint)accessPoint {
   self = [super initWithBaseViewController:viewController browser:browser];
   if (self) {
     _account = account;
     _accessPoint = accessPoint;
   }
   return self;
+}
+
+- (instancetype)initWithBaseViewController:(UIViewController*)viewController
+                                   browser:(Browser*)browser
+                                   account:(const CoreAccountInfo&)account
+                         signinAccessPoint:
+                             (signin_metrics::AccessPoint)accessPoint {
+  self = [super initWithBaseViewController:viewController browser:browser];
+  if (self) {
+    _account = account;
+    _accessPoint = accessPoint;
+  }
+  return self;
+}
+
+- (void)dealloc {
+  CHECK(!_identityInteractionManager, base::NotFatalUntil::M144);
 }
 
 #pragma mark - ChromeCoordinator
@@ -65,15 +85,12 @@
 
 - (void)stop {
   if (_identityInteractionManager) {
-    // The operation hasn't finished yet - cancel and notify the delegate.
+    // The operation hasn't finished yet - cancel.
     [_identityInteractionManager cancelAuthActivityAnimated:NO];
-
-    [self recordReauthFlowEvent:signin_metrics::ReauthFlowEvent::kInterrupted];
-
-    [self.delegate reauthFinishedWithResult:ReauthResult::kInterrupted];
     _identityInteractionManager = nil;
+    [self.delegate reauthFinishedWithResult:ReauthResult::kInterrupted];
+    [self recordReauthFlowEvent:signin_metrics::ReauthFlowEvent::kInterrupted];
   }
-  self.delegate = nil;
 
   [super stop];
 }
@@ -108,9 +125,16 @@
 }
 
 - (void)recordReauthFlowEvent:(signin_metrics::ReauthFlowEvent)event {
-  // TODO(crbug.com/391342053): Add logging for reauth flows that aren't started
-  // from a sign-in flow.
-  signin_metrics::RecordReauthFlowEventInSigninFlow(_accessPoint, event);
+  std::visit(absl::Overload{
+                 [event](signin_metrics::ReauthAccessPoint ap) {
+                   signin_metrics::RecordReauthFlowEventInExplicitFlow(ap,
+                                                                       event);
+                 },
+                 [event](signin_metrics::AccessPoint ap) {
+                   signin_metrics::RecordReauthFlowEventInSigninFlow(ap, event);
+                 },
+             },
+             _accessPoint);
 }
 
 @end

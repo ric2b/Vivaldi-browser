@@ -10,7 +10,6 @@
 #import "base/metrics/user_metrics_action.h"
 #import "base/notreached.h"
 #import "base/timer/timer.h"
-#import "components/feature_engagement/public/tracker.h"
 #import "components/sessions/core/tab_restore_service.h"
 #import "components/signin/public/identity_manager/objc/identity_manager_observer_bridge.h"
 #import "components/signin/public/identity_manager/primary_account_change_event.h"
@@ -26,26 +25,26 @@
 #import "ios/chrome/browser/recent_tabs/ui_bundled/recent_tabs_consumer.h"
 #import "ios/chrome/browser/recent_tabs/ui_bundled/sessions_sync_user_state.h"
 #import "ios/chrome/browser/sessions/model/ios_chrome_tab_restore_service_factory.h"
-#import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser/browser_provider.h"
 #import "ios/chrome/browser/shared/model/browser/browser_provider_interface.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list_observer_bridge.h"
-#import "ios/chrome/browser/shared/public/commands/tab_grid_commands.h"
 #import "ios/chrome/browser/signin/model/identity_manager_factory.h"
 #import "ios/chrome/browser/sync/model/session_sync_service_factory.h"
-#import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/grid/grid_consumer.h"
-#import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/grid/grid_toolbars_mutator.h"
-#import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/tab_grid_mode_holder.h"
-#import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/tab_grid_mode_observing.h"
-#import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/toolbars/tab_grid_toolbars_configuration.h"
-#import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/toolbars/tab_grid_toolbars_grid_delegate.h"
 #import "ios/chrome/common/ui/favicon/favicon_constants.h"
 #import "url/gurl.h"
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
+#import "ios/chrome/browser/policy/model/policy_util.h"
+#import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
+#import "ios/chrome/browser/shared/public/commands/tab_grid_commands.h"
+#import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/grid/grid_toolbars_mutator.h"
+#import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/tab_grid_mode_holder.h"
+#import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/tab_grid_mode_observing.h"
+#import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/toolbars/tab_grid_toolbars_configuration.h"
+#import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/toolbars/tab_grid_toolbars_grid_delegate.h"
 #import "ios/ui/settings/sync/manager/vivaldi_account_sync_manager_consumer.h"
 #import "ios/ui/settings/sync/manager/vivaldi_account_sync_manager.h"
 #import "ios/ui/settings/sync/manager/vivaldi_session_simplified_state.h"
@@ -99,10 +98,10 @@ bool UserActionIsRequiredToHaveTabSyncWork(syncer::SyncService* sync_service) {
 
 @interface RecentTabsMediator () <IdentityManagerObserverBridgeDelegate,
                                   SyncedSessionsObserver,
-                                  TabGridModeObserving,
-                                  TabGridToolbarsGridDelegate,
 
                                   // Vivaldi
+                                  TabGridModeObserving,
+                                  TabGridToolbarsGridDelegate,
                                   VivaldiAccountSyncManagerConsumer
                                   // End Vivaldi
 
@@ -112,6 +111,11 @@ bool UserActionIsRequiredToHaveTabSyncWork(syncer::SyncService* sync_service) {
   std::unique_ptr<signin::IdentityManagerObserverBridge>
       _identityManagerObserver;
   std::unique_ptr<recent_tabs::ClosedTabsObserverBridge> _closedTabsObserver;
+  // Time to ensure that the updates to the consumer are only happening once all
+  // the updates are complete.
+  std::unique_ptr<base::RetainingOneShotTimer> _timer;
+
+  // Vivaldi
   SessionsSyncUserState _userState;
   // Current scene state.
   SceneState* _sceneState;
@@ -121,13 +125,9 @@ bool UserActionIsRequiredToHaveTabSyncWork(syncer::SyncService* sync_service) {
   TabGridPage _lastActivePage;
   // Whether this screen is selected in the TabGrid.
   BOOL _selectedGrid;
-  // Feature engagement tracker for notifying promo events.
-  raw_ptr<feature_engagement::Tracker> _engagementTracker;
-  // Time to ensure that the updates to the consumer are only happening once all
-  // the updates are complete.
-  std::unique_ptr<base::RetainingOneShotTimer> _timer;
   // Holder for the current mode of the tab grid.
   TabGridModeHolder* _modeHolder;
+  // End Vivaldi
 }
 
 // Return the user's current sign-in and chrome-sync state.
@@ -140,9 +140,9 @@ bool UserActionIsRequiredToHaveTabSyncWork(syncer::SyncService* sync_service) {
 @property(nonatomic, assign) sessions::TabRestoreService* restoreService;
 @property(nonatomic, assign) FaviconLoader* faviconLoader;
 @property(nonatomic, assign) syncer::SyncService* syncService;
-@property(nonatomic, assign) BrowserList* browserList;
 
 // Vivaldi
+@property(nonatomic, assign) BrowserList* browserList;
 @property(nonatomic, strong) VivaldiAccountSyncManager* syncManager;
 // End Vivaldi
 
@@ -150,6 +150,7 @@ bool UserActionIsRequiredToHaveTabSyncWork(syncer::SyncService* sync_service) {
 
 @implementation RecentTabsMediator
 
+#if defined(VIVALDI_BUILD)
 - (instancetype)
     initWithSessionSyncService:
         (sync_sessions::SessionSyncService*)sessionSyncService
@@ -160,8 +161,17 @@ bool UserActionIsRequiredToHaveTabSyncWork(syncer::SyncService* sync_service) {
                    browserList:(BrowserList*)browserList
                     sceneState:(SceneState*)sceneState
               disabledByPolicy:(BOOL)disabled
-             engagementTracker:(feature_engagement::Tracker*)engagementTracker
                     modeHolder:(TabGridModeHolder*)modeHolder {
+#else
+- (instancetype)
+    initWithSessionSyncService:
+        (sync_sessions::SessionSyncService*)sessionSyncService
+               identityManager:(signin::IdentityManager*)identityManager
+                restoreService:(sessions::TabRestoreService*)restoreService
+                 faviconLoader:(FaviconLoader*)faviconLoader
+                   syncService:(syncer::SyncService*)syncService {
+#endif // End Vivaldi
+
   self = [super init];
   if (self) {
     _sessionSyncService = sessionSyncService;
@@ -169,17 +179,20 @@ bool UserActionIsRequiredToHaveTabSyncWork(syncer::SyncService* sync_service) {
     _restoreService = restoreService;
     _faviconLoader = faviconLoader;
     _syncService = syncService;
-    _browserList = browserList;
-    _sceneState = sceneState;
-    _isDisabled = disabled;
-    _engagementTracker = engagementTracker;
     __weak __typeof(self) weakSelf = self;
     _timer = std::make_unique<base::RetainingOneShotTimer>(
         FROM_HERE, base::Milliseconds(100), base::BindRepeating(^{
           [weakSelf updateConsumerTabs];
         }));
+
+    // Vivaldi
+    _browserList = browserList;
+    _sceneState = sceneState;
+    _isDisabled = disabled;
     _modeHolder = modeHolder;
     [_modeHolder addObserver:self];
+    // End Vivaldi
+
   }
   return self;
 }
@@ -247,14 +260,26 @@ bool UserActionIsRequiredToHaveTabSyncWork(syncer::SyncService* sync_service) {
     _syncService = nullptr;
   }
 
+  // Vivaldi
   _sceneState = nil;
-
   [_modeHolder removeObserver:self];
   _modeHolder = nil;
+  // End Vivaldi
+
 }
 
 - (void)configureConsumer {
   [self refreshSessionsView];
+}
+
+- (void)refreshSessionsView {
+  // This method is called from three places: 1) when this mediator observes a
+  // change in the synced session state,  2) when the UI layer recognizes
+  // that the signin process has completed, and 3) when the history & tabs sync
+  // opt-in screen is dismissed.
+  // The 2 latter calls are necessary because they can happen much more
+  // immediately than the former call.
+  [self.consumer refreshUserState:[self userSignedInState]];
 }
 
 #pragma mark - SyncedSessionsObserver
@@ -337,6 +362,14 @@ bool UserActionIsRequiredToHaveTabSyncWork(syncer::SyncService* sync_service) {
              : SessionsSyncUserState::USER_SIGNED_IN_SYNC_ON_NO_SESSIONS;
 }
 
+// Update consumer tabs.
+- (void)updateConsumerTabs {
+  self.restoreService->LoadTabsFromLastSession();
+  [self.consumer refreshRecentlyClosedTabs];
+}
+
+#pragma mark - VIVALDI
+
 // Creates and send a tab grid toolbar configuration with button that should be
 // displayed when recent grid is selected.
 - (void)configureToolbarsButtons {
@@ -377,22 +410,17 @@ bool UserActionIsRequiredToHaveTabSyncWork(syncer::SyncService* sync_service) {
   [self.toolbarsMutator setToolbarConfiguration:toolbarsConfiguration];
 }
 
-// Update consumer tabs.
-- (void)updateConsumerTabs {
-  self.restoreService->LoadTabsFromLastSession();
-  [self.consumer refreshRecentlyClosedTabs];
+- (BOOL)isSyncActive {
+  if (_syncManager) {
+    return [_syncManager hasSyncConsent] && [_syncManager isSyncActive];
+  }
+  return NO;
 }
 
-#pragma mark - RecentTabsTableViewControllerDelegate
-
-- (void)refreshSessionsView {
-  // This method is called from three places: 1) when this mediator observes a
-  // change in the synced session state,  2) when the UI layer recognizes
-  // that the signin process has completed, and 3) when the history & tabs sync
-  // opt-in screen is dismissed.
-  // The 2 latter calls are necessary because they can happen much more
-  // immediately than the former call.
-  [self.consumer refreshUserState:[self userSignedInState]];
+- (void)enableTabsSync {
+  if (_syncManager) {
+    [_syncManager enableTabsSync];
+  }
 }
 
 #pragma mark - TabGridModeObserving
@@ -407,10 +435,6 @@ bool UserActionIsRequiredToHaveTabSyncWork(syncer::SyncService* sync_service) {
   _selectedGrid = selected;
 
   if (selected) {
-    base::RecordAction(
-        base::UserMetricsAction("MobileTabGridSelectRemotePanel"));
-    default_browser::NotifyRemoteTabsGridViewed(_engagementTracker);
-
     [self configureToolbarsButtons];
   }
 }
@@ -466,23 +490,10 @@ bool UserActionIsRequiredToHaveTabSyncWork(syncer::SyncService* sync_service) {
   _lastActivePage = page;
 }
 
-#pragma mark - VIVALDI
-- (BOOL)isSyncActive {
-  if (_syncManager) {
-    return [_syncManager hasSyncConsent] && [_syncManager isSyncActive];
-  }
-  return NO;
-}
-
-- (void)enableTabsSync {
-  if (_syncManager) {
-    [_syncManager enableTabsSync];
-  }
-}
-
 #pragma mark: - VivaldiAccountSyncManagerConsumer
 - (void)onVivaldiSessionUpdated:(VivaldiSessionSimplifiedState)sessionState {
   [self.consumer refreshUserState:[self userSignedInState]];
 }
+// End Vivaldi
 
 @end

@@ -63,7 +63,7 @@ ExtensionFunction::ResponseAction ReadingListPrivateAddFunction::Run() {
   bool success = false;
   if (model->IsUrlSupported(url) && model->loaded()) {
     model->AddOrReplaceEntry(url, params->title,
-        reading_list::ADDED_VIA_CURRENT_APP, {});
+                             reading_list::ADDED_VIA_CURRENT_APP, {}, {});
     success = true;
   }
   return RespondNow(ArgumentList(Results::Create(success)));

@@ -19,13 +19,14 @@ compositor and client developers. The governance rules are described in
 Protocols in general have three phases: the development phase, the testing
 phase, and the stable phase.
 
-In the development phase, a protocol is not officially part of
-wayland-protocols, but is actively being developed, for example by
+In the development phase, a protocol may be added to wayland-protocols
+as `experimental/`. It is actively being developed, for example by
 iterating over it in a [merge request] or planning it in an [issue].
+Extensions in this phase can have backward incompatible changes.
 
 During this phase, patches for clients and compositors are written as a test
-vehicle. Such patches must not be merged in clients and compositors, because
-the protocol can still change.
+vehicle. Such patches should be merged with caution in clients and compositors,
+because the protocol can still change.
 
 When a protocol has reached a stage where it is ready for wider adoption,
 and after the [GOVERNANCE section 2.3] requirements have been met, it enters
@@ -86,11 +87,23 @@ tracker. If the protocol isn't ready for complete review yet and is an
 RFC, create a merge request and add the "Draft:" prefix in the title.
 
 To propose changes to existing protocols, create a GitLab merge request.
+Please make sure you CC the authors and maintainers of the protocol, who
+are named in the protocol's README.
 
 Please include a `Signed-off-by` line at the end of the commit to certify
 that you wrote it or otherwise have the right to pass it on as an
 open-source patch. See the [Developer Certificate of Origin] for a formal
 definition.
+
+## Protocol development recommendations
+
+It is recommended that protocols be small and specific in scope in order to
+minimize sites of friction.
+
+Development discussion should be approached with a fresh, productive mindset
+and an openness to explore contrary ideas.
+
+Development discussions must remain civil and technical in nature at all times.
 
 ## Interface naming convention
 
@@ -112,10 +125,10 @@ prefixed with both `wp_` and the operating system, for example
 
 For more information about namespaces, see [GOVERNANCE section 2.1].
 
-Each new protocol XML file must include a major version postfix, starting
-with `-v1`. The purpose of this postfix is to make it possible to
-distinguish between backward incompatible major versions of the same
-protocol.
+Each new non-experimental protocol XML file must include a major version
+postfix, starting with `-v1`. The purpose of this postfix is to make it
+possible to distinguish between backward incompatible major versions of
+the same protocol.
 
 The interfaces in the protocol XML file should as well have the same
 major version postfix in their names.
@@ -162,7 +175,22 @@ A protocol may receive backward compatible additions and changes. This
 is to be done in the general Wayland way, using `version` and `since` XML
 element attributes.
 
-## Backward incompatible protocol changes
+## Backward incompatible protocol changes for experimental protocols
+
+A protocol in the experimental phase should expect to see backward incompatible
+changes at any time.
+
+Assuming a backward incompatible change is needed here, the procedure for how to
+do so is the following:
+
+- Increase the major version number in the protocol XML by 1.
+- Increase the major version number in all of the interfaces in the
+  XML by 1.
+- Reset the interface version number (interface version attribute) of all
+  the interfaces to 1.
+- Remove all of the `since` attributes.
+
+## Backward incompatible protocol changes for testing protocols
 
 While not preferred, a protocol may at any stage, especially during the
 testing phase, when it is located in the `staging/` directory, see
@@ -178,6 +206,29 @@ do so is the following:
 - Reset the interface version number (interface version attribute) of all
   the interfaces to 1.
 - Remove all of the `since` attributes.
+
+## Experimental Protocols: Development Recommendations
+
+Implementations choosing to support experimental protocols must work to
+support the latest version of the protocol at all times. It is therefore
+recommended that developers only opt-in to supporting protocols they
+have time and resources to actively develop.
+
+A runtime option to enable features may also be useful to ensure users
+do not opt-in to potentially broken behavior.
+
+There is no expectation or requirement for stability between experimental
+protocol versions. It is therefore strongly advised that such consumer
+projects add build-time compile options to enable such protocols in order
+to avoid compile errors from protocol version mismatches.
+
+## Promoting a protocol from experimental
+
+The author of an experimental protocol can request that it be promoted at any point
+when it meets the requirements for `staging/`. At such time,
+the namespace prefix should be determined, and then the protocol should be
+renamed and merged into the appropriate directory, deleting the `experimental/`
+entry.
 
 ## Declaring a protocol stable
 

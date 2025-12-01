@@ -8,6 +8,8 @@ $assert REQUANTIZATION == "FP32" or not REQUANTIZATION
 $assert DATATYPE in ["QD8", "QS8", "QC4", "QB4", "QC8"]
 $assert VARIANT in ["", "MADD"]
 #include <assert.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #include <immintrin.h>
 
@@ -15,9 +17,10 @@ $assert VARIANT in ["", "MADD"]
 #include "src/xnnpack/gemm.h"
 #include "src/xnnpack/intrinsics-polyfill.h"
 #include "src/xnnpack/math.h"
-#include "src/xnnpack/unaligned.h"
+#include "src/xnnpack/microparams.h"
 $if PREFETCH:
   #include "src/xnnpack/prefetch.h"
+#include "src/xnnpack/unaligned.h"
 
 
 $#
@@ -61,10 +64,10 @@ void xnn_${DATATYPE_SPEC}_gemm_minmax${REQUANTIZATION_SPEC}_ukernel_${MR}x16c8__
     size_t cm_stride,
     size_t cn_stride,
     $if DATATYPE in ["QD8", "QC4", "QB4"]:
-      const ${PARAMS_TYPE} params[restrict XNN_MIN_ELEMENTS(1)],
-      const struct xnn_qd8_quantization_params quantization_params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
+      const ${PARAMS_TYPE}* restrict params,
+      const struct xnn_qd8_quantization_params* restrict quantization_params) XNN_OOB_READS
     $else:
-      const ${PARAMS_TYPE} params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
+      const ${PARAMS_TYPE}* restrict params) XNN_OOB_READS
 {
   assert(mr != 0);
   assert(mr <= ${MR});

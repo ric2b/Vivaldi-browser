@@ -11,6 +11,7 @@
 
 #include "base/functional/callback.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "remoting/base/http_status.h"
 #include "remoting/base/oauth_token_info.h"
@@ -62,6 +63,8 @@ class RemotingClient : public SignalStrategy::Listener,
 
   void AddObserver(ClientStatusObserver* observer);
   void RemoveObserver(ClientStatusObserver* observer);
+
+  base::WeakPtr<RemotingClient> GetWeakPtr();
 
  private:
   // ClientStub implementation.
@@ -125,6 +128,8 @@ class RemotingClient : public SignalStrategy::Listener,
 
   // Used to make service requests.
   scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_;
+
+  base::WeakPtrFactory<RemotingClient> weak_factory_{this};
 };
 
 }  // namespace remoting

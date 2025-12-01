@@ -660,7 +660,7 @@
     } while ( subglyph->flags & MORE_COMPONENTS );
 
     gloader->current.num_subglyphs = num_subglyphs;
-    FT_TRACE5(( "  %d component%s\n",
+    FT_TRACE5(( "  %u component%s\n",
                 num_subglyphs,
                 num_subglyphs > 1 ? "s" : "" ));
 
@@ -674,7 +674,7 @@
       for ( i = 0; i < num_subglyphs; i++ )
       {
         if ( num_subglyphs > 1 )
-          FT_TRACE7(( "    subglyph %d:\n", i ));
+          FT_TRACE7(( "    subglyph %u:\n", i ));
 
         FT_TRACE7(( "      glyph index: %d\n", subglyph->index ));
 
@@ -1144,30 +1144,15 @@
         x = FT_MulFix( x, x_scale );
         y = FT_MulFix( y, y_scale );
 
-        if ( subglyph->flags & ROUND_XY_TO_GRID )
+        if ( subglyph->flags & ROUND_XY_TO_GRID &&
+             IS_HINTED( loader->load_flags )    )
         {
-          TT_Face    face   = loader->face;
-          TT_Driver  driver = (TT_Driver)FT_FACE_DRIVER( face );
+#ifdef TT_SUPPORT_SUBPIXEL_HINTING_MINIMAL
+          if ( !loader->exec->backward_compatibility )
+#endif
+            x = FT_PIX_ROUND( x );
 
-
-          if ( IS_HINTED( loader->load_flags ) )
-          {
-            /*
-             * We round the horizontal offset only if there is hinting along
-             * the x axis; this corresponds to integer advance width values.
-             *
-             * Theoretically, a glyph's bytecode can toggle ClearType's
-             * `backward compatibility' mode, which would allow modification
-             * of the advance width.  In reality, however, applications
-             * neither allow nor expect modified advance widths if subpixel
-             * rendering is active.
-             *
-             */
-            if ( driver->interpreter_version == TT_INTERPRETER_VERSION_35 )
-              x = FT_PIX_ROUND( x );
-
-            y = FT_PIX_ROUND( y );
-          }
+          y = FT_PIX_ROUND( y );
         }
       }
     }
@@ -1370,8 +1355,9 @@
 
       if ( driver->interpreter_version == TT_INTERPRETER_VERSION_40 &&
            loader->exec                                             &&
-           loader->exec->subpixel_hinting_lean                      &&
-           loader->exec->grayscale_cleartype                        )
+           loader->exec->mode != FT_RENDER_MODE_MONO                &&
+           loader->exec->mode != FT_RENDER_MODE_LCD                 &&
+           loader->exec->mode != FT_RENDER_MODE_LCD_V               )
       {
         loader->pp3.x = loader->advance / 2;
         loader->pp4.x = loader->advance / 2;
@@ -1436,13 +1422,13 @@
 
 #ifdef FT_DEBUG_LEVEL_TRACE
     if ( recurse_count )
-      FT_TRACE5(( "  nesting level: %d\n", recurse_count ));
+      FT_TRACE5(( "  nesting level: %u\n", recurse_count ));
 #endif
 
     /* some fonts have an incorrect value of `maxComponentDepth' */
     if ( recurse_count > face->max_profile.maxComponentDepth )
     {
-      FT_TRACE1(( "load_truetype_glyph: maxComponentDepth set to %d\n",
+      FT_TRACE1(( "load_truetype_glyph: maxComponentDepth set to %u\n",
                   recurse_count ));
       face->max_profile.maxComponentDepth = (FT_UShort)recurse_count;
     }
@@ -2098,7 +2084,6 @@
   {
     TT_Face             face   = (TT_Face)glyph->face;
     SFNT_Service        sfnt   = (SFNT_Service)face->sfnt;
-    FT_Stream           stream = face->root.stream;
     FT_Error            error;
     TT_SBit_MetricsRec  sbit_metrics;
 
@@ -2107,7 +2092,7 @@
                                    size->strike_index,
                                    glyph_index,
                                    (FT_UInt)load_flags,
-                                   stream,
+                                   face->root.stream,
                                    &glyph->bitmap,
                                    &sbit_metrics );
     if ( !error )
@@ -2195,7 +2180,6 @@
                   FT_Bool       glyf_table_only )
   {
     TT_Face    face   = (TT_Face)glyph->face;
-    FT_Stream  stream = face->root.stream;
 
 
     FT_ZERO( loader );
@@ -2207,82 +2191,42 @@
     {
       FT_Error        error;
       TT_ExecContext  exec;
-      FT_Bool         pedantic  = FT_BOOL( load_flags & FT_LOAD_PEDANTIC );
-      FT_Bool         grayscale = TRUE;
+      FT_Render_Mode  mode      = FT_LOAD_TARGET_MODE( load_flags );
+      FT_Bool         grayscale = FT_BOOL( mode != FT_RENDER_MODE_MONO );
+      FT_Bool         reexecute = FALSE;
 #ifdef TT_SUPPORT_SUBPIXEL_HINTING_MINIMAL
-      FT_Bool         subpixel_hinting_lean;
-      FT_Bool         grayscale_cleartype;
-      TT_Driver       driver = (TT_Driver)FT_FACE_DRIVER( glyph->face );
+      TT_Driver       driver    = (TT_Driver)FT_FACE_DRIVER( glyph->face );
 #endif
 
-      FT_Bool  reexecute = FALSE;
 
-
-      if ( size->bytecode_ready < 0 || size->cvt_ready < 0 )
+      if ( size->bytecode_ready > 0 )
+        return size->bytecode_ready;
+      if ( size->bytecode_ready < 0 )
       {
-        error = tt_size_ready_bytecode( size, pedantic );
+        FT_Bool  pedantic = FT_BOOL( load_flags & FT_LOAD_PEDANTIC );
+
+
+        error = tt_size_init_bytecode( size, pedantic );
         if ( error )
           return error;
       }
-      else if ( size->bytecode_ready )
-        return size->bytecode_ready;
-      else if ( size->cvt_ready )
-        return size->cvt_ready;
 
-      /* query new execution context */
       exec = size->context;
-      if ( !exec )
-        return FT_THROW( Could_Not_Find_Context );
-
-      exec->pedantic_hinting = pedantic;
-
-      grayscale = FT_BOOL( FT_LOAD_TARGET_MODE( load_flags ) !=
-                             FT_RENDER_MODE_MONO             );
 
 #ifdef TT_SUPPORT_SUBPIXEL_HINTING_MINIMAL
       if ( driver->interpreter_version == TT_INTERPRETER_VERSION_40 )
       {
-        subpixel_hinting_lean =
-          FT_BOOL( FT_LOAD_TARGET_MODE( load_flags ) !=
-                   FT_RENDER_MODE_MONO               );
-        grayscale_cleartype =
-          FT_BOOL( subpixel_hinting_lean         &&
-                   !( ( load_flags         &
-                        FT_LOAD_TARGET_LCD )   ||
-                      ( load_flags           &
-                        FT_LOAD_TARGET_LCD_V ) ) );
-        exec->vertical_lcd_lean =
-          FT_BOOL( subpixel_hinting_lean    &&
-                   ( load_flags           &
-                     FT_LOAD_TARGET_LCD_V ) );
-        grayscale = FT_BOOL( grayscale && !subpixel_hinting_lean );
+        grayscale = FALSE;
 
-        /* a change from mono to subpixel rendering (and vice versa) */
-        /* requires a re-execution of the CVT program                */
-        if ( subpixel_hinting_lean != exec->subpixel_hinting_lean )
+        /* any mode change requires a re-execution of the CVT program */
+        if ( mode != exec->mode )
         {
-          FT_TRACE4(( "tt_loader_init: subpixel hinting change,"
+          FT_TRACE4(( "tt_loader_init: render mode change,"
                       " re-executing `prep' table\n" ));
 
-          exec->subpixel_hinting_lean = subpixel_hinting_lean;
-          reexecute                   = TRUE;
+          exec->mode = mode;
+          reexecute  = TRUE;
         }
-
-        /* a change from colored to grayscale subpixel rendering (and */
-        /* vice versa) requires a re-execution of the CVT program     */
-        if ( grayscale_cleartype != exec->grayscale_cleartype )
-        {
-          FT_TRACE4(( "tt_loader_init: grayscale subpixel hinting change,"
-                      " re-executing `prep' table\n" ));
-
-          exec->grayscale_cleartype = grayscale_cleartype;
-          reexecute                 = TRUE;
-        }
-      }
-      else
-      {
-        subpixel_hinting_lean   = FALSE;
-        exec->vertical_lcd_lean = FALSE;
       }
 #endif
 
@@ -2297,9 +2241,11 @@
         reexecute       = TRUE;
       }
 
-      if ( reexecute )
+      if ( size->cvt_ready > 0 )
+        return size->cvt_ready;
+      if ( size->cvt_ready < 0 || reexecute )
       {
-        error = tt_size_run_prep( size, pedantic );
+        error = tt_size_run_prep( size );
         if ( error )
           return error;
       }
@@ -2331,7 +2277,7 @@
        *
        */
       if ( driver->interpreter_version == TT_INTERPRETER_VERSION_40 &&
-           subpixel_hinting_lean                                    &&
+           mode != FT_RENDER_MODE_MONO                              &&
            !FT_IS_TRICKY( glyph->face )                             )
         exec->backward_compatibility = ( size->GS.instruct_control & 4 ) ^ 4;
       else
@@ -2344,12 +2290,12 @@
       /* is set or backward compatibility mode of the v38 or v40  */
       /* interpreters is active.  See `ttinterp.h' for details on */
       /* backward compatibility mode.                             */
-      if ( IS_HINTED( loader->load_flags )                   &&
-           !( loader->load_flags & FT_LOAD_COMPUTE_METRICS ) &&
+      if ( IS_HINTED( load_flags )                   &&
+           !( load_flags & FT_LOAD_COMPUTE_METRICS ) &&
 #ifdef TT_SUPPORT_SUBPIXEL_HINTING_MINIMAL
-           !exec->backward_compatibility                     &&
+           !exec->backward_compatibility             &&
 #endif
-           !face->postscript.isFixedPitch                    )
+           !face->postscript.isFixedPitch            )
       {
         loader->widthp = size->widthp;
       }
@@ -2374,7 +2320,7 @@
     loader->face   = face;
     loader->size   = size;
     loader->glyph  = (FT_GlyphSlot)glyph;
-    loader->stream = stream;
+    loader->stream = face->root.stream;
 
     loader->composites.head = NULL;
     loader->composites.tail = NULL;
@@ -2436,7 +2382,7 @@
     TT_LoaderRec  loader;
 
 
-    FT_TRACE1(( "TT_Load_Glyph: glyph index %d\n", glyph_index ));
+    FT_TRACE1(( "TT_Load_Glyph: glyph index %u\n", glyph_index ));
 
 #ifdef TT_CONFIG_OPTION_EMBEDDED_BITMAPS
 
@@ -2517,7 +2463,7 @@
 #endif /* TT_CONFIG_OPTION_EMBEDDED_BITMAPS */
 
     /* if FT_LOAD_NO_SCALE is not set, `ttmetrics' must be valid */
-    if ( !( load_flags & FT_LOAD_NO_SCALE ) && !size->ttmetrics.valid )
+    if ( !( load_flags & FT_LOAD_NO_SCALE ) && !size->ttmetrics.ppem )
     {
       error = FT_THROW( Invalid_Size_Handle );
       goto Exit;

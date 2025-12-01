@@ -9,7 +9,6 @@ import {expectError} from '../../conductor/events.js';
 import {
   $,
   $$,
-  assertNotNullOrUndefined,
   click,
   getBrowserAndPages,
   getResourcesPath,
@@ -157,7 +156,7 @@ describe('The Network Request view', () => {
 
     const names = await getAllRequestNames();
     const name = names.find(v => v?.startsWith('data:'));
-    assertNotNullOrUndefined(name);
+    assert.isOk(name);
     await selectRequestByName(name);
 
     const styleSrcError = expectError(`Refused to load the stylesheet '${stylesheet}'`);
@@ -191,7 +190,7 @@ describe('The Network Request view', () => {
 
     const names = await getAllRequestNames();
     const name = names.find(v => v?.startsWith('data:'));
-    assertNotNullOrUndefined(name);
+    assert.isOk(name);
     await selectRequestByName(name);
 
     const networkView = await waitFor('.network-item-view');
@@ -660,12 +659,10 @@ describe('The Network Request view', () => {
     const SEARCH_RESULT = '.search-result';
     const {frontend} = getBrowserAndPages();
 
-    await triggerLocalFindDialog(frontend);
+    await triggerLocalFindDialog();
     await waitFor(SEARCH_QUERY);
     const inputElement = await $(SEARCH_QUERY);
-    if (!inputElement) {
-      assert.fail('Unable to find search input field');
-    }
+    assert.isOk(inputElement, 'Unable to find search input field');
 
     await inputElement.focus();
     await inputElement.type('Cache-Control');

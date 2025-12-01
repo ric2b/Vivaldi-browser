@@ -15,7 +15,7 @@
         "id": "ContentSettingEnum",
         "type": "string",
         "description": "ContentSetting, see /components/content_settings/core/common/content_settings_types.h",
-        "enum": [ "allow", "block", "ask", "session_only", "detect_important_content", "num_settings" ]
+        "enum": [ "allow", "block", "ask", "session_only", "num_settings" ]
       },
 
       {

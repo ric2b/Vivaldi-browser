@@ -26,7 +26,6 @@
 #include "content/test/test_navigation_url_loader.h"
 #include "content/test/test_render_view_host.h"
 #include "content/test/test_render_widget_host.h"
-#include "ipc/ipc_message.h"
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -467,7 +466,7 @@ void TestRenderFrameHost::SendRendererInitiatedNavigationRequest(
           blink::mojom::NavigationInitiatorActivationAndAdStatus::
               kDidNotStartWithTransientActivation,
           false /* is_container_initiated */,
-          net::StorageAccessApiStatus::kNone, false /* has_rel_opener */);
+          net::StorageAccessApiStatus::kNone, false /* has_rel_opener */, false /*vivaldi_from_trusted_event*/);
   auto common_params = blink::CreateCommonNavigationParams();
   common_params->url = url;
   common_params->initiator_origin = GetLastCommittedOrigin();
@@ -658,6 +657,7 @@ void TestRenderFrameHost::SendCommitFailedNavigation(
     std::unique_ptr<blink::PendingURLLoaderFactoryBundle>
         subresource_loader_factories,
     const blink::DocumentToken& document_token,
+    const base::UnguessableToken& devtools_navigation_token,
     blink::mojom::PolicyContainerPtr policy_container) {
   CHECK(navigation_client);
   commit_failed_callback_[navigation_request] =

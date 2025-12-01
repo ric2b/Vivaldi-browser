@@ -1,16 +1,12 @@
-groupshared float w;
+struct main_inputs {
+  uint tint_local_index : SV_GroupIndex;
+};
 
-void tint_zero_workgroup_memory(uint local_idx) {
-  if ((local_idx < 1u)) {
-    w = 0.0f;
-  }
-  GroupMemoryBarrierWithGroupSync();
-}
 
 static float p = 0.0f;
+groupshared float w;
 ByteAddressBuffer uniforms : register(t1);
 RWByteAddressBuffer storages : register(u0);
-
 void no_uses() {
 }
 
@@ -19,12 +15,13 @@ void zoo() {
 }
 
 void bar(float a, float b) {
-  uint tint_symbol_3 = 0u;
-  storages.GetDimensions(tint_symbol_3);
-  uint tint_symbol_4 = (tint_symbol_3 / 4u);
   p = a;
   w = b;
-  storages.Store((4u * min(0u, (tint_symbol_4 - 1u))), asuint(asfloat(uniforms.Load(0u))));
+  uint v = 0u;
+  storages.GetDimensions(v);
+  uint v_1 = ((v / 4u) - 1u);
+  uint v_2 = (min(uint(int(0)), v_1) * 4u);
+  storages.Store((0u + v_2), asuint(asfloat(uniforms.Load(0u))));
   zoo();
 }
 
@@ -34,17 +31,16 @@ void foo(float a) {
   no_uses();
 }
 
-struct tint_symbol_1 {
-  uint local_invocation_index : SV_GroupIndex;
-};
-
-void main_inner(uint local_invocation_index) {
-  tint_zero_workgroup_memory(local_invocation_index);
+void main_inner(uint tint_local_index) {
+  if ((tint_local_index < 1u)) {
+    w = 0.0f;
+  }
+  GroupMemoryBarrierWithGroupSync();
   foo(1.0f);
 }
 
 [numthreads(1, 1, 1)]
-void main(tint_symbol_1 tint_symbol) {
-  main_inner(tint_symbol.local_invocation_index);
-  return;
+void main(main_inputs inputs) {
+  main_inner(inputs.tint_local_index);
 }
+

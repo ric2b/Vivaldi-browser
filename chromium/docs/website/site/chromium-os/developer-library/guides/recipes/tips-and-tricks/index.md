@@ -279,12 +279,11 @@ Follow these instructions to make `sudo` request your password less frequently:
 cd /tmp
 cat > ./sudo_editor <<EOF
 #!/bin/sh
-[ "\$1" == "--" ] && shift                 # visudo might pass '--' arg
+[ "\$1" = "--" ] && shift                  # visudo might pass '--' arg
 echo Defaults \!tty_tickets > \$1          # Entering your password in one shell affects all shells
 echo Defaults timestamp_timeout=180 >> \$1 # Time between re-requesting your password, in minutes
 EOF
-chmod +x ./sudo_editor
-sudo EDITOR=./sudo_editor visudo -f /etc/sudoers.d/relax_requirements
+sudo EDITOR="sh ./sudo_editor" visudo -f /etc/sudoers.d/relax_requirements
 ```
 
 ***note

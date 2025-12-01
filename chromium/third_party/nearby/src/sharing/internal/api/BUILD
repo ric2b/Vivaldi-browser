@@ -27,7 +27,6 @@ cc_library(
         "public_certificate_database.h",
         "sharing_platform.h",
         "sharing_rpc_client.h",
-        "sharing_rpc_notifier.h",
         "system_info.h",
         "wifi_adapter.h",
     ],
@@ -38,6 +37,7 @@ cc_library(
         "//sharing:__subpackages__",
     ],
     deps = [
+        "//internal/base:file_path",
         "//internal/platform:types",
         "//internal/platform/implementation:account_manager",
         "//proto/identity/v1:rpcs_cc_proto",
@@ -73,6 +73,7 @@ cc_library(
     visibility = ["//visibility:public"],
     deps = [
         ":platform",
+        "//internal/base:file_path",
         "//internal/platform:types",
         "//internal/platform/implementation:account_manager",
         "//sharing/analytics",

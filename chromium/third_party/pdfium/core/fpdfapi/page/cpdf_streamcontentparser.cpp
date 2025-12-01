@@ -187,10 +187,10 @@ ByteStringView FindFullName(pdfium::span<const AbbrPair> table,
 
 void ReplaceAbbr(RetainPtr<CPDF_Object> pObj);
 
-void ReplaceAbbrInDictionary(CPDF_Dictionary* pDict) {
+void ReplaceAbbrInDictionary(CPDF_Dictionary* dict) {
   std::vector<AbbrReplacementOp> replacements;
   {
-    CPDF_DictionaryLocker locker(pDict);
+    CPDF_DictionaryLocker locker(dict);
     for (const auto& it : locker) {
       ByteString key = it.first;
       ByteStringView fullname =
@@ -221,9 +221,9 @@ void ReplaceAbbrInDictionary(CPDF_Dictionary* pDict) {
   }
   for (const auto& op : replacements) {
     if (op.is_replace_key) {
-      pDict->ReplaceKey(op.key, ByteString(op.replacement));
+      dict->ReplaceKey(op.key, ByteString(op.replacement));
     } else {
-      pDict->SetNewFor<CPDF_Name>(op.key, ByteString(op.replacement));
+      dict->SetNewFor<CPDF_Name>(op.key, ByteString(op.replacement));
     }
   }
 }
@@ -245,9 +245,9 @@ void ReplaceAbbrInArray(CPDF_Array* pArray) {
 }
 
 void ReplaceAbbr(RetainPtr<CPDF_Object> pObj) {
-  CPDF_Dictionary* pDict = pObj->AsMutableDictionary();
-  if (pDict) {
-    ReplaceAbbrInDictionary(pDict);
+  CPDF_Dictionary* dict = pObj->AsMutableDictionary();
+  if (dict) {
+    ReplaceAbbrInDictionary(dict);
     return;
   }
 
@@ -387,7 +387,7 @@ void CPDF_StreamContentParser::DestroyGlobals() {
 }
 
 CPDF_StreamContentParser::CPDF_StreamContentParser(
-    CPDF_Document* pDocument,
+    CPDF_Document* document,
     RetainPtr<CPDF_Dictionary> pPageResources,
     RetainPtr<CPDF_Dictionary> pParentResources,
     const CFX_Matrix* pmtContentToUser,
@@ -396,7 +396,7 @@ CPDF_StreamContentParser::CPDF_StreamContentParser(
     const CFX_FloatRect& rcBBox,
     const CPDF_AllStates* pStates,
     CPDF_Form::RecursionState* recursion_state)
-    : document_(pDocument),
+    : document_(document),
       page_resources_(pPageResources),
       parent_resources_(pParentResources),
       resources_(CPDF_Form::ChooseResourcesDict(pResources.Get(),
@@ -641,7 +641,7 @@ void CPDF_StreamContentParser::Handle_BeginMarkedContent_Dictionary() {
 
 void CPDF_StreamContentParser::Handle_BeginImage() {
   FX_FILESIZE savePos = syntax_->GetPos();
-  auto pDict = document_->New<CPDF_Dictionary>();
+  auto dict = document_->New<CPDF_Dictionary>();
   while (true) {
     CPDF_StreamParser::ElementType type = syntax_->ParseNextElement();
     if (type == CPDF_StreamParser::ElementType::kKeyword) {
@@ -658,28 +658,28 @@ void CPDF_StreamContentParser::Handle_BeginImage() {
     ByteString key(word.Last(word.GetLength() - 1));
     auto pObj = syntax_->ReadNextObject(false, false, 0);
     if (pObj && !pObj->IsInline()) {
-      pDict->SetNewFor<CPDF_Reference>(key, document_, pObj->GetObjNum());
+      dict->SetNewFor<CPDF_Reference>(key, document_, pObj->GetObjNum());
     } else {
-      pDict->SetFor(key, std::move(pObj));
+      dict->SetFor(key, std::move(pObj));
     }
   }
-  ReplaceAbbr(pDict);
+  ReplaceAbbr(dict);
   RetainPtr<const CPDF_Object> pCSObj;
-  if (pDict->KeyExist("ColorSpace")) {
-    pCSObj = pDict->GetDirectObjectFor("ColorSpace");
+  if (dict->KeyExist("ColorSpace")) {
+    pCSObj = dict->GetDirectObjectFor("ColorSpace");
     if (pCSObj->IsName()) {
       ByteString name = pCSObj->GetString();
       if (name != "DeviceRGB" && name != "DeviceGray" && name != "DeviceCMYK") {
         pCSObj = FindResourceObj("ColorSpace", name);
         if (pCSObj && pCSObj->IsInline()) {
-          pDict->SetFor("ColorSpace", pCSObj->Clone());
+          dict->SetFor("ColorSpace", pCSObj->Clone());
         }
       }
     }
   }
-  pDict->SetNewFor<CPDF_Name>("Subtype", "Image");
+  dict->SetNewFor<CPDF_Name>("Subtype", "Image");
   RetainPtr<CPDF_Stream> pStream =
-      syntax_->ReadInlineStream(document_, std::move(pDict), pCSObj.Get());
+      syntax_->ReadInlineStream(document_, std::move(dict), pCSObj.Get());
   while (true) {
     CPDF_StreamParser::ElementType type = syntax_->ParseNextElement();
     if (type == CPDF_StreamParser::ElementType::kEndOfData) {
@@ -1191,9 +1191,9 @@ void CPDF_StreamContentParser::Handle_MoveTextPoint_SetLeading() {
 
 void CPDF_StreamContentParser::Handle_SetFont() {
   cur_states_->mutable_text_state().SetFontSize(GetNumber(0));
-  RetainPtr<CPDF_Font> pFont = FindFont(GetString(1));
-  if (pFont) {
-    cur_states_->mutable_text_state().SetFont(std::move(pFont));
+  RetainPtr<CPDF_Font> font = FindFont(GetString(1));
+  if (font) {
+    cur_states_->mutable_text_state().SetFont(std::move(font));
   }
 }
 
@@ -1203,9 +1203,9 @@ RetainPtr<CPDF_Dictionary> CPDF_StreamContentParser::FindResourceHolder(
     return nullptr;
   }
 
-  RetainPtr<CPDF_Dictionary> pDict = resources_->GetMutableDictFor(type);
-  if (pDict) {
-    return pDict;
+  RetainPtr<CPDF_Dictionary> dict = resources_->GetMutableDictFor(type);
+  if (dict) {
+    return dict;
   }
 
   if (resources_ == page_resources_ || !page_resources_) {
@@ -1225,23 +1225,23 @@ RetainPtr<CPDF_Object> CPDF_StreamContentParser::FindResourceObj(
 
 RetainPtr<CPDF_Font> CPDF_StreamContentParser::FindFont(
     const ByteString& name) {
-  RetainPtr<CPDF_Dictionary> pFontDict(
+  RetainPtr<CPDF_Dictionary> font_dict(
       ToDictionary(FindResourceObj("Font", name)));
-  if (!pFontDict) {
+  if (!font_dict) {
     return CPDF_Font::GetStockFont(document_, CFX_Font::kDefaultAnsiFontName);
   }
-  RetainPtr<CPDF_Font> pFont =
-      CPDF_DocPageData::FromDocument(document_)->GetFont(std::move(pFontDict));
-  if (pFont) {
+  RetainPtr<CPDF_Font> font =
+      CPDF_DocPageData::FromDocument(document_)->GetFont(std::move(font_dict));
+  if (font) {
     // Save `name` for later retrieval by the CPDF_TextObject that uses the
     // font.
-    pFont->SetResourceName(name);
-    if (pFont->IsType3Font()) {
-      pFont->AsType3Font()->SetPageResources(resources_.Get());
-      pFont->AsType3Font()->CheckType3FontMetrics();
+    font->SetResourceName(name);
+    if (font->IsType3Font()) {
+      font->AsType3Font()->SetPageResources(resources_.Get());
+      font->AsType3Font()->CheckType3FontMetrics();
     }
   }
-  return pFont;
+  return font;
 }
 
 CPDF_PageObjectHolder::CTMMap CPDF_StreamContentParser::TakeAllCTMs() {
@@ -1307,12 +1307,12 @@ void CPDF_StreamContentParser::AddTextObject(
     pdfium::span<const ByteString> strings,
     pdfium::span<const float> kernings,
     float initial_kerning) {
-  RetainPtr<CPDF_Font> pFont = cur_states_->text_state().GetFont();
-  if (!pFont) {
+  RetainPtr<CPDF_Font> font = cur_states_->text_state().GetFont();
+  if (!font) {
     return;
   }
   if (initial_kerning != 0) {
-    if (pFont->IsVertWriting()) {
+    if (font->IsVertWriting()) {
       cur_states_->IncrementTextPositionY(
           -GetVerticalTextSize(initial_kerning));
     } else {
@@ -1324,11 +1324,11 @@ void CPDF_StreamContentParser::AddTextObject(
     return;
   }
   const TextRenderingMode text_mode =
-      pFont->IsType3Font() ? TextRenderingMode::MODE_FILL
-                           : cur_states_->text_state().GetTextMode();
+      font->IsType3Font() ? TextRenderingMode::MODE_FILL
+                          : cur_states_->text_state().GetTextMode();
   {
     auto pText = std::make_unique<CPDF_TextObject>(GetCurrentStreamIndex());
-    pText->SetResourceName(pFont->GetResourceName());
+    pText->SetResourceName(font->GetResourceName());
     SetGraphicStates(pText.get(), true, true, true);
     if (TextRenderingModeIsStrokeMode(text_mode)) {
       const CFX_Matrix& ctm = cur_states_->current_transformation_matrix();
@@ -1353,7 +1353,7 @@ void CPDF_StreamContentParser::AddTextObject(
     object_holder_->AppendPageObject(std::move(pText));
   }
   if (!kernings.empty() && kernings.back() != 0) {
-    if (pFont->IsVertWriting()) {
+    if (font->IsVertWriting()) {
       cur_states_->IncrementTextPositionY(
           -GetVerticalTextSize(kernings.back()));
     } else {
@@ -1372,9 +1372,8 @@ float CPDF_StreamContentParser::GetVerticalTextSize(float fKerning) const {
 }
 
 int32_t CPDF_StreamContentParser::GetCurrentStreamIndex() {
-  auto it = std::upper_bound(stream_start_offsets_.begin(),
-                             stream_start_offsets_.end(),
-                             syntax_->GetPos() + start_parse_offset_);
+  auto it = std::ranges::upper_bound(stream_start_offsets_,
+                                     syntax_->GetPos() + start_parse_offset_);
   return (it - stream_start_offsets_.begin()) - 1;
 }
 

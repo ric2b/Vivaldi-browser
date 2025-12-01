@@ -48,7 +48,7 @@
     </enum>
 
     <request name="get_surface_content_type">
-      <description summary="create a new toplevel decoration object">
+      <description summary="create a new content type object">
         Create a new content type object associated with the given surface.
 
         Creating a wp_content_type_v1 from a wl_surface which already has one

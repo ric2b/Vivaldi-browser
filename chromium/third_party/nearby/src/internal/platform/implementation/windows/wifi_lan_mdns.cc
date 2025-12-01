@@ -122,8 +122,8 @@ bool WifiLanMdns::StartMdnsService(
   DWORD status = DnsServiceRegister(&dns_service_register_request_, nullptr);
 
   if (status != DNS_REQUEST_PENDING) {
-    NEARBY_LOGS(ERROR) << "Failed to start mDNS advertising for service type ="
-                       << service_type;
+    LOG(ERROR) << "Failed to start mDNS advertising for service type ="
+               << service_type;
     return false;
   }
 
@@ -148,7 +148,7 @@ bool WifiLanMdns::StopMdnsService() {
   LOG(INFO) << "StopMdnsService is called";
   if (!is_service_started_) {
     LOG(WARNING) << "The mDNS service is not started.";
-    return false;
+    return true;
   }
 
   dns_service_notification_ = std::make_unique<absl::Notification>();
@@ -156,7 +156,7 @@ bool WifiLanMdns::StopMdnsService() {
   DWORD status = DnsServiceDeRegister(&dns_service_register_request_, nullptr);
 
   if (status != DNS_REQUEST_PENDING) {
-    NEARBY_LOGS(ERROR) << "Failed to stop mDNS advertising.";
+    LOG(ERROR) << "Failed to stop mDNS advertising.";
     CleanUp();
     return false;
   }

@@ -10,9 +10,9 @@ binary when run inside a gclient source tree, so users can just type
 import os
 import signal
 import shutil
-import subprocess
 import sys
 
+import caffeinate
 import gclient_paths
 
 
@@ -151,14 +151,14 @@ def main(args):
         for siso_path in siso_paths:
             if siso_path and os.path.isfile(siso_path):
                 checkOutdir(args[1:])
-                return subprocess.call([siso_path] + args[1:], env=env)
+                return caffeinate.run([siso_path] + args[1:], env=env)
         print(
             'depot_tools/siso.py: Could not find siso in third_party/siso '
             'of the current project. Did you run gclient sync?',
             file=sys.stderr)
         return 1
     if siso_override_path:
-        return subprocess.call([siso_override_path] + args[1:])
+        return caffeinate.run([siso_override_path] + args[1:])
 
     print(
         'depot_tools/siso.py: Could not find .sisoenv under build/config/siso '

@@ -384,6 +384,8 @@
       "https://chromium-review.googlesource.com",
       "--change",
       "91827",
+      "--revision",
+      "2",
       "--verbose"
     ],
     "env": {

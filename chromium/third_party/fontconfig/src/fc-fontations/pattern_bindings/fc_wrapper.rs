@@ -22,13 +22,11 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-use fc_fontations_bindgen::{
-    fcint::{
-        FcCharSet, FcCharSetCopy, FcCharSetCreate, FcCharSetDestroy, FcLangSet, FcPattern,
-        FcPatternCreate, FcPatternDestroy, FcRange, FcRangeCopy, FcRangeCreateDouble,
-        FcRangeDestroy,
-    },
-    FcLangSetCopy, FcLangSetCreate, FcLangSetDestroy,
+use fontconfig_bindings::{FcLangSet, FcLangSetCopy, FcLangSetCreate, FcLangSetDestroy};
+
+use fcint_bindings::{
+    FcCharSet, FcCharSetAddChar, FcCharSetCopy, FcCharSetCreate, FcCharSetDestroy, FcPattern,
+    FcPatternCreate, FcPatternDestroy, FcRange, FcRangeCopy, FcRangeCreateDouble, FcRangeDestroy,
 };
 
 macro_rules! wrap_fc_object {
@@ -134,7 +132,6 @@ wrap_fc_object! {
 }
 
 impl FcCharSetWrapper {
-    #[allow(unused)]
     pub fn new() -> Option<Self> {
         let created_charset: *mut FcCharSet;
         unsafe {
@@ -146,6 +143,16 @@ impl FcCharSetWrapper {
             Some(Self {
                 inner: created_charset,
             })
+        }
+    }
+
+    pub fn add_char(&mut self, char: u32) -> Result<(), ()> {
+        unsafe {
+            if FcCharSetAddChar(self.as_ptr(), char) == 1 {
+                Ok(())
+            } else {
+                Err(())
+            }
         }
     }
 }
@@ -160,7 +167,7 @@ wrap_fc_object! {
 impl FcLangSetWrapper {
     #[allow(unused)]
     pub fn new() -> Option<Self> {
-        let created_langset: *mut FcLangSet;
+        let created_langset: *mut fontconfig_bindings::FcLangSet;
         unsafe {
             created_langset = FcLangSetCreate();
         }
@@ -171,5 +178,9 @@ impl FcLangSetWrapper {
                 inner: created_langset,
             })
         }
+    }
+
+    pub fn is_null(&self) -> bool {
+        self.inner.is_null()
     }
 }

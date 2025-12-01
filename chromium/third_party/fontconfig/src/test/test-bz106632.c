@@ -305,6 +305,7 @@ bail:
 	FcStrFree (fontdir);
     if (cachedir)
 	FcStrFree (cachedir);
+    FcFini();
 
     return ret;
 }

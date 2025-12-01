@@ -1,28 +1,19 @@
-import path from 'path';
-import inject from '@rollup/plugin-inject';
 import {nodeResolve} from '@rollup/plugin-node-resolve';
 import terser from '@rollup/plugin-terser';
 import cleanup from 'rollup-plugin-cleanup';
 
 const beautify = () => cleanup({
-  exclude: ['**/tfjs-partial.min.js', '**/hide-if-matches-xpath3-dependency*.js'],
+  exclude: ['**/hide-if-matches-xpath3-dependency*.js'],
   comments: 'none',
   maxEmptyLines: 1
 });
 
-const preserveGlobals = () => inject({
-  $: path.resolve('source/$.js'),
-  hideElement: [path.resolve('source/utils/dom.js'), 'hideElement'],
-  raceWinner: [path.resolve('source/introspection/race.js'), 'raceWinner']
-});
-
 export default [
   {
-    input: './bundle/isolated-first-all.js',
+    input: './bundle/isolated-full.js',
     plugins: [
       nodeResolve(),
-      beautify(),
-      preserveGlobals()
+      beautify()
     ],
     output: {
       esModule: false,
@@ -31,12 +22,11 @@ export default [
     }
   },
   {
-    input: './bundle/isolated-first-all.js',
+    input: './bundle/isolated-full.js',
     plugins: [
       nodeResolve(),
       beautify(),
-      terser(),
-      preserveGlobals()
+      terser()
     ],
     output: {
       esModule: false,

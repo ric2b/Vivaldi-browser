@@ -53,7 +53,6 @@ SET(PROD_HVX_MICROKERNEL_SRCS
   src/f32-vgelu/gen/f32-vgelu-hvx-rational-12-10-div.c
   src/f32-vhswish/gen/f32-vhswish-hvx.c
   src/f32-vlog/gen/f32-vlog-hvx-rational-3-3-div.c
-  src/f32-vrelu/gen/f32-vrelu-hvx.c
   src/f32-vrnd/gen/f32-vrndd-hvx-u128.c
   src/f32-vrnd/gen/f32-vrndne-hvx-u128.c
   src/f32-vrnd/gen/f32-vrndu-hvx-u128.c
@@ -114,13 +113,13 @@ SET(NON_PROD_HVX_MICROKERNEL_SRCS
   src/f32-gemm/gen/f32-gemm-6x128-minmax-hvx-broadcast.c
   src/f32-gemm/gen/f32-gemm-7x32-minmax-hvx-broadcast.c
   src/f32-gemm/gen/f32-gemm-7x64-minmax-hvx-broadcast.c
+  src/f32-gemm/gen/f32-gemm-7x128-minmax-hvx-broadcast.c
   src/f32-gemm/gen/f32-gemm-8x64-minmax-hvx-broadcast.c
+  src/f32-gemm/gen/f32-gemm-8x128-minmax-hvx-broadcast.c
   src/f32-gemm/gen/f32-gemm-9x32-minmax-hvx-broadcast.c
   src/f32-gemm/gen/f32-gemm-9x64-minmax-hvx-broadcast.c
   src/f32-gemm/gen/f32-gemm-10x32-minmax-hvx-broadcast.c
   src/f32-gemm/gen/f32-gemm-10x64-minmax-hvx-broadcast.c
-  src/f32-gemm/gen/f32-gemm-16x32-minmax-hvx-broadcast.c
-  src/f32-gemm/gen/f32-gemm-16x64-minmax-hvx-broadcast.c
   src/f32-igemm/gen/f32-igemm-1x32-minmax-hvx-broadcast.c
   src/f32-igemm/gen/f32-igemm-1x128-minmax-hvx-broadcast.c
   src/f32-igemm/gen/f32-igemm-2x32-minmax-hvx-broadcast.c
@@ -139,13 +138,14 @@ SET(NON_PROD_HVX_MICROKERNEL_SRCS
   src/f32-igemm/gen/f32-igemm-6x128-minmax-hvx-broadcast.c
   src/f32-igemm/gen/f32-igemm-7x32-minmax-hvx-broadcast.c
   src/f32-igemm/gen/f32-igemm-7x64-minmax-hvx-broadcast.c
+  src/f32-igemm/gen/f32-igemm-7x128-minmax-hvx-broadcast.c
   src/f32-igemm/gen/f32-igemm-8x32-minmax-hvx-broadcast.c
   src/f32-igemm/gen/f32-igemm-8x64-minmax-hvx-broadcast.c
+  src/f32-igemm/gen/f32-igemm-8x128-minmax-hvx-broadcast.c
   src/f32-igemm/gen/f32-igemm-9x32-minmax-hvx-broadcast.c
   src/f32-igemm/gen/f32-igemm-9x64-minmax-hvx-broadcast.c
   src/f32-igemm/gen/f32-igemm-10x32-minmax-hvx-broadcast.c
   src/f32-igemm/gen/f32-igemm-10x64-minmax-hvx-broadcast.c
-  src/f32-igemm/gen/f32-igemm-16x64-minmax-hvx-broadcast.c
   src/f32-qs8-vcvt/gen/f32-qs8-vcvt-hvx-u32.c
   src/f32-qs8-vcvt/gen/f32-qs8-vcvt-hvx-u64.c
   src/f32-qs8-vcvt/gen/f32-qs8-vcvt-hvx-u96.c
@@ -169,7 +169,6 @@ SET(NON_PROD_HVX_MICROKERNEL_SRCS
   src/f32-rsum/gen/f32-rsum-hvx-u96-acc3.c
   src/f32-rsum/gen/f32-rsum-hvx-u128-acc2.c
   src/f32-rsum/gen/f32-rsum-hvx-u128-acc4.c
-  src/f32-rsum/gen/f32-rsum-hvx-u256-acc4.c
   src/f32-spmm/gen/f32-spmm-32x1-minmax-hvx-pipelined-x2.c
   src/f32-spmm/gen/f32-spmm-32x1-minmax-hvx-pipelined-x4.c
   src/f32-spmm/gen/f32-spmm-32x1-minmax-hvx-pipelined.c

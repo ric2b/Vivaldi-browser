@@ -689,11 +689,6 @@ const CGFloat kIpadTabSwipeDistance = 100;
       }
     }
   } else {
-    if (gesture.state == UIGestureRecognizerStateCancelled) {
-      [self.tabsDelegate
-          cancelTabSwitchWithSwipeAndRevertToInitialTabIndex:_startingTabIndex];
-    }
-
     [self.tabsDelegate didCompleteTabSwitchWithSwipe];
 
     // Redisplay the view if it was in overlay preview mode.

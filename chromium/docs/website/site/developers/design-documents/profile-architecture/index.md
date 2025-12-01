@@ -180,7 +180,7 @@ ChromeCustomizedKeyedServiceFactory()
 
 In some cases, creating a PKSF is not possible, PKSF can only be created under
 chrome/ directory. Other factories/services will have to derive from BCKSF,
-e.g implementing a factory under components/, weblayer/ or extensions/
+e.g implementing a factory under components/ or extensions/
 (extensions mainly use a templated version `BrowserContextKeyedAPIFactory<T>`).
 There are some differences to note when using a BCKSF:
 *  The derived constructor should associate the factory with the

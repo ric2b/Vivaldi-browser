@@ -30,6 +30,7 @@ import org.chromium.content_public.browser.BrowserContextHandle;
 // Vivaldi
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 import org.chromium.components.content_settings.ContentSettingsType;
+import org.chromium.build.BuildConfig;
 
 /**
  * The main Site Settings screen, which shows all the site settings categories: All sites, Location,
@@ -106,6 +107,13 @@ public class SiteSettings extends BaseSiteSettingsFragment
             getPreferenceScreen().removePreference(autorevocationPref);
             Preference dividerPref = findPreference(DIVIDER_PREF);
             getPreferenceScreen().removePreference(dividerPref);
+        }
+
+        // Vivaldi (gabriel@vivaldi.com) ref. VAB-11385 Duplicated preference from Theme prefs.
+        if (BuildConfig.IS_VIVALDI) {
+            Preference darkWebsitesPreferece =
+                    findPreference(Type.AUTO_DARK_WEB_CONTENT);
+            getPreferenceScreen().removePreference(darkWebsitesPreferece);
         }
     }
 

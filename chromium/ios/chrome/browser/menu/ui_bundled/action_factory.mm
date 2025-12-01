@@ -407,9 +407,7 @@ using l10n_util::GetNSString;
   if (IsVivaldiRunning())
     image = [UIImage imageNamed:vMenuClose]; // End Vivaldi
 
-  int titleID = IsTabGroupSyncEnabled()
-                    ? IDS_IOS_CONTENT_CONTEXT_CLOSEALLTABSANDGROUPS
-                    : IDS_IOS_CONTENT_CONTEXT_CLOSEALLTABS;
+  int titleID = IDS_IOS_CONTENT_CONTEXT_CLOSEALLTABSANDGROUPS;
   UIAction* action = [self actionWithTitle:l10n_util::GetNSString(titleID)
                                      image:image
                                       type:MenuActionType::CloseAllTabs
@@ -458,9 +456,6 @@ using l10n_util::GetNSString;
 - (UIAction*)actionToAddTabsToNewGroupWithTabsNumber:(int)tabsNumber
                                            inSubmenu:(BOOL)inSubmenu
                                                block:(ProceduralBlock)block {
-  CHECK(IsTabGroupInGridEnabled())
-      << "You should not be able to create a tab group context menu action "
-         "outside the Tab Groups experiment.";
   UIImage* image = DefaultSymbolWithPointSize(kNewTabGroupActionSymbol,
                                               kSymbolActionPointSize);
   NSString* title =
@@ -495,10 +490,6 @@ using l10n_util::GetNSString;
     menuToAddTabToGroupWithGroups:(const std::set<const TabGroup*>&)groups
                      numberOfTabs:(int)tabsNumber
                             block:(void (^)(const TabGroup*))block {
-  CHECK(IsTabGroupInGridEnabled())
-      << "You should not be able to create a tab group context menu action "
-         "outside the Tab Groups experiment.";
-
   if (groups.size() == 0) {
     ProceduralBlock addTabToNewGroupBlock = ^{
       if (block) {
@@ -547,10 +538,6 @@ using l10n_util::GetNSString;
                       currentGroup:(const TabGroup*)currentGroup
                          moveBlock:(void (^)(const TabGroup*))moveBlock
                        removeBlock:(ProceduralBlock)removeBlock {
-  CHECK(IsTabGroupInGridEnabled())
-      << "You should not be able to create a tab group context menu action "
-         "outside the Tab Groups experiment.";
-
   if (groups.size() == 0) {
     NOTREACHED() << "Groups cannot be empty.";
   }
@@ -579,10 +566,6 @@ using l10n_util::GetNSString;
 - (UIMenuElement*)
     menuToOpenLinkInGroupWithGroups:(const std::set<const TabGroup*>&)groups
                               block:(void (^)(const TabGroup*))block {
-  CHECK(IsTabGroupInGridEnabled())
-      << "You should not be able to create a tab group context menu action "
-         "outside the Tab Groups experiment.";
-
   if (groups.size() == 0) {
     ProceduralBlock openInNewGroupBlock = ^{
       if (block) {
@@ -624,7 +607,6 @@ using l10n_util::GetNSString;
 }
 
 - (UIAction*)actionToRenameTabGroupWithBlock:(ProceduralBlock)block {
-  CHECK(IsTabGroupInGridEnabled());
   UIImage* image =
       DefaultSymbolWithPointSize(kEditActionSymbol, kSymbolActionPointSize);
   UIAction* action =
@@ -637,7 +619,6 @@ using l10n_util::GetNSString;
 }
 
 - (UIAction*)actionToAddNewTabInGroupWithBlock:(ProceduralBlock)block {
-  CHECK(IsTabGroupInGridEnabled());
   UIImage* image = DefaultSymbolWithPointSize(kNewTabGroupActionSymbol,
                                               kSymbolActionPointSize);
   UIAction* action =
@@ -650,7 +631,6 @@ using l10n_util::GetNSString;
 }
 
 - (UIAction*)actionToUngroupTabGroupWithBlock:(ProceduralBlock)block {
-  CHECK(IsTabGroupInGridEnabled());
   UIImage* image = DefaultSymbolWithPointSize(kUngroupTabGroupSymbol,
                                               kSymbolActionPointSize);
   UIAction* action = [self
@@ -662,7 +642,6 @@ using l10n_util::GetNSString;
 }
 
 - (UIAction*)actionToDeleteTabGroupWithBlock:(ProceduralBlock)block {
-  CHECK(IsTabGroupInGridEnabled());
   UIImage* image =
       DefaultSymbolWithPointSize(kDeleteActionSymbol, kSymbolActionPointSize);
   UIAction* action =
@@ -676,9 +655,6 @@ using l10n_util::GetNSString;
 }
 
 - (UIAction*)actionToCloseTabGroupWithBlock:(ProceduralBlock)block {
-  CHECK(IsTabGroupInGridEnabled());
-  CHECK(IsTabGroupSyncEnabled());
-
   UIImage* image =
       DefaultSymbolWithPointSize(kXMarkSymbol, kSymbolActionPointSize);
   UIAction* action = [self
@@ -691,9 +667,6 @@ using l10n_util::GetNSString;
 }
 
 - (UIAction*)actionToLeaveSharedTabGroupWithBlock:(ProceduralBlock)block {
-  CHECK(IsTabGroupInGridEnabled());
-  CHECK(IsTabGroupSyncEnabled());
-
   UIImage* image =
       DefaultSymbolWithPointSize(kMinusInCircleSymbol, kSymbolActionPointSize);
   UIAction* action =
@@ -707,9 +680,6 @@ using l10n_util::GetNSString;
 }
 
 - (UIAction*)actionToDeleteSharedTabGroupWithBlock:(ProceduralBlock)block {
-  CHECK(IsTabGroupInGridEnabled());
-  CHECK(IsTabGroupSyncEnabled());
-
   UIImage* image =
       DefaultSymbolWithPointSize(kDeleteActionSymbol, kSymbolActionPointSize);
   UIAction* action =
@@ -723,9 +693,6 @@ using l10n_util::GetNSString;
 }
 
 - (UIAction*)actionToShareTabGroupWithBlock:(ProceduralBlock)block {
-  CHECK(IsTabGroupInGridEnabled());
-  CHECK(IsTabGroupSyncEnabled());
-
   UIImage* image =
       DefaultSymbolWithPointSize(kPersonPlusSymbol, kSymbolActionPointSize);
   UIAction* action =
@@ -738,9 +705,6 @@ using l10n_util::GetNSString;
 }
 
 - (UIAction*)actionToManageTabGroupWithBlock:(ProceduralBlock)block {
-  CHECK(IsTabGroupInGridEnabled());
-  CHECK(IsTabGroupSyncEnabled());
-
   UIImage* image =
       DefaultSymbolWithPointSize(kPersonPlusSymbol, kSymbolActionPointSize);
   UIAction* action =
@@ -773,9 +737,6 @@ using l10n_util::GetNSString;
 
 // Creates a UIAction instance for removing a tab from a group.
 - (UIAction*)actionToRemoveTabFromGroup:(ProceduralBlock)block {
-  CHECK(IsTabGroupInGridEnabled())
-      << "You should not be able to create a tab group context menu action "
-         "outside the Tab Groups experiment.";
   UIImage* image = DefaultSymbolWithPointSize(kRemoveTabFromGroupActionSymbol,
                                               kSymbolActionPointSize);
   NSString* title =

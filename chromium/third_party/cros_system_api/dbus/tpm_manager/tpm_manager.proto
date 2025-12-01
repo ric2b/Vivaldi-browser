@@ -109,6 +109,7 @@ enum GscDevice {
   GSC_DEVICE_NOT_GSC = 0;
   GSC_DEVICE_H1 = 1;
   GSC_DEVICE_DT = 2;
+  GSC_DEVICE_NT = 3;
 }
 
 // The status of whether last AP reboot is triggered by RO verification.

@@ -1,7 +1,7 @@
 'use strict';
 
 var $SyntaxError = require('es-errors/syntax');
-var callBound = require('call-bind/callBound');
+var callBound = require('call-bound');
 
 var $SymbolValueOf = callBound('Symbol.prototype.valueOf', true);
 

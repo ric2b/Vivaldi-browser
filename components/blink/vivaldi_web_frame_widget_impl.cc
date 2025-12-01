@@ -3,10 +3,6 @@
 
 namespace blink {
 
-void WebFrameWidgetImpl::LoadImageAt(const gfx::Point& point) {
-  View()->LoadImageAt(point);
-}
-
 void WebFrameWidgetImpl::SetImagesEnabled(const bool show) {
   View()->SetImagesEnabled(show);
 }

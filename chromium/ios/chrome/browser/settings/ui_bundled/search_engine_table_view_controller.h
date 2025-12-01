@@ -10,6 +10,10 @@
 
 class ProfileIOS;
 
+// Vivaldi
+class Browser;
+// End Vivaldi
+
 // This class is the table view for the Search Engine settings.
 @interface SearchEngineTableViewController
     : SettingsRootTableViewController <SettingsControllerProtocol>
@@ -22,6 +26,7 @@ class ProfileIOS;
 // Initializer to open the search engine settings page from private or standard
 // button tap from settings.
 - (instancetype)initWithProfile:(ProfileIOS*)profile
+                        browser:(Browser*)browser
                       isPrivate:(BOOL)isPrivate;
 // End Vivaldi
 

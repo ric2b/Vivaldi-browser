@@ -6,11 +6,15 @@
 
 #include "base/functional/bind.h"
 #include "base/strings/strcat.h"
+#include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ai/ai_context_bound_object.h"
 #include "chrome/browser/ai/ai_utils.h"
+#include "components/language/core/common/locale_util.h"
 #include "components/optimization_guide/core/optimization_guide_util.h"
 #include "components/optimization_guide/proto/common_types.pb.h"
+#include "third_party/blink/public/common/features_generated.h"
 #include "third_party/blink/public/mojom/ai/model_streaming_responder.mojom.h"
+#include "ui/base/l10n/l10n_util.h"
 
 namespace {
 
@@ -89,7 +93,26 @@ AIWriter::ToProtoOptions(
   proto_options->set_output_tone(ToProtoTone(options->tone));
   proto_options->set_output_format(ToProtoFormat(options->format));
   proto_options->set_output_length(ToProtoLength(options->length));
+  if (options->output_language && !options->output_language->code.empty()) {
+    // Writer expects the language's display name to use within English prose.
+    std::u16string name = l10n_util::GetDisplayNameForLocaleWithoutCountry(
+        options->output_language->code, "en", /*is_for_ui=*/false);
+    proto_options->set_output_language(base::UTF16ToUTF8(name));
+  }
   return proto_options;
+}
+
+// static
+base::flat_set<std::string_view> AIWriter::GetSupportedLanguageBaseCodes() {
+  // Comma-separated language codes to enable; or "*" enables all supported.
+  const base::FeatureParam<std::string> kAIWriterAPILanguagesEnabled{
+      &blink::features::kAIWriterAPI, "langs", /*default=*/"en,es,ja"};
+  // TODO(crbug.com/394841624): Get supported languages from the model config.
+  auto kSupportedBaseLanguages =
+      base::MakeFixedFlatSet<std::string_view>({"en", "ja", "es"});
+  return AIUtils::RestrictSupportedLanguagesForFeature(
+      base::MakeFlatSet<std::string_view>(kSupportedBaseLanguages),
+      kAIWriterAPILanguagesEnabled);
 }
 
 void AIWriter::Write(const std::string& input,

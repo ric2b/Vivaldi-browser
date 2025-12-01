@@ -10,6 +10,7 @@
 #import "base/memory/raw_ptr.h"
 #import "base/metrics/histogram_functions.h"
 #import "base/metrics/user_metrics.h"
+#import "base/strings/sys_string_conversions.h"
 #import "components/collaboration/public/collaboration_service.h"
 #import "components/collaboration/public/messaging/message.h"
 #import "components/collaboration/public/messaging/messaging_backend_service.h"
@@ -29,6 +30,7 @@
 #import "ios/chrome/browser/saved_tab_groups/model/tab_group_service.h"
 #import "ios/chrome/browser/saved_tab_groups/model/tab_group_service_factory.h"
 #import "ios/chrome/browser/saved_tab_groups/ui/tab_group_utils.h"
+#import "ios/chrome/browser/share_kit/model/share_kit_service.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser/browser_list.h"
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
@@ -45,14 +47,14 @@
 #import "ios/chrome/browser/shared/public/commands/shared_tab_group_last_tab_closed_alert_command.h"
 #import "ios/chrome/browser/shared/public/commands/tab_strip_commands.h"
 #import "ios/chrome/browser/shared/public/commands/tab_strip_last_tab_dragged_alert_command.h"
-#import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_collection_drag_drop_metrics.h"
+#import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/tab_groups/tab_group_sync_service_observer_bridge.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_group_action_type.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_group_item.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_snapshot_and_favicon_configurator.h"
+#import "ios/chrome/browser/tab_switcher/ui_bundled/tab_strip/coordinator/tab_strip_mediator_delegate.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_strip/coordinator/tab_strip_mediator_utils.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_strip/ui/swift.h"
-#import "ios/chrome/browser/tab_switcher/ui_bundled/tab_strip/ui/tab_strip_features_utils.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_strip/ui/tab_strip_tab_item.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_utils.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_browser_agent.h"
@@ -63,6 +65,24 @@
 #import "ios/web/public/web_state_observer_bridge.h"
 #import "net/base/apple/url_conversions.h"
 #import "ui/gfx/image/image.h"
+
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "components/prefs/ios/pref_observer_bridge.h"
+#import "components/prefs/pref_change_registrar.h"
+#import "components/prefs/pref_service.h"
+#import "ios/chrome/browser/shared/model/application_context/application_context.h"
+#import "ios/chrome/browser/shared/model/prefs/pref_backed_boolean.h"
+#import "ios/chrome/browser/shared/model/prefs/pref_names.h"
+#import "ios/ui/settings/appearance/vivaldi_appearance_settings_prefs_helper.h"
+#import "ios/ui/settings/appearance/vivaldi_appearance_settings_prefs.h"
+#import "ios/ui/settings/tabs/vivaldi_tab_settings_helper.h"
+#import "prefs/vivaldi_pref_names.h"
+// End Vivaldi
+
+using ScopedTabGroupSyncObservation =
+    base::ScopedObservation<tab_groups::TabGroupSyncService,
+                            tab_groups::TabGroupSyncService::Observer>;
 
 namespace {
 
@@ -141,9 +161,29 @@ TabStripItemData* CreateTabItemData(
     data.isLastTabInGroup = range.range_end() == index + 1;
     data.groupStrokeColor =
         tab_groups::ColorForTabGroupColorId(group->GetColor());
+
+    // Vivaldi
+    data.isTabInGroup = YES;
+    // End Vivaldi
+
   }
   data.hasNotificationDot =
       dirty_tabs.contains(web_state->GetUniqueIdentifier().identifier());
+
+  // Vivaldi
+  web::WebState* pinnedWebState = GetWebState(
+      web_state_list,
+      WebStateSearchCriteria{
+          .identifier = web_state->GetUniqueIdentifier(),
+          .pinned_state = WebStateSearchCriteria::PinnedState::kPinned,
+      });
+  if (pinnedWebState) {
+    data.isPinned = YES;
+  } else {
+    data.isPinned = NO;
+  }
+  // End Vivaldi
+
   return data;
 }
 
@@ -177,18 +217,17 @@ NSMutableArray<TabStripItemData*>* CreateItemData(
   NSMutableArray<TabStripItemData*>* data = [[NSMutableArray alloc] init];
   for (int index : range) {
     const TabGroup* group_of_web_state = nullptr;
-    if ([TabStripFeaturesUtils isModernTabStripWithTabGroups]) {
-      CHECK(web_state_list->ContainsIndex(index));
-      group_of_web_state = web_state_list->GetGroupOfWebStateAt(index);
-      if (including_group_items) {
-        const TabGroup* group_starting_at_index =
-            FindTabGroupStartingAtIndex(index, web_state_list);
-        if (group_starting_at_index) {
-          [data addObject:CreateGroupItemData(group_starting_at_index,
-                                              dirty_groups)];
-        }
+    CHECK(web_state_list->ContainsIndex(index));
+    group_of_web_state = web_state_list->GetGroupOfWebStateAt(index);
+    if (including_group_items) {
+      const TabGroup* group_starting_at_index =
+          FindTabGroupStartingAtIndex(index, web_state_list);
+      if (group_starting_at_index) {
+        [data addObject:CreateGroupItemData(group_starting_at_index,
+                                            dirty_groups)];
       }
     }
+
     // The tab associated with WebState at `index` should be included in the
     // output if it has no group, or its group is not collapsed, or
     // `including_hidden_tab_items` is true.
@@ -221,18 +260,17 @@ NSMutableArray<TabStripItemIdentifier*>* CreateItemIdentifiers(
       [[NSMutableArray alloc] init];
   for (int index : range) {
     const TabGroup* group_of_web_state = nullptr;
-    if ([TabStripFeaturesUtils isModernTabStripWithTabGroups]) {
-      CHECK(web_state_list->ContainsIndex(index));
-      group_of_web_state = web_state_list->GetGroupOfWebStateAt(index);
-      if (including_group_items) {
-        const TabGroup* group_starting_at_index =
-            FindTabGroupStartingAtIndex(index, web_state_list);
-        if (group_starting_at_index) {
-          [item_identifiers
-              addObject:CreateGroupItemIdentifier(group_starting_at_index)];
-        }
+    CHECK(web_state_list->ContainsIndex(index));
+    group_of_web_state = web_state_list->GetGroupOfWebStateAt(index);
+    if (including_group_items) {
+      const TabGroup* group_starting_at_index =
+          FindTabGroupStartingAtIndex(index, web_state_list);
+      if (group_starting_at_index) {
+        [item_identifiers
+            addObject:CreateGroupItemIdentifier(group_starting_at_index)];
       }
     }
+
     // The tab associated with WebState at `index` should be included in the
     // output if it has no group, or its group is not collapsed, or
     // `including_hidden_tab_items` is true.
@@ -242,7 +280,12 @@ NSMutableArray<TabStripItemIdentifier*>* CreateItemIdentifiers(
         including_hidden_tab_items;
     if (should_include_tab_item) {
       web::WebState* web_state = web_state_list->GetWebStateAt(index);
+#if defined(VIVALDI_BUILD)
+        [item_identifiers addObject:CreateTabItemIdentifier(web_state,
+                                                            web_state_list)];
+#else
       [item_identifiers addObject:CreateTabItemIdentifier(web_state)];
+#endif // End Vivaldi
     }
   }
   return item_identifiers;
@@ -252,26 +295,47 @@ NSMutableArray<TabStripItemIdentifier*>* CreateItemIdentifiers(
 
 @interface TabStripMediator () <CRWWebStateObserver,
                                 MessagingBackendServiceObserving,
+                                TabGroupSyncServiceObserverDelegate,
                                 WebStateFaviconDriverObserver,
+                                // Vivaldi
+                                BooleanObserver,
+                                PrefObserverDelegate,
+                                // End Vivaldi
                                 WebStateListObserving>
+
+// Vivaldi
+{
+  // Pref observer to track changes to prefs.
+  std::unique_ptr<PrefObserverBridge> _prefObserverBridge;
+  // Registrar for pref changes notifications.
+  PrefChangeRegistrar _prefChangeRegistrar;
+  // Observer for dynamic accent color state
+  PrefBackedBoolean* _dynamicAccentColorEnabled;
+  // Pref tracking if tab bar is enabled.
+  PrefBackedBoolean* _tabBarEnabled;
+  // Pref tracking if X button for background tabs is enabled.
+  PrefBackedBoolean* _showXButtonBackgroundTabsEnabled;
+}
+// End Vivaldi
+
 // The consumer for this object.
 @property(nonatomic, weak) id<TabStripConsumer> consumer;
 
 @end
 
 @implementation TabStripMediator {
-  // Bridge C++ WebStateListObserver methods to this TabStripController.
+  // Bridges between C++ service observers and this Objective-C class.
+  std::unique_ptr<TabGroupSyncServiceObserverBridge>
+      _tabGroupSyncServiceObserver;
+  std::unique_ptr<ScopedTabGroupSyncObservation>
+      _scopedTabGroupSyncServiceObservation;
   std::unique_ptr<WebStateListObserverBridge> _webStateListObserver;
-  // Bridge C++ WebStateObserver methods to this TabStripController.
   std::unique_ptr<web::WebStateObserverBridge> _webStateObserver;
-  // Forward observer methods for all WebStates in the WebStateList monitored
-  // by the TabStripMediator.
   std::unique_ptr<AllWebStateObservationForwarder>
       _allWebStateObservationForwarder;
-  // Bridges FaviconDriverObservers methods to this mediator, and maintains a
-  // FaviconObserver for each all webstates.
   std::unique_ptr<WebStateListFaviconDriverObserver>
       _webStateListFaviconObserver;
+
   // Browser list.
   raw_ptr<BrowserList> _browserList;
 
@@ -286,6 +350,8 @@ NSMutableArray<TabStripItemIdentifier*>* CreateItemIdentifiers(
   // The bridge between the C++ MessagingBackendService observer and this
   // Objective-C class.
   std::unique_ptr<MessagingBackendServiceBridge> _messagingBackendServiceBridge;
+  // The service for shared tab group flows.
+  raw_ptr<ShareKitService> _shareKitService;
   // The collaboration service for shared tab group.
   raw_ptr<collaboration::CollaborationService> _collaborationService;
   // Helper class to configure tab item images.
@@ -306,23 +372,34 @@ NSMutableArray<TabStripItemIdentifier*>* CreateItemIdentifiers(
              browserList:(BrowserList*)browserList
         messagingService:
             (collaboration::messaging::MessagingBackendService*)messagingService
+         shareKitService:(ShareKitService*)shareKitService
     collaborationService:
         (collaboration::CollaborationService*)collaborationService
            faviconLoader:(FaviconLoader*)faviconLoader {
   if ((self = [super init])) {
     CHECK(browserList);
     _browserList = browserList;
+    _shareKitService = shareKitService;
     _collaborationService = collaborationService;
     _tabGroupSyncService = tabGroupSyncService;
     _consumer = consumer;
     _messagingService = messagingService;
     _tabImagesConfigurator =
-        std::make_unique<TabSnapshotAndFaviconConfigurator>(faviconLoader);
+        std::make_unique<TabSnapshotAndFaviconConfigurator>(faviconLoader,
+                                                            nullptr);
     if (_messagingService) {
       _messagingBackendServiceBridge =
           std::make_unique<MessagingBackendServiceBridge>(self);
       _messagingService->AddPersistentMessageObserver(
           _messagingBackendServiceBridge.get());
+    }
+    if (tabGroupSyncService) {
+      _tabGroupSyncServiceObserver =
+          std::make_unique<TabGroupSyncServiceObserverBridge>(self);
+      _scopedTabGroupSyncServiceObservation =
+          std::make_unique<ScopedTabGroupSyncObservation>(
+              _tabGroupSyncServiceObserver.get());
+      _scopedTabGroupSyncServiceObservation->Observe(_tabGroupSyncService);
     }
   }
   return self;
@@ -344,9 +421,34 @@ NSMutableArray<TabStripItemIdentifier*>* CreateItemIdentifiers(
     _messagingBackendServiceBridge.reset();
     _messagingService = nullptr;
   }
+  if (_tabGroupSyncService) {
+    _scopedTabGroupSyncServiceObservation.reset();
+    _tabGroupSyncServiceObserver.reset();
+  }
   _tabGroupSyncService = nullptr;
   _tabStripHandler = nil;
   _browserList = nullptr;
+
+  // Vivaldi
+  if (_showXButtonBackgroundTabsEnabled) {
+    [_showXButtonBackgroundTabsEnabled stop];
+    [_showXButtonBackgroundTabsEnabled setObserver:nil];
+    _showXButtonBackgroundTabsEnabled = nil;
+  }
+  if (_tabBarEnabled) {
+    [_tabBarEnabled stop];
+    [_tabBarEnabled setObserver:nil];
+    _tabBarEnabled = nil;
+  }
+  if (_dynamicAccentColorEnabled) {
+    [_dynamicAccentColorEnabled stop];
+    [_dynamicAccentColorEnabled setObserver:nil];
+    _dynamicAccentColorEnabled = nil;
+  }
+  _prefChangeRegistrar.RemoveAll();
+  _prefObserverBridge.reset();
+  // End Vivaldi
+
 }
 
 - (void)cancelMoveForTab:(web::WebStateID)tabID
@@ -441,7 +543,7 @@ NSMutableArray<TabStripItemIdentifier*>* CreateItemIdentifiers(
   }
   base::RecordAction(base::UserMetricsAction("MobileTabStripDeleteGroup"));
   CloseAllWebStatesInGroup(*_webStateList, tabGroupItem.tabGroup,
-                           WebStateList::CLOSE_USER_ACTION);
+                           WebStateList::ClosingReason::kUserAction);
 }
 
 - (void)leaveSharedGroup:(TabGroupItem*)tabGroupItem {
@@ -475,7 +577,8 @@ NSMutableArray<TabStripItemIdentifier*>* CreateItemIdentifiers(
   }
   CHECK_EQ(tabGroupItem.tabGroup,
            self.webStateList->GetGroupOfWebStateAt(index));
-  self.webStateList->CloseWebStateAt(index, WebStateList::CLOSE_USER_ACTION);
+  self.webStateList->CloseWebStateAt(index,
+                                     WebStateList::ClosingReason::kUserAction);
   _tabToClose = nil;
 }
 
@@ -538,6 +641,15 @@ NSMutableArray<TabStripItemIdentifier*>* CreateItemIdentifiers(
           activeWebStateDidChangeStatus = true;
         }
       }
+
+      // Vivaldi
+      const WebStateListChangeStatusOnly& selectionOnlyChange =
+          change.As<WebStateListChangeStatusOnly>();
+      if (selectionOnlyChange.pinned_state_changed()) {
+        [self populateConsumerItems];
+      }
+      // End Vivaldi
+
       break;
     }
     case WebStateListChange::Type::kDetach: {
@@ -560,8 +672,13 @@ NSMutableArray<TabStripItemIdentifier*>* CreateItemIdentifiers(
           change.As<WebStateListChangeInsert>();
       const int index = insertChange.index();
       web::WebState* insertedWebState = insertChange.inserted_web_state();
+#if defined(VIVALDI_BUILD)
+      TabStripItemIdentifier* itemIdentifier =
+          CreateTabItemIdentifier(insertedWebState, self.webStateList);
+#else
       TabStripItemIdentifier* itemIdentifier =
           CreateTabItemIdentifier(insertedWebState);
+#endif // End Vivaldi
       TabStripItemData* itemData =
           CreateTabItemData(index, webStateList, _dirtyTabs);
       [self.consumer updateItemData:@{itemIdentifier : itemData}
@@ -766,6 +883,21 @@ NSMutableArray<TabStripItemIdentifier*>* CreateItemIdentifiers(
     }
     TabSwitcherItem* item =
         [[TabStripTabItem alloc] initWithWebState:status.new_active_web_state];
+
+    // Vivaldi
+    web::WebState* pinnedWebState = GetWebState(
+        _webStateList,
+        WebStateSearchCriteria{
+            .identifier = status.new_active_web_state->GetUniqueIdentifier(),
+            .pinned_state = WebStateSearchCriteria::PinnedState::kPinned,
+        });
+    if (pinnedWebState) {
+      item.isPinned = YES;
+    } else {
+      item.isPinned = NO;
+    }
+    // End Vivaldi
+
     [self.consumer selectItem:item];
     // If the active WebState is in a group, ensure that group is not collapsed.
     const TabGroup* groupOfActiveWebState =
@@ -865,10 +997,16 @@ NSMutableArray<TabStripItemIdentifier*>* CreateItemIdentifiers(
 
   int index = GetWebStateIndex(
       self.webStateList,
+#if defined(VIVALDI_BUILD)
+      WebStateSearchCriteria{
+          .identifier = item.identifier
+      });
+#else
       WebStateSearchCriteria{
           .identifier = item.identifier,
           .pinned_state = WebStateSearchCriteria::PinnedState::kNonPinned,
       });
+#endif // End Vivaldi
   if (index == WebStateList::kInvalidIndex) {
     return;
   }
@@ -884,7 +1022,8 @@ NSMutableArray<TabStripItemIdentifier*>* CreateItemIdentifiers(
                                     closing:YES];
     return;
   } else {
-    self.webStateList->CloseWebStateAt(index, WebStateList::CLOSE_USER_ACTION);
+    self.webStateList->CloseWebStateAt(
+        index, WebStateList::ClosingReason::kUserAction);
   }
 }
 
@@ -907,7 +1046,7 @@ NSMutableArray<TabStripItemIdentifier*>* CreateItemIdentifiers(
                                      WebStateSearchCriteria(item.identifier));
 
   int closedGroupCount = 0;
-  if (IsTabGroupSyncEnabled() && _tabGroupSyncService) {
+  if (_tabGroupSyncService) {
     for (const TabGroup* group : _webStateList->GetGroups()) {
       // Remove the local tab group mapping if the `indexToKeep` is not in the
       // group.
@@ -922,10 +1061,10 @@ NSMutableArray<TabStripItemIdentifier*>* CreateItemIdentifiers(
 
   // Closes all non-pinned items except for `item`.
   CloseOtherWebStates(*(self.webStateList), indexToKeep,
-                      WebStateList::CLOSE_USER_ACTION);
+                      WebStateList::ClosingReason::kUserAction);
 
   // Show the tab group snackbar if some groups have been closed.
-  if (IsTabGroupSyncEnabled() && closedGroupCount > 0) {
+  if (closedGroupCount > 0) {
     [self.tabStripHandler
         showTabStripTabGroupSnackbarAfterClosingGroups:closedGroupCount];
   }
@@ -983,31 +1122,21 @@ NSMutableArray<TabStripItemIdentifier*>* CreateItemIdentifiers(
 
 - (void)ungroupGroup:(TabGroupItem*)tabGroupItem
           sourceView:(UIView*)sourceView {
-  if (IsTabGroupSyncEnabled()) {
-    // Show the confirmation dialog only when the tab group sync feature is
-    // enabled.
-    [_tabStripHandler
-        showTabGroupConfirmationForAction:TabGroupActionType::kUngroupTabGroup
-                                groupItem:tabGroupItem
-                               sourceView:sourceView];
-    return;
-  }
-
-  [self ungroupGroup:tabGroupItem];
+  // Show the confirmation dialog only when the tab group sync feature is
+  // enabled.
+  [_tabStripHandler
+      showTabGroupConfirmationForAction:TabGroupActionType::kUngroupTabGroup
+                              groupItem:tabGroupItem
+                             sourceView:sourceView];
 }
 
 - (void)deleteGroup:(TabGroupItem*)tabGroupItem sourceView:(UIView*)sourceView {
-  if (IsTabGroupSyncEnabled()) {
-    // Show the confirmation dialog only when the tab group sync feature is
-    // enabled.
-    [_tabStripHandler
-        showTabGroupConfirmationForAction:TabGroupActionType::kDeleteTabGroup
-                                groupItem:tabGroupItem
-                               sourceView:sourceView];
-    return;
-  }
-
-  [self deleteGroup:tabGroupItem];
+  // Show the confirmation dialog only when the tab group sync feature is
+  // enabled.
+  [_tabStripHandler
+      showTabGroupConfirmationForAction:TabGroupActionType::kDeleteTabGroup
+                              groupItem:tabGroupItem
+                             sourceView:sourceView];
 }
 
 - (void)closeGroup:(TabGroupItem*)tabGroupItem {
@@ -1015,14 +1144,9 @@ NSMutableArray<TabStripItemIdentifier*>* CreateItemIdentifiers(
     return;
   }
 
-  if (IsTabGroupSyncEnabled()) {
-    tab_groups::utils::CloseTabGroupLocally(
-        tabGroupItem.tabGroup, self.webStateList, _tabGroupSyncService);
-    [self.tabStripHandler showTabStripTabGroupSnackbarAfterClosingGroups:1];
-  } else {
-    CloseAllWebStatesInGroup(*self.webStateList, tabGroupItem.tabGroup,
-                             WebStateList::CLOSE_USER_ACTION);
-  }
+  tab_groups::utils::CloseTabGroupLocally(
+      tabGroupItem.tabGroup, self.webStateList, _tabGroupSyncService);
+  [self.tabStripHandler showTabStripTabGroupSnackbarAfterClosingGroups:1];
 }
 
 #pragma mark - CRWWebStateObserver
@@ -1036,10 +1160,18 @@ NSMutableArray<TabStripItemIdentifier*>* CreateItemIdentifiers(
 
 - (void)webStateDidStopLoading:(web::WebState*)webState {
   [self reconfigureItemForWebState:webState];
+
+  // Vivaldi
+  [self.consumer setCustomAccentColor:[self customAccentColor]];
+  // End Vivaldi
 }
 
 - (void)webStateDidChangeTitle:(web::WebState*)webState {
   [self reconfigureItemForWebState:webState];
+
+  // Vivaldi
+  [self.consumer setCustomAccentColor:[self customAccentColor]];
+  // End Vivaldi
 }
 
 #pragma mark - WebStateFaviconDriverObserver
@@ -1047,6 +1179,25 @@ NSMutableArray<TabStripItemIdentifier*>* CreateItemIdentifiers(
 - (void)faviconDriver:(favicon::FaviconDriver*)driver
     didUpdateFaviconForWebState:(web::WebState*)webState {
   [self reconfigureItemForWebState:webState];
+}
+
+#pragma mark - TabGroupSyncServiceObserverDelegate
+
+- (void)tabGroupSyncServiceTabGroupMigrated:
+            (const tab_groups::SavedTabGroup&)newGroup
+                                  oldSyncID:(const base::Uuid&)oldSyncId
+                                 fromSource:(tab_groups::TriggerSource)source {
+  std::set<const TabGroup*> groups = self.webStateList->GetGroups();
+  const TabGroup* localGroup = nullptr;
+  for (const TabGroup* group : groups) {
+    if (group->tab_group_id() == newGroup.local_group_id()) {
+      localGroup = group;
+      break;
+    }
+  }
+  if (localGroup) {
+    [self updateDataAndReconfigureItemsInGroup:localGroup];
+  }
 }
 
 #pragma mark - TabCollectionDragDropHandler
@@ -1084,8 +1235,13 @@ NSMutableArray<TabStripItemIdentifier*>* CreateItemIdentifiers(
       removeObject:[TabStripItemIdentifier groupIdentifier:item]];
   CHECK(item.tabGroup);
   for (int childWebStateIndex : item.tabGroup->range()) {
+#if defined(VIVALDI_BUILD)
+    TabStripItemIdentifier* childItemIdentifier = CreateTabItemIdentifier(
+        _webStateList->GetWebStateAt(childWebStateIndex), self.webStateList);
+#else
     TabStripItemIdentifier* childItemIdentifier = CreateTabItemIdentifier(
         _webStateList->GetWebStateAt(childWebStateIndex));
+#endif // End Vivaldi
     [_visibleItemsDuringDrag removeObject:childItemIdentifier];
   }
 }
@@ -1211,7 +1367,7 @@ NSMutableArray<TabStripItemIdentifier*>* CreateItemIdentifiers(
         [_tabStripHandler showAlertForLastTabRemovedFromGroup:group
                                                         tabID:tabInfo.tabID
                                                       closing:NO];
-      } else if (IsTabGroupSyncEnabled()) {
+      } else {
         if (group && group->range().count() == 1) {
           // `_tabGroupSyncService` is nullptr in incognito.
           const tab_groups::TabGroupId& localID = group->tab_group_id();
@@ -1402,6 +1558,27 @@ NSMutableArray<TabStripItemIdentifier*>* CreateItemIdentifiers(
                                                          completion);
 }
 
+#pragma mark -  TabStripTabGroupCellDataSource
+
+- (id<FacePileProviding>)facePileProviderForItem:
+    (TabStripItemIdentifier*)itemIdentifier {
+  CHECK(itemIdentifier.tabGroupItem);
+  if (!_shareKitService || !_shareKitService->IsSupported() ||
+      !_collaborationService || !_tabGroupSyncService) {
+    return nil;
+  }
+
+  const TabGroup* group = itemIdentifier.tabGroupItem.tabGroup;
+  tab_groups::CollaborationId collaborationID =
+      tab_groups::utils::GetTabGroupCollabID(group, _tabGroupSyncService);
+  if (collaborationID->empty()) {
+    return nil;
+  }
+  UIColor* groupColor = tab_groups::ColorForTabGroupColorId(group->GetColor());
+  return [self.delegate facePileProviderForGroupID:collaborationID.value()
+                                        groupColor:groupColor];
+}
+
 #pragma mark - Private
 
 // Adds an observation to every WebState of the current WebSateList.
@@ -1439,8 +1616,14 @@ NSMutableArray<TabStripItemIdentifier*>* CreateItemIdentifiers(
             _webStateList->GetGroupOfWebStateAt(index)) {
       TabGroupItem* parentTabGroupItem =
           [[TabGroupItem alloc] initWithTabGroup:parentGroup];
+#if defined(VIVALDI_BUILD)
+      TabStripItemIdentifier* itemIdentifier =
+          CreateTabItemIdentifier(_webStateList->GetWebStateAt(index),
+                                  self.webStateList);
+#else
       TabStripItemIdentifier* itemIdentifier =
           CreateTabItemIdentifier(_webStateList->GetWebStateAt(index));
+#endif // End Vivaldi
       [itemParents setObject:parentTabGroupItem forKey:itemIdentifier];
     }
   }
@@ -1622,7 +1805,13 @@ NSMutableArray<TabStripItemIdentifier*>* CreateItemIdentifiers(
     // If group is collapsed then tab cells cannot be reconfigured.
     return;
   }
+#if defined(VIVALDI_BUILD)
+  [self.consumer reconfigureItems:@[
+    CreateTabItemIdentifier(webState, _webStateList)
+  ]];
+#else
   [self.consumer reconfigureItems:@[ CreateTabItemIdentifier(webState) ]];
+#endif // End Vivaldi
 }
 
 // Returns a destination item for insertion before/after `index`, such that the
@@ -1642,7 +1831,11 @@ NSMutableArray<TabStripItemIdentifier*>* CreateItemIdentifiers(
     if (parentGroup->range().contains(index)) {
       // If the item at `index` also belongs to `parentGroup`, then it can be
       // used as a destination item.
+#if defined(VIVALDI_BUILD)
+      return CreateTabItemIdentifier(destinationWebState, self.webStateList);
+#else
       return CreateTabItemIdentifier(destinationWebState);
+#endif // End Vivaldi
     }
     // Otherwise `item` cannot be used as a destination item to insert in
     // `parentGroup`.
@@ -1661,7 +1854,11 @@ NSMutableArray<TabStripItemIdentifier*>* CreateItemIdentifiers(
 
   // Otherwise if `item` also does not belong to a group, then it can be used as
   // a destination item.
+#if defined(VIVALDI_BUILD)
+  return CreateTabItemIdentifier(destinationWebState, self.webStateList);
+#else
   return CreateTabItemIdentifier(destinationWebState);
+#endif // End Vivaldi
 }
 
 // Updates the tab strip items to reflect the move of `webState` in the
@@ -1673,7 +1870,12 @@ NSMutableArray<TabStripItemIdentifier*>* CreateItemIdentifiers(
         toWebStateListIndex:(int)toIndex
                    oldGroup:(const TabGroup*)oldGroup
                    newGroup:(const TabGroup*)newGroup {
+#if defined(VIVALDI_BUILD)
+  TabStripItemIdentifier* itemIdentifier =
+      CreateTabItemIdentifier(webState, self.webStateList);
+#else
   TabStripItemIdentifier* itemIdentifier = CreateTabItemIdentifier(webState);
+#endif // End Vivaldi
 
   // Update item data.
   bool itemIsVisible = !newGroup || !newGroup->visual_data().is_collapsed();
@@ -1715,6 +1917,14 @@ NSMutableArray<TabStripItemIdentifier*>* CreateItemIdentifiers(
 // (if there is one).
 - (void)insertAndActivateNewWebStateInGroup:(const TabGroup*)group {
   UrlLoadParams params = UrlLoadParams::InNewTab(GURL(kChromeUINewTabURL));
+
+  if (vivaldi::IsVivaldiRunning()) {
+    PrefService* prefService = _profile->GetPrefs();
+    NSString* urlString =
+        [VivaldiTabSettingsHelper getNewTabURLWithPref:prefService];
+    params = UrlLoadParams::InNewTab(GURL([urlString UTF8String]));
+  }  // End Vivaldi
+
   params.in_incognito = self.profile->IsOffTheRecord();
   if (group) {
     params.load_in_group = true;
@@ -1828,7 +2038,12 @@ NSMutableArray<TabStripItemIdentifier*>* CreateItemIdentifiers(
     return;
   }
 
+#if defined(VIVALDI_BUILD)
+  TabStripItemIdentifier* itemIdentifier =
+      CreateTabItemIdentifier(webState, self.webStateList);
+#else
   TabStripItemIdentifier* itemIdentifier = CreateTabItemIdentifier(webState);
+#endif // End Vivaldi
   TabStripItemData* itemData =
       CreateTabItemData(self.webStateList->GetIndexOfWebState(webState),
                         self.webStateList, _dirtyTabs);
@@ -1880,6 +2095,7 @@ NSMutableArray<TabStripItemIdentifier*>* CreateItemIdentifiers(
     case TabGroupActionType::kDeleteTabGroup:
     case TabGroupActionType::kLeaveOrKeepSharedTabGroup:
     case TabGroupActionType::kDeleteOrKeepSharedTabGroup:
+    case TabGroupActionType::kCloseLastTabUnknownRole:
       NOTREACHED();
   }
 }
@@ -1891,5 +2107,79 @@ NSMutableArray<TabStripItemIdentifier*>* CreateItemIdentifiers(
   // - Unblock the screen.
   // - Show an error if needed.
 }
+
+#pragma mark- Vivaldi
+- (void)setProfile:(ProfileIOS*)profile {
+  if (profile != nullptr) {
+    _profile = profile;
+    PrefService* prefService = _profile->GetPrefs();
+    if (prefService) {
+      [VivaldiAppearanceSettingPrefs setPrefService:prefService];
+      [self startObservingTabBarState:prefService];
+      [self startObservingTabStyles:prefService];
+      [self startObservingAccentColorChange:prefService];
+    }
+  }
+}
+
+- (void)startObservingTabBarState:(PrefService*)prefService {
+  _tabBarEnabled = [[PrefBackedBoolean alloc]
+      initWithPrefService:prefService
+                 prefName:vivaldiprefs::kVivaldiDesktopTabsEnabled];
+  [_tabBarEnabled setObserver:self];
+}
+
+- (void)startObservingTabStyles:(PrefService*)prefService {
+  _showXButtonBackgroundTabsEnabled = [[PrefBackedBoolean alloc]
+      initWithPrefService:prefService
+                 prefName:vivaldiprefs::
+                              kVivaldiShowXButtonBackgroundTabsEnabled];
+  [_showXButtonBackgroundTabsEnabled setObserver:self];
+  [self booleanDidChange:_showXButtonBackgroundTabsEnabled];
+}
+
+- (void)startObservingAccentColorChange:(PrefService*)prefService {
+  // Dynamic accent color toggle
+  _dynamicAccentColorEnabled = [[PrefBackedBoolean alloc]
+      initWithPrefService:prefService
+                 prefName:vivaldiprefs::kVivaldiDynamicAccentColorEnabled];
+  [_dynamicAccentColorEnabled setObserver:self];
+  [self booleanDidChange:_dynamicAccentColorEnabled];
+
+  // Custom accent color
+  _prefChangeRegistrar.Init(prefService);
+  _prefObserverBridge.reset(new PrefObserverBridge(self));
+
+  _prefObserverBridge->ObserveChangesForPreference(
+      vivaldiprefs::kVivaldiCustomAccentColor, &_prefChangeRegistrar);
+  [self onPreferenceChanged:vivaldiprefs::kVivaldiCustomAccentColor];
+}
+
+- (NSString*)customAccentColor {
+  return [VivaldiAppearanceSettingsPrefsHelper getCustomAccentColor];
+}
+
+#pragma mark - Boolean Observer
+- (void)booleanDidChange:(id<ObservableBoolean>)observableBoolean {
+  if (observableBoolean == _showXButtonBackgroundTabsEnabled) {
+    [self.consumer setCloseButtonVisible:[observableBoolean value]];
+  }
+
+  if (observableBoolean == _tabBarEnabled) {
+    [self.consumer setTabBarEnabled:[observableBoolean value]];
+  }
+
+  if (observableBoolean == _dynamicAccentColorEnabled) {
+    [self.consumer setDynamicAccentColorEnabled:[observableBoolean value]];
+  }
+}
+
+#pragma mark - PrefObserverDelegate
+- (void)onPreferenceChanged:(const std::string&)preferenceName {
+  if (preferenceName == vivaldiprefs::kVivaldiCustomAccentColor) {
+    [self.consumer setCustomAccentColor:[self customAccentColor]];
+  }
+}
+// End Vivaldi
 
 @end

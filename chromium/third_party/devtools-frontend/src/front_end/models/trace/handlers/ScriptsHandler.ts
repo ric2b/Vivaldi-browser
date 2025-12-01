@@ -4,7 +4,6 @@
 
 import * as Common from '../../../core/common/common.js';
 import * as Platform from '../../../core/platform/platform.js';
-// eslint-disable-next-line rulesdir/no-imports-in-directory
 import type * as SDK from '../../../core/sdk/sdk.js';
 import type * as Protocol from '../../../generated/protocol.js';
 import * as Types from '../types/types.js';
@@ -119,6 +118,10 @@ function findFrame(meta: MetaHandlerData, frameId: string): Types.Events.TraceFr
 
 function findNetworkRequest(networkRequests: Types.Events.SyntheticNetworkRequest[], script: Script):
     Types.Events.SyntheticNetworkRequest|null {
+  if (!script.url) {
+    return null;
+  }
+
   return networkRequests.find(request => request.args.data.url === script.url) ?? null;
 }
 

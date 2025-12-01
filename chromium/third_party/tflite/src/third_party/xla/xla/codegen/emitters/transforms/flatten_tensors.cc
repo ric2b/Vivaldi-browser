@@ -326,7 +326,7 @@ struct RewriteVectorTransferRead : OpRewritePattern<mv::TransferReadOp> {
     if (vector_type.getRank() != 1) {
       return rewriter.notifyMatchFailure(op, "the vector should be 1D");
     }
-    auto tensor = op.getSource();
+    auto tensor = op.getBase();
     auto tensor_type = tensor.getType();
     if (tensor_type.getRank() < 2) {
       return rewriter.notifyMatchFailure(op,
@@ -340,7 +340,8 @@ struct RewriteVectorTransferRead : OpRewritePattern<mv::TransferReadOp> {
                              loc, GetFlattenedType(tensor_type), tensor)
                          .getResult(0);
     rewriter.replaceOpWithNewOp<mv::TransferReadOp>(
-        op, vector_type, tensor_1D, linear_index, llvm::ArrayRef<bool>{true});
+        op, vector_type, tensor_1D, linear_index, op.getPadding(),
+        llvm::ArrayRef<bool>{true});
     return mlir::success();
   }
 };

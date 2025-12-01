@@ -24,6 +24,10 @@ class OverlayRequestQueue;
 class InfobarOverlayRequestInserter;
 class TipsManagerIOS;
 
+// Vivaldi
+class PrefService;
+// End Vivaldi
+
 // Helper object that inserts a Translate banner request when Translate finishes
 // for an infobar.
 class TranslateOverlayTabHelper
@@ -142,6 +146,13 @@ class TranslateOverlayTabHelper
   raw_ptr<OverlayRequestQueue> banner_queue_ = nullptr;
   // Request inserter for the TabHelper's WebState;
   raw_ptr<InfobarOverlayRequestInserter> inserter_ = nullptr;
+
+  // Vivaldi
+  // Helper method to get PrefService from WebState.
+  PrefService* GetPrefs();
+  // WebState for accessing prefs
+  raw_ptr<web::WebState> web_state_ = nullptr;
+  // End Vivaldi
 };
 
 #endif  // IOS_CHROME_BROWSER_INFOBARS_MODEL_OVERLAYS_TRANSLATE_OVERLAY_TAB_HELPER_H_

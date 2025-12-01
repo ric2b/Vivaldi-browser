@@ -14,7 +14,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Linux TSan Builder",
-              "project": "chromium-m138"
+              "project": "chromium-m140"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-memory-archive",
@@ -38,7 +38,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Linux TSan Tests",
-              "project": "chromium-m138"
+              "project": "chromium-m140"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-memory-archive",
@@ -59,7 +59,7 @@
               "parent": {
                 "bucket": "ci",
                 "builder": "Linux TSan Builder",
-                "project": "chromium-m138"
+                "project": "chromium-m140"
               }
             }
           }
@@ -69,22 +69,18 @@
         {
           "bucket": "ci",
           "builder": "Linux TSan Builder",
-          "project": "chromium-m138"
+          "project": "chromium-m140"
         }
       ],
       "builder_ids_in_scope_for_testing": [
         {
           "bucket": "ci",
           "builder": "Linux TSan Tests",
-          "project": "chromium-m138"
+          "project": "chromium-m140"
         }
       ],
       "targets_spec_directory": "src/infra/config/generated/builders/try/linux_chromium_tsan_rel_ng/targets"
     }
-  },
-  "$build/flakiness": {
-    "check_for_flakiness": true,
-    "check_for_flakiness_with_resultdb": true
   },
   "$build/siso": {
     "configs": [

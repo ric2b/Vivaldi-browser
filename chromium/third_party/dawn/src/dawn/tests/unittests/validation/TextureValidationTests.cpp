@@ -359,7 +359,7 @@ TEST_F(TextureValidationTest, MipLevelCount) {
 // Test the validation of array layer count
 TEST_F(TextureValidationTest, ArrayLayerCount) {
     wgpu::TextureDescriptor defaultDescriptor = CreateDefaultTextureDescriptor();
-    wgpu::Limits supportedLimits = GetSupportedLimits();
+    const auto& supportedLimits = GetSupportedLimits();
 
     // Array layer count exceeding maxTextureArrayLayers is not allowed for 2D texture
     {
@@ -386,7 +386,7 @@ TEST_F(TextureValidationTest, ArrayLayerCount) {
 
 // Test the validation of 1D texture size
 TEST_F(TextureValidationTest, 1DTextureSize) {
-    wgpu::Limits supportedLimits = GetSupportedLimits();
+    const auto& supportedLimits = GetSupportedLimits();
 
     wgpu::TextureDescriptor defaultDescriptor;
     defaultDescriptor.size = {4, 1, 1};
@@ -432,7 +432,7 @@ TEST_F(TextureValidationTest, 1DTextureSize) {
 // Test the validation of 2D texture size
 TEST_F(TextureValidationTest, 2DTextureSize) {
     wgpu::TextureDescriptor defaultDescriptor = CreateDefaultTextureDescriptor();
-    wgpu::Limits supportedLimits = GetSupportedLimits();
+    const auto& supportedLimits = GetSupportedLimits();
 
     // Out-of-bound texture dimension is not allowed
     {
@@ -482,7 +482,7 @@ TEST_F(TextureValidationTest, 3DTextureSize) {
     wgpu::TextureDescriptor defaultDescriptor = CreateDefaultTextureDescriptor();
     defaultDescriptor.dimension = wgpu::TextureDimension::e3D;
     defaultDescriptor.usage = wgpu::TextureUsage::TextureBinding;
-    wgpu::Limits supportedLimits = GetSupportedLimits();
+    const auto& supportedLimits = GetSupportedLimits();
 
     // Out-of-bound texture dimension is not allowed
     {
@@ -1197,6 +1197,73 @@ TEST_F(TransientAttachmentValidationTest, FlagsBeyondRenderAttachment) {
                  wgpu::TextureUsage::CopySrc;
 
     ASSERT_DEVICE_ERROR(device.CreateTexture(&desc));
+}
+
+// Test that kTier1AdditionalRenderableFormats formats are invalid as renderable texture without
+// TextureFormatsTier1.
+TEST_F(TextureValidationTest, NoRenderableSupport) {
+    for (const auto format : utils::kTier1AdditionalRenderableFormats) {
+        SCOPED_TRACE(absl::StrFormat("Test format: %s", format));
+        wgpu::TextureDescriptor descriptor;
+        descriptor.size = {1, 1, 1};
+        descriptor.usage = wgpu::TextureUsage::RenderAttachment;
+        descriptor.format = format;
+        ASSERT_DEVICE_ERROR(device.CreateTexture(&descriptor));
+    }
+}
+
+class TextureFormatsTier1TextureTest : public TextureValidationTest {
+  protected:
+    std::vector<wgpu::FeatureName> GetRequiredFeatures() override {
+        return {wgpu::FeatureName::TextureFormatsTier1};
+    }
+};
+
+// Test that kTier1AdditionalRenderableFormats formats are valid as renderable texture and they also
+// allow multisampling with TextureFormatsTier1.
+TEST_F(TextureFormatsTier1TextureTest, RenderableAndMultisampleSupport) {
+    for (const auto format : utils::kTier1AdditionalRenderableFormats) {
+        SCOPED_TRACE(absl::StrFormat("Test format: %s", format));
+        wgpu::TextureDescriptor descriptor;
+        descriptor.size = {1, 1, 1};
+        descriptor.usage = wgpu::TextureUsage::RenderAttachment;
+        descriptor.format = format;
+        descriptor.sampleCount = 4;
+        device.CreateTexture(&descriptor);
+    }
+}
+
+// Test that creating a storage texture using kTier1AdditionalStorageFormats succeeds when
+// TextureFormatsTier1 feature is enabled.
+TEST_F(TextureFormatsTier1TextureTest, StorageBindingSuppport) {
+    for (wgpu::TextureFormat format : utils::kTier1AdditionalStorageFormats) {
+        wgpu::TextureDescriptor descriptor;
+        descriptor.size = {1, 1, 1};
+        descriptor.usage = wgpu::TextureUsage::StorageBinding;
+        SCOPED_TRACE(absl::StrFormat("Test format: %s", format));
+        descriptor.format = format;
+        device.CreateTexture(&descriptor);
+    }
+}
+
+class TextureFormatsTier2TextureTest : public TextureValidationTest {
+  protected:
+    std::vector<wgpu::FeatureName> GetRequiredFeatures() override {
+        return {wgpu::FeatureName::TextureFormatsTier2};
+    }
+};
+
+// Test that creating a storage texture using kTier2AdditionalStorageFormats succeeds when
+// TextureFormatsTier2 feature is enabled.
+TEST_F(TextureFormatsTier2TextureTest, StorageBindingSuppport) {
+    for (wgpu::TextureFormat format : utils::kTier2AdditionalStorageFormats) {
+        wgpu::TextureDescriptor descriptor;
+        descriptor.size = {1, 1, 1};
+        descriptor.usage = wgpu::TextureUsage::StorageBinding;
+        SCOPED_TRACE(absl::StrFormat("Test format: %s", format));
+        descriptor.format = format;
+        device.CreateTexture(&descriptor);
+    }
 }
 
 }  // anonymous namespace

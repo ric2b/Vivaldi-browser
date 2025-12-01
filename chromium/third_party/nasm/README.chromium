@@ -3,7 +3,7 @@ Short Name: nasm
 URL: https://www.nasm.us/
 Version: 2.16.03 / 888d9ab55012d25059da81fed6575ef3a004726f
 CPEPrefix: cpe:/a:nasm:netwide_assembler:2.16.03
-License: 2-Clause BSD
+License: BSD-2-Clause
 License File: LICENSE
 Security Critical: no
 Shipped: no

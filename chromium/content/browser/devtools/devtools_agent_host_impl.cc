@@ -16,6 +16,7 @@
 #include "base/observer_list.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
+#include "base/strings/string_view_util.h"
 #include "content/browser/devtools/auction_worklet_devtools_agent_host.h"
 #include "content/browser/devtools/dedicated_worker_devtools_agent_host.h"
 #include "content/browser/devtools/devtools_http_handler.h"
@@ -424,12 +425,18 @@ DevToolsSession::Mode DevToolsAgentHostImpl::GetSessionMode() {
 }
 
 bool DevToolsAgentHostImpl::Inspect() {
-  DevToolsManager* manager = DevToolsManager::GetInstance();
-  if (manager->delegate()) {
-    manager->delegate()->Inspect(this);
+  if (auto* delegate = DevToolsManager::GetInstance()->delegate()) {
+    delegate->Inspect(this);
     return true;
   }
   return false;
+}
+
+scoped_refptr<DevToolsAgentHost> DevToolsAgentHostImpl::OpenDevTools() {
+  if (auto* delegate = DevToolsManager::GetInstance()->delegate()) {
+    return delegate->OpenDevTools(this);
+  }
+  return nullptr;
 }
 
 void DevToolsAgentHostImpl::ForceDetachAllSessions() {

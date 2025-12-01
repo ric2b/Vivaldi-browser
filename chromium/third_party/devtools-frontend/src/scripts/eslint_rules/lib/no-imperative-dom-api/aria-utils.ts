@@ -2,22 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /**
- * @fileoverview A library to identify and templatize UI.ARIAUtils calls.
+ * @file A library to identify and templatize UI.ARIAUtils calls.
  */
 
 import type {TSESTree} from '@typescript-eslint/utils';
 
-import {isIdentifier, isIdentifierChain, isMemberExpression} from './ast.ts';
-import type {DomFragment} from './dom-fragment.ts';
+import {isIdentifier, isIdentifierChain, isMemberExpression, type RuleCreator} from './ast.ts';
 
-type Node = TSESTree.Node;
-type CallExpression = TSESTree.CallExpression;
 type Identifier = TSESTree.Identifier;
 
-export const ariaUtils = {
-  create(_) {
+export const ariaUtils: RuleCreator = {
+  create() {
     return {
-      functionCall(call: CallExpression, _firstArg: Node, secondArg: Node, domFragment: DomFragment): boolean {
+      functionCall(call, _firstArg, secondArg, domFragment) {
         const func = isMemberExpression(
             call.callee, n => isIdentifierChain(n, ['UI', 'ARIAUtils']), n => n.type === 'Identifier');
         if (!func) {

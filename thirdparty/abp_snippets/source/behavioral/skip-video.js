@@ -18,7 +18,9 @@
 import {$$} from "../utils/dom.js";
 import $ from "../$.js";
 
+import {formatArguments} from "../utils/general.js";
 import {getDebugger} from "../introspection/log.js";
+import {profile} from "../introspection/profile.js";
 import {initQueryAndApply} from "../utils/dom.js";
 import {raceWinner} from "../introspection/race.js";
 import {waitUntilEvent} from "../utils/execution.js";
@@ -69,15 +71,25 @@ let {isNaN, MutationObserver, parseInt, parseFloat, setTimeout} = $(window);
  * Used to disable the snippet when the video is already near its end.
  * Video is considered near its end when the difference between the
  * video duration and the current time is less than 0.5 seconds.
+ *
+ * -start-from:1000 (default is 0)
+ * Delays running of the snippet until video reaches the given timestamp.
+ * Unit is in ms.
+ *
+ * -mute-video-when-skipping:false (default is true)
+ * Mutes the video when skipping is happening.
  */
 export function skipVideo(playerSelector, xpathCondition, ...attributes) {
+  const formattedArguments = formatArguments(arguments);
   const optionalParameters = new Map([
     ["-max-attempts", "10"],
     ["-retry-ms", "10"],
     ["-run-once", "false"],
     ["-wait-until", ""],
     ["-skip-to", "-0.1"],
-    ["-stop-on-video-end", "false"]
+    ["-stop-on-video-end", "false"],
+    ["-start-from", "0"],
+    ["-mute-video-when-skipping", "true"]
   ]);
 
   for (let attr of attributes) {
@@ -105,16 +117,25 @@ export function skipVideo(playerSelector, xpathCondition, ...attributes) {
   const skipToStr = optionalParameters.get("-skip-to");
   const skipToNum = parseFloat(skipToStr || -0.1);
 
+  const startFromStr = optionalParameters.get("-start-from");
+  const startFrom = parseInt(startFromStr || 0, 10);
+
   const waitUntil = optionalParameters.get("-wait-until");
 
   const stopOnVideoEndStr = optionalParameters.get("-stop-on-video-end");
   const stopOnVideoEndFlag = (stopOnVideoEndStr === "true");
 
+  const muteVideoStr = optionalParameters.get("-mute-video-when-skipping");
+  const muteVideo = !(muteVideoStr === "false");
+
   const debugLog = getDebugger("skip-video");
+  const {mark, end} = profile("skip-video");
   const queryAndApply = initQueryAndApply(`xpath(${xpathCondition})`);
   let skippedOnce = false;
 
   const mainLogic = () => {
+    mark();
+    const seenMap = new WeakSet();
     const callback = (retryCounter = 0) => {
       if (skippedOnce && runOnceFlag) {
         if (mo)
@@ -122,10 +143,49 @@ export function skipVideo(playerSelector, xpathCondition, ...attributes) {
         return;
       }
       queryAndApply(node => {
-        debugLog("info", "Matched: ", node, " for selector: ", xpathCondition);
-        debugLog("info", "Running video skipping logic.");
-        const video = $$(playerSelector)[0];
-        while (isNaN(video.duration) && retryCounter < maxAttemptsNum) {
+        let nodeAlreadySeen = seenMap.has(node);
+        let lastSkippedVideoDuration;
+        if (!nodeAlreadySeen) {
+          debugLog("info", "Matched:", node, " for selector: ", xpathCondition);
+          debugLog("info", "Running video skipping logic.");
+        }
+        const videos = $$(playerSelector);
+        let foundValidVideo = false;
+        for (const video of videos) {
+          if (!video || isNaN(video.duration) || isNaN(video.currentTime))
+            continue;
+          foundValidVideo = true;
+          const videoNearEnd = (video.duration - video.currentTime) < 0.5;
+          if ((video.duration > 0) && (video.currentTime < video.duration) &&
+              !(stopOnVideoEndFlag && videoNearEnd)) {
+            if (muteVideo) {
+              video.muted = true;
+              if (!nodeAlreadySeen)
+                debugLog("success", "Muted video...");
+            }
+            if (startFrom <= video.currentTime * 1000) {
+              // If skipTo is zero or negative, skip to the end of the video
+              // If skipTo is positive, skip forward for the given time.
+              skipToNum <= 0 ?
+                video.currentTime = video.duration + skipToNum :
+                video.currentTime += skipToNum;
+              if (lastSkippedVideoDuration !== video.duration) {
+                debugLog("success",
+                         "Skipped video, currentTime: ",
+                         video.currentTime,
+                         "s.",
+                         "\nFILTER: skip-video",
+                         formattedArguments);
+                seenMap.add(node);
+                lastSkippedVideoDuration = video.duration;
+              }
+              video.paused && video.play();
+              skippedOnce = true;
+              win();
+            }
+          }
+        }
+        if (!foundValidVideo && retryCounter < maxAttemptsNum) {
           setTimeout(() => {
             const attempt = retryCounter + 1;
             debugLog("info",
@@ -133,21 +193,6 @@ export function skipVideo(playerSelector, xpathCondition, ...attributes) {
                      attempt);
             callback(attempt);
           }, retryMsNum);
-          return;
-        }
-        const videoNearEnd = (video.duration - video.currentTime) < 0.5;
-        if (!isNaN(video.duration) && !(stopOnVideoEndFlag && videoNearEnd)) {
-          video.muted = true;
-          debugLog("success", "Muted video...");
-          // If skipTo is zero or negative, skip to the end of the video
-          // If skipTo is positive, skip forward for the given time.
-          skipToNum <= 0 ?
-            video.currentTime = video.duration + skipToNum :
-            video.currentTime += skipToNum;
-          debugLog("success", "Skipped duration...");
-          video.paused && video.play();
-          skippedOnce = true;
-          win();
         }
       });
     };
@@ -159,6 +204,7 @@ export function skipVideo(playerSelector, xpathCondition, ...attributes) {
     mo.observe(
       document, {characterData: true, childList: true, subtree: true});
     callback();
+    end();
   };
 
   waitUntilEvent(debugLog, mainLogic, waitUntil);

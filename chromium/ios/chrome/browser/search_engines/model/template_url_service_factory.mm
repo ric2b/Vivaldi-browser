@@ -25,6 +25,7 @@
 #endif
 
 //Vivaldi
+#import "components/application_locale_storage/application_locale_storage.h"
 #import "components/search_engines/vivaldi_pref_names.h"
 #import "components/prefs/pref_service.h"
 #import "components/pref_registry/pref_registry_syncable.h"
@@ -51,7 +52,7 @@ std::unique_ptr<KeyedService> BuildTemplateURLService(
   // Vivaldi
   if (!profile->GetPrefs()->HasPrefPath(prefs::kLanguageAtInstall))
     profile->GetPrefs()->SetString(prefs::kLanguageAtInstall,
-        GetApplicationContext()->GetApplicationLocale());
+        GetApplicationContext()->GetApplicationLocaleStorage()->Get());
   //End Vivaldi
 
   return std::make_unique<TemplateURLService>(
@@ -106,11 +107,6 @@ void TemplateURLServiceFactory::RegisterBrowserStatePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
   DefaultSearchManager::RegisterProfilePrefs(registry);
   TemplateURLService::RegisterProfilePrefs(registry);
-
-  //Vivaldi
-  registry->RegisterStringPref(prefs::kLanguageAtInstall, "");
-  //End Vivaldi
-
 }
 
 std::unique_ptr<KeyedService>

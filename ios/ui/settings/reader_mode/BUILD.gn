@@ -1,0 +1,56 @@
+# Copyright 2025 Vivaldi Technologies. All rights reserved.
+
+import("//build/config/apple/swift_source_set.gni")
+
+source_set("vivaldi_reader_mode") {
+  sources = [
+    "vivaldi_reader_mode_floating_ui.h",
+    "vivaldi_reader_mode_floating_ui.mm",
+    "vivaldi_reader_mode_consumer.h",
+    "vivaldi_reader_mode_coordinator.h",
+    "vivaldi_reader_mode_coordinator.mm",
+    "vivaldi_reader_mode_mediator.h",
+    "vivaldi_reader_mode_mediator.mm",
+    "vivaldi_reader_mode_prefs.h",
+    "vivaldi_reader_mode_prefs.mm",
+  ]
+
+  deps = [
+    ":vivaldi_reader_mode_swift",
+    "//base",
+    "//components/prefs",
+    "//ios/chrome/browser/shared/coordinator/chrome_coordinator",
+    "//ios/chrome/browser/shared/model/browser",
+    "//ios/chrome/browser/shared/model/prefs:pref_names",
+    "//ios/chrome/browser/shared/model/prefs",
+    "//ios/chrome/browser/shared/model/utils",
+    "//ui/base",
+    "resources:assets",
+  ]
+}
+
+swift_source_set("vivaldi_reader_mode_swift") {
+  bridge_header = "vivaldi_reader_mode_swift_bridge.h"
+  sources = [
+    "vivaldi_reader_mode_constants.swift",
+    "vivaldi_reader_mode_state.swift",
+    "vivaldi_reader_mode_view_provider.swift",
+    "vivaldi_reader_mode_view.swift",
+    "vivaldi_reader_mode_setting.swift",
+  ]
+
+  deps = [
+    "//base",
+    "//ui/base",
+    "//ios/chrome/app/strings",
+    "//ios/chrome/common/ui/colors:swift",
+    "//vivaldi/ios/ui/helpers:helpers_swift",
+    "//vivaldi/ios/ui/custom_views:custom_views_swift",
+  ]
+
+  frameworks = [
+    "UIKit.framework",
+    "SwiftUI.framework",
+    "Combine.framework",
+  ]
+}

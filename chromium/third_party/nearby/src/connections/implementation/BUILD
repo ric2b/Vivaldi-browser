@@ -1,3 +1,6 @@
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+
 # Copyright 2020 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,10 +22,7 @@ cc_library(
         "pcp.h",
         "webrtc_state.h",
     ],
-    visibility = [
-        "//connections:__subpackages__",
-        "//sharing:__subpackages__",
-    ],
+    visibility = ["//connections:__subpackages__"],
 )
 
 cc_library(
@@ -33,13 +33,11 @@ cc_library(
     hdrs = [
         "ble_advertisement.h",
     ],
-    visibility = [
-        "//connections:__subpackages__",
-        "//sharing:__subpackages__",
-    ],
+    visibility = ["//connections:__subpackages__"],
     deps = [
         ":types",
         "//internal/platform:base",
+        "//internal/platform:mac_address",
         "//internal/platform:types",
         "//internal/platform:util",
         "@com_google_absl//absl/status",
@@ -176,6 +174,7 @@ cc_library(
         "//internal/platform:comm",
         "//internal/platform:connection_info",
         "//internal/platform:error_code_recorder",
+        "//internal/platform:mac_address",
         "//internal/platform:types",
         "//internal/platform:util",
         "//internal/platform/implementation:comm",
@@ -335,6 +334,7 @@ cc_test(
         ":internal",
         ":types",
         "//internal/platform:base",
+        "//internal/platform:mac_address",
         "//internal/platform/implementation/g3",  # build_cleaner: keep
         "@com_github_protobuf_matchers//protobuf-matchers",
         "@com_google_absl//absl/status",
@@ -551,6 +551,7 @@ cc_test(
         ":internal",
         "//internal/platform:base",
         "//internal/platform:comm",
+        "//internal/platform:mac_address",
         "//internal/platform/implementation/g3",  # build_cleaner: keep
         "@com_github_protobuf_matchers//protobuf-matchers",
         "@com_google_googletest//:gtest_main",

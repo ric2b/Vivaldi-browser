@@ -33,7 +33,11 @@ const copySync = (source, dest) => {
     }
     else {
       const content = readFileSync(fs);
-      writeFileSync(fd, withLicense() + "\n" + content);
+      if (file === "package.json") {
+        writeFileSync(fd, content);
+      } else {
+        writeFileSync(fd, withLicense() + "\n" + content);
+      }
     }
   }
 };

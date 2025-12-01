@@ -8,13 +8,14 @@
 #include "base/task/bind_post_task.h"
 #include "base/task/thread_pool.h"
 #include "chrome/browser/content_extraction/inner_html.h"
-#include "chrome/browser/content_extraction/inner_text.h"
 #include "chrome/browser/ui/lens/lens_overlay_image_helper.h"
 #include "chrome/browser/ui/lens/lens_overlay_proto_converter.h"
 #include "chrome/browser/ui/lens/lens_overlay_side_panel_coordinator.h"
 #include "chrome/browser/ui/lens/lens_search_controller.h"
+#include "chrome/browser/ui/lens/lens_search_feature_flag_utils.h"
 #include "chrome/browser/ui/lens/lens_searchbox_controller.h"
 #include "chrome/browser/ui/lens/lens_session_metrics_logger.h"
+#include "components/content_extraction/content/browser/inner_text.h"
 #include "components/lens/lens_features.h"
 #include "components/tabs/public/tab_interface.h"
 #include "components/zoom/zoom_controller.h"
@@ -129,19 +130,10 @@ double CalculateWordOverlapSimilarity(std::string dom_text,
   return total_ocr_words == 0 ? 0.0 : overlap_count / total_ocr_words;
 }
 
-bool IsPageContextEligible(
-    const GURL& main_frame_url,
-    std::vector<optimization_guide::FrameMetadata> frame_metadata,
-    optimization_guide::PageContextEligibility* page_context_eligibility) {
-  if (!page_context_eligibility ||
-      !lens::features::IsLensSearchProtectedPageEnabled() ||
-      !lens::features::IsLensOverlayContextualSearchboxEnabled() ||
-      !lens::features::UseApcAsContext()) {
-    return true;
-  }
-  return optimization_guide::IsPageContextEligible(
-      main_frame_url.host(), main_frame_url.path(), std::move(frame_metadata),
-      page_context_eligibility);
+bool IsProtectedPageFeatureEnabled() {
+  return lens::features::IsLensSearchProtectedPageEnabled() &&
+         lens::IsLensOverlayContextualSearchboxEnabled() &&
+         lens::features::UseApcAsContext();
 }
 
 }  // namespace
@@ -178,26 +170,22 @@ void LensSearchContextualizationController::StartContextualization(
 void LensSearchContextualizationController::GetPageContextualization(
     PageContentRetrievedCallback callback) {
   // If the contextual searchbox is disabled, exit early.
-  if (!lens::features::IsLensOverlayContextualSearchboxEnabled()) {
+  if (!lens::IsLensOverlayContextualSearchboxEnabled()) {
     std::move(callback).Run(/*page_contents=*/{}, lens::MimeType::kUnknown,
                             std::nullopt);
     return;
   }
 
   is_page_context_eligible_ = true;
-  lens_search_controller_->lens_overlay_side_panel_coordinator()
-      ->SetShowProtectedErrorPage(false);
 
 #if BUILDFLAG(ENABLE_PDF)
   // The overlay controller needs to check if the PDF helper exists before
   // calling MaybeGetPdfBytes or else the `callback` will have been moved but
   // not called.
   pdf::PDFDocumentHelper* pdf_helper =
-      lens::features::UsePdfsAsContext()
-          ? pdf::PDFDocumentHelper::MaybeGetForWebContents(
-                lens_search_controller_->GetTabInterface()->GetContents())
-          : nullptr;
-  if (lens::features::UsePdfsAsContext() && pdf_helper) {
+      pdf::PDFDocumentHelper::MaybeGetForWebContents(
+          lens_search_controller_->GetTabInterface()->GetContents());
+  if (pdf_helper) {
     // Fetch the PDF bytes then run the callback.
     MaybeGetPdfBytes(pdf_helper, std::move(callback));
     return;
@@ -208,17 +196,16 @@ void LensSearchContextualizationController::GetPageContextualization(
   auto* render_frame_host = lens_search_controller_->GetTabInterface()
                                 ->GetContents()
                                 ->GetPrimaryMainFrame();
-  if (!render_frame_host || (!lens::features::UseInnerHtmlAsContext() &&
-                             !lens::features::UseInnerTextAsContext() &&
+  if (!render_frame_host || (!lens::features::UseInnerTextAsContext() &&
                              !lens::features::UseApcAsContext())) {
     std::move(callback).Run(page_contents, lens::MimeType::kUnknown,
                             std::nullopt);
     return;
   }
-  // TODO(crbug.com/399610478): The fetches for innerHTML, innerText, and APC
+  // TODO(crbug.com/399610478): The fetches for innerText and APC
   // should be parallelized to fetch all data at once. Currently fetches are
   // sequential to prevent getting stuck in a race condition.
-  MaybeGetInnerHtml(page_contents, render_frame_host, std::move(callback));
+  MaybeGetInnerText(page_contents, render_frame_host, std::move(callback));
 }
 
 void LensSearchContextualizationController::TryUpdatePageContextualization(
@@ -287,6 +274,9 @@ void LensSearchContextualizationController::ResetState() {
   last_retrieved_most_visible_page_ = std::nullopt;
   pdf_partial_page_text_retrieved_callback_.Reset();
   pdf_pages_text_.clear();
+  // Reset the page context eligibility API state.
+  page_context_eligibility_callback_.Reset();
+  pending_context_eligibility_params_.reset();
   state_ = State::kOff;
 }
 
@@ -318,8 +308,8 @@ void LensSearchContextualizationController::RecordDocumentMetrics(
   }
 
   // Fetch and record the other content type for representing the webpage.
-  // TODO(crbug.com/398304347): Remove these once both the innerHtml and
-  // innerText metrics are recorded as part of the content data.
+  // TODO(crbug.com/398304347): Remove this once innerText metrics are recorded
+  // as part of the content data.
   auto* render_frame_host = lens_search_controller_->GetTabInterface()
                                 ->GetContents()
                                 ->GetPrimaryMainFrame();
@@ -329,14 +319,6 @@ void LensSearchContextualizationController::RecordDocumentMetrics(
         *render_frame_host, /*node_id=*/std::nullopt,
         base::BindOnce(
             &LensSearchContextualizationController::RecordInnerTextSize,
-            weak_ptr_factory_.GetWeakPtr()));
-  }
-  if (!retrieved_content_types.contains(lens::MimeType::kHtml)) {
-    // Fetch the innerHtml bytes to log the size.
-    content_extraction::GetInnerHtml(
-        *render_frame_host,
-        base::BindOnce(
-            &LensSearchContextualizationController::RecordInnerHtmlSize,
             weak_ptr_factory_.GetWeakPtr()));
   }
 
@@ -395,11 +377,11 @@ void LensSearchContextualizationController::UpdatePageContextualization(
     lens::MimeType primary_content_type,
     std::optional<uint32_t> page_count) {
   // Exit early if the controller is off.
-  if(state_ == State::kOff) {
+  if (state_ == State::kOff) {
     return;
   }
 
-  if (!lens::features::IsLensOverlayContextualSearchboxEnabled()) {
+  if (!lens::IsLensOverlayContextualSearchboxEnabled()) {
     std::move(on_page_context_updated_callback_).Run();
     return;
   }
@@ -440,18 +422,15 @@ void LensSearchContextualizationController::UpdatePageContextualizationPart2(
   }
 
 #if BUILDFLAG(ENABLE_PDF)
-  if (lens::features::SendPdfCurrentPageEnabled()) {
-    pdf::PDFDocumentHelper* pdf_helper =
-        pdf::PDFDocumentHelper::MaybeGetForWebContents(
-            lens_search_controller_->GetTabInterface()->GetContents());
-    if (pdf_helper) {
-      pdf_helper->GetMostVisiblePageIndex(
-          base::BindOnce(&LensSearchContextualizationController::
-                             UpdatePageContextualizationPart3,
-                         weak_ptr_factory_.GetWeakPtr(), page_contents,
-                         primary_content_type, page_count, bitmap));
-      return;
-    }
+  pdf::PDFDocumentHelper* pdf_helper =
+      pdf::PDFDocumentHelper::MaybeGetForWebContents(
+          lens_search_controller_->GetTabInterface()->GetContents());
+  if (pdf_helper) {
+    pdf_helper->GetMostVisiblePageIndex(base::BindOnce(
+        &LensSearchContextualizationController::UpdatePageContextualizationPart3,
+        weak_ptr_factory_.GetWeakPtr(), page_contents, primary_content_type,
+        page_count, bitmap));
+    return;
   }
 #endif  // BUILDFLAG(ENABLE_PDF)
 
@@ -480,8 +459,16 @@ void LensSearchContextualizationController::UpdatePageContextualizationPart3(
     viewport_screenshot_ = bitmap;
     sending_bitmap = true;
 
-    // Send the updated bitmap to the searchbox controller.
-    GetSearchboxController()->HandleThumbnailCreatedBitmap(bitmap);
+    // If the overlay is NOT showing/initializing, then the selections should be
+    // cleared so future contextual queries do not include it. The thumbnail
+    // will be updated by the query controller on region searches if needed.
+    if (!lens_search_controller_->lens_overlay_controller()
+             ->IsOverlayShowing() &&
+        !lens_search_controller_->lens_overlay_controller()
+             ->IsOverlayInitializing()) {
+      lens_search_controller_->lens_overlay_controller()->ClearAllSelections();
+      GetSearchboxController()->HandleThumbnailCreatedBitmap(bitmap);
+    }
   }
   last_retrieved_most_visible_page_ = most_visible_page;
 
@@ -576,40 +563,6 @@ void LensSearchContextualizationController::UpdatePageContextualizationPart3(
   std::move(on_page_context_updated_callback_).Run();
 }
 
-void LensSearchContextualizationController::MaybeGetInnerHtml(
-    std::vector<lens::PageContent> page_contents,
-    content::RenderFrameHost* render_frame_host,
-    PageContentRetrievedCallback callback) {
-  if (!lens::features::UseInnerHtmlAsContext()) {
-    MaybeGetInnerText(page_contents, render_frame_host, std::move(callback));
-    return;
-  }
-  content_extraction::GetInnerHtml(
-      *render_frame_host,
-      base::BindOnce(
-          &LensSearchContextualizationController::OnInnerHtmlReceived,
-          weak_ptr_factory_.GetWeakPtr(), page_contents, render_frame_host,
-          std::move(callback)));
-}
-
-void LensSearchContextualizationController::OnInnerHtmlReceived(
-    std::vector<lens::PageContent> page_contents,
-    content::RenderFrameHost* render_frame_host,
-    PageContentRetrievedCallback callback,
-    const std::optional<std::string>& result) {
-  const bool was_successful =
-      result.has_value() &&
-      result->size() <= lens::features::GetLensOverlayFileUploadLimitBytes();
-  // Add the innerHTML to the page contents if successful, or empty bytes if
-  // not.
-  page_contents.emplace_back(
-      /*bytes=*/was_successful
-          ? std::vector<uint8_t>(result->begin(), result->end())
-          : std::vector<uint8_t>{},
-      lens::MimeType::kHtml);
-  MaybeGetInnerText(page_contents, render_frame_host, std::move(callback));
-}
-
 void LensSearchContextualizationController::MaybeGetInnerText(
     std::vector<lens::PageContent> page_contents,
     content::RenderFrameHost* render_frame_host,
@@ -657,8 +610,7 @@ void LensSearchContextualizationController::MaybeGetAnnotatedPageContent(
     // plain text if that is the only content type enabled.
     // TODO(crbug.com/401614601): Set primary content type to kHtml in all
     // cases.
-    auto primary_content_type = lens::features::UseInnerTextAsContext() &&
-                                        !lens::features::UseInnerHtmlAsContext()
+    auto primary_content_type = lens::features::UseInnerTextAsContext()
                                     ? lens::MimeType::kPlainText
                                     : lens::MimeType::kHtml;
     std::move(callback).Run(page_contents, primary_content_type, std::nullopt);
@@ -682,6 +634,11 @@ void LensSearchContextualizationController::OnAnnotatedPageContentReceived(
     std::vector<lens::PageContent> page_contents,
     PageContentRetrievedCallback callback,
     std::optional<optimization_guide::AIPageContentResult> result) {
+  // The tab URL is used to check if the page is context eligible.
+  const auto& tab_url = lens_search_controller_->GetTabInterface()
+                            ->GetContents()
+                            ->GetLastCommittedURL();
+
   // Add the apc proto the page_contents if it exists.
   if (result) {
     // Convert the page metadata to a C struct defined in the optimization_guide
@@ -691,25 +648,42 @@ void LensSearchContextualizationController::OnAnnotatedPageContentReceived(
 
     // If the page is protected, do not send the latest page content to the
     // server.
-    const auto& tab_url = lens_search_controller_->GetTabInterface()
-                              ->GetContents()
-                              ->GetLastCommittedURL();
-    if (!IsPageContextEligible(
-            tab_url, std::move(frame_metadata_structs),
-            lens_search_controller_->page_context_eligibility())) {
-      is_page_context_eligible_ = false;
-      lens_search_controller_->lens_overlay_side_panel_coordinator()
-          ->SetShowProtectedErrorPage(true);
-      // Clear all previous page contents.
-      page_contents.clear();
-    } else {
-      std::string serialized_apc;
-      result->proto.SerializeToString(&serialized_apc);
-      page_contents.emplace_back(
-          std::vector<uint8_t>(serialized_apc.begin(), serialized_apc.end()),
-          lens::MimeType::kAnnotatedPageContent);
-    }
+    IsPageContextEligible(
+        tab_url, std::move(frame_metadata_structs),
+        base::BindOnce(&LensSearchContextualizationController::
+                           OnPageContextEligibilityFetched,
+                       weak_ptr_factory_.GetWeakPtr(), std::move(page_contents),
+                       std::move(callback), std::move(result)));
+    return;
   }
+
+  IsPageContextEligible(
+      tab_url, {},
+      base::BindOnce(&LensSearchContextualizationController::
+                         OnPageContextEligibilityFetched,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(page_contents),
+                     std::move(callback), std::nullopt));
+}
+
+void LensSearchContextualizationController::OnPageContextEligibilityFetched(
+    std::vector<lens::PageContent> page_contents,
+    PageContentRetrievedCallback callback,
+    std::optional<optimization_guide::AIPageContentResult> result,
+    bool is_page_context_eligible) {
+  if (!is_page_context_eligible) {
+    is_page_context_eligible_ = false;
+    lens_search_controller_->lens_overlay_side_panel_coordinator()
+        ->SetShowProtectedErrorPage(true);
+    // Clear all previous page contents.
+    page_contents.clear();
+  } else if (result) {
+    std::string serialized_apc;
+    result->proto.SerializeToString(&serialized_apc);
+    page_contents.emplace_back(
+        std::vector<uint8_t>(serialized_apc.begin(), serialized_apc.end()),
+        lens::MimeType::kAnnotatedPageContent);
+  }
+
   // Done fetching page contents.
   std::move(callback).Run(page_contents, lens::MimeType::kAnnotatedPageContent,
                           std::nullopt);
@@ -845,12 +819,105 @@ void LensSearchContextualizationController::DidCaptureScreenshot(
                             ->GetContents()
                             ->GetLastCommittedURL();
 
+  // Check if the page is context eligible. This should start the query flow
+  // after the eligibility is fetched.
+  IsPageContextEligible(
+      tab_url, {},
+      base::BindOnce(&LensSearchContextualizationController::
+                         OnInitialPageContextEligibilityFetched,
+                     weak_ptr_factory_.GetWeakPtr(), bitmap, bounds,
+                     pdf_current_page, std::move(callback)));
+}
+
+void LensSearchContextualizationController::IsPageContextEligible(
+    const GURL& main_frame_url,
+    std::vector<optimization_guide::FrameMetadata> frame_metadata,
+    LensSearchPageContextEligibilityCallback callback) {
+  if (!IsProtectedPageFeatureEnabled()) {
+    std::move(callback).Run(true);
+    return;
+  }
+
+  if (!page_context_eligibility_) {
+    // If the page context eligibility API failed to load, then the page should
+    // be marked as not eligible.
+    if (has_page_context_eligibility_api_loaded_) {
+      std::move(callback).Run(false);
+      return;
+    }
+
+    // If the page context eligibility API is not yet available, then wait for
+    // it to be loaded before checking eligibility by storing the callback and
+    // checking again once the API is loaded.
+    pending_context_eligibility_params_.emplace(main_frame_url,
+                                                std::move(frame_metadata));
+    page_context_eligibility_callback_ = std::move(callback);
+    return;
+  }
+
+  std::move(callback).Run(optimization_guide::IsPageContextEligible(
+      main_frame_url.host(), main_frame_url.path(), std::move(frame_metadata),
+      page_context_eligibility_));
+}
+
+void LensSearchContextualizationController::CreatePageContextEligibilityAPI() {
+  // Post to a background thread to avoid blocking the set up of the overlay.
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::TaskPriority::BEST_EFFORT, base::MayBlock()},
+      base::BindOnce(&optimization_guide::PageContextEligibility::Get),
+      base::BindOnce(&LensSearchContextualizationController::
+                         OnPageContextEligibilityAPILoaded,
+                     weak_ptr_factory_.GetWeakPtr()));
+}
+
+bool LensSearchContextualizationController::GetCurrentPageContextEligibility() {
+  if (!IsProtectedPageFeatureEnabled()) {
+    return true;
+  }
+
+  return is_page_context_eligible_ && has_page_context_eligibility_api_loaded_;
+}
+
+LensSearchContextualizationController::PageContextEligibilityParams::
+    PageContextEligibilityParams(
+        const GURL& main_frame_url,
+        std::vector<optimization_guide::FrameMetadata> frame_metadata)
+    : main_frame_url(main_frame_url),
+      frame_metadata(std::move(frame_metadata)) {}
+
+LensSearchContextualizationController::PageContextEligibilityParams::
+    ~PageContextEligibilityParams() = default;
+
+void LensSearchContextualizationController::OnPageContextEligibilityAPILoaded(
+    optimization_guide::PageContextEligibility* page_context_eligibility) {
+  page_context_eligibility_ = page_context_eligibility;
+  has_page_context_eligibility_api_loaded_ = true;
+  if (page_context_eligibility_callback_ &&
+      pending_context_eligibility_params_) {
+    std::move(page_context_eligibility_callback_)
+        .Run(optimization_guide::IsPageContextEligible(
+            pending_context_eligibility_params_->main_frame_url.host(),
+            pending_context_eligibility_params_->main_frame_url.path(),
+            std::move(pending_context_eligibility_params_->frame_metadata),
+            page_context_eligibility_));
+    pending_context_eligibility_params_.reset();
+  }
+}
+
+void LensSearchContextualizationController::
+    OnInitialPageContextEligibilityFetched(
+        const SkBitmap& bitmap,
+        const std::vector<gfx::Rect>& all_bounds,
+        std::optional<uint32_t> pdf_current_page,
+        OnPageContextUpdatedCallback callback,
+        bool is_page_context_eligible) {
   auto bitmap_to_send = bitmap;
   auto page_url = lens_search_controller_->GetPageURL();
   auto page_title = lens_search_controller_->GetPageTitle();
-  if (!IsPageContextEligible(
-          tab_url, {}, lens_search_controller_->page_context_eligibility())) {
+  if (!is_page_context_eligible) {
     is_page_context_eligible_ = false;
+    lens_search_controller_->lens_overlay_side_panel_coordinator()
+        ->SetShowProtectedErrorPage(true);
     bitmap_to_send = SkBitmap();
     page_url = GURL();
     page_title = "";
@@ -862,12 +929,12 @@ void LensSearchContextualizationController::DidCaptureScreenshot(
 
   GetQueryController()->StartQueryFlow(
       viewport_screenshot_, page_url_, page_title_,
-      ConvertSignificantRegionBoxes(bounds), std::vector<lens::PageContent>(),
-      lens::MimeType::kUnknown, pdf_current_page, GetUiScaleFactor(),
-      base::TimeTicks::Now());
+      ConvertSignificantRegionBoxes(all_bounds),
+      std::vector<lens::PageContent>(), lens::MimeType::kUnknown,
+      pdf_current_page, GetUiScaleFactor(), base::TimeTicks::Now());
 
   // Pass the thumbnail to the searchbox controller.
-  GetSearchboxController()->HandleThumbnailCreatedBitmap(bitmap);
+  GetSearchboxController()->HandleThumbnailCreatedBitmap(bitmap_to_send);
 
   state_ = State::kActive;
   TryUpdatePageContextualization(std::move(callback));
@@ -901,17 +968,15 @@ void LensSearchContextualizationController::GetPdfCurrentPage(
     OnPageContextUpdatedCallback callback,
     const std::vector<gfx::Rect>& bounds) {
 #if BUILDFLAG(ENABLE_PDF)
-  if (lens::features::SendPdfCurrentPageEnabled()) {
-    pdf::PDFDocumentHelper* pdf_helper =
-        pdf::PDFDocumentHelper::MaybeGetForWebContents(
-            lens_search_controller_->GetTabInterface()->GetContents());
-    if (pdf_helper) {
-      pdf_helper->GetMostVisiblePageIndex(base::BindOnce(
-          &LensSearchContextualizationController::DidCaptureScreenshot,
-          weak_ptr_factory_.GetWeakPtr(), std::move(chrome_render_frame),
-          attempt_id, bitmap, bounds, std::move(callback)));
-      return;
-    }
+  pdf::PDFDocumentHelper* pdf_helper =
+      pdf::PDFDocumentHelper::MaybeGetForWebContents(
+          lens_search_controller_->GetTabInterface()->GetContents());
+  if (pdf_helper) {
+    pdf_helper->GetMostVisiblePageIndex(base::BindOnce(
+        &LensSearchContextualizationController::DidCaptureScreenshot,
+        weak_ptr_factory_.GetWeakPtr(), std::move(chrome_render_frame),
+        attempt_id, bitmap, bounds, std::move(callback)));
+    return;
   }
 #endif  // BUILDFLAG(ENABLE_PDF)
 
@@ -927,14 +992,6 @@ void LensSearchContextualizationController::RecordInnerTextSize(
   }
   lens::RecordDocumentSizeBytes(lens::MimeType::kPlainText,
                                 result->inner_text.size());
-}
-
-void LensSearchContextualizationController::RecordInnerHtmlSize(
-    const std::optional<std::string>& result) {
-  if (!result) {
-    return;
-  }
-  lens::RecordDocumentSizeBytes(lens::MimeType::kHtml, result->size());
 }
 
 std::vector<lens::mojom::CenterRotatedBoxPtr>

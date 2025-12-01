@@ -33,6 +33,7 @@ $(FATE_PIXFMT): CMD = pixfmt_conversion
 $(FATE_PIXFMT): REF = $(SRC_PATH)/tests/ref/pixfmt/$(@:fate-pixfmt-%=%)
 $(FATE_PIXFMT): $(VREF)
 
+FATE_PIXFMT := $(if $(call DEMDEC, IMAGE2, PGMYUV RAWVIDEO, RAWVIDEO_DEMUXER RAWVIDEO_MUXER RAWVIDEO_ENCODER), $(FATE_PIXFMT))
 PIXFMT_16_LIST =        gray16le        \
                         gray16be        \
                         yuv420p16le     \
@@ -136,9 +137,9 @@ $(FATE_PIXFMT_EXT): REF = $(SRC_PATH)/tests/ref/pixfmt/$(@:fate-pixfmt-%=%)
 FATE_PIXFMT_16-YUV-$(call ALLYES, SCALE_FILTER YUVTESTSRC_FILTER LAVFI_INDEV) += $(PIXFMT_16_LIST)
 FATE_PIXFMT_16-RGB-$(call ALLYES, SCALE_FILTER RGBTESTSRC_FILTER LAVFI_INDEV) += $(PIXFMT_16_LIST)
 
-FATE_PIXFMT_16-YUV := $(FATE_PIXFMT_16-YUV-yes:%=fate-pixfmt-yuv444p16-%)
-FATE_PIXFMT_16-YUV := $(FATE_PIXFMT_16-RGB-yes:%=fate-pixfmt-p416-%)
-FATE_PIXFMT_16-RGB := $(FATE_PIXFMT_16-RGB-yes:%=fate-pixfmt-gbrp16-%)
+FATE_PIXFMT_16-YUV += $(FATE_PIXFMT_16-YUV-yes:%=fate-pixfmt-yuv444p16-%)
+FATE_PIXFMT_16-YUV += $(FATE_PIXFMT_16-YUV-yes:%=fate-pixfmt-p416-%)
+FATE_PIXFMT_16-RGB += $(FATE_PIXFMT_16-RGB-yes:%=fate-pixfmt-gbrp16-%)
 
 $(FATE_PIXFMT_16-YUV): CMD = pixfmt_conversion_ext "yuv" "le"
 $(FATE_PIXFMT_16-RGB): CMD = pixfmt_conversion_ext "rgb" "le"

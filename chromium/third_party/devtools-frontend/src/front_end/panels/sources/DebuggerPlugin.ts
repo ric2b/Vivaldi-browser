@@ -45,6 +45,7 @@ import * as Workspace from '../../models/workspace/workspace.js';
 import * as CodeMirror from '../../third_party/codemirror.next/codemirror.next.js';
 import * as Buttons from '../../ui/components/buttons/buttons.js';
 import * as TextEditor from '../../ui/components/text_editor/text_editor.js';
+import * as Tooltips from '../../ui/components/tooltips/tooltips.js';
 import * as ObjectUI from '../../ui/legacy/components/object_ui/object_ui.js';
 import * as SourceFrame from '../../ui/legacy/components/source_frame/source_frame.js';
 import * as UI from '../../ui/legacy/legacy.js';
@@ -52,7 +53,7 @@ import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
 
 import {AddDebugInfoURLDialog} from './AddSourceMapURLDialog.js';
 import {BreakpointEditDialog} from './BreakpointEditDialog.js';
-import * as SourceComponents from './components/components.js';
+import {BreakpointsSidebarController} from './BreakpointsView.js';
 import {Plugin} from './Plugin.js';
 import {SourcesPanel} from './SourcesPanel.js';
 
@@ -270,7 +271,7 @@ export class DebuggerPlugin extends Plugin {
         SDK.PageResourceLoader.Events.UPDATE, this.showSourceMapInfobarIfNeeded.bind(this), this);
 
     this.ignoreListCallback = this.showIgnoreListInfobarIfNeeded.bind(this);
-    Bindings.IgnoreListManager.IgnoreListManager.instance().addChangeListener(this.ignoreListCallback);
+    Workspace.IgnoreListManager.IgnoreListManager.instance().addChangeListener(this.ignoreListCallback);
 
     UI.Context.Context.instance().addFlavorChangeListener(SDK.DebuggerModel.CallFrame, this.callFrameChanged, this);
     this.liveLocationPool = new Bindings.LiveLocation.LiveLocationPool();
@@ -411,7 +412,7 @@ export class DebuggerPlugin extends Plugin {
       return;
     }
 
-    if (!Bindings.IgnoreListManager.IgnoreListManager.instance().isUserOrSourceMapIgnoreListedUISourceCode(
+    if (!Workspace.IgnoreListManager.IgnoreListManager.instance().isUserOrSourceMapIgnoreListedUISourceCode(
             uiSourceCode)) {
       this.hideIgnoreListInfobar();
       return;
@@ -422,7 +423,7 @@ export class DebuggerPlugin extends Plugin {
     }
 
     function unIgnoreList(): void {
-      Bindings.IgnoreListManager.IgnoreListManager.instance().unIgnoreListUISourceCode(uiSourceCode);
+      Workspace.IgnoreListManager.IgnoreListManager.instance().unIgnoreListUISourceCode(uiSourceCode);
     }
 
     const infobar = new UI.Infobar.Infobar(
@@ -586,7 +587,7 @@ export class DebuggerPlugin extends Plugin {
 
     if (this.uiSourceCode.project().type() === Workspace.Workspace.projectTypes.Network &&
         Common.Settings.Settings.instance().moduleSetting('js-source-maps-enabled').get() &&
-        !Bindings.IgnoreListManager.IgnoreListManager.instance().isUserIgnoreListedURL(this.uiSourceCode.url())) {
+        !Workspace.IgnoreListManager.IgnoreListManager.instance().isUserIgnoreListedURL(this.uiSourceCode.url())) {
       if (this.scriptFileForDebuggerModel.size) {
         const scriptFile: Bindings.ResourceScriptMapping.ResourceScriptFile =
             this.scriptFileForDebuggerModel.values().next().value as Bindings.ResourceScriptMapping.ResourceScriptFile;
@@ -893,12 +894,10 @@ export class DebuggerPlugin extends Plugin {
       dialog.detach();
       editor.dispatch({effects: compartment.reconfigure([])});
       if (!result.committed) {
-        SourceComponents.BreakpointsView.BreakpointsSidebarController.instance().breakpointEditFinished(
-            breakpoint, false);
+        BreakpointsSidebarController.instance().breakpointEditFinished(breakpoint, false);
         return;
       }
-      SourceComponents.BreakpointsView.BreakpointsSidebarController.instance().breakpointEditFinished(
-          breakpoint, oldCondition !== result.condition);
+      BreakpointsSidebarController.instance().breakpointEditFinished(breakpoint, oldCondition !== result.condition);
       if (breakpoint) {
         breakpoint.setCondition(result.condition, result.isLogpoint);
       } else if (location) {
@@ -1274,7 +1273,7 @@ export class DebuggerPlugin extends Plugin {
       } else if (main.condition()) {
         gutterClass += ' cm-breakpoint-conditional';
       }
-      gutterMarkers.push((new BreakpointGutterMarker(gutterClass, lineStart)).range(lineStart));
+      gutterMarkers.push((new BreakpointGutterMarker(gutterClass, lineStart, main.condition())).range(lineStart));
     }
 
     const addPossibleBreakpoints = (line: CodeMirror.Line, locations: Workspace.UISourceCode.UILocation[]): void => {
@@ -1740,7 +1739,7 @@ export class DebuggerPlugin extends Plugin {
     this.uiSourceCode.removeEventListener(
         Workspace.UISourceCode.Events.WorkingCopyCommitted, this.workingCopyCommitted, this);
 
-    Bindings.IgnoreListManager.IgnoreListManager.instance().removeChangeListener(this.ignoreListCallback);
+    Workspace.IgnoreListManager.IgnoreListManager.instance().removeChangeListener(this.ignoreListCallback);
 
     debuggerPluginForUISourceCode.delete(this.uiSourceCode);
     super.dispose();
@@ -1783,8 +1782,7 @@ export class BreakpointLocationRevealer implements
     if (debuggerPlugin) {
       debuggerPlugin.editBreakpointLocation(breakpointLocation);
     } else {
-      SourceComponents.BreakpointsView.BreakpointsSidebarController.instance().breakpointEditFinished(
-          breakpointLocation.breakpoint, false);
+      BreakpointsSidebarController.instance().breakpointEditFinished(breakpointLocation.breakpoint, false);
     }
   }
 }
@@ -1827,7 +1825,9 @@ function muteGutterMarkers(markers: CodeMirror.RangeSet<CodeMirror.GutterMarker>
     if (!/cm-breakpoint-disabled/.test(className)) {
       className += ' cm-breakpoint-disabled';
     }
-    newMarkers.push(new BreakpointGutterMarker(className, from).range(from));
+    newMarkers.push(new BreakpointGutterMarker(
+                        className, from, marker instanceof BreakpointGutterMarker ? marker.condition : undefined)
+                        .range(from));
   });
   return CodeMirror.RangeSet.of(newMarkers, false);
 }
@@ -1903,11 +1903,16 @@ class BreakpointInlineMarker extends CodeMirror.WidgetType {
 }
 
 class BreakpointGutterMarker extends CodeMirror.GutterMarker {
+  static nextTooltipId = 0;
   readonly #position: number;
+  readonly condition: Breakpoints.BreakpointManager.UserCondition|undefined;
 
-  constructor(override readonly elementClass: string, position: number) {
+  constructor(
+      override readonly elementClass: string, position: number,
+      condition?: Breakpoints.BreakpointManager.UserCondition) {
     super();
     this.#position = position;
+    this.condition = condition;
   }
 
   override eq(other: BreakpointGutterMarker): boolean {
@@ -1920,7 +1925,21 @@ class BreakpointGutterMarker extends CodeMirror.GutterMarker {
     const line = view.state.doc.lineAt(this.#position).number;
     const formatNumber = view.state.facet(SourceFrame.SourceFrame.LINE_NUMBER_FORMATTER);
     div.textContent = formatNumber(line, view.state);
-    return div;
+    if (!this.condition) {
+      return div;
+    }
+    const container = document.createElement('div');
+    const id = `cm-breakpoint-tooltip-${BreakpointGutterMarker.nextTooltipId++}`;
+    div.setAttribute('aria-details', id);
+    container.appendChild(div);
+    const tooltip = new Tooltips.Tooltip.Tooltip({
+      id,
+      anchor: div,
+      jslogContext: 'breakpoint-tooltip',
+    });
+    tooltip.append(this.condition);
+    container.appendChild(tooltip);
+    return container;
   }
 }
 

@@ -22,8 +22,9 @@
 #include "base/trace_event/memory_usage_estimator.h"
 #include "build/build_config.h"
 #include "components/history/core/browser/url_database.h"
+#include "components/omnibox/browser/aim_eligibility_service.h"
 #include "components/omnibox/browser/autocomplete_provider.h"
-#include "components/omnibox/browser/autocomplete_result.h"
+#include "components/omnibox/browser/autocomplete_provider_client.h"
 #include "components/omnibox/browser/page_classification_functions.h"
 #include "components/omnibox/browser/url_index_private_data.h"
 #include "components/omnibox/common/omnibox_features.h"
@@ -33,7 +34,10 @@
 #include "components/variations/hashing.h"
 #include "components/variations/variations_associated_data.h"
 #include "third_party/metrics_proto/omnibox_event.pb.h"
+#include "ui/base/device_form_factor.h"
 #include "ui/base/ui_base_features.h"
+
+#include "components/omnibox/browser/autocomplete_result.h"
 
 using metrics::OmniboxEventProto;
 
@@ -96,72 +100,6 @@ void InitializeScoreBuckets(const VariationParams& params,
     // {DecayedCount/DecayedFactor + ":" + MaxRelevance}.
     InitializeBucketsFromString(it->second, score_buckets);
   }
-}
-
-// Background and implementation details:
-//
-// Each experiment group in any field trial can come with an optional set of
-// parameters (key-value pairs).  In the bundled omnibox experiment
-// (kBundledExperimentFieldTrialName), each experiment group comes with a
-// list of parameters in the form:
-//   key=<Rule>:
-//       <OmniboxEventProto::PageClassification (as an int)>:
-//       <whether Instant Extended is enabled (as a 1 or 0)>
-//     (note that there are no linebreaks in keys; this format is for
-//      presentation only>
-//   value=<arbitrary string>
-// Both the OmniboxEventProto::PageClassification and the Instant Extended
-// entries can be "*", which means this rule applies for all values of the
-// matching portion of the context.
-// One example parameter is
-//   key=SearchHistory:6:1
-//   value=PreventInlining
-// This means in page classification context 6 (a search result page doing
-// search term replacement) with Instant Extended enabled, the SearchHistory
-// experiment should PreventInlining.
-//
-// When an exact match to the rule in the current context is missing, we
-// give preference to a wildcard rule that matches the instant extended
-// context over a wildcard rule that matches the page classification
-// context.  Hopefully, though, users will write their field trial configs
-// so as not to rely on this fall back order.
-//
-// In short, this function tries to find the value associated with key
-// |rule|:|page_classification|:|instant_extended|, failing that it looks up
-// |rule|:*:|instant_extended|, failing that it looks up
-// |rule|:|page_classification|:*, failing that it looks up |rule|:*:*,
-// and failing that it returns the empty string.
-std::string GetValueForRuleInContextFromVariationParams(
-    const std::map<std::string, std::string>& params,
-    const std::string& rule,
-    OmniboxEventProto::PageClassification page_classification) {
-  if (params.empty()) {
-    return std::string();
-  }
-
-  const std::string page_classification_str =
-      base::NumberToString(static_cast<int>(page_classification));
-  const std::string instant_extended =
-      search::IsInstantExtendedAPIEnabled() ? "1" : "0";
-  // Look up rule in this exact context.
-  VariationParams::const_iterator it = params.find(
-      rule + ":" + page_classification_str + ":" + instant_extended);
-  if (it != params.end()) {
-    return it->second;
-  }
-  // Fall back to the global page classification context.
-  it = params.find(rule + ":*:" + instant_extended);
-  if (it != params.end()) {
-    return it->second;
-  }
-  // Fall back to the global instant extended context.
-  it = params.find(rule + ":" + page_classification_str + ":*");
-  if (it != params.end()) {
-    return it->second;
-  }
-  // Look up rule in the global context.
-  it = params.find(rule + ":*:*");
-  return (it != params.end()) ? it->second : std::string();
 }
 
 OmniboxFieldTrial::MLConfig& GetMLConfigInternal() {
@@ -231,68 +169,6 @@ void OmniboxFieldTrial::GetActiveSuggestFieldTrialHashes(
   if (base::FieldTrialList::TrialExists(kBundledExperimentFieldTrialName)) {
     field_trial_hashes->push_back(
         variations::HashName(kBundledExperimentFieldTrialName));
-  }
-}
-
-void OmniboxFieldTrial::GetDemotionsByType(
-    OmniboxEventProto::PageClassification current_page_classification,
-    DemotionMultipliers* demotions_by_type) {
-  demotions_by_type->clear();
-
-  // Explicitly check whether the feature is enabled before calling
-  // |GetValueForRuleInContextByFeature| because it is possible for
-  // |GetValueForRuleInContextByFeature| to return an empty string even if the
-  // feature is enabled, and we don't want to fallback to
-  // |GetValueForRuleInContext| in this case.
-  std::string demotion_rule =
-      base::FeatureList::IsEnabled(omnibox::kOmniboxDemoteByType)
-          ? OmniboxFieldTrial::internal::GetValueForRuleInContextByFeature(
-                omnibox::kOmniboxDemoteByType, kDemoteByTypeRule,
-                current_page_classification)
-          : OmniboxFieldTrial::internal::GetValueForRuleInContext(
-                kDemoteByTypeRule, current_page_classification);
-  // If there is no demotion rule for this context, then use the default
-  // value for that context.
-  if (demotion_rule.empty()) {
-    // This rule demotes URLs as strongly as possible without violating user
-    // expectations.  In particular, for URL-seeking inputs, if the user would
-    // likely expect a URL first (i.e., it would be inline autocompleted), then
-    // that URL will still score strongly enough to be first.  This is done
-    // using a demotion multipler of 0.61.  If a URL would get a score high
-    // enough to be inline autocompleted (1400+), even after demotion it will
-    // score above 850 ( 1400 * 0.61 > 850).  850 is the maximum score for
-    // queries when the input has been detected as URL-seeking.
-#if BUILDFLAG(IS_ANDROID)
-    if (current_page_classification ==
-        OmniboxEventProto::SEARCH_RESULT_PAGE_NO_SEARCH_TERM_REPLACEMENT) {
-      demotion_rule = "1:61,2:61,3:61,4:61,16:61,24:61";
-    }
-#endif
-    omnibox::CheckObsoletePageClass(current_page_classification);
-
-    if (current_page_classification == OmniboxEventProto::NTP_REALBOX) {
-      demotion_rule = "1:10,2:10,3:10,4:10,5:10,16:10,17:10,24:10,33:0";
-    }
-  }
-
-  // The value of the DemoteByType rule is a comma-separated list of
-  // {ResultType + ":" + Number} where ResultType is an AutocompleteMatchType::
-  // Type enum represented as an integer and Number is an integer number
-  // between 0 and 100 inclusive.   Relevance scores of matches of that result
-  // type are multiplied by Number / 100.  100 means no change.
-  base::StringPairs kv_pairs;
-  if (base::SplitStringIntoKeyValuePairs(demotion_rule, ':', ',', &kv_pairs)) {
-    for (base::StringPairs::const_iterator it = kv_pairs.begin();
-         it != kv_pairs.end(); ++it) {
-      // This is a best-effort conversion; we trust the hand-crafted parameters
-      // downloaded from the server to be perfect.  There's no need to handle
-      // errors smartly.
-      int k, v;
-      base::StringToInt(it->first, &k);
-      base::StringToInt(it->second, &v);
-      (*demotions_by_type)[static_cast<AutocompleteMatchType::Type>(k)] =
-          static_cast<float>(v) / 100.0f;
-    }
   }
 }
 
@@ -615,8 +491,7 @@ bool OmniboxFieldTrial::ShouldApplyOnDeviceHeadModelSelectionFix() {
 
 bool OmniboxFieldTrial::IsOnDeviceHeadSuggestEnabledForLocale(
     const std::string& locale) {
-  if (IsKoreanLocale(locale) &&
-      !base::FeatureList::IsEnabled(omnibox::kOnDeviceHeadProviderKorean)) {
+  if (IsKoreanLocale(locale)) {
     return false;
   }
   return IsOnDeviceHeadSuggestEnabledForAnyMode();
@@ -638,7 +513,6 @@ std::string OmniboxFieldTrial::OnDeviceHeadModelLocaleConstraint(
 const char OmniboxFieldTrial::kBundledExperimentFieldTrialName[] =
     "OmniboxBundledExperimentV1";
 const char OmniboxFieldTrial::kDisableProvidersRule[] = "DisableProviders";
-const char OmniboxFieldTrial::kDemoteByTypeRule[] = "DemoteByType";
 const char OmniboxFieldTrial::kHQPBookmarkValueRule[] = "HQPBookmarkValue";
 const char OmniboxFieldTrial::kHQPTypedValueRule[] = "HQPTypedValue";
 const char OmniboxFieldTrial::kHQPAllowMatchInTLDRule[] = "HQPAllowMatchInTLD";
@@ -795,6 +669,72 @@ bool IsHideSuggestionGroupHeadersEnabledInContext(
   }
 }
 
+bool IsDeterministicAimActionInTypedStateEnabled(AutocompleteProviderClient* client) {
+  ui::DeviceFormFactor factor = ui::GetDeviceFormFactor();
+  if (!(factor == ui::DEVICE_FORM_FACTOR_PHONE || factor == ui::DEVICE_FORM_FACTOR_FOLDABLE)) {
+    return false;
+  }
+
+  // If the feature is overridden to be false, return false.
+  auto* feature_list = base::FeatureList::GetInstance();
+  if (feature_list &&
+      feature_list->IsFeatureOverridden(omnibox::kOmniboxAimShortcutTypedState.name) &&
+      !base::FeatureList::IsEnabled(omnibox::kOmniboxAimShortcutTypedState)) {
+    return false;
+  }
+
+  const auto* aim_eligibility_service = client->GetAimEligibilityService();
+  if (!aim_eligibility_service) {
+    return false;
+  }
+
+  // If the server eligibility is enabled, check overall eligibility alone.
+  // The service will control locale rollout so there's no need to check the
+  // state of omnibox::kOmniboxAimShortcutTypedState below.
+  if (aim_eligibility_service->IsServerEligibilityEnabled()) {
+    return aim_eligibility_service->IsAimEligible();
+  }
+
+  // If not locally eligible, return false.
+  if (!aim_eligibility_service->IsAimLocallyEligible()) {
+    return false;
+  }
+
+  // Otherwise, check the feature state.
+  return base::FeatureList::IsEnabled(omnibox::kOmniboxAimShortcutTypedState);
+}
+
+bool IsAimOmniboxEntrypointEnabled(
+    const AimEligibilityService* aim_eligibility_service) {
+  // If the generic entrypoint feature is overridden to be false, return false.
+  auto* feature_list = base::FeatureList::GetInstance();
+  if (feature_list &&
+      feature_list->IsFeatureOverridden(
+          omnibox::kAiModeOmniboxEntryPoint.name) &&
+      !base::FeatureList::IsEnabled(omnibox::kAiModeOmniboxEntryPoint)) {
+    return false;
+  }
+
+  if (!aim_eligibility_service) {
+    return false;
+  }
+
+  // If the server eligibility is enabled, check overall eligibility alone.
+  // The service will control locale rollout so there's no need to check locale
+  // or the state of kAiModeOmniboxEntryPoint below.
+  if (aim_eligibility_service->IsServerEligibilityEnabled()) {
+    return aim_eligibility_service->IsAimEligible();
+  }
+
+  // If not locally eligible, return false.
+  if (!aim_eligibility_service->IsAimLocallyEligible()) {
+    return false;
+  }
+
+  // Otherwise, check the generic entrypoint feature.
+  return base::FeatureList::IsEnabled(omnibox::kAiModeOmniboxEntryPoint);
+}
+
 // Rich autocompletion.
 
 bool IsRichAutocompletionEnabled() {
@@ -811,56 +751,6 @@ const base::FeatureParam<size_t>
         &omnibox::kRichAutocompletion,
         "RichAutocompletionAutocompleteShortcutTextMinChar",
         3);
-
-const base::FeatureParam<bool> kDomainSuggestionsCounterfactual(
-    &omnibox::kDomainSuggestions,
-    "DomainSuggestionsCounterfactual",
-    false);
-
-const base::FeatureParam<int> kDomainSuggestionsTypedUrlsThreshold(
-    &omnibox::kDomainSuggestions,
-    "DomainSuggestionsTypedUrlsThreshold",
-    7);
-
-const base::FeatureParam<int> kDomainSuggestionsTypedUrlsOffset(
-    &omnibox::kDomainSuggestions,
-    "DomainSuggestionsTypedUrlsOffset",
-    1);
-
-const base::FeatureParam<int> kDomainSuggestionsTypedVisitThreshold(
-    &omnibox::kDomainSuggestions,
-    "DomainSuggestionsTypedVisitThreshold",
-    4);
-
-const base::FeatureParam<int> kDomainSuggestionsTypedVisitOffset(
-    &omnibox::kDomainSuggestions,
-    "DomainSuggestionsTypedVisitOffset",
-    1);
-
-const base::FeatureParam<int> kDomainSuggestionsTypedVisitCapPerVisit(
-    &omnibox::kDomainSuggestions,
-    "DomainSuggestionsTypedVisitCapPerVisit",
-    2);
-
-const base::FeatureParam<int> kDomainSuggestionsMinInputLength(
-    &omnibox::kDomainSuggestions,
-    "DomainSuggestionsMinInputLength",
-    4);
-
-const base::FeatureParam<int> kDomainSuggestionsMaxMatchesPerDomain(
-    &omnibox::kDomainSuggestions,
-    "DomainSuggestionsMaxMatchesPerDomain",
-    2);
-
-const base::FeatureParam<double> kDomainSuggestionsScoreFactor(
-    &omnibox::kDomainSuggestions,
-    "DomainSuggestionsScoreFactor",
-    1);
-
-const base::FeatureParam<bool> kDomainSuggestionsAlternativeScoring(
-    &omnibox::kDomainSuggestions,
-    "DomainSuggestionsAlternativeScoring",
-    false);
 
 // ---------------------------------------------------------
 // ML Relevance Scoring ->
@@ -1120,28 +1010,3 @@ bool IsStarterPackIPHEnabled() {
 
 // <- Site Search Starter Pack
 }  // namespace OmniboxFieldTrial
-
-std::string OmniboxFieldTrial::internal::GetValueForRuleInContext(
-    const std::string& rule,
-    OmniboxEventProto::PageClassification page_classification) {
-  VariationParams params;
-  if (!base::GetFieldTrialParams(kBundledExperimentFieldTrialName, &params)) {
-    return std::string();
-  }
-
-  return GetValueForRuleInContextFromVariationParams(params, rule,
-                                                     page_classification);
-}
-
-std::string OmniboxFieldTrial::internal::GetValueForRuleInContextByFeature(
-    const base::Feature& feature,
-    const std::string& rule,
-    metrics::OmniboxEventProto::PageClassification page_classification) {
-  VariationParams params;
-  if (!base::GetFieldTrialParamsByFeature(feature, &params)) {
-    return std::string();
-  }
-
-  return GetValueForRuleInContextFromVariationParams(params, rule,
-                                                     page_classification);
-}

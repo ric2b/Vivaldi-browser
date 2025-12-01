@@ -22,10 +22,10 @@ class CPDF_StructElement;
 class CPDF_StructTree {
  public:
   static std::unique_ptr<CPDF_StructTree> LoadPage(
-      const CPDF_Document* pDoc,
+      const CPDF_Document* doc,
       RetainPtr<const CPDF_Dictionary> pPageDict);
 
-  explicit CPDF_StructTree(const CPDF_Document* pDoc);
+  explicit CPDF_StructTree(const CPDF_Document* doc);
   ~CPDF_StructTree();
 
   size_t CountTopElements() const { return kids_.size(); }
@@ -40,10 +40,10 @@ class CPDF_StructTree {
 
   void LoadPageTree(RetainPtr<const CPDF_Dictionary> pPageDict);
   RetainPtr<CPDF_StructElement> AddPageNode(
-      RetainPtr<const CPDF_Dictionary> pDict,
+      RetainPtr<const CPDF_Dictionary> dict,
       StructElementMap* map,
       int nLevel);
-  bool AddTopLevelNode(const CPDF_Dictionary* pDict,
+  bool AddTopLevelNode(const CPDF_Dictionary* dict,
                        const RetainPtr<CPDF_StructElement>& pElement);
 
   RetainPtr<const CPDF_Dictionary> const tree_root_;

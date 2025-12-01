@@ -210,11 +210,15 @@ MaybeError Device::Initialize(const UnpackedPtr<DeviceDescriptor>& descriptor) {
         DAWN_GL_TRY(gl, GetIntegerv(GL_MAX_TEXTURE_MAX_ANISOTROPY, &mMaxTextureMaxAnisotropy));
     }
 
-    DAWN_TRY(DeviceBase::Initialize(std::move(queue)));
+    DAWN_TRY(DeviceBase::Initialize(descriptor, std::move(queue)));
 
     // Create internal buffers needed for workarounds.
     if (mTextureBuiltinsBuffer.Get() == nullptr) {
         BufferDescriptor desc = {};
+        // The uniform buffer will contain an array of vec4u so make sure that it contains the last
+        // possible vec4u entirely by rounding the size to 4 u32s. Check that the constant is indeed
+        // a multiple of 4.
+        static_assert(kGLMaxTextureImageUnitsReported % 4 == 0);
         desc.size = kGLMaxTextureImageUnitsReported * sizeof(uint32_t);
         desc.usage = wgpu::BufferUsage::Uniform | wgpu::BufferUsage::CopyDst;
         Ref<BufferBase> buffer;
@@ -282,10 +286,8 @@ ResultOrError<Ref<SamplerBase>> Device::CreateSamplerImpl(const SamplerDescripto
 ResultOrError<Ref<ShaderModuleBase>> Device::CreateShaderModuleImpl(
     const UnpackedPtr<ShaderModuleDescriptor>& descriptor,
     const std::vector<tint::wgsl::Extension>& internalExtensions,
-    ShaderModuleParseResult* parseResult,
-    std::unique_ptr<OwnedCompilationMessages>* compilationMessages) {
-    return ShaderModule::Create(this, descriptor, internalExtensions, parseResult,
-                                compilationMessages);
+    ShaderModuleParseResult* parseResult) {
+    return ShaderModule::Create(this, descriptor, internalExtensions, parseResult);
 }
 ResultOrError<Ref<SwapChainBase>> Device::CreateSwapChainImpl(Surface* surface,
                                                               SwapChainBase* previousSwapChain,
@@ -470,11 +472,11 @@ MaybeError Device::TickImpl() {
     return {};
 }
 
-MaybeError Device::CopyFromStagingToBufferImpl(BufferBase* source,
-                                               uint64_t sourceOffset,
-                                               BufferBase* destination,
-                                               uint64_t destinationOffset,
-                                               uint64_t size) {
+MaybeError Device::CopyFromStagingToBuffer(BufferBase* source,
+                                           uint64_t sourceOffset,
+                                           BufferBase* destination,
+                                           uint64_t destinationOffset,
+                                           uint64_t size) {
     return DAWN_UNIMPLEMENTED_ERROR("Device unable to copy from staging buffer.");
 }
 

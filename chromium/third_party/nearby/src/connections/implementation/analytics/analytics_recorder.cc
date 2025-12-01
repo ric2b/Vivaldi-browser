@@ -45,7 +45,7 @@ namespace analytics {
 
 namespace {
 // const char kVersion_1_0_0[] = "v1.0.0";
-const char kVersion [] = "v1.5.0";
+const char kVersion[] = "v1.5.0";
 constexpr absl::string_view kOnStartClientSession = "OnStartClientSession";
 const absl::Duration kConnectionTokenMaxLife = absl::Hours(24);
 
@@ -164,8 +164,7 @@ OperationResultCategory ConvertToOperationResultCategory(
 
 AnalyticsRecorder::AnalyticsRecorder(EventLogger *event_logger)
     : event_logger_(event_logger) {
-  NEARBY_LOGS(INFO) << "Start AnalyticsRecorder ctor event_logger_="
-                    << event_logger_;
+  LOG(INFO) << "Start AnalyticsRecorder ctor event_logger_=" << event_logger_;
   LogStartSession();
 }
 
@@ -173,13 +172,11 @@ AnalyticsRecorder::AnalyticsRecorder(EventLogger *event_logger,
                                      bool no_record_time_millis)
     : event_logger_(event_logger),
       no_record_time_millis_(no_record_time_millis) {
-  NEARBY_LOGS(INFO) << "Start AnalyticsRecorder ctor event_logger_="
-                    << event_logger_;
+  LOG(INFO) << "Start AnalyticsRecorder ctor event_logger_=" << event_logger_;
   LogStartSession();
 }
 
-AnalyticsRecorder::~AnalyticsRecorder() {
-}
+AnalyticsRecorder::~AnalyticsRecorder() = default;
 
 bool AnalyticsRecorder::IsSessionLogged() {
   MutexLock lock(&mutex_);
@@ -205,8 +202,8 @@ void AnalyticsRecorder::OnStartAdvertising(
     return;
   }
   if (!strategy.IsValid()) {
-    NEARBY_LOGS(INFO) << "AnalyticsRecorder OnStartAdvertising with unknown "
-                         "strategy, bail out.";
+    LOG(INFO) << "AnalyticsRecorder OnStartAdvertising with unknown "
+                 "strategy, bail out.";
     return;
   }
   // Initialize/update a StrategySession.
@@ -267,8 +264,8 @@ void AnalyticsRecorder::OnStartDiscovery(
     return;
   }
   if (!strategy.IsValid()) {
-    NEARBY_LOGS(INFO) << "AnalyticsRecorder OnStartDiscovery unknown "
-                         "strategy enter, bail out.";
+    LOG(INFO) << "AnalyticsRecorder OnStartDiscovery unknown "
+                 "strategy enter, bail out.";
     return;
   }
 
@@ -346,8 +343,8 @@ void AnalyticsRecorder::OnEndpointFound(Medium medium) {
     return;
   }
   if (current_discovery_phase_ == nullptr) {
-    NEARBY_LOGS(INFO) << "Unable to record discovered endpoint due to null "
-                         "current_discovery_phase_";
+    LOG(INFO) << "Unable to record discovered endpoint due to null "
+                 "current_discovery_phase_";
     return;
   }
   ConnectionsLog::DiscoveredEndpoint *discovered_endpoint =
@@ -453,8 +450,8 @@ void AnalyticsRecorder::OnIncomingConnectionAttempt(
     return;
   }
   if (current_strategy_session_ == nullptr) {
-    NEARBY_LOGS(INFO) << "Unable to record incoming connection attempt due to "
-                         "null current_strategy_session_";
+    LOG(INFO) << "Unable to record incoming connection attempt due to "
+                 "null current_strategy_session_";
     return;
   }
 
@@ -532,8 +529,8 @@ void AnalyticsRecorder::OnOutgoingConnectionAttempt(
     return;
   }
   if (current_strategy_session_ == nullptr) {
-    NEARBY_LOGS(INFO) << "Unable to record outgoing connection attempt due to "
-                         "null current_strategy_session_";
+    LOG(INFO) << "Unable to record outgoing connection attempt due to "
+                 "null current_strategy_session_";
     return;
   }
 
@@ -648,20 +645,19 @@ void AnalyticsRecorder::OnConnectionClosed(const std::string &endpoint_id,
                                            DisconnectionReason reason,
                                            SafeDisconnectionResult result) {
   MutexLock lock(&mutex_);
-  NEARBY_LOGS(INFO) << __func__
-                    << ": OnConnectionClosed is called with endpoint_id:"
-                    << endpoint_id << ", medium:" << Medium_Name(medium)
-                    << ", reason:" << DisconnectionReason_Name(reason)
-                    << ", result:" << result;
+  LOG(INFO) << __func__
+            << ": OnConnectionClosed is called with endpoint_id:" << endpoint_id
+            << ", medium:" << Medium_Name(medium)
+            << ", reason:" << DisconnectionReason_Name(reason)
+            << ", result:" << result;
 
   if (!CanRecordAnalyticsLocked("OnConnectionClosed")) {
     return;
   }
 
   if (current_strategy_session_ == nullptr) {
-    NEARBY_VLOG(1) << "AnalyticsRecorder CanRecordAnalytics Unexpected call "
-                   << __func__
-                   << " since current_strategy_session_ is required.";
+    VLOG(1) << "AnalyticsRecorder CanRecordAnalytics Unexpected call "
+            << __func__ << " since current_strategy_session_ is required.";
     return;
   }
 
@@ -886,8 +882,8 @@ void AnalyticsRecorder::OnErrorCode(const ErrorCodeParams &params) {
   connections_log.set_version(kVersion);
   connections_log.set_allocated_error_code(error_code.release());
 
-  NEARBY_VLOG(1) << "AnalyticsRecorder LogErrorCode connections_log="
-                 << connections_log.DebugString();  // NOLINT
+  VLOG(1) << "AnalyticsRecorder LogErrorCode connections_log="
+          << connections_log.DebugString();  // NOLINT
 
   event_logger_->Log(connections_log);
 }
@@ -895,10 +891,9 @@ void AnalyticsRecorder::OnErrorCode(const ErrorCodeParams &params) {
 void AnalyticsRecorder::LogStartSession() {
   MutexLock lock(&mutex_);
   if (start_client_session_was_logged_) {
-    NEARBY_LOGS(WARNING)
-        << "AnalyticsRecorder CanRecordAnalytics Unexpected call "
-        << kOnStartClientSession
-        << " after start client session has already been logged.";
+    LOG(WARNING) << "AnalyticsRecorder CanRecordAnalytics Unexpected call "
+                 << kOnStartClientSession
+                 << " after start client session has already been logged.";
     return;
   }
 
@@ -1011,15 +1006,14 @@ OperationResultCode AnalyticsRecorder::GetChannelIoErrorResultCodeFromMedium(
 
 bool AnalyticsRecorder::CanRecordAnalyticsLocked(
     absl::string_view method_name) {
-  NEARBY_VLOG(1) << "AnalyticsRecorder LogEvent " << method_name
-                 << " is calling.";
+  VLOG(1) << "AnalyticsRecorder LogEvent " << method_name << " is calling.";
   if (event_logger_ == nullptr) {
     return false;
   }
 
   if (session_was_logged_) {
-    NEARBY_VLOG(1) << "AnalyticsRecorder CanRecordAnalytics Unexpected call "
-                   << method_name << " after session has already been logged.";
+    VLOG(1) << "AnalyticsRecorder CanRecordAnalytics Unexpected call "
+            << method_name << " after session has already been logged.";
     return false;
   }
 
@@ -1035,8 +1029,8 @@ void AnalyticsRecorder::LogClientSessionLocked() {
   connections_log.set_allocated_client_session(client_session_.release());
   connections_log.set_version(kVersion);
 
-  NEARBY_VLOG(1) << "AnalyticsRecorder LogClientSession connections_log="
-                 << connections_log.DebugString();  // NOLINT
+  VLOG(1) << "AnalyticsRecorder LogClientSession connections_log="
+          << connections_log.DebugString();  // NOLINT
 
   event_logger_->Log(connections_log);
   client_session_ = nullptr;
@@ -1047,8 +1041,8 @@ void AnalyticsRecorder::LogEvent(EventType event_type) {
   connections_log.set_event_type(event_type);
   connections_log.set_version(kVersion);
 
-  NEARBY_VLOG(1) << "AnalyticsRecorder LogEvent connections_log="
-                 << connections_log.DebugString();  // NOLINT
+  VLOG(1) << "AnalyticsRecorder LogEvent connections_log="
+          << connections_log.DebugString();  // NOLINT
 
   event_logger_->Log(connections_log);
 }
@@ -1091,8 +1085,8 @@ void AnalyticsRecorder::UpdateStrategySessionLocked(
 void AnalyticsRecorder::RecordAdvertisingPhaseDurationAndReasonLocked(
     bool on_stop) const {
   if (current_advertising_phase_ == nullptr) {
-    NEARBY_LOGS(INFO) << "Unable to record advertising phase duration due to "
-                         "null current_advertising_phase_";
+    LOG(INFO) << "Unable to record advertising phase duration due to "
+                 "null current_advertising_phase_";
     return;
   }
   if (!current_advertising_phase_->has_duration_millis() &&
@@ -1122,8 +1116,8 @@ void AnalyticsRecorder::FinishAdvertisingPhaseLocked() {
       *current_strategy_session_->add_advertising_phase() =
           *std::move(current_advertising_phase_);
     } else {
-      NEARBY_LOGS(INFO) << "Unable to record advertising phase due to null "
-                           "current_strategy_session_";
+      LOG(INFO) << "Unable to record advertising phase due to null "
+                   "current_strategy_session_";
     }
   }
   incoming_connection_requests_.clear();
@@ -1132,8 +1126,8 @@ void AnalyticsRecorder::FinishAdvertisingPhaseLocked() {
 void AnalyticsRecorder::RecordDiscoveryPhaseDurationAndReasonLocked(
     bool on_stop) const {
   if (current_discovery_phase_ == nullptr) {
-    NEARBY_LOGS(INFO) << "Unable to record discovery phase duration due to "
-                         "null current_discovery_phase_";
+    LOG(INFO) << "Unable to record discovery phase duration due to "
+                 "null current_discovery_phase_";
     return;
   }
   if (!current_discovery_phase_->has_duration_millis() &&
@@ -1164,8 +1158,8 @@ void AnalyticsRecorder::FinishDiscoveryPhaseLocked() {
       *current_strategy_session_->add_discovery_phase() =
           *std::move(current_discovery_phase_);
     } else {
-      NEARBY_LOGS(INFO) << "Unable to record discovery phase due to null "
-                           "current_strategy_session_";
+      LOG(INFO) << "Unable to record discovery phase due to null "
+                   "current_strategy_session_";
     }
   }
   outgoing_connection_requests_.clear();
@@ -1174,9 +1168,8 @@ void AnalyticsRecorder::FinishDiscoveryPhaseLocked() {
 bool AnalyticsRecorder::UpdateAdvertiserConnectionRequestLocked(
     ConnectionsLog::ConnectionRequest *request) {
   if (current_advertising_phase_ == nullptr) {
-    NEARBY_LOGS(INFO)
-        << "Unable to record advertiser connection request due to null "
-           "current_advertising_phase_";
+    LOG(INFO) << "Unable to record advertiser connection request due to null "
+                 "current_advertising_phase_";
     return false;
   }
   if (BothEndpointsRespondedLocked(request)) {
@@ -1194,8 +1187,8 @@ bool AnalyticsRecorder::UpdateAdvertiserConnectionRequestLocked(
 bool AnalyticsRecorder::UpdateDiscovererConnectionRequestLocked(
     ConnectionsLog::ConnectionRequest *request) {
   if (current_discovery_phase_ == nullptr) {
-    NEARBY_LOGS(INFO) << "Unable to record discoverer connection request due "
-                         "to null current_discovery_phase_.";
+    LOG(INFO) << "Unable to record discoverer connection request due "
+                 "to null current_discovery_phase_.";
     return false;
   }
   if (BothEndpointsRespondedLocked(request) ||
@@ -1323,8 +1316,8 @@ void AnalyticsRecorder::FinishUpgradeAttemptLocked(
     BandwidthUpgradeErrorStage error_stage,
     OperationResultCode operation_result_code, bool erase_item) {
   if (current_strategy_session_ == nullptr) {
-    NEARBY_LOGS(INFO) << "Unable to record upgrade attempt due to null "
-                         "current_strategy_session_";
+    LOG(INFO) << "Unable to record upgrade attempt due to null "
+                 "current_strategy_session_";
     return;
   }
   // Add the BandwidthUpgradeAttempt in the current StrategySession.
@@ -1455,9 +1448,8 @@ ConnectionsLog::Payload AnalyticsRecorder::PendingPayload::GetProtoPayload(
 void AnalyticsRecorder::LogicalConnection::PhysicalConnectionEstablished(
     Medium medium, const std::string &connection_token) {
   if (current_medium_ != UNKNOWN_MEDIUM) {
-    NEARBY_LOGS(WARNING)
-        << "Unexpected call to PhysicalConnectionEstablished while "
-           "AnalyticsRecorder still has an active current medium.";
+    LOG(WARNING) << "Unexpected call to PhysicalConnectionEstablished while "
+                    "AnalyticsRecorder still has an active current medium.";
   }
 
   auto established_connection =
@@ -1483,20 +1475,19 @@ void AnalyticsRecorder::LogicalConnection::PhysicalConnectionEstablished(
 void AnalyticsRecorder::LogicalConnection::PhysicalConnectionClosed(
     Medium medium, DisconnectionReason reason, SafeDisconnectionResult result) {
   if (current_medium_ == UNKNOWN_MEDIUM) {
-    NEARBY_LOGS(WARNING)
-        << "Unexpected call to PhysicalConnectionClosed() for medium  "
-        << Medium_Name(medium)
-        << " while AnalyticsRecorder has no active current medium";
+    LOG(WARNING) << "Unexpected call to PhysicalConnectionClosed() for medium  "
+                 << Medium_Name(medium)
+                 << " while AnalyticsRecorder has no active current medium";
   } else if (current_medium_ != medium) {
-    NEARBY_LOGS(WARNING)
-        << "Unexpected call to PhysicalConnectionClosed() for medium "
-        << Medium_Name(medium) << "while AnalyticsRecorder has active medium "
-        << Medium_Name(current_medium_);
+    LOG(WARNING) << "Unexpected call to PhysicalConnectionClosed() for medium "
+                 << Medium_Name(medium)
+                 << "while AnalyticsRecorder has active medium "
+                 << Medium_Name(current_medium_);
   }
 
   auto it = physical_connections_.find(medium);
   if (it == physical_connections_.end()) {
-    NEARBY_LOGS(WARNING)
+    LOG(WARNING)
         << "Unexpected call to physicalConnectionClosed() for medium "
         << Medium_Name(medium)
         << " with no corresponding EstablishedConnection that was previously"
@@ -1506,11 +1497,11 @@ void AnalyticsRecorder::LogicalConnection::PhysicalConnectionClosed(
   ConnectionsLog::EstablishedConnection *established_connection =
       it->second.get();
   if (established_connection->has_disconnection_reason()) {
-    NEARBY_LOGS(WARNING)
-        << "Unexpected call to physicalConnectionClosed() for medium "
-        << Medium_Name(medium) << " which already has disconnection reason "
-        << DisconnectionReason_Name(
-               established_connection->disconnection_reason());
+    LOG(WARNING) << "Unexpected call to physicalConnectionClosed() for medium "
+                 << Medium_Name(medium)
+                 << " which already has disconnection reason "
+                 << DisconnectionReason_Name(
+                        established_connection->disconnection_reason());
     return;
   }
   FinishPhysicalConnection(established_connection, reason, result);
@@ -1539,7 +1530,7 @@ std::vector<ConnectionsLog::EstablishedConnection>
 AnalyticsRecorder::LogicalConnection::GetEstablisedConnections() {
   std::vector<ConnectionsLog::EstablishedConnection> established_connections;
   if (current_medium_ != UNKNOWN_MEDIUM) {
-    NEARBY_LOGS(WARNING)
+    LOG(WARNING)
         << "AnalyticsRecorder expected no more active physical connections "
            "before logging this endpoint connection.";
     return established_connections;
@@ -1552,7 +1543,7 @@ AnalyticsRecorder::LogicalConnection::GetEstablisedConnections() {
   for (auto &established_connection : established_connections) {
     if (absl::Milliseconds(established_connection.duration_millis()) >=
         kConnectionTokenMaxLife) {
-      NEARBY_LOGS(INFO) << "connection token exceed TTL, drop token.";
+      LOG(INFO) << "connection token exceed TTL, drop token.";
       established_connection.set_connection_token("");
     }
   }
@@ -1581,8 +1572,8 @@ void AnalyticsRecorder::LogicalConnection::IncomingPayloadDone(
     std::int64_t payload_id, PayloadStatus status,
     OperationResultCode operation_result_code) {
   if (current_medium_ == UNKNOWN_MEDIUM) {
-    NEARBY_LOGS(WARNING) << "Unexpected call to incomingPayloadDone() while "
-                            "AnalyticsRecorder has no active current medium.";
+    LOG(WARNING) << "Unexpected call to incomingPayloadDone() while "
+                    "AnalyticsRecorder has no active current medium.";
     return;
   }
   auto it = physical_connections_.find(current_medium_);
@@ -1620,8 +1611,8 @@ void AnalyticsRecorder::LogicalConnection::OutgoingPayloadDone(
     std::int64_t payload_id, PayloadStatus status,
     OperationResultCode operation_result_code) {
   if (current_medium_ == UNKNOWN_MEDIUM) {
-    NEARBY_LOGS(WARNING) << "Unexpected call to outgoingPayloadDone() while "
-                            "AnalyticsRecorder has no active current medium.";
+    LOG(WARNING) << "Unexpected call to outgoingPayloadDone() while "
+                    "AnalyticsRecorder has no active current medium.";
     return;
   }
   auto it = physical_connections_.find(current_medium_);

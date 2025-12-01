@@ -36,7 +36,7 @@ jobs:
         path: |
           sys
           external
-        key: ${{ runner.os }}-${{ hashFiles('sys/dav1d-sys/Cargo.toml', 'sys/dav1d-sys/dav1d.cmd', 'sys/dav1d-sys/build.rs', 'sys/libyuv-sys/Cargo.toml', 'sys/libyuv-sys/libyuv.cmd', 'sys/libyuv-sys/build.rs', 'external/googletest.cmd') }}
+        key: ${{ runner.os }}-${{ hashFiles('sys/dav1d-sys/Cargo.toml', 'sys/dav1d-sys/dav1d.cmd', 'sys/dav1d-sys/build.rs', 'sys/libyuv-sys/Cargo.toml', 'sys/libyuv-sys/libyuv.cmd', 'sys/libyuv-sys/build.rs', 'external/googletest.cmd', 'sys/libsharpyuv-sys/Cargo.toml', 'sys/libsharpyuv-sys/libsharpyuv.cmd', 'sys/libsharpyuv-sys/build.rs') }}
 
     - uses: jwlawson/actions-setup-cmake@d06b37b47cfd043ec794ffa3e40e0b6b5858a7ec # v1.14.2
       if: steps.cache-ext-with-libavif.outputs.cache-hit != 'true'
@@ -118,7 +118,7 @@ jobs:
         toolchain: stable
 
     - name: Build and run the Rust tests
-      run: cargo test -- test_conformance
+      run: cargo test --no-default-features --features dav1d,libyuv -- test_conformance
 
     - name: Build GoogleTest
       if: steps.cache-ext-with-libavif.outputs.cache-hit != 'true' && runner.os == 'Linux'
@@ -128,7 +128,7 @@ jobs:
     - name: Build and run the C++ tests
       if: runner.os == 'Linux'
       run: |
-        cargo build --features capi --release
+        cargo build --no-default-features --features dav1d,libyuv,capi --release
         cmake -S c_api_tests -B c_build
         make -C c_build conformance_tests
         ctest --test-dir c_build -R conformance_tests

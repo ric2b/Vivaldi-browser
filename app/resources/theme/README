@@ -1,0 +1,14 @@
+To generate Assets.car for the macOS icons:
+
+xcrun actool \
+  --compile ./vivaldi_final/mac/ \
+  --platform macosx \
+  --minimum-deployment-target 11.0 \
+  --app-icon AppIcon \
+  --output-partial-info-plist /dev/null \
+  ./vivaldi_final/mac/Assets.xcassets
+
+Replacing "vivaldi_final" with "vivaldi_sopranos"/"vivaldi_snapshot" as appropriate.
+
+Note: the tool wants to generate a partial plist, which we can discard,
+but we must provide the output path even if we don't want it.

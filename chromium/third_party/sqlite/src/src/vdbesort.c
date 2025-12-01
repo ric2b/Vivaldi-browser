@@ -332,8 +332,11 @@ struct VdbeSorter {
   u8 iPrev;                       /* Previous thread used to flush PMA */
   u8 nTask;                       /* Size of aTask[] array */
   u8 typeMask;
-  SortSubtask aTask[1];           /* One or more subtasks */
+  SortSubtask aTask[FLEXARRAY];   /* One or more subtasks */
 };
+
+/* Size (in bytes) of a VdbeSorter object that works with N or fewer subtasks */
+#define SZ_VDBESORTER(N)  (offsetof(VdbeSorter,aTask)+(N)*sizeof(SortSubtask))
 
 #define SORTER_TYPE_INTEGER 0x01
 #define SORTER_TYPE_TEXT    0x02
@@ -936,7 +939,7 @@ int sqlite3VdbeSorterInit(
   VdbeSorter *pSorter;            /* The new sorter */
   KeyInfo *pKeyInfo;              /* Copy of pCsr->pKeyInfo with db==0 */
   int szKeyInfo;                  /* Size of pCsr->pKeyInfo in bytes */
-  int sz;                         /* Size of pSorter in bytes */
+  i64 sz;                         /* Size of pSorter in bytes */
   int rc = SQLITE_OK;
 #if SQLITE_MAX_WORKER_THREADS==0
 # define nWorker 0
@@ -964,8 +967,10 @@ int sqlite3VdbeSorterInit(
   assert( pCsr->pKeyInfo );
   assert( !pCsr->isEphemeral );
   assert( pCsr->eCurType==CURTYPE_SORTER );
-  szKeyInfo = sizeof(KeyInfo) + (pCsr->pKeyInfo->nKeyField-1)*sizeof(CollSeq*);
-  sz = sizeof(VdbeSorter) + nWorker * sizeof(SortSubtask);
+  assert( sizeof(KeyInfo) + UMXV(pCsr->pKeyInfo->nKeyField)*sizeof(CollSeq*)
+               < 0x7fffffff );
+  szKeyInfo = SZ_KEYINFO(pCsr->pKeyInfo->nKeyField+1);
+  sz = SZ_VDBESORTER(nWorker+1);
 
   pSorter = (VdbeSorter*)sqlite3DbMallocZero(db, sz + szKeyInfo);
   pCsr->uc.pSorter = pSorter;
@@ -1177,7 +1182,7 @@ static int vdbeSorterJoinAll(VdbeSorter *pSorter, int rcin){
 */
 static MergeEngine *vdbeMergeEngineNew(int nReader){
   int N = 2;                      /* Smallest power of two >= nReader */
-  int nByte;                      /* Total bytes of space to allocate */
+  i64 nByte;                      /* Total bytes of space to allocate */
   MergeEngine *pNew;              /* Pointer to allocated object to return */
 
   assert( nReader<=SORTER_MAX_MERGE_COUNT );
@@ -1429,6 +1434,10 @@ static int vdbeSorterSort(SortSubtask *pTask, SorterList *pList){
     p->u.pNext = 0;
     for(i=0; aSlot[i]; i++){
       p = vdbeSorterMerge(pTask, p, aSlot[i]);
+      /* ,--Each aSlot[] holds twice as much as the previous. So we cannot use
+      ** |  up all 64 aSlots[] with only a 64-bit address space.
+      ** v                                                                */
+      assert( i<ArraySize(aSlot) );
       aSlot[i] = 0;
     }
     aSlot[i] = p;

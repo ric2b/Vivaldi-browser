@@ -17,7 +17,9 @@
 
 import $ from "../$.js";
 
+import {formatArguments} from "../utils/general.js";
 import {getDebugger} from "../introspection/log.js";
+import {profile} from "../introspection/profile.js";
 import {overrideValue, wrapPropertyAccess} from "../utils/execution.js";
 
 let {Error} = $(window);
@@ -61,21 +63,24 @@ export function overridePropertyRead(property, value, setConfigurable) {
                      "No value to override with.");
   }
 
+  const formattedArguments = formatArguments(arguments);
   let debugLog = getDebugger("override-property-read");
+  const {mark, end} = profile("override-property-read");
 
   let cValue = overrideValue(value);
 
   let newGetter = () => {
-    debugLog("success", `${property} override done.`);
+    debugLog("success", `${property} override done.`, "\nFILTER: override-property-read", formattedArguments);
     return cValue;
   };
 
   debugLog("info", `Overriding ${property}.`);
 
   const configurableFlag = !(setConfigurable === "false");
-
+  mark();
   wrapPropertyAccess(window,
                      property,
                      {get: newGetter, set() {}},
                      configurableFlag);
+  end();
 }

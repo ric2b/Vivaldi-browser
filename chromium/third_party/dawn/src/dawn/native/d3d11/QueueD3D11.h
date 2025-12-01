@@ -46,7 +46,6 @@ class Queue : public d3d::Queue {
     ScopedCommandRecordingContext GetScopedPendingCommandContext(SubmitMode submitMode);
     ScopedSwapStateCommandRecordingContext GetScopedSwapStatePendingCommandContext(
         SubmitMode submitMode);
-    MaybeError SubmitPendingCommands() override;
     virtual MaybeError NextSerial() = 0;
 
     // Separated from creation because it creates resources, which is not valid before the
@@ -83,8 +82,12 @@ class Queue : public d3d::Queue {
     bool HasPendingCommands() const override;
     void ForceEventualFlushOfCommands() override;
     MaybeError WaitForIdleForDestruction() override;
+    MaybeError SubmitPendingCommandsImpl() override;
+    ResultOrError<ExecutionSerial> CheckAndUpdateCompletedSerials() override;
 
     ResultOrError<Ref<d3d::SharedFence>> GetOrCreateSharedFence() override;
+
+    virtual ResultOrError<ExecutionSerial> CheckCompletedSerialsImpl() = 0;
 
     // Check all pending map buffers, and actually map the ready ones.
     MaybeError CheckAndMapReadyBuffers(ExecutionSerial completedSerial);

@@ -629,10 +629,13 @@ void Navigator::DidNavigate(
   // proxies, including the proxy created in DidNavigateFrame() to replace the
   // old frame in cross-process navigation cases. Note that the origin-related
   // bits are set separately, through `SetLastCommittedOrigin()`.
-  render_frame_host->browsing_context_state()->SetInsecureRequestPolicy(
-      params.insecure_request_policy);
-  render_frame_host->browsing_context_state()->SetInsecureNavigationsSet(
-      params.insecure_navigations_set);
+  if (!was_within_same_document ||
+      !::features::IsEnforceSameDocumentOriginInvariantsEnabled()) {
+    render_frame_host->browsing_context_state()->SetInsecureRequestPolicy(
+        params.insecure_request_policy);
+    render_frame_host->browsing_context_state()->SetInsecureNavigationsSet(
+        params.insecure_navigations_set);
+  }
 
   // If the committing URL requires the SiteInstance's site to be assigned,
   // that site assignment should've already happened at ReadyToCommit time. We
@@ -889,6 +892,10 @@ void Navigator::Navigate(std::unique_ptr<NavigationRequest> request,
         base::FeatureList::IsEnabled(features::kIgnoreDuplicateNavs)) {
       request->set_navigation_discard_reason(
           NavigationDiscardReason::kNeverStarted);
+      DVLOG(0) << "Ignoring duplicate navigation to "
+               << request->common_params().url
+               << " due to the short interval since the previous one.";
+
       return;
     } else {
       ongoing_navigation_request->set_navigation_discard_reason(

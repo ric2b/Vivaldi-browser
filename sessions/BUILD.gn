@@ -38,4 +38,7 @@ static_library("sessions") {
   public_deps = [
     "//components/sync/protocol",
   ]
+  configs += [
+     "//vivaldi/gn/config:release_kind"
+  ]
 }

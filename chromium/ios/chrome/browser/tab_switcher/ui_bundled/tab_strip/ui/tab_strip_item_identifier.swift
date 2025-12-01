@@ -18,7 +18,7 @@
 // which prevents consecutive identifiers to have consecutive hash values, while
 // the hashing for groups is based on NSValue's hashing of the TabGroup
 // pointer).
-@objc class TabStripItemIdentifier: NSObject, NSCopying {
+@objc final class TabStripItemIdentifier: NSObject, NSCopying, Sendable {
 
   // Item this identifier is referring to.
   // Since a tab strip item can either be a tab (represented by `TabSwitcherItem`)
@@ -26,6 +26,7 @@
   // by the sum of these two types i.e. Item = TabSwitcherItem + TabGroupItem.
   // In Swift, sum types are enumerations with associated values, which are not
   // visible from Objective-C code, hence the need for `TabStripItemType`.
+  @MainActor
   enum Item: Hashable {
     case tab(TabSwitcherItem)
     case group(TabGroupItem)
@@ -40,12 +41,30 @@
 
   public init(_ tabSwitcherItem: TabSwitcherItem) {
     self.item = .tab(tabSwitcherItem)
+
+    if VivaldiGlobalHelpers.isVivaldiRunning() {
+      // Avoid hash overflow scenario
+      self.itemHash = Int(
+        bitPattern: GetHashForTabSwitcherItem(tabSwitcherItem)
+      )
+    } else {
     self.itemHash = Int(GetHashForTabSwitcherItem(tabSwitcherItem))
+    } // End Vivaldi
   }
 
   public init(_ tabGroupItem: TabGroupItem) {
     self.item = .group(tabGroupItem)
-    self.itemHash = Int(GetHashForTabGroupItem(tabGroupItem))
+
+    if VivaldiGlobalHelpers.isVivaldiRunning() {
+      // Avoid hash overflow scenario
+      self.itemHash = Int(
+        bitPattern: GetHashForTabGroupItem(tabGroupItem)
+      )
+    } else { // Vivaldi
+    // Converting `NSUInteger` item hashes to Swift `Int` can
+    // cause crashes due to large hash values exceeding `Int`'s capacity.
+    self.itemHash = Int(truncatingIfNeeded: GetHashForTabGroupItem(tabGroupItem))
+    } // End Vivaldi
   }
 
   public convenience init?(_ tabSwitcherItem: TabSwitcherItem?) {

@@ -40,8 +40,9 @@ constexpr uint32_t kRTSize = 1;
 
 class ImmediateDataTests : public DawnTest {
   protected:
-    wgpu::Limits GetRequiredLimits(const wgpu::Limits&) override {
-        return wgpu::Limits{.maxImmediateSize = kDefaultMaxImmediateDataBytes};
+    void GetRequiredLimits(const dawn::utils::ComboLimits& supported,
+                           dawn::utils::ComboLimits& required) override {
+        required.maxImmediateSize = kDefaultMaxImmediateDataBytes;
     }
 
     void SetUp() override {
@@ -484,7 +485,7 @@ TEST_P(ImmediateDataTests, SetImmediateDataWithPipelineSwitch) {
     }
 }
 
-DAWN_INSTANTIATE_TEST(ImmediateDataTests, VulkanBackend());
+DAWN_INSTANTIATE_TEST(ImmediateDataTests, D3D11Backend(), D3D12Backend(), VulkanBackend());
 
 }  // anonymous namespace
 }  // namespace dawn

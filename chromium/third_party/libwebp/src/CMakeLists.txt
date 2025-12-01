@@ -9,11 +9,7 @@
 if(APPLE)
   cmake_minimum_required(VERSION 3.17)
 else()
-  cmake_minimum_required(VERSION 3.7)
-endif()
-
-if(POLICY CMP0072)
-  cmake_policy(SET CMP0072 NEW)
+  cmake_minimum_required(VERSION 3.16)
 endif()
 
 project(WebP C)
@@ -87,6 +83,15 @@ if(WEBP_BUILD_WEBP_JS)
   if(WEBP_ENABLE_SIMD)
     message(NOTICE
             "wasm2js does not support SIMD, disabling webp.js generation.")
+  endif()
+
+  if(NOT EMSCRIPTEN_VERSION)
+    message(
+      WARNING
+        "EMSCRIPTEN_VERSION not detected!\n"
+        "WEBP_BUILD_WEBP_JS is only supported with emcmake/emmake.\n"
+        "The build may fail if those tools are not used. See webp_js/README.md."
+    )
   endif()
 endif()
 

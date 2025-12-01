@@ -312,7 +312,7 @@ def reclient_setup_docs_url():
 
 
 @contextlib.contextmanager
-def build_context(argv, tool, should_collect_logs):
+def build_context(argv, tool, should_collect_logs=False):
     # If use_remoteexec is set, but the reclient binaries or configs don't
     # exist, display an error message and stop.  Otherwise, the build will
     # attempt to run with rewrapper wrapping actions, but will fail with

@@ -1,69 +1,60 @@
-SKIP: FAILED
-
-
-enable chromium_experimental_immediate;
-
-var<immediate> a : i32;
-
-fn uses_a() {
-  let foo = a;
-}
-
-@compute @workgroup_size(1)
-fn main1() {
-  uses_a();
-}
-
-Failed to generate: error: unhandled address space immediate
-
-enable chromium_experimental_immediate;
-
-var<immediate> a : i32;
-
-fn uses_a() {
-  let foo = a;
-}
-
-fn uses_uses_a() {
-  uses_a();
-}
-
-@compute @workgroup_size(1)
-fn main2() {
-  uses_uses_a();
-}
-
-Failed to generate: error: unhandled address space immediate
-
-enable chromium_experimental_immediate;
-
-var<immediate> b : i32;
-
-fn uses_b() {
-  let foo = b;
-}
-
-@compute @workgroup_size(1)
-fn main3() {
-  uses_b();
-}
-
-Failed to generate: error: unhandled address space immediate
 //
 // main1
 //
+
+cbuffer cbuffer_a : register(b0) {
+  uint4 a[1];
+};
+void uses_a() {
+  int foo = asint(a[0u].x);
+}
+
+[numthreads(1, 1, 1)]
+void main1() {
+  uses_a();
+}
+
 //
 // main2
 //
+
+cbuffer cbuffer_a : register(b0) {
+  uint4 a[1];
+};
+void uses_a() {
+  int foo = asint(a[0u].x);
+}
+
+void uses_uses_a() {
+  uses_a();
+}
+
+[numthreads(1, 1, 1)]
+void main2() {
+  uses_uses_a();
+}
+
 //
 // main3
 //
+
+cbuffer cbuffer_b : register(b0) {
+  uint4 b[1];
+};
+void uses_b() {
+  int foo = asint(b[0u].x);
+}
+
+[numthreads(1, 1, 1)]
+void main3() {
+  uses_b();
+}
+
 //
 // main4
 //
+
 [numthreads(1, 1, 1)]
 void main4() {
-  return;
 }
 
-tint executable returned error: exit status 1

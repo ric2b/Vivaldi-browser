@@ -30,6 +30,8 @@ class Accelerator;
 
 namespace vivaldi {
 
+int WebEventModifiersToEventFlags(int modifiers);
+
 // Helper functions for menus
 ui::KeyboardCode GetFunctionKey(std::string token);
 ui::Accelerator ParseShortcut(const std::string& accelerator,

@@ -8,13 +8,14 @@
 <translation id="1310184829257917508">他のアプリからリンクを開く際にプライベートタブで開くかどうかを聞く</translation>
 <translation id="1743244221910283364">変更を破棄</translation>
 <translation id="2010481384079864967">{count, plural,
-        =1 {新しいスタックにタブを追加しました}
-        other {新しいスタックにタブを追加しました}}</translation>
+        =1 {新しいスタックにタブを追加する}
+        other {新しいスタックにタブを追加する}}</translation>
 <translation id="207677936531967364">新しいプライベートタブページ</translation>
 <translation id="2099591136582442348">これにより、あなたのデバイスからスタックが永久に削除されます。</translation>
 <translation id="2181990701313127304">スタック内に新しいタブを開く</translation>
 <translation id="2351280151183279120">スタックを共有する</translation>
 <translation id="2353953000228441783">デフォルトサイトビュー</translation>
+<translation id="2360196772093551345">モバイルサイトをリクエストする</translation>
 <translation id="2394192052244849643">貼り付けて検索</translation>
 <translation id="2418705169960294134">新しいプライベートタブ</translation>
 <translation id="2565593432251168402">タブスタックを作成して整理整頓を保つ</translation>
@@ -63,6 +64,7 @@
 <translation id="6163856768888310791">スタックを解除する</translation>
 <translation id="6168969409902608220">スタックの名前</translation>
 <translation id="6233792867654386826">入力した URL を Vivaldi で開く。</translation>
+<translation id="6271462272606946663">モバイルサイトのリクエストを非表示にする</translation>
 <translation id="6478587527114893588">スタックを閉じる</translation>
 <translation id="6527405730445064713">タブスタック。展開されています。</translation>
 <translation id="6532106788206463496">変更を保存</translation>
@@ -78,6 +80,7 @@
 <translation id="7363285031331302144">開いているタブを整理するためにタブスタックを作成する</translation>
 <translation id="7395230742578757172">新しいタブスタックで開く</translation>
 <translation id="7424676799308869002">スタックを保持しますか？</translation>
+<translation id="7460698861522306757">モバイルサイトをリクエストする</translation>
 <translation id="7498234416455752244">編集を続ける</translation>
 <translation id="7549299604720382000">新しいプライベートタブ</translation>
 <translation id="7585610907974664408">スタック内に新しいプライベートタブを開く</translation>
@@ -88,8 +91,8 @@
 <translation id="8345989863850359861">タブを削除してスタックを消去しますか？</translation>
 <translation id="8407986162266014185">スタックを共有する</translation>
 <translation id="8412536526999793719">{count, plural,
-        =1 {新しいスタックにタブを追加しました}
-        other {新しいスタックにタブを追加しました}}</translation>
+        =1 {新しいスタックにタブを追加する}
+        other {新しいスタックにタブを追加する}}</translation>
 <translation id="8465550436083180511">タブスタックを折りたたむ</translation>
 <translation id="8685478989144570078">タブスタック</translation>
 <translation id="8756969031206844760">パスワードを更新しますか？</translation>

@@ -25,7 +25,7 @@
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include "src/tint/lang/core/builtin_fn.h"
+#include "src/tint/lang/core/enums.h"
 #include "src/tint/lang/core/fluent_types.h"
 #include "src/tint/lang/core/type/depth_multisampled_texture.h"
 #include "src/tint/lang/core/type/depth_texture.h"
@@ -647,6 +647,17 @@ INSTANTIATE_TEST_SUITE_P(
     SpirvWriterTest,
     TextureSampleLevel,
     testing::Values(
+        TextureBuiltinTestCase{
+            kSampledTexture,
+            core::type::TextureDimension::k1d,
+            /* texel type */ kF32,
+            {{"coords", 1, kF32}, {"lod", 1, kF32}},
+            {"result", 4, kF32},
+            {
+                "%10 = OpSampledImage %11 %t %s",
+                "OpImageSampleExplicitLod %v4float %10 %coords Lod %lod",
+            },
+        },
         TextureBuiltinTestCase{
             kSampledTexture,
             core::type::TextureDimension::k2d,

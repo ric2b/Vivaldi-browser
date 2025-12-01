@@ -15,12 +15,6 @@ function cipd_bin_setup {
         ;;
     esac
 
-    # value in .cipd_client_root file overrides the default root.
-    CIPD_ROOT_OVERRIDE_FILE="${MYPATH}/.cipd_client_root"
-    if [ -f "${CIPD_ROOT_OVERRIDE_FILE}" ]; then
-        ROOT=$(<"${CIPD_ROOT_OVERRIDE_FILE}")
-    fi
-
     (
     source "$MYPATH/cipd" ensure \
         -log-level warning \

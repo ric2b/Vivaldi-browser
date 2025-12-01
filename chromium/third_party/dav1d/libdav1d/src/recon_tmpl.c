@@ -401,7 +401,7 @@ static int decode_coefs(Dav1dTaskContext *const t,
     }
 
     // find end-of-block (eob)
-    int eob_bin;
+    int eob;
     const int slw = imin(t_dim->lw, TX_32X32), slh = imin(t_dim->lh, TX_32X32);
     const int tx2dszctx = slw + slh;
     const enum TxClass tx_class = dav1d_tx_type_class[*txtp];
@@ -410,7 +410,7 @@ static int decode_coefs(Dav1dTaskContext *const t,
 #define case_sz(sz, bin, ns, is_1d) \
     case sz: { \
         uint16_t *const eob_bin_cdf = ts->cdf.coef.eob_bin_##bin[chroma]is_1d; \
-        eob_bin = dav1d_msac_decode_symbol_adapt##ns(&ts->msac, eob_bin_cdf, 4 + sz); \
+        eob = dav1d_msac_decode_symbol_adapt##ns(&ts->msac, eob_bin_cdf, 4 + sz); \
         break; \
     }
     case_sz(0,   16,  8, [is_1d]);
@@ -424,21 +424,18 @@ static int decode_coefs(Dav1dTaskContext *const t,
     }
     if (dbg)
         printf("Post-eob_bin_%d[%d][%d][%d]: r=%d\n",
-               16 << tx2dszctx, chroma, is_1d, eob_bin, ts->msac.rng);
-    int eob;
-    if (eob_bin > 1) {
+               16 << tx2dszctx, chroma, is_1d, eob, ts->msac.rng);
+    if (eob > 1) {
+        const int eob_bin = eob - 2;
         uint16_t *const eob_hi_bit_cdf =
             ts->cdf.coef.eob_hi_bit[t_dim->ctx][chroma][eob_bin];
         const int eob_hi_bit = dav1d_msac_decode_bool_adapt(&ts->msac, eob_hi_bit_cdf);
         if (dbg)
             printf("Post-eob_hi_bit[%d][%d][%d][%d]: r=%d\n",
                    t_dim->ctx, chroma, eob_bin, eob_hi_bit, ts->msac.rng);
-        eob = ((eob_hi_bit | 2) << (eob_bin - 2)) |
-              dav1d_msac_decode_bools(&ts->msac, eob_bin - 2);
+        eob = ((eob_hi_bit | 2) << eob_bin) | dav1d_msac_decode_bools(&ts->msac, eob_bin);
         if (dbg)
             printf("Post-eob[%d]: r=%d\n", eob, ts->msac.rng);
-    } else {
-        eob = eob_bin;
     }
     assert(eob >= 0);
 
@@ -481,7 +478,7 @@ static int decode_coefs(Dav1dTaskContext *const t,
                        ts->msac.rng); \
         } \
         cf[rc] = tok << 11; \
-        if (TX_CLASS_2D) \
+        if (tx_class == TX_CLASS_2D) \
             level = levels + rc; \
         else \
             level = levels + x * stride + y; \
@@ -495,8 +492,8 @@ static int decode_coefs(Dav1dTaskContext *const t,
             else /* tx_class == TX_CLASS_V */ \
                 x = i & mask, y = i >> shift, rc_i = (x << shift2) | y; \
             assert(x < 32 && y < 32); \
-            if (TX_CLASS_2D) \
-                level = levels + rc; \
+            if (tx_class == TX_CLASS_2D) \
+                level = levels + rc_i; \
             else \
                 level = levels + x * stride + y; \
             ctx = get_lo_ctx(level, tx_class, &mag, lo_ctx_offsets, x, y, stride); \

@@ -134,8 +134,9 @@ message VmInfo {
   string permission_token = 5;
 
   // VmType is assumed to be no larger than 99 (e.g. in
-  // concierge::service.cc::GetDiskImageVmTYpe), if VmTYpe ever exceeds 99
+  // concierge::service.cc::GetDiskImageVmType), if VmType ever exceeds 99
   // please fix assertion elsewhere.
+  // LINT.IfChange
   enum VmType {
     // Default value indicating an unknown or custom VM.
     UNKNOWN = 0;
@@ -148,6 +149,7 @@ message VmInfo {
     BRUSCHETTA = 5;
     BAGUETTE = 6;
   };
+  // LINT.ThenChange(/system_api/dbus/vm_applications/apps.proto)
 
   // What type of VM this is.
   VmType vm_type = 6;
@@ -1083,6 +1085,9 @@ message VmDiskInfo {
   // VM type of the disk image (mainly used to distinguish baguette and
   // crostini).
   VmInfo.VmType vm_type = 9;
+
+  // True if the disk image file has vm_type xattr and passed via vm_type.
+  bool has_vm_type = 10;
 }
 
 // Response to ListVmDisks {

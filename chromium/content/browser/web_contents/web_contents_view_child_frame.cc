@@ -11,6 +11,7 @@
 #include "content/browser/renderer_host/render_frame_proxy_host.h"
 #include "content/browser/renderer_host/render_widget_host_view_child_frame.h"
 #include "content/browser/web_contents/web_contents_impl.h"
+#include "content/public/browser/web_contents_delegate.h"
 #include "content/public/browser/web_contents_view_delegate.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom.h"
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom.h"
@@ -146,14 +147,20 @@ void WebContentsViewChildFrame::SetPageTitle(const std::u16string& title) {
   // The title is ignored for the WebContentsViewChildFrame.
 }
 
-void WebContentsViewChildFrame::RenderViewReady() {}
+void WebContentsViewChildFrame::RenderViewReady() {
+#if defined(USE_AURA)
+  WebContentsDelegate* delegate = web_contents_->GetDelegate();
+  SetOverscrollControllerEnabled(!delegate || delegate->CanOverscrollContent());
+#endif // USE_AURA
+}
 
 void WebContentsViewChildFrame::RenderViewHostChanged(
     RenderViewHost* old_host,
-    RenderViewHost* new_host) {}
-
-void WebContentsViewChildFrame::SetOverscrollControllerEnabled(bool enabled) {
-  // This is managed by the outer view.
+    RenderViewHost* new_host) {
+#if defined(USE_AURA)
+  WebContentsDelegate* delegate = web_contents_->GetDelegate();
+  SetOverscrollControllerEnabled(!delegate || delegate->CanOverscrollContent());
+#endif // USE_AURA
 }
 
 #if BUILDFLAG(IS_MAC)
@@ -165,9 +172,6 @@ bool WebContentsViewChildFrame::CloseTabAfterEventTrackingIfNeeded() {
 void WebContentsViewChildFrame::OnCapturerCountChanged() {}
 
 void WebContentsViewChildFrame::FullscreenStateChanged(bool is_fullscreen) {}
-
-void WebContentsViewChildFrame::UpdateWindowControlsOverlay(
-    const gfx::Rect& bounding_rect) {}
 
 BackForwardTransitionAnimationManager*
 WebContentsViewChildFrame::GetBackForwardTransitionAnimationManager() {
@@ -203,7 +207,7 @@ DropData* WebContentsViewChildFrame::GetDropData() const {
     WebContentsImpl* embedder_web_contents =
       web_contents_->GetOutermostWebContents();
     return embedder_web_contents ? embedder_web_contents->GetDropData()
-      : nullptr;
+                                 : nullptr;
   }
 
   NOTREACHED();
@@ -271,6 +275,7 @@ void WebContentsViewChildFrame::StartDragging(
   }
 }
 
+/*static*/
 RenderWidgetHostViewChildFrame*
 WebContentsViewChildFrame::CreateRenderWidgetHostViewForInnerFrameTree(
     WebContentsImpl* web_contents,
@@ -294,6 +299,37 @@ bool WebContentsView::IsWebContentsViewChildFrame() const {
 
 bool WebContentsViewChildFrame::IsWebContentsViewChildFrame() const {
   return true;
+}
+
+#if defined(USE_AURA)
+void WebContentsViewChildFrame::InstallOverscrollControllerDelegate(
+    RenderWidgetHostViewChildFrame* view) {
+  if (!base::FeatureList::IsEnabled(features::kOverscrollHistoryNavigation))
+    return;
+
+  if (!gesture_nav_simple_)
+    gesture_nav_simple_ = std::make_unique<GestureNavSimple>(web_contents_);
+  if (view) {
+    view->overscroll_controller()->set_delegate(
+        gesture_nav_simple_->GetWeakPtr());
+  }
+}
+#endif  // USE_AURA
+
+void WebContentsViewChildFrame::SetOverscrollControllerEnabled(bool enabled) {
+  RenderWidgetHostViewChildFrame* view =
+      static_cast<RenderWidgetHostViewChildFrame*>(
+          web_contents_->GetRenderWidgetHostView());
+
+  if (view)
+    view->SetOverscrollControllerEnabled(enabled);
+
+#if defined(USE_AURA)
+  if (enabled)
+    InstallOverscrollControllerDelegate(view);
+  else
+    gesture_nav_simple_.reset();
+#endif // USE_AURA
 }
 
 }  // namespace content

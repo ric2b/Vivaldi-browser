@@ -12,9 +12,11 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>  // NOLINT
+#include <condition_variable>  // NOLINT
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <mutex>  // NOLINT
 #include <thread>  // NOLINT
 #include <vector>
 
@@ -108,6 +110,24 @@ const size_t kIncrementIterations6D = 3;
 
 const uint32_t kMaxUArchIndex = 0;
 const uint32_t kDefaultUArchIndex = 42;
+
+static void WorkImbalance(std::atomic_int* num_processed_items,
+                          size_t increment, size_t total, bool wait) {
+  static std::mutex mutex;
+  static std::condition_variable cond_var;
+  std::unique_lock<std::mutex> lock(mutex);
+  if (num_processed_items->fetch_add(increment, std::memory_order_acquire) +
+          increment ==
+      total) {
+    cond_var.notify_all();
+  }
+  if (wait) {
+    /* Wait until all items are computed */
+    while (num_processed_items->load(std::memory_order_relaxed) != total) {
+      cond_var.wait(lock);
+    }
+  }
+}
 
 TEST(CreateAndDestroy, NullThreadPool) {
   pthreadpool* threadpool = nullptr;
@@ -326,14 +346,8 @@ TEST(Parallelize1D, MultiThreadPoolHighContention) {
 }
 
 static void WorkImbalance1D(std::atomic_int* num_processed_items, size_t i) {
-  num_processed_items->fetch_add(1, std::memory_order_relaxed);
-  if (i == 0) {
-    /* Spin-wait until all items are computed */
-    while (num_processed_items->load(std::memory_order_relaxed) !=
-           kParallelize1DRange) {
-      std::atomic_thread_fence(std::memory_order_acquire);
-    }
-  }
+  WorkImbalance(num_processed_items, /*increment=*/1, kParallelize1DRange,
+                /*wait=*/i == 0);
 }
 
 TEST(Parallelize1D, MultiThreadPoolWorkStealing) {
@@ -574,14 +588,8 @@ TEST(Parallelize1DWithThread, MultiThreadPoolHighContention) {
 
 static void WorkImbalance1DWithThread(std::atomic_int* num_processed_items,
                                       size_t, size_t i) {
-  num_processed_items->fetch_add(1, std::memory_order_relaxed);
-  if (i == 0) {
-    /* Spin-wait until all items are computed */
-    while (num_processed_items->load(std::memory_order_relaxed) !=
-           kParallelize1DRange) {
-      std::atomic_thread_fence(std::memory_order_acquire);
-    }
-  }
+  WorkImbalance(num_processed_items, /*increment=*/1, kParallelize1DRange,
+                /*wait=*/i == 0);
 }
 
 TEST(Parallelize1DWithThread, MultiThreadPoolWorkStealing) {
@@ -871,14 +879,8 @@ TEST(Parallelize1DWithUArch, MultiThreadPoolHighContention) {
 
 static void WorkImbalance1DWithUArch(std::atomic_int* num_processed_items,
                                      uint32_t, size_t i) {
-  num_processed_items->fetch_add(1, std::memory_order_relaxed);
-  if (i == 0) {
-    /* Spin-wait until all items are computed */
-    while (num_processed_items->load(std::memory_order_relaxed) !=
-           kParallelize1DRange) {
-      std::atomic_thread_fence(std::memory_order_acquire);
-    }
-  }
+  WorkImbalance(num_processed_items, /*increment=*/1, kParallelize1DRange,
+                /*wait=*/i == 0);
 }
 
 TEST(Parallelize1DWithUArch, MultiThreadPoolWorkStealing) {
@@ -1155,14 +1157,9 @@ TEST(Parallelize1DTile1D, MultiThreadPoolHighContention) {
 
 static void WorkImbalance1DTile1D(std::atomic_int* num_processed_items,
                                   size_t start_i, size_t tile_i) {
-  num_processed_items->fetch_add(tile_i, std::memory_order_relaxed);
-  if (start_i == 0) {
-    /* Spin-wait until all items are computed */
-    while (num_processed_items->load(std::memory_order_relaxed) !=
-           kParallelize1DTile1DRange) {
-      std::atomic_thread_fence(std::memory_order_acquire);
-    }
-  }
+  WorkImbalance(num_processed_items, /*increment=*/tile_i,
+                kParallelize1DTile1DRange, /*wait=*/
+                start_i == 0);
 }
 
 TEST(Parallelize1DTile1D, MultiThreadPoolWorkStealing) {
@@ -1441,14 +1438,14 @@ TEST(Parallelize1DTile1DDynamic, MultiThreadPoolHighContention) {
 
 static void WorkImbalance1DDynamic(std::atomic_int* num_processed_items,
                                    size_t start_i, size_t tile_i) {
-  num_processed_items->fetch_add(tile_i, std::memory_order_relaxed);
+  num_processed_items->fetch_add(tile_i, std::memory_order_acquire);
   if (start_i == 0) {
-    /* Sleep for a second. This differs from the non-dynamic `WorkImbalance*`
+    /* Sleep for 100 ms. This differs from the non-dynamic `WorkImbalance*`
      * strategies in that a thread may reserve more elements than fit into a
      * single work function call. Blocking a single work function call will also
      * block any potentially remaining elements allocated to that thread. We
      * therefore just sleep for a second instead.*/
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
 }
 
@@ -1712,14 +1709,9 @@ TEST(Parallelize2D, MultiThreadPoolHighContention) {
 
 static void WorkImbalance2D(std::atomic_int* num_processed_items, size_t i,
                             size_t j) {
-  num_processed_items->fetch_add(1, std::memory_order_relaxed);
-  if (i == 0 && j == 0) {
-    /* Spin-wait until all items are computed */
-    while (num_processed_items->load(std::memory_order_relaxed) !=
-           kParallelize2DRangeI * kParallelize2DRangeJ) {
-      std::atomic_thread_fence(std::memory_order_acquire);
-    }
-  }
+  WorkImbalance(num_processed_items, /*increment=*/1,
+                kParallelize2DRangeI * kParallelize2DRangeJ,
+                /*wait=*/i == 0 && j == 0);
 }
 
 TEST(Parallelize2D, MultiThreadPoolWorkStealing) {
@@ -1993,14 +1985,9 @@ TEST(Parallelize2DWithThread, MultiThreadPoolHighContention) {
 
 static void WorkImbalance2DWithThread(std::atomic_int* num_processed_items,
                                       size_t, size_t i, size_t j) {
-  num_processed_items->fetch_add(1, std::memory_order_relaxed);
-  if (i == 0 && j == 0) {
-    /* Spin-wait until all items are computed */
-    while (num_processed_items->load(std::memory_order_relaxed) !=
-           kParallelize2DRangeI * kParallelize2DRangeJ) {
-      std::atomic_thread_fence(std::memory_order_acquire);
-    }
-  }
+  WorkImbalance(num_processed_items, /*increment=*/1,
+                kParallelize2DRangeI * kParallelize2DRangeJ,
+                /*wait=*/i == 0 && j == 0);
 }
 
 TEST(Parallelize2DWithThread, MultiThreadPoolWorkStealing) {
@@ -2338,14 +2325,10 @@ TEST(Parallelize2DTile1D, MultiThreadPoolHighContention) {
 
 static void WorkImbalance2DTile1D(std::atomic_int* num_processed_items,
                                   size_t i, size_t start_j, size_t tile_j) {
-  num_processed_items->fetch_add(tile_j, std::memory_order_relaxed);
-  if (i == 0 && start_j == 0) {
-    /* Spin-wait until all items are computed */
-    while (num_processed_items->load(std::memory_order_relaxed) !=
-           kParallelize2DTile1DRangeI * kParallelize2DTile1DRangeJ) {
-      std::atomic_thread_fence(std::memory_order_acquire);
-    }
-  }
+  WorkImbalance(
+      num_processed_items, /*increment=*/tile_j,
+      kParallelize2DTile1DRangeI * kParallelize2DTile1DRangeJ, /*wait=*/
+      i == 0 && start_j == 0);
 }
 
 TEST(Parallelize2DTile1D, MultiThreadPoolWorkStealing) {
@@ -2664,14 +2647,14 @@ TEST(Parallelize2DTile1DDynamic, MultiThreadPoolHighContention) {
 static void WorkImbalance2DTile1DDynamic(std::atomic_int* num_processed_items,
                                          size_t i, size_t start_j,
                                          size_t tile_j) {
-  num_processed_items->fetch_add(tile_j, std::memory_order_relaxed);
+  num_processed_items->fetch_add(tile_j, std::memory_order_acquire);
   if (i == 0 && start_j == 0) {
-    /* Sleep for a second. This differs from the non-dynamic `WorkImbalance*`
+    /* Sleep for 100 ms. This differs from the non-dynamic `WorkImbalance*`
      * strategies in that a thread may reserve more elements than fit into a
      * single work function call. Blocking a single work function call will also
      * block any potentially remaining elements allocated to that thread. We
      * therefore just sleep for a second instead.*/
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
 }
 
@@ -3039,14 +3022,10 @@ TEST(Parallelize2DTile1DWithUArch, MultiThreadPoolHighContention) {
 static void WorkImbalance2DTile1DWithUArch(std::atomic_int* num_processed_items,
                                            uint32_t, size_t i, size_t start_j,
                                            size_t tile_j) {
-  num_processed_items->fetch_add(tile_j, std::memory_order_relaxed);
-  if (i == 0 && start_j == 0) {
-    /* Spin-wait until all items are computed */
-    while (num_processed_items->load(std::memory_order_relaxed) !=
-           kParallelize2DTile1DRangeI * kParallelize2DTile1DRangeJ) {
-      std::atomic_thread_fence(std::memory_order_acquire);
-    }
-  }
+  WorkImbalance(
+      num_processed_items, /*increment=*/tile_j,
+      kParallelize2DTile1DRangeI * kParallelize2DTile1DRangeJ, /*wait=*/
+      i == 0 && start_j == 0);
 }
 
 TEST(Parallelize2DTile1DWithUArch, MultiThreadPoolWorkStealing) {
@@ -3420,14 +3399,10 @@ TEST(Parallelize2DTile1DWithUArchWithThread, MultiThreadPoolHighContention) {
 static void WorkImbalance2DTile1DWithUArchWithThread(
     std::atomic_int* num_processed_items, uint32_t, size_t, size_t i,
     size_t start_j, size_t tile_j) {
-  num_processed_items->fetch_add(tile_j, std::memory_order_relaxed);
-  if (i == 0 && start_j == 0) {
-    /* Spin-wait until all items are computed */
-    while (num_processed_items->load(std::memory_order_relaxed) !=
-           kParallelize2DTile1DRangeI * kParallelize2DTile1DRangeJ) {
-      std::atomic_thread_fence(std::memory_order_acquire);
-    }
-  }
+  WorkImbalance(
+      num_processed_items, /*increment=*/tile_j,
+      kParallelize2DTile1DRangeI * kParallelize2DTile1DRangeJ, /*wait=*/
+      i == 0 && start_j == 0);
 }
 
 TEST(Parallelize2DTile1DWithUArchWithThread, MultiThreadPoolWorkStealing) {
@@ -3790,14 +3765,10 @@ TEST(Parallelize2DTile2D, MultiThreadPoolHighContention) {
 static void WorkImbalance2DTile2D(std::atomic_int* num_processed_items,
                                   size_t start_i, size_t start_j, size_t tile_i,
                                   size_t tile_j) {
-  num_processed_items->fetch_add(tile_i * tile_j, std::memory_order_relaxed);
-  if (start_i == 0 && start_j == 0) {
-    /* Spin-wait until all items are computed */
-    while (num_processed_items->load(std::memory_order_relaxed) !=
-           kParallelize2DTile2DRangeI * kParallelize2DTile2DRangeJ) {
-      std::atomic_thread_fence(std::memory_order_acquire);
-    }
-  }
+  WorkImbalance(
+      num_processed_items, /*increment=*/tile_i * tile_j,
+      kParallelize2DTile2DRangeI * kParallelize2DTile2DRangeJ, /*wait=*/
+      start_i == 0 && start_j == 0);
 }
 
 TEST(Parallelize2DTile2D, MultiThreadPoolWorkStealing) {
@@ -4134,14 +4105,14 @@ TEST(Parallelize2DTile2DDynamic, MultiThreadPoolHighContention) {
 static void WorkImbalance2DDynamic(std::atomic_int* num_processed_items,
                                    size_t start_i, size_t start_j,
                                    size_t tile_i, size_t tile_j) {
-  num_processed_items->fetch_add(tile_i * tile_j, std::memory_order_relaxed);
+  num_processed_items->fetch_add(tile_i * tile_j, std::memory_order_acquire);
   if (start_i == 0 && start_j == 0) {
-    /* Sleep for a second. This differs from the non-dynamic `WorkImbalance*`
+    /* Sleep for 100 ms. This differs from the non-dynamic `WorkImbalance*`
      * strategies in that a thread may reserve more elements than fit into a
      * single work function call. Blocking a single work function call will also
      * block any potentially remaining elements allocated to that thread. We
      * therefore just sleep for a second instead.*/
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
 }
 
@@ -4536,14 +4507,14 @@ TEST(Parallelize2DTile2DDynamicWithUArch, MultiThreadPoolHighContention) {
 static void WorkImbalance2DTile2DDynamicWithUArch(
     std::atomic_int* num_processed_items, uint32_t, size_t start_i,
     size_t start_j, size_t tile_i, size_t tile_j) {
-  num_processed_items->fetch_add(tile_i * tile_j, std::memory_order_relaxed);
+  num_processed_items->fetch_add(tile_i * tile_j, std::memory_order_acquire);
   if (start_i == 0 && start_j == 0) {
-    /* Sleep for a second. This differs from the non-dynamic `WorkImbalance*`
+    /* Sleep for 100 ms. This differs from the non-dynamic `WorkImbalance*`
      * strategies in that a thread may reserve more elements than fit into a
      * single work function call. Blocking a single work function call will also
      * block any potentially remaining elements allocated to that thread. We
      * therefore just sleep for a second instead.*/
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
 }
 
@@ -4937,14 +4908,10 @@ static void WorkImbalance2DTile2DWithUArch(std::atomic_int* num_processed_items,
                                            uint32_t, size_t start_i,
                                            size_t start_j, size_t tile_i,
                                            size_t tile_j) {
-  num_processed_items->fetch_add(tile_i * tile_j, std::memory_order_relaxed);
-  if (start_i == 0 && start_j == 0) {
-    /* Spin-wait until all items are computed */
-    while (num_processed_items->load(std::memory_order_relaxed) !=
-           kParallelize2DTile2DRangeI * kParallelize2DTile2DRangeJ) {
-      std::atomic_thread_fence(std::memory_order_acquire);
-    }
-  }
+  WorkImbalance(
+      num_processed_items, /*increment=*/tile_i * tile_j,
+      kParallelize2DTile2DRangeI * kParallelize2DTile2DRangeJ, /*wait=*/
+      start_i == 0 && start_j == 0);
 }
 
 TEST(Parallelize2DTile2DWithUArch, MultiThreadPoolWorkStealing) {
@@ -5230,14 +5197,10 @@ TEST(Parallelize3D, MultiThreadPoolHighContention) {
 
 static void WorkImbalance3D(std::atomic_int* num_processed_items, size_t i,
                             size_t j, size_t k) {
-  num_processed_items->fetch_add(1, std::memory_order_relaxed);
-  if (i == 0 && j == 0 && k == 0) {
-    /* Spin-wait until all items are computed */
-    while (num_processed_items->load(std::memory_order_relaxed) !=
-           kParallelize3DRangeI * kParallelize3DRangeJ * kParallelize3DRangeK) {
-      std::atomic_thread_fence(std::memory_order_acquire);
-    }
-  }
+  WorkImbalance(num_processed_items, /*increment=*/1,
+                kParallelize3DRangeI * kParallelize3DRangeJ *
+                    kParallelize3DRangeK, /*wait=*/
+                i == 0 && j == 0 && k == 0);
 }
 
 TEST(Parallelize3D, MultiThreadPoolWorkStealing) {
@@ -5594,15 +5557,10 @@ TEST(Parallelize3DTile1D, MultiThreadPoolHighContention) {
 static void WorkImbalance3DTile1D(std::atomic_int* num_processed_items,
                                   size_t i, size_t j, size_t start_k,
                                   size_t tile_k) {
-  num_processed_items->fetch_add(tile_k, std::memory_order_relaxed);
-  if (i == 0 && j == 0 && start_k == 0) {
-    /* Spin-wait until all items are computed */
-    while (num_processed_items->load(std::memory_order_relaxed) !=
-           kParallelize3DTile1DRangeI * kParallelize3DTile1DRangeJ *
-               kParallelize3DTile1DRangeK) {
-      std::atomic_thread_fence(std::memory_order_acquire);
-    }
-  }
+  WorkImbalance(num_processed_items, /*increment=*/tile_k,
+                kParallelize3DTile1DRangeI * kParallelize3DTile1DRangeJ *
+                    kParallelize3DTile1DRangeK, /*wait=*/
+                i == 0 && j == 0 && start_k == 0);
 }
 
 TEST(Parallelize3DTile1D, MultiThreadPoolWorkStealing) {
@@ -5973,15 +5931,10 @@ TEST(Parallelize3DTile1DWithThread, MultiThreadPoolHighContention) {
 static void WorkImbalance3DTile1DWithThread(
     std::atomic_int* num_processed_items, size_t, size_t i, size_t j,
     size_t start_k, size_t tile_k) {
-  num_processed_items->fetch_add(tile_k, std::memory_order_relaxed);
-  if (i == 0 && j == 0 && start_k == 0) {
-    /* Spin-wait until all items are computed */
-    while (num_processed_items->load(std::memory_order_relaxed) !=
-           kParallelize3DTile1DRangeI * kParallelize3DTile1DRangeJ *
-               kParallelize3DTile1DRangeK) {
-      std::atomic_thread_fence(std::memory_order_acquire);
-    }
-  }
+  WorkImbalance(num_processed_items, /*increment=*/tile_k,
+                kParallelize3DTile1DRangeI * kParallelize3DTile1DRangeJ *
+                    kParallelize3DTile1DRangeK, /*wait=*/
+                i == 0 && j == 0 && start_k == 0);
 }
 
 TEST(Parallelize3DTile1DWithThread, MultiThreadPoolWorkStealing) {
@@ -6415,15 +6368,10 @@ TEST(Parallelize3DTile1DWithUArch, MultiThreadPoolHighContention) {
 static void WorkImbalance3DTile1DWithUArch(std::atomic_int* num_processed_items,
                                            uint32_t, size_t i, size_t j,
                                            size_t start_k, size_t tile_k) {
-  num_processed_items->fetch_add(tile_k, std::memory_order_relaxed);
-  if (i == 0 && j == 0 && start_k == 0) {
-    /* Spin-wait until all items are computed */
-    while (num_processed_items->load(std::memory_order_relaxed) !=
-           kParallelize3DTile1DRangeI * kParallelize3DTile1DRangeJ *
-               kParallelize3DTile1DRangeK) {
-      std::atomic_thread_fence(std::memory_order_acquire);
-    }
-  }
+  WorkImbalance(num_processed_items, /*increment=*/tile_k,
+                kParallelize3DTile1DRangeI * kParallelize3DTile1DRangeJ *
+                    kParallelize3DTile1DRangeK, /*wait=*/
+                i == 0 && j == 0 && start_k == 0);
 }
 
 TEST(Parallelize3DTile1DWithUArch, MultiThreadPoolWorkStealing) {
@@ -6843,15 +6791,10 @@ TEST(Parallelize3DTile1DWithUArchWithThread, MultiThreadPoolHighContention) {
 static void WorkImbalance3DTile1DWithUArchWithThread(
     std::atomic_int* num_processed_items, uint32_t, size_t, size_t i, size_t j,
     size_t start_k, size_t tile_k) {
-  num_processed_items->fetch_add(tile_k, std::memory_order_relaxed);
-  if (i == 0 && j == 0 && start_k == 0) {
-    /* Spin-wait until all items are computed */
-    while (num_processed_items->load(std::memory_order_relaxed) !=
-           kParallelize3DTile1DRangeI * kParallelize3DTile1DRangeJ *
-               kParallelize3DTile1DRangeK) {
-      std::atomic_thread_fence(std::memory_order_acquire);
-    }
-  }
+  WorkImbalance(num_processed_items, /*increment=*/tile_k,
+                kParallelize3DTile1DRangeI * kParallelize3DTile1DRangeJ *
+                    kParallelize3DTile1DRangeK, /*wait=*/
+                i == 0 && j == 0 && start_k == 0);
 }
 
 TEST(Parallelize3DTile1DWithUArchWithThread, MultiThreadPoolWorkStealing) {
@@ -7254,15 +7197,10 @@ TEST(Parallelize3DTile2D, MultiThreadPoolHighContention) {
 static void WorkImbalance3DTile2D(std::atomic_int* num_processed_items,
                                   size_t i, size_t start_j, size_t start_k,
                                   size_t tile_j, size_t tile_k) {
-  num_processed_items->fetch_add(tile_j * tile_k, std::memory_order_relaxed);
-  if (i == 0 && start_j == 0 && start_k == 0) {
-    /* Spin-wait until all items are computed */
-    while (num_processed_items->load(std::memory_order_relaxed) !=
-           kParallelize3DTile2DRangeI * kParallelize3DTile2DRangeJ *
-               kParallelize3DTile2DRangeK) {
-      std::atomic_thread_fence(std::memory_order_acquire);
-    }
-  }
+  WorkImbalance(num_processed_items, /*increment=*/tile_j * tile_k,
+                kParallelize3DTile2DRangeI * kParallelize3DTile2DRangeJ *
+                    kParallelize3DTile2DRangeK, /*wait=*/
+                i == 0 && start_j == 0 && start_k == 0);
 }
 
 TEST(Parallelize3DTile2D, MultiThreadPoolWorkStealing) {
@@ -7650,14 +7588,14 @@ static void WorkImbalance3DTile2DDynamic(std::atomic_int* num_processed_items,
                                          size_t i, size_t start_j,
                                          size_t start_k, size_t tile_j,
                                          size_t tile_k) {
-  num_processed_items->fetch_add(tile_j * tile_k, std::memory_order_relaxed);
+  num_processed_items->fetch_add(tile_j * tile_k, std::memory_order_acquire);
   if (i == 0 && start_j == 0 && start_k == 0) {
-    /* Sleep for a second. This differs from the non-dynamic `WorkImbalance*`
+    /* Sleep for 100 ms. This differs from the non-dynamic `WorkImbalance*`
      * strategies in that a thread may reserve more elements than fit into a
      * single work function call. Blocking a single work function call will also
      * block any potentially remaining elements allocated to that thread. We
      * therefore just sleep for a second instead.*/
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
 }
 
@@ -8095,14 +8033,14 @@ TEST(Parallelize3DTile2DDynamicWithUArch, MultiThreadPoolHighContention) {
 static void WorkImbalance3DTile2DDynamicWithUArch(
     std::atomic_int* num_processed_items, uint32_t tid, size_t i,
     size_t start_j, size_t start_k, size_t tile_j, size_t tile_k) {
-  num_processed_items->fetch_add(tile_j * tile_k, std::memory_order_relaxed);
+  num_processed_items->fetch_add(tile_j * tile_k, std::memory_order_acquire);
   if (i == 0 && start_j == 0 && start_k == 0) {
-    /* Sleep for a second. This differs from the non-dynamic `WorkImbalance*`
+    /* Sleep for 100 ms. This differs from the non-dynamic `WorkImbalance*`
      * strategies in that a thread may reserve more elements than fit into a
      * single work function call. Blocking a single work function call will also
      * block any potentially remaining elements allocated to that thread. We
      * therefore just sleep for a second instead.*/
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
 }
 
@@ -8541,15 +8479,10 @@ static void WorkImbalance3DTile2DWithUArch(std::atomic_int* num_processed_items,
                                            uint32_t, size_t i, size_t start_j,
                                            size_t start_k, size_t tile_j,
                                            size_t tile_k) {
-  num_processed_items->fetch_add(tile_j * tile_k, std::memory_order_relaxed);
-  if (i == 0 && start_j == 0 && start_k == 0) {
-    /* Spin-wait until all items are computed */
-    while (num_processed_items->load(std::memory_order_relaxed) !=
-           kParallelize3DTile2DRangeI * kParallelize3DTile2DRangeJ *
-               kParallelize3DTile2DRangeK) {
-      std::atomic_thread_fence(std::memory_order_acquire);
-    }
-  }
+  WorkImbalance(num_processed_items, /*increment=*/tile_j * tile_k,
+                kParallelize3DTile2DRangeI * kParallelize3DTile2DRangeJ *
+                    kParallelize3DTile2DRangeK, /*wait=*/
+                i == 0 && start_j == 0 && start_k == 0);
 }
 
 TEST(Parallelize3DTile2DWithUArch, MultiThreadPoolWorkStealing) {
@@ -8892,15 +8825,10 @@ TEST(Parallelize4D, MultiThreadPoolHighContention) {
 
 static void WorkImbalance4D(std::atomic_int* num_processed_items, size_t i,
                             size_t j, size_t k, size_t l) {
-  num_processed_items->fetch_add(1, std::memory_order_relaxed);
-  if (i == 0 && j == 0 && k == 0 && l == 0) {
-    /* Spin-wait until all items are computed */
-    while (num_processed_items->load(std::memory_order_relaxed) !=
-           kParallelize4DRangeI * kParallelize4DRangeJ * kParallelize4DRangeK *
-               kParallelize4DRangeL) {
-      std::atomic_thread_fence(std::memory_order_acquire);
-    }
-  }
+  WorkImbalance(num_processed_items, /*increment=*/1,
+                kParallelize4DRangeI * kParallelize4DRangeJ *
+                    kParallelize4DRangeK * kParallelize4DRangeL, /*wait=*/
+                i == 0 && j == 0 && k == 0 && l == 0);
 }
 
 TEST(Parallelize4D, MultiThreadPoolWorkStealing) {
@@ -9306,15 +9234,11 @@ TEST(Parallelize4DTile1D, MultiThreadPoolHighContention) {
 static void WorkImbalance4DTile1D(std::atomic_int* num_processed_items,
                                   size_t i, size_t j, size_t k, size_t start_l,
                                   size_t tile_l) {
-  num_processed_items->fetch_add(tile_l, std::memory_order_relaxed);
-  if (i == 0 && j == 0 && k == 0 && start_l == 0) {
-    /* Spin-wait until all items are computed */
-    while (num_processed_items->load(std::memory_order_relaxed) !=
-           kParallelize4DTile1DRangeI * kParallelize4DTile1DRangeJ *
-               kParallelize4DTile1DRangeK * kParallelize4DTile1DRangeL) {
-      std::atomic_thread_fence(std::memory_order_acquire);
-    }
-  }
+  WorkImbalance(num_processed_items, /*increment=*/tile_l,
+                kParallelize4DTile1DRangeI * kParallelize4DTile1DRangeJ *
+                    kParallelize4DTile1DRangeK *
+                    kParallelize4DTile1DRangeL, /*wait=*/
+                i == 0 && j == 0 && k == 0 && start_l == 0);
 }
 
 TEST(Parallelize4DTile1D, MultiThreadPoolWorkStealing) {
@@ -9743,15 +9667,11 @@ static void WorkImbalance4DTile2D(std::atomic_int* num_processed_items,
                                   size_t i, size_t j, size_t start_k,
                                   size_t start_l, size_t tile_k,
                                   size_t tile_l) {
-  num_processed_items->fetch_add(tile_k * tile_l, std::memory_order_relaxed);
-  if (i == 0 && j == 0 && start_k == 0 && start_l == 0) {
-    /* Spin-wait until all items are computed */
-    while (num_processed_items->load(std::memory_order_relaxed) !=
-           kParallelize4DTile2DRangeI * kParallelize4DTile2DRangeJ *
-               kParallelize4DTile2DRangeK * kParallelize4DTile2DRangeL) {
-      std::atomic_thread_fence(std::memory_order_acquire);
-    }
-  }
+  WorkImbalance(num_processed_items, /*increment=*/tile_k * tile_l,
+                kParallelize4DTile2DRangeI * kParallelize4DTile2DRangeJ *
+                    kParallelize4DTile2DRangeK *
+                    kParallelize4DTile2DRangeL, /*wait=*/
+                i == 0 && j == 0 && start_k == 0 && start_l == 0);
 }
 
 TEST(Parallelize4DTile2D, MultiThreadPoolWorkStealing) {
@@ -10236,15 +10156,11 @@ static void WorkImbalance4DTile2DWithUArch(std::atomic_int* num_processed_items,
                                            uint32_t, size_t i, size_t j,
                                            size_t start_k, size_t start_l,
                                            size_t tile_k, size_t tile_l) {
-  num_processed_items->fetch_add(tile_k * tile_l, std::memory_order_relaxed);
-  if (i == 0 && j == 0 && start_k == 0 && start_l == 0) {
-    /* Spin-wait until all items are computed */
-    while (num_processed_items->load(std::memory_order_relaxed) !=
-           kParallelize4DTile2DRangeI * kParallelize4DTile2DRangeJ *
-               kParallelize4DTile2DRangeK * kParallelize4DTile2DRangeL) {
-      std::atomic_thread_fence(std::memory_order_acquire);
-    }
-  }
+  WorkImbalance(num_processed_items, /*increment=*/tile_k * tile_l,
+                kParallelize4DTile2DRangeI * kParallelize4DTile2DRangeJ *
+                    kParallelize4DTile2DRangeK *
+                    kParallelize4DTile2DRangeL, /*wait=*/
+                i == 0 && j == 0 && start_k == 0 && start_l == 0);
 }
 
 TEST(Parallelize4DTile2DWithUArch, MultiThreadPoolWorkStealing) {
@@ -10678,14 +10594,14 @@ static void WorkImbalance4DTile2DDynamic(std::atomic_int* num_processed_items,
                                          size_t i, size_t j, size_t start_k,
                                          size_t start_l, size_t tile_k,
                                          size_t tile_l) {
-  num_processed_items->fetch_add(tile_k * tile_l, std::memory_order_relaxed);
+  num_processed_items->fetch_add(tile_k * tile_l, std::memory_order_acquire);
   if (i == 0 && j == 0 && start_k == 0 && start_l == 0) {
-    /* Sleep for a second. This differs from the non-dynamic `WorkImbalance*`
+    /* Sleep for 100 ms. This differs from the non-dynamic `WorkImbalance*`
      * strategies in that a thread may reserve more elements than fit into a
      * single work function call. Blocking a single work function call will also
      * block any potentially remaining elements allocated to that thread. We
      * therefore just sleep for a second instead.*/
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
 }
 
@@ -11167,14 +11083,14 @@ TEST(Parallelize4DTile2DDynamicWithUArch, MultiThreadPoolHighContention) {
 static void WorkImbalance4DTile2DDynamicWithUArch(
     std::atomic_int* num_processed_items, uint32_t, size_t i, size_t j,
     size_t start_k, size_t start_l, size_t tile_k, size_t tile_l) {
-  num_processed_items->fetch_add(tile_k * tile_l, std::memory_order_relaxed);
+  num_processed_items->fetch_add(tile_k * tile_l, std::memory_order_acquire);
   if (i == 0 && j == 0 && start_k == 0 && start_l == 0) {
-    /* Sleep for a second. This differs from the non-dynamic `WorkImbalance*`
+    /* Sleep for 100 ms. This differs from the non-dynamic `WorkImbalance*`
      * strategies in that a thread may reserve more elements than fit into a
      * single work function call. Blocking a single work function call will also
      * block any potentially remaining elements allocated to that thread. We
      * therefore just sleep for a second instead.*/
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
 }
 
@@ -11548,15 +11464,11 @@ TEST(Parallelize5D, MultiThreadPoolHighContention) {
 
 static void WorkImbalance5D(std::atomic_int* num_processed_items, size_t i,
                             size_t j, size_t k, size_t l, size_t m) {
-  num_processed_items->fetch_add(1, std::memory_order_relaxed);
-  if (i == 0 && j == 0 && k == 0 && l == 0 && m == 0) {
-    /* Spin-wait until all items are computed */
-    while (num_processed_items->load(std::memory_order_relaxed) !=
-           kParallelize5DRangeI * kParallelize5DRangeJ * kParallelize5DRangeK *
-               kParallelize5DRangeL * kParallelize5DRangeM) {
-      std::atomic_thread_fence(std::memory_order_acquire);
-    }
-  }
+  WorkImbalance(num_processed_items, /*increment=*/1,
+                kParallelize5DRangeI * kParallelize5DRangeJ *
+                    kParallelize5DRangeK * kParallelize5DRangeL *
+                    kParallelize5DRangeM, /*wait=*/
+                i == 0 && j == 0 && k == 0 && l == 0 && m == 0);
 }
 
 TEST(Parallelize5D, MultiThreadPoolWorkStealing) {
@@ -12006,16 +11918,11 @@ TEST(Parallelize5DTile1D, MultiThreadPoolHighContention) {
 static void WorkImbalance5DTile1D(std::atomic_int* num_processed_items,
                                   size_t i, size_t j, size_t k, size_t l,
                                   size_t start_m, size_t tile_m) {
-  num_processed_items->fetch_add(tile_m, std::memory_order_relaxed);
-  if (i == 0 && j == 0 && k == 0 && l == 0 && start_m == 0) {
-    /* Spin-wait until all items are computed */
-    while (num_processed_items->load(std::memory_order_relaxed) !=
-           kParallelize5DTile1DRangeI * kParallelize5DTile1DRangeJ *
-               kParallelize5DTile1DRangeK * kParallelize5DTile1DRangeL *
-               kParallelize5DTile1DRangeM) {
-      std::atomic_thread_fence(std::memory_order_acquire);
-    }
-  }
+  WorkImbalance(num_processed_items, /*increment=*/tile_m,
+                kParallelize5DTile1DRangeI * kParallelize5DTile1DRangeJ *
+                    kParallelize5DTile1DRangeK * kParallelize5DTile1DRangeL *
+                    kParallelize5DTile1DRangeM, /*wait=*/
+                i == 0 && j == 0 && k == 0 && l == 0 && start_m == 0);
 }
 
 TEST(Parallelize5DTile1D, MultiThreadPoolWorkStealing) {
@@ -12490,16 +12397,11 @@ static void WorkImbalance5DTile2D(std::atomic_int* num_processed_items,
                                   size_t i, size_t j, size_t k, size_t start_l,
                                   size_t start_m, size_t tile_l,
                                   size_t tile_m) {
-  num_processed_items->fetch_add(tile_l * tile_m, std::memory_order_relaxed);
-  if (i == 0 && j == 0 && k == 0 && start_l == 0 && start_m == 0) {
-    /* Spin-wait until all items are computed */
-    while (num_processed_items->load(std::memory_order_relaxed) !=
-           kParallelize5DTile2DRangeI * kParallelize5DTile2DRangeJ *
-               kParallelize5DTile2DRangeK * kParallelize5DTile2DRangeL *
-               kParallelize5DTile2DRangeM) {
-      std::atomic_thread_fence(std::memory_order_acquire);
-    }
-  }
+  WorkImbalance(num_processed_items, /*increment=*/tile_l * tile_m,
+                kParallelize5DTile2DRangeI * kParallelize5DTile2DRangeJ *
+                    kParallelize5DTile2DRangeK * kParallelize5DTile2DRangeL *
+                    kParallelize5DTile2DRangeM, /*wait=*/
+                i == 0 && j == 0 && k == 0 && start_l == 0 && start_m == 0);
 }
 
 TEST(Parallelize5DTile2D, MultiThreadPoolWorkStealing) {
@@ -12910,16 +12812,11 @@ TEST(Parallelize6D, MultiThreadPoolHighContention) {
 
 static void WorkImbalance6D(std::atomic_int* num_processed_items, size_t i,
                             size_t j, size_t k, size_t l, size_t m, size_t n) {
-  num_processed_items->fetch_add(1, std::memory_order_relaxed);
-  if (i == 0 && j == 0 && k == 0 && l == 0 && m == 0 && n == 0) {
-    /* Spin-wait until all items are computed */
-    while (num_processed_items->load(std::memory_order_relaxed) !=
-           kParallelize6DRangeI * kParallelize6DRangeJ * kParallelize6DRangeK *
-               kParallelize6DRangeL * kParallelize6DRangeM *
-               kParallelize6DRangeN) {
-      std::atomic_thread_fence(std::memory_order_acquire);
-    }
-  }
+  WorkImbalance(num_processed_items, /*increment=*/1,
+                kParallelize6DRangeI * kParallelize6DRangeJ *
+                    kParallelize6DRangeK * kParallelize6DRangeL *
+                    kParallelize6DRangeM * kParallelize6DRangeN, /*wait=*/
+                i == 0 && j == 0 && k == 0 && l == 0 && m == 0 && n == 0);
 }
 
 TEST(Parallelize6D, MultiThreadPoolWorkStealing) {
@@ -13413,16 +13310,12 @@ TEST(Parallelize6DTile1D, MultiThreadPoolHighContention) {
 static void WorkImbalance6DTile1D(std::atomic_int* num_processed_items,
                                   size_t i, size_t j, size_t k, size_t l,
                                   size_t m, size_t start_n, size_t tile_n) {
-  num_processed_items->fetch_add(tile_n, std::memory_order_relaxed);
-  if (i == 0 && j == 0 && k == 0 && l == 0 && m == 0 && start_n == 0) {
-    /* Spin-wait until all items are computed */
-    while (num_processed_items->load(std::memory_order_relaxed) !=
-           kParallelize6DTile1DRangeI * kParallelize6DTile1DRangeJ *
-               kParallelize6DTile1DRangeK * kParallelize6DTile1DRangeL *
-               kParallelize6DTile1DRangeM * kParallelize6DTile1DRangeN) {
-      std::atomic_thread_fence(std::memory_order_acquire);
-    }
-  }
+  WorkImbalance(num_processed_items, /*increment=*/tile_n,
+                kParallelize6DTile1DRangeI * kParallelize6DTile1DRangeJ *
+                    kParallelize6DTile1DRangeK * kParallelize6DTile1DRangeL *
+                    kParallelize6DTile1DRangeM *
+                    kParallelize6DTile1DRangeN, /*wait=*/
+                i == 0 && j == 0 && k == 0 && l == 0 && m == 0 && start_n == 0);
 }
 
 TEST(Parallelize6DTile1D, MultiThreadPoolWorkStealing) {
@@ -13941,16 +13834,12 @@ static void WorkImbalance6DTile2D(std::atomic_int* num_processed_items,
                                   size_t i, size_t j, size_t k, size_t l,
                                   size_t start_m, size_t start_n, size_t tile_m,
                                   size_t tile_n) {
-  num_processed_items->fetch_add(tile_m * tile_n, std::memory_order_relaxed);
-  if (i == 0 && j == 0 && k == 0 && l == 0 && start_m == 0 && start_n == 0) {
-    /* Spin-wait until all items are computed */
-    while (num_processed_items->load(std::memory_order_relaxed) !=
-           kParallelize6DTile2DRangeI * kParallelize6DTile2DRangeJ *
-               kParallelize6DTile2DRangeK * kParallelize6DTile2DRangeL *
-               kParallelize6DTile2DRangeM * kParallelize6DTile2DRangeN) {
-      std::atomic_thread_fence(std::memory_order_acquire);
-    }
-  }
+  WorkImbalance(
+      num_processed_items, /*increment=*/tile_m * tile_n,
+      kParallelize6DTile2DRangeI * kParallelize6DTile2DRangeJ *
+          kParallelize6DTile2DRangeK * kParallelize6DTile2DRangeL *
+          kParallelize6DTile2DRangeM * kParallelize6DTile2DRangeN, /*wait=*/
+      i == 0 && j == 0 && k == 0 && l == 0 && start_m == 0 && start_n == 0);
 }
 
 TEST(Parallelize6DTile2D, MultiThreadPoolWorkStealing) {

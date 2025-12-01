@@ -16,7 +16,7 @@ runs:
       path: |
         sys
         external
-      key: ${{ runner.os }}-${{ hashFiles('sys/dav1d-sys/Cargo.toml', 'sys/dav1d-sys/dav1d.cmd', 'sys/dav1d-sys/build.rs', 'sys/libyuv-sys/Cargo.toml', 'sys/libyuv-sys/libyuv.cmd', 'sys/libyuv-sys/build.rs', 'sys/libgav1-sys/Cargo.toml', 'sys/libgav1-sys/libgav1.cmd', 'sys/libgav1-sys/build.rs', 'external/googletest.cmd', 'sys/aom-sys/Cargo.toml', 'sys/aom-sys/aom.cmd', 'sys/aom-sys/build.rs') }}
+      key: ${{ runner.os }}-${{ hashFiles('sys/dav1d-sys/Cargo.toml', 'sys/dav1d-sys/dav1d.cmd', 'sys/dav1d-sys/build.rs', 'sys/libyuv-sys/Cargo.toml', 'sys/libyuv-sys/libyuv.cmd', 'sys/libyuv-sys/build.rs', 'sys/libgav1-sys/Cargo.toml', 'sys/libgav1-sys/libgav1.cmd', 'sys/libgav1-sys/build.rs', 'external/googletest.cmd', 'sys/aom-sys/Cargo.toml', 'sys/aom-sys/aom.cmd', 'sys/aom-sys/build.rs', 'sys/libsharpyuv-sys/Cargo.toml', 'sys/libsharpyuv-sys/libsharpyuv.cmd', 'sys/libsharpyuv-sys/build.rs') }}
 
   - uses: jwlawson/actions-setup-cmake@d06b37b47cfd043ec794ffa3e40e0b6b5858a7ec # v1.14.2
     if: steps.cache-ext.outputs.cache-hit != 'true'
@@ -41,6 +41,11 @@ runs:
     if: steps.cache-ext.outputs.cache-hit != 'true'
     working-directory: ./sys/aom-sys
     run: ./aom.cmd
+    shell: bash
+  - name: Build sharpyuv
+    if: steps.cache-ext.outputs.cache-hit != 'true'
+    working-directory: ./sys/libsharpyuv-sys
+    run: ./libsharpyuv.cmd
     shell: bash
   - name: Build libgav1
     if: steps.cache-ext.outputs.cache-hit != 'true'

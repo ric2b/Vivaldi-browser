@@ -224,6 +224,7 @@ typedef struct HLSContext {
     AVDictionary *avio_opts;
     AVDictionary *seg_format_opts;
     char *allowed_extensions;
+    char *allowed_segment_extensions;
     int extension_picky;
     int max_reload;
     int http_persistent;
@@ -740,12 +741,12 @@ static int test_segment(AVFormatContext *s, const AVInputFormat *in_fmt, struct 
     if (!c->extension_picky)
         return 0;
 
-    if (strcmp(c->allowed_extensions, "ALL"))
-        matchA =      av_match_ext    (seg->url, c->allowed_extensions)
-                 + 2*(ff_match_url_ext(seg->url, c->allowed_extensions) > 0);
+    if (strcmp(c->allowed_segment_extensions, "ALL"))
+        matchA =      av_match_ext    (seg->url, c->allowed_segment_extensions)
+                 + 2*(ff_match_url_ext(seg->url, c->allowed_segment_extensions) > 0);
 
     if (!matchA) {
-        av_log(s, AV_LOG_ERROR, "URL %s is not in allowed_extensions, consider updating hls.c and submitting a patch to ffmpeg-devel, if this should be added\n", seg->url);
+        av_log(s, AV_LOG_ERROR, "URL %s is not in allowed_segment_extensions, consider updating hls.c and submitting a patch to ffmpeg-devel, if this should be added\n", seg->url);
         return AVERROR_INVALIDDATA;
     }
 
@@ -759,8 +760,11 @@ static int test_segment(AVFormatContext *s, const AVInputFormat *in_fmt, struct 
                           + 2*(ff_match_url_ext(seg->url, "ts,m2t,m2ts,mts,mpg,m4s,mpeg,mpegts") > 0);
             }
         } else if (!strcmp(in_fmt->name, "mpegts")) {
-            matchF =      av_match_ext(    seg->url, "ts,m2t,m2ts,mts,mpg,m4s,mpeg,mpegts")
-                     + 2*(ff_match_url_ext(seg->url, "ts,m2t,m2ts,mts,mpg,m4s,mpeg,mpegts") > 0);
+            const char *str = "ts,m2t,m2ts,mts,mpg,m4s,mpeg,mpegts"
+                              ",html" // https://flash1.bogulus.cfd/
+                            ;
+            matchF =      av_match_ext(    seg->url, str)
+                     + 2*(ff_match_url_ext(seg->url, str) > 0);
         } else if (!strcmp(in_fmt->name, "webvtt")) {
             matchF =      av_match_ext(    seg->url, "vtt,webvtt")
                      + 2*(ff_match_url_ext(seg->url, "vtt,webvtt") > 0);
@@ -1332,6 +1336,37 @@ static void intercept_id3(struct playlist *pls, uint8_t *buf,
         pls->is_id3_timestamped = (pls->id3_mpegts_timestamp != AV_NOPTS_VALUE);
 }
 
+static int read_key(HLSContext *c, struct playlist *pls, struct segment *seg)
+{
+    AVIOContext *pb = NULL;
+
+    int ret = open_url(pls->parent, &pb, seg->key, &c->avio_opts, NULL, NULL);
+    if (ret < 0) {
+        av_log(pls->parent, AV_LOG_ERROR, "Unable to open key file %s, %s\n",
+               seg->key, av_err2str(ret));
+        return ret;
+    }
+
+    ret = avio_read(pb, pls->key, sizeof(pls->key));
+    ff_format_io_close(pls->parent, &pb);
+    if (ret != sizeof(pls->key)) {
+        if (ret < 0) {
+            av_log(pls->parent, AV_LOG_ERROR, "Unable to read key file %s, %s\n",
+                   seg->key, av_err2str(ret));
+        } else {
+            av_log(pls->parent, AV_LOG_ERROR, "Unable to read key file %s, read bytes %d != %zu\n",
+                   seg->key, ret, sizeof(pls->key));
+            ret = AVERROR_INVALIDDATA;
+        }
+
+        return ret;
+    }
+
+    av_strlcpy(pls->key_url, seg->key, sizeof(pls->key_url));
+
+    return 0;
+}
+
 static int open_input(HLSContext *c, struct playlist *pls, struct segment *seg, AVIOContext **in)
 {
     AVDictionary *opts = NULL;
@@ -1353,19 +1388,9 @@ static int open_input(HLSContext *c, struct playlist *pls, struct segment *seg, 
 
     if (seg->key_type == KEY_AES_128 || seg->key_type == KEY_SAMPLE_AES) {
         if (strcmp(seg->key, pls->key_url)) {
-            AVIOContext *pb = NULL;
-            if (open_url(pls->parent, &pb, seg->key, &c->avio_opts, NULL, NULL) == 0) {
-                ret = avio_read(pb, pls->key, sizeof(pls->key));
-                if (ret != sizeof(pls->key)) {
-                    av_log(pls->parent, AV_LOG_ERROR, "Unable to read key file %s\n",
-                           seg->key);
-                }
-                ff_format_io_close(pls->parent, &pb);
-            } else {
-                av_log(pls->parent, AV_LOG_ERROR, "Unable to open key file %s\n",
-                       seg->key);
-            }
-            av_strlcpy(pls->key_url, seg->key, sizeof(pls->key_url));
+            ret = read_key(c, pls, seg);
+            if (ret < 0)
+                goto cleanup;
         }
     }
 
@@ -2112,7 +2137,7 @@ static int hls_read_header(AVFormatContext *s)
         return ret;
 
     /* XXX: Some HLS servers don't like being sent the range header,
-       in this case, need to  setting http_seekable = 0 to disable
+       in this case, we need to set http_seekable = 0 to disable
        the range header */
     av_dict_set_int(&c->avio_opts, "seekable", c->http_seekable, 0);
 
@@ -2772,6 +2797,15 @@ static const AVOption hls_options[] = {
             ",cmfv,cmfa" // Ticket11526 www.nicovideo.jp
             ",ec3"       // part of Ticket11435 (Elisa Viihde (Finnish online recording service))
             ",fmp4"      // https://github.com/yt-dlp/yt-dlp/issues/12700
+        },
+        INT_MIN, INT_MAX, FLAGS},
+    {"allowed_segment_extensions", "List of file extensions that hls is allowed to access",
+        OFFSET(allowed_segment_extensions), AV_OPT_TYPE_STRING,
+        {.str = "3gp,aac,avi,ac3,eac3,flac,mkv,m3u8,m4a,m4s,m4v,mpg,mov,mp2,mp3,mp4,mpeg,mpegts,ogg,ogv,oga,ts,vob,vtt,wav,webvtt"
+            ",cmfv,cmfa" // Ticket11526 www.nicovideo.jp
+            ",ec3"       // part of Ticket11435 (Elisa Viihde (Finnish online recording service))
+            ",fmp4"      // https://github.com/yt-dlp/yt-dlp/issues/12700
+            ",html"      // https://flash1.bogulus.cfd/
         },
         INT_MIN, INT_MAX, FLAGS},
     {"extension_picky", "Be picky with all extensions matching",

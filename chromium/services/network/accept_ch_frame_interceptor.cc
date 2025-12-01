@@ -4,6 +4,7 @@
 
 #include "services/network/accept_ch_frame_interceptor.h"
 
+#include "base/containers/contains.h"
 #include "base/feature_list.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/time/time.h"
@@ -11,6 +12,7 @@
 #include "net/http/http_request_headers.h"
 #include "services/network/public/cpp/client_hints.h"
 #include "services/network/public/cpp/features.h"
+#include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/mojom/web_client_hints_types.mojom-shared.h"
 
 namespace network {
@@ -50,21 +52,35 @@ std::vector<mojom::WebClientHintsType> ComputeAcceptCHFrameHints(
 
 // static
 std::unique_ptr<AcceptCHFrameInterceptor> AcceptCHFrameInterceptor::MaybeCreate(
-    mojo::PendingRemote<mojom::AcceptCHFrameObserver>
-        accept_ch_frame_observer) {
+    mojo::PendingRemote<mojom::AcceptCHFrameObserver> accept_ch_frame_observer,
+    std::optional<ResourceRequest::TrustedParams::EnabledClientHints>
+        enabled_client_hints) {
   if (!accept_ch_frame_observer ||
       !base::FeatureList::IsEnabled(features::kAcceptCHFrame)) {
     return nullptr;
   }
-  return std::make_unique<AcceptCHFrameInterceptor>(
-      std::move(accept_ch_frame_observer),
-      base::PassKey<AcceptCHFrameInterceptor>());
+  return base::WrapUnique(new AcceptCHFrameInterceptor(
+      std::move(accept_ch_frame_observer), std::move(enabled_client_hints),
+      base::PassKey<AcceptCHFrameInterceptor>()));
+}
+
+std::unique_ptr<AcceptCHFrameInterceptor>
+AcceptCHFrameInterceptor::CreateForTesting(
+    mojo::PendingRemote<mojom::AcceptCHFrameObserver> accept_ch_frame_observer,
+    std::optional<ResourceRequest::TrustedParams::EnabledClientHints>
+        enabled_client_hints) {
+  return base::WrapUnique(new AcceptCHFrameInterceptor(
+      std::move(accept_ch_frame_observer), std::move(enabled_client_hints),
+      base::PassKey<AcceptCHFrameInterceptor>()));
 }
 
 AcceptCHFrameInterceptor::AcceptCHFrameInterceptor(
     mojo::PendingRemote<mojom::AcceptCHFrameObserver> accept_ch_frame_observer,
+    std::optional<ResourceRequest::TrustedParams::EnabledClientHints>
+        enabled_client_hints,
     base::PassKey<AcceptCHFrameInterceptor>)
-    : accept_ch_frame_observer_(std::move(accept_ch_frame_observer)) {}
+    : accept_ch_frame_observer_(std::move(accept_ch_frame_observer)),
+      enabled_client_hints_(std::move(enabled_client_hints)) {}
 
 AcceptCHFrameInterceptor::~AcceptCHFrameInterceptor() = default;
 
@@ -76,13 +92,20 @@ net::Error AcceptCHFrameInterceptor::OnConnected(
   if (accept_ch_frame.empty() || !accept_ch_frame_observer_) {
     return net::OK;
   }
-
   // Find client hints that are in the ACCEPT_CH frame that were not already
   // included in the request
   const auto hints = ComputeAcceptCHFrameHints(accept_ch_frame, headers);
   base::UmaHistogramBoolean("Net.URLLoader.AcceptCH.RunObserverCall",
                             !hints.empty());
   if (hints.empty()) {
+    return net::OK;
+  }
+
+  const NeedsObserverCheckReason reason =
+      NeedsObserverCheck(url::Origin::Create(url), hints);
+  base::UmaHistogramEnumeration(
+      "Net.AcceptCHFrameInterceptor.NeedsObserverCheckReason", reason);
+  if (reason == NeedsObserverCheckReason::kNotNeeded) {
     return net::OK;
   }
 
@@ -116,6 +139,50 @@ net::Error AcceptCHFrameInterceptor::OnConnected(
       base::BindOnce(record, std::move(callback), base::TimeTicks::Now(),
                      TRACE_ID_LOCAL(this).raw_id()));
   return net::ERR_IO_PENDING;
+}
+
+AcceptCHFrameInterceptor::NeedsObserverCheckReason
+AcceptCHFrameInterceptor::NeedsObserverCheckForTesting(
+    const url::Origin& origin,
+    const std::vector<mojom::WebClientHintsType>& hints) {
+  return NeedsObserverCheck(origin, hints);
+}
+
+AcceptCHFrameInterceptor::NeedsObserverCheckReason
+AcceptCHFrameInterceptor::NeedsObserverCheck(
+    const url::Origin& origin,
+    const std::vector<mojom::WebClientHintsType>& hints) {
+  if (!enabled_client_hints_.has_value()) {
+    return NeedsObserverCheckReason::kNoEnabledClientHints;
+  }
+
+  // For main frames, the origin must match to use the cached hints.
+  if (enabled_client_hints_->is_outermost_main_frame &&
+      !enabled_client_hints_->origin.IsSameOriginWith(origin)) {
+    return NeedsObserverCheckReason::kMainFrameOriginMismatch;
+  }
+  // For subframes, the optimization is only allowed if the feature is enabled.
+  if (!enabled_client_hints_->is_outermost_main_frame &&
+      !features::kAcceptCHOffloadForSubframe.Get()) {
+    return NeedsObserverCheckReason::kSubframeFeatureDisabled;
+  }
+
+  CHECK(base::FeatureList::IsEnabled(features::kOffloadAcceptCHFrameCheck));
+  if (!std::all_of(hints.cbegin(), hints.cend(),
+                   [&](const network::mojom::WebClientHintsType& h) {
+                     const bool hint_enabled =
+                         base::Contains(enabled_client_hints_->hints, h);
+                     if (!hint_enabled) {
+                       base::UmaHistogramEnumeration(
+                           "Net.AcceptCHFrameInterceptor.MismatchClientHint",
+                           h);
+                     }
+                     return hint_enabled;
+                   })) {
+    return NeedsObserverCheckReason::kHintNotEnabled;
+  }
+
+  return NeedsObserverCheckReason::kNotNeeded;
 }
 
 }  // namespace network

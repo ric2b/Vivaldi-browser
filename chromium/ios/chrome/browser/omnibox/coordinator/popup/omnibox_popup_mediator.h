@@ -27,6 +27,8 @@
 @class OmniboxPopupPresenter;
 @class SceneState;
 @protocol SnackbarCommands;
+@protocol LoadQueryCommands;
+class TemplateURLService;
 
 // Vivaldi
 class PrefService;
@@ -93,7 +95,8 @@ class Tracker;
 /// Flag that marks that incognito actions are available. Those can be disabled
 /// by an enterprise policy.
 @property(nonatomic, assign) BOOL allowIncognitoActions;
-
+/// Template URL service.
+@property(nonatomic, assign) TemplateURLService* templateURLService;
 /// Delegate for sharing popup content.
 @property(nonatomic, weak) id<OmniboxPopupMediatorSharingDelegate>
     sharingDelegate;

@@ -126,8 +126,9 @@ const REGISTERED_EXPERIMENTS = [
   Root.Runtime.ExperimentName.TIMELINE_DEBUG_MODE,
   Root.Runtime.ExperimentName.FULL_ACCESSIBILITY_TREE,
   Root.Runtime.ExperimentName.TIMELINE_SHOW_POST_MESSAGE_EVENTS,
+  Root.Runtime.ExperimentName.TIMELINE_SAVE_AS_GZ,
   Root.Runtime.ExperimentName.TIMELINE_ENHANCED_TRACES,
-  Root.Runtime.ExperimentName.TIMELINE_EXPERIMENTAL_INSIGHTS,
+  Root.Runtime.ExperimentName.VERTICAL_DRAWER,
 ];
 
 export async function initializeGlobalVars({reset = true} = {}) {
@@ -188,6 +189,8 @@ export async function initializeGlobalVars({reset = true} = {}) {
         Common.Settings.SettingType.ENUM),
     createSettingValue(
         Common.Settings.SettingCategory.RENDERING, 'emulated-vision-deficiency', '', Common.Settings.SettingType.ENUM),
+    createSettingValue(
+        Common.Settings.SettingCategory.RENDERING, 'emulated-os-text-scale', '', Common.Settings.SettingType.ENUM),
     createSettingValue(
         Common.Settings.SettingCategory.RENDERING, 'emulate-auto-dark-mode', '', Common.Settings.SettingType.ENUM),
     createSettingValue(Common.Settings.SettingCategory.RENDERING, 'local-fonts-disabled', false),
@@ -298,6 +301,9 @@ export async function initializeGlobalVars({reset = true} = {}) {
         Common.Settings.SettingCategory.AI, 'ai-assistance-patching-fre-completed', false,
         Common.Settings.SettingType.BOOLEAN),
     createSettingValue(
+        Common.Settings.SettingCategory.AI, 'ai-code-completion-fre-completed', false,
+        Common.Settings.SettingType.BOOLEAN),
+    createSettingValue(
         Common.Settings.SettingCategory.MOBILE, 'emulation.show-device-outline', false,
         Common.Settings.SettingType.BOOLEAN),
     createSettingValue(
@@ -350,7 +356,7 @@ export async function deinitializeGlobalVars() {
   Common.Revealer.RevealerRegistry.removeInstance();
   Common.Console.Console.removeInstance();
   Workspace.Workspace.WorkspaceImpl.removeInstance();
-  Bindings.IgnoreListManager.IgnoreListManager.removeInstance();
+  Workspace.IgnoreListManager.IgnoreListManager.removeInstance();
   Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding.removeInstance();
   Bindings.CSSWorkspaceBinding.CSSWorkspaceBinding.removeInstance();
   IssuesManager.IssuesManager.IssuesManager.removeInstance();
@@ -390,6 +396,14 @@ describeWithEnvironment.only = function(title: string, fn: (this: Mocha.Suite) =
     before(async () => await initializeGlobalVars(opts));
     fn.call(this);
     after(async () => await deinitializeGlobalVars());
+  });
+};
+describeWithEnvironment.skip = function(title: string, fn: (this: Mocha.Suite) => void, _opts: {reset: boolean} = {
+  reset: true,
+}) {
+  // eslint-disable-next-line rulesdir/check-test-definitions
+  return describe.skip(title, function() {
+    fn.call(this);
   });
 };
 
@@ -452,10 +466,6 @@ export function createFakeRegExpSetting(name: string, defaultValue: string): Com
   return new Common.Settings.RegExpSetting(name, defaultValue, new Common.ObjectWrapper.ObjectWrapper(), storage);
 }
 
-export function enableFeatureForTest(feature: string): void {
-  Root.Runtime.experiments.enableForTest(feature);
-}
-
 export function setupActionRegistry() {
   before(function() {
     const actionRegistry = UI.ActionRegistry.ActionRegistry.instance();
@@ -472,6 +482,7 @@ export function setupActionRegistry() {
   });
 }
 
+// This needs to be invoked within a describe block, rather than within an it() block.
 export function expectConsoleLogs(expectedLogs: {warn?: string[], log?: string[], error?: string[]}) {
   const {error, warn, log} = console;
   before(() => {

@@ -14,6 +14,7 @@
 #import "base/json/json_reader.h"
 #import "base/notreached.h"
 #import "base/vivaldi_switches.h"
+#import "components/application_locale_storage/application_locale_storage.h"
 #import "components/language/core/browser/language_model.h"
 #import "components/prefs/pref_service.h"
 #import "components/translate/core/browser/translate_download_manager.h"
@@ -75,7 +76,7 @@ void VivaldiIOSTranslateService::Initialize() {
   download_manager->set_url_loader_factory(
       GetApplicationContext()->GetSharedURLLoaderFactory());
   download_manager->set_application_locale(
-      GetApplicationContext()->GetApplicationLocale());
+      GetApplicationContext()->GetApplicationLocaleStorage()->Get());
 
   // Set ours prefs list as default in Chromium.
   g_translate_service->SetPrefsListAsDefault();
@@ -120,6 +121,10 @@ void VivaldiIOSTranslateService::SetListInChromium(
     const base::Value::List& list) {
   translate::TranslateLanguageList* language_list =
       translate::TranslateDownloadManager::GetInstance()->language_list();
+  // Never allow LanguageList to make language update call as that is handled
+  // by chromium. We update language list in this file.
+  language_list->SetResourceRequestsAllowed(false);
+  language_list->DisableUpdate();
   if (language_list) {
     std::vector<std::string> lang_list;
     for (const auto& value : list) {

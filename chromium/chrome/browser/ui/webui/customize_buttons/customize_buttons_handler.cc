@@ -110,14 +110,9 @@ void CustomizeButtonsHandler::SetCustomizeChromeSidePanelVisible(
           GetSidePanelControllerForActiveTab();
   CHECK(customize_chrome_side_panel_controller);
 
-  bool is_side_panel_showing =
-      customize_chrome_side_panel_controller->IsCustomizeChromeEntryShowing();
-
-  // Send mojo signal to indicate whether the side panel is showing.
-  NotifyCustomizeChromeSidePanelVisibilityChanged(!is_side_panel_showing);
-
-  if (is_side_panel_showing) {
+  if (!visible) {
     customize_chrome_side_panel_controller->CloseSidePanel();
+    NotifyCustomizeChromeSidePanelVisibilityChanged(false);
     return;
   }
 
@@ -142,6 +137,9 @@ void CustomizeButtonsHandler::SetCustomizeChromeSidePanelVisible(
     case customize_buttons::mojom::CustomizeChromeSection::kToolbar:
       section_enum = CustomizeChromeSection::kToolbar;
       break;
+    case customize_buttons::mojom::CustomizeChromeSection::kFooter:
+      section_enum = CustomizeChromeSection::kFooter;
+      break;
   }
 
   SidePanelOpenTrigger trigger_enum;
@@ -154,6 +152,7 @@ void CustomizeButtonsHandler::SetCustomizeChromeSidePanelVisible(
       break;
   }
 
+  NotifyCustomizeChromeSidePanelVisibilityChanged(true);
   customize_chrome_side_panel_controller->OpenSidePanel(trigger_enum,
                                                         section_enum);
 

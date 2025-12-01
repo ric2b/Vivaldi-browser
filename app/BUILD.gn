@@ -170,7 +170,12 @@ if (is_ios) {
       if (locale == "ca-valencia" || locale == "ca@valencia") {
         locale = "ca-valencia"
       }
-      outputs += [ "$root_gen_dir/vivaldi/ios/vivaldi_ios_native_strings_$locale.pak" ]
+      foreach(_gender_suffix, gender_suffixes) {
+        outputs += [ "$root_gen_dir/vivaldi/ios/vivaldi_ios_native_strings_$locale${_gender_suffix}.pak" ]
+      }
+    }
+    if (translate_genders) {
+      grit_flags = [ "--translate-genders" ]
     }
   }
 }

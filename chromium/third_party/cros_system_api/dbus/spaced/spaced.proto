@@ -59,3 +59,39 @@ message GetQuotaCurrentSpacesForIdsReply {
   map<uint32, int64> curspaces_for_gids = 2;
   map<uint32, int64> curspaces_for_project_ids = 3;
 }
+
+// Input parameters for GetDiskIOStatsForPaths.
+message GetDiskIOStatsForPathsRequest {
+  repeated string path = 1;
+}
+
+message DiskIOStats {
+  uint64 read_ios = 1;
+  uint64 read_merges = 2;
+  uint64 read_sectors = 3;
+  uint64 read_ticks = 4;
+  uint64 write_ios = 5;
+  uint64 write_merges = 6;
+  uint64 write_sectors = 7;
+  uint64 write_ticks = 8;
+  uint64 in_flight = 9;
+  uint64 io_ticks = 10;
+  uint64 time_in_queue = 11;
+  uint64 discard_ios = 12;
+  uint64 discard_merges = 13;
+  uint64 discard_sectors = 14;
+  uint64 discard_ticks = 15;
+  uint64 flush_ios = 16;
+  uint64 flush_ticks = 17;
+}
+
+// Disk IO stats result for a specified path.
+message DiskIOStatsForPath {
+  string path = 1;
+  DiskIOStats stats = 2;
+}
+
+// Output parameters for GetDiskIOStatsForPaths.
+message GetDiskIOStatsForPathsReply {
+  repeated DiskIOStatsForPath stats_for_path = 1;
+}

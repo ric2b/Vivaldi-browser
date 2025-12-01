@@ -153,6 +153,13 @@ static_library("browser") {
       "android/media/vivaldi_background_media_playback_enabler.cc",
     ]
   }
+  if (is_linux) {
+    sources += [
+      "vivaldi_platform_util_linux.h",
+      "vivaldi_platform_util_linux.cc",
+    ]
+  }
+
 }
 
 static_library("internal_handlers") {
@@ -314,4 +321,22 @@ source_set("vivaldi_browser_component_wrapper_impl") {
     "//content/public/browser:browser",
     "//vivaldi/components:tabs",
   ]
+}
+source_set("features") {
+  sources = [
+    "features/vivaldi_features.h",
+    "features/vivaldi_features.cc",
+    "features/vivaldi_flag_descriptions.h",
+    "features/vivaldi_flag_descriptions.cc",
+    "features/vivaldi_flag_utils.h",
+    "features/vivaldi_flag_utils.cc",
+  ]
+  deps = [
+    "//base:base",
+    "//base/version_info:version_info",
+  ]
+
+  configs += [
+     "//vivaldi/gn/config:release_kind"
+   ]
 }

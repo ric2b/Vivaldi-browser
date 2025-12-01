@@ -40,7 +40,6 @@
 #include "dawn/native/Commands.h"
 #include "dawn/native/ExternalTexture.h"
 #include "dawn/native/RenderBundle.h"
-#include "dawn/native/opengl/BindingPoint.h"
 #include "dawn/native/opengl/BufferGL.h"
 #include "dawn/native/opengl/ComputePipelineGL.h"
 #include "dawn/native/opengl/DeviceGL.h"
@@ -57,6 +56,26 @@
 namespace dawn::native::opengl {
 
 namespace {
+
+GLenum ComponentSwizzle(wgpu::ComponentSwizzle swizzle) {
+    switch (swizzle) {
+        case wgpu::ComponentSwizzle::Zero:
+            return GL_ZERO;
+        case wgpu::ComponentSwizzle::One:
+            return GL_ONE;
+        case wgpu::ComponentSwizzle::R:
+            return GL_RED;
+        case wgpu::ComponentSwizzle::G:
+            return GL_GREEN;
+        case wgpu::ComponentSwizzle::B:
+            return GL_BLUE;
+        case wgpu::ComponentSwizzle::A:
+            return GL_ALPHA;
+
+        case wgpu::ComponentSwizzle::Undefined:
+            DAWN_UNREACHABLE();
+    }
+}
 
 GLenum IndexFormatType(wgpu::IndexFormat format) {
     switch (format) {
@@ -286,21 +305,19 @@ class BindGroupTracker : public BindGroupTrackerBase<false, uint64_t> {
     void OnSetPipeline(RenderPipeline* pipeline) {
         BindGroupTrackerBase::OnSetPipeline(pipeline);
         mPipeline = pipeline;
-        ResetInternalUniformDataDirtyRange();
-        ResetInternalUniformDataDirtyRangeArrayLength();
+        ResetInternalUniformDataBindgroupAndDirtyRange();
     }
 
     void OnSetPipeline(ComputePipeline* pipeline) {
         BindGroupTrackerBase::OnSetPipeline(pipeline);
         mPipeline = pipeline;
-        ResetInternalUniformDataDirtyRange();
-        ResetInternalUniformDataDirtyRangeArrayLength();
+        ResetInternalUniformDataBindgroupAndDirtyRange();
     }
 
     MaybeError Apply(const OpenGLFunctions& gl) {
         BeforeApply();
         for (BindGroupIndex index : mDirtyBindGroupsObjectChangedOrIsDynamic) {
-            DAWN_TRY(ApplyBindGroup(gl, index, mBindGroups[index], mDynamicOffsets[index]));
+            DAWN_TRY(ApplyBindGroup(gl, index, mBindGroups[index], GetDynamicOffsets(index)));
         }
         DAWN_TRY(ApplyInternalUniforms(gl));
         DAWN_TRY(ApplyInternalArrayLengthUniforms(gl));
@@ -309,17 +326,13 @@ class BindGroupTracker : public BindGroupTrackerBase<false, uint64_t> {
     }
 
   private:
-    MaybeError BindSamplerAtIndex(const OpenGLFunctions& gl, SamplerBase* s, GLuint samplerIndex) {
+    MaybeError BindSamplerAtIndex(const OpenGLFunctions& gl,
+                                  SamplerBase* s,
+                                  FlatBindingIndex samplerIndex) {
         Sampler* sampler = ToBackend(s);
 
-        for (PipelineGL::SamplerUnit unit : mPipeline->GetTextureUnitsForSampler(samplerIndex)) {
-            // Only use filtering for certain texture units, because int
-            // and uint texture are only complete without filtering
-            if (unit.shouldUseFiltering) {
-                DAWN_GL_TRY(gl, BindSampler(unit.unit, sampler->GetFilteringHandle()));
-            } else {
-                DAWN_GL_TRY(gl, BindSampler(unit.unit, sampler->GetNonFilteringHandle()));
-            }
+        for (TextureUnit unit : mPipeline->GetTextureUnitsForSampler(samplerIndex)) {
+            DAWN_GL_TRY(gl, BindSampler(uint32_t(unit), sampler->GetHandle()));
         }
 
         return {};
@@ -328,7 +341,7 @@ class BindGroupTracker : public BindGroupTrackerBase<false, uint64_t> {
     MaybeError ApplyBindGroup(const OpenGLFunctions& gl,
                               BindGroupIndex groupIndex,
                               BindGroupBase* group,
-                              const ityp::vector<BindingIndex, uint64_t>& dynamicOffsets) {
+                              const ityp::span<BindingIndex, uint64_t>& dynamicOffsets) {
         const auto& indices = ToBackend(mPipelineLayout)->GetBindingIndexInfo()[groupIndex];
 
         for (BindingIndex bindingIndex : Range(group->GetLayout()->GetBindingCount())) {
@@ -338,7 +351,7 @@ class BindGroupTracker : public BindGroupTrackerBase<false, uint64_t> {
                 [&](const BufferBindingInfo& layout) -> MaybeError {
                     BufferBinding binding = group->GetBindingAsBufferBinding(bindingIndex);
                     GLuint buffer = ToBackend(binding.buffer)->GetHandle();
-                    GLuint index = indices[bindingIndex];
+                    FlatBindingIndex index = indices[bindingIndex];
                     GLuint offset = binding.offset;
 
                     if (layout.hasDynamicOffset) {
@@ -363,7 +376,8 @@ class BindGroupTracker : public BindGroupTrackerBase<false, uint64_t> {
                             DAWN_UNREACHABLE();
                     }
 
-                    DAWN_GL_TRY(gl, BindBufferRange(target, index, buffer, offset, binding.size));
+                    DAWN_GL_TRY(
+                        gl, BindBufferRange(target, GLuint(index), buffer, offset, binding.size));
                     return {};
                 },
                 [&](const StaticSamplerBindingInfo& layout) -> MaybeError {
@@ -379,10 +393,10 @@ class BindGroupTracker : public BindGroupTrackerBase<false, uint64_t> {
                     TextureView* view = ToBackend(group->GetBindingAsTextureView(bindingIndex));
                     GLuint handle = view->GetHandle();
                     GLenum target = view->GetGLTarget();
-                    GLuint viewIndex = indices[bindingIndex];
+                    FlatBindingIndex viewIndex = indices[bindingIndex];
 
                     for (auto unit : mPipeline->GetTextureUnitsForTextureView(viewIndex)) {
-                        DAWN_GL_TRY(gl, ActiveTexture(GL_TEXTURE0 + unit));
+                        DAWN_GL_TRY(gl, ActiveTexture(GL_TEXTURE0 + GLuint(unit)));
                         DAWN_GL_TRY(gl, BindTexture(target, handle));
                         if (ToBackend(view->GetTexture())->GetGLFormat().format ==
                             GL_DEPTH_STENCIL) {
@@ -413,18 +427,32 @@ class BindGroupTracker : public BindGroupTrackerBase<false, uint64_t> {
                         DAWN_GL_TRY(
                             gl, TexParameteri(target, GL_TEXTURE_MAX_LEVEL,
                                               view->GetBaseMipLevel() + view->GetLevelCount() - 1));
+                        if (mPipelineLayout->GetDevice()->HasFeature(
+                                Feature::TextureComponentSwizzle)) {
+                            DAWN_GL_TRY(gl, TexParameteri(target, GL_TEXTURE_SWIZZLE_R,
+                                                          ComponentSwizzle(view->GetSwizzleRed())));
+                            DAWN_GL_TRY(gl,
+                                        TexParameteri(target, GL_TEXTURE_SWIZZLE_G,
+                                                      ComponentSwizzle(view->GetSwizzleGreen())));
+                            DAWN_GL_TRY(gl,
+                                        TexParameteri(target, GL_TEXTURE_SWIZZLE_B,
+                                                      ComponentSwizzle(view->GetSwizzleBlue())));
+                            DAWN_GL_TRY(gl,
+                                        TexParameteri(target, GL_TEXTURE_SWIZZLE_A,
+                                                      ComponentSwizzle(view->GetSwizzleAlpha())));
+                        }
                     }
 
                     // Some texture builtin function data needs emulation to update into the
                     // internal uniform buffer.
-                    UpdateTextureBuiltinsUniformData(gl, view, groupIndex, bindingIndex);
+                    UpdateTextureBuiltinsUniformData(gl, view, viewIndex);
                     return {};
                 },
                 [&](const StorageTextureBindingInfo& layout) -> MaybeError {
                     TextureView* view = ToBackend(group->GetBindingAsTextureView(bindingIndex));
                     Texture* texture = ToBackend(view->GetTexture());
                     GLuint handle = texture->GetHandle();
-                    GLuint imageIndex = indices[bindingIndex];
+                    FlatBindingIndex imageIndex = indices[bindingIndex];
 
                     GLenum access;
                     switch (layout.access) {
@@ -453,9 +481,10 @@ class BindGroupTracker : public BindGroupTrackerBase<false, uint64_t> {
                         DAWN_UNREACHABLE();
                     }
 
-                    DAWN_GL_TRY(gl, BindImageTexture(imageIndex, handle, view->GetBaseMipLevel(),
-                                                     isLayered, view->GetBaseArrayLayer(), access,
-                                                     texture->GetGLFormat().internalFormat));
+                    DAWN_GL_TRY(
+                        gl, BindImageTexture(GLuint(imageIndex), handle, view->GetBaseMipLevel(),
+                                             isLayered, view->GetBaseArrayLayer(), access,
+                                             texture->GetGLFormat().internalFormat));
                     return {};
                 },
                 [](const InputAttachmentBindingInfo&) -> MaybeError { DAWN_UNREACHABLE(); }));
@@ -466,41 +495,33 @@ class BindGroupTracker : public BindGroupTrackerBase<false, uint64_t> {
 
     void UpdateTextureBuiltinsUniformData(const OpenGLFunctions& gl,
                                           const TextureView* view,
-                                          BindGroupIndex groupIndex,
-                                          BindingIndex bindingIndex) {
-        const auto& bindingInfo = mPipeline->GetBindingPointBuiltinDataInfo();
-        if (bindingInfo.empty()) {
-            return;
-        }
-
-        auto iter = bindingInfo.find(tint::BindingPoint{static_cast<uint32_t>(groupIndex),
-                                                        static_cast<uint32_t>(bindingIndex)});
-        if (iter == bindingInfo.end()) {
+                                          FlatBindingIndex textureIndex) {
+        const auto& builtinInfo = mPipeline->GetEmulatedTextureBuiltinInfo();
+        auto iter = builtinInfo.find(textureIndex);
+        if (iter == builtinInfo.end()) {
             return;
         }
 
         // Update data by retrieving information from texture view object.
-        const BindPointFunction field = iter->second.first;
-        const size_t byteOffset = static_cast<size_t>(iter->second.second);
-
         uint32_t data;
-        switch (field) {
-            case BindPointFunction::kTextureNumLevels:
+        switch (iter->second.query) {
+            case TextureQuery::NumLevels:
                 data = view->GetLevelCount();
                 break;
-            case BindPointFunction::kTextureNumSamples:
+            case TextureQuery::NumSamples:
                 data = view->GetTexture()->GetSampleCount();
                 break;
         }
 
-        if (byteOffset >= mInternalUniformBufferData.size()) {
-            mInternalUniformBufferData.resize(byteOffset + sizeof(uint32_t));
+        const size_t offset = iter->second.index * sizeof(uint32_t);
+        if (offset >= mInternalUniformBufferData.size()) {
+            mInternalUniformBufferData.resize(offset + sizeof(uint32_t));
         }
-        memcpy(mInternalUniformBufferData.data() + byteOffset, &data, sizeof(uint32_t));
+        memcpy(mInternalUniformBufferData.data() + offset, &data, sizeof(uint32_t));
 
         // Updating dirty range of the data vector
-        mDirtyRange.begin = std::min(mDirtyRange.begin, byteOffset);
-        mDirtyRange.end = std::max(mDirtyRange.end, byteOffset + sizeof(uint32_t));
+        mDirtyRange.begin = std::min(mDirtyRange.begin, offset);
+        mDirtyRange.end = std::max(mDirtyRange.end, offset + sizeof(uint32_t));
     }
 
     void ResetInternalUniformDataDirtyRange() {
@@ -522,10 +543,11 @@ class BindGroupTracker : public BindGroupTrackerBase<false, uint64_t> {
         DAWN_ASSERT(internalUniformBuffer);
 
         GLuint internalUniformBufferHandle = internalUniformBuffer->GetHandle();
-        DAWN_GL_TRY(gl, BindBufferBase(
-                            GL_UNIFORM_BUFFER,
-                            ToBackend(mPipelineLayout)->GetInternalTextureBuiltinsUniformBinding(),
-                            internalUniformBufferHandle));
+        DAWN_GL_TRY(
+            gl, BindBufferBase(
+                    GL_UNIFORM_BUFFER,
+                    GLuint(ToBackend(mPipelineLayout)->GetInternalTextureBuiltinsUniformBinding()),
+                    internalUniformBufferHandle));
 
         DAWN_GL_TRY(gl, BindBuffer(GL_UNIFORM_BUFFER, internalUniformBufferHandle));
         DAWN_GL_TRY(gl, BufferSubData(GL_UNIFORM_BUFFER, mDirtyRange.begin,
@@ -553,10 +575,11 @@ class BindGroupTracker : public BindGroupTrackerBase<false, uint64_t> {
         DAWN_ASSERT(internalUniformBuffer);
 
         GLuint internalUniformBufferHandle = internalUniformBuffer->GetHandle();
-        DAWN_GL_TRY(
-            gl, BindBufferBase(GL_UNIFORM_BUFFER,
-                               ToBackend(mPipelineLayout)->GetInternalArrayLengthUniformBinding(),
-                               internalUniformBufferHandle));
+        DAWN_GL_TRY(gl,
+                    BindBufferBase(
+                        GL_UNIFORM_BUFFER,
+                        GLuint(ToBackend(mPipelineLayout)->GetInternalArrayLengthUniformBinding()),
+                        internalUniformBufferHandle));
 
         DAWN_GL_TRY(gl, BindBuffer(GL_UNIFORM_BUFFER, internalUniformBufferHandle));
         DAWN_GL_TRY(
@@ -580,23 +603,34 @@ class BindGroupTracker : public BindGroupTrackerBase<false, uint64_t> {
         }
 
         const auto& bindingIndexInfo = ToBackend(mPipelineLayout)->GetBindingIndexInfo();
-        GLuint ssboIndex = bindingIndexInfo[groupIndex][bindingIndex];
+        FlatBindingIndex ssboIndex = bindingIndexInfo[groupIndex][bindingIndex];
 
-        uint32_t data = static_cast<uint32_t>(size);
-        const size_t index = static_cast<size_t>(ssboIndex);
-
-        if (index >= mInternalArrayLengthBufferData.size()) {
-            mInternalArrayLengthBufferData.resize(index + 4);
+        if (ssboIndex >= mInternalArrayLengthBufferData.size()) {
+            mInternalArrayLengthBufferData.resize(ssboIndex + FlatBindingIndex(4));
         }
-        mInternalArrayLengthBufferData[index] = data;
+        mInternalArrayLengthBufferData[ssboIndex] = static_cast<uint32_t>(size);
 
         // Updating dirty range of the data vector
-        mDirtyRangeArrayLength.begin = std::min(mDirtyRangeArrayLength.begin, index);
-        mDirtyRangeArrayLength.end = std::max(mDirtyRangeArrayLength.end, index + 1);
+        mDirtyRangeArrayLength.begin = std::min(mDirtyRangeArrayLength.begin, size_t(ssboIndex));
+        mDirtyRangeArrayLength.end = std::max(mDirtyRangeArrayLength.end, size_t(ssboIndex) + 1);
     }
 
     void ResetInternalUniformDataDirtyRangeArrayLength() {
-        mDirtyRangeArrayLength = {mInternalArrayLengthBufferData.size(), 0};
+        mDirtyRangeArrayLength = {size_t(mInternalArrayLengthBufferData.size()), 0};
+    }
+
+    void ResetInternalUniformDataBindgroupAndDirtyRange() {
+        // Mark bind groups that need emulated builtin uniforms dirty so that they can be updated
+        // properly, even if the bind group is not updated.
+        // TODO(crbug.com/408065421): This forces bindgroups with metadata to be completely set
+        // again each pipeline change. In the future we will want to optimize that to only recompute
+        // the metadata as needed, not force a rebind of all resources.
+        const auto& builtinInfo = mPipeline->GetEmulatedTextureBuiltinInfo();
+        for (const auto& entry : builtinInfo) {
+            mDirtyBindGroupsObjectChangedOrIsDynamic.set(BindGroupIndex(entry.second.group));
+        }
+        ResetInternalUniformDataDirtyRange();
+        ResetInternalUniformDataDirtyRangeArrayLength();
     }
 
     raw_ptr<PipelineGL> mPipeline = nullptr;
@@ -610,7 +644,7 @@ class BindGroupTracker : public BindGroupTrackerBase<false, uint64_t> {
     VectorDirtyRangeInfo mDirtyRange;
 
     // The data used for mPipeline's internal uniform buffer to store ssbo buffer sizes.
-    std::vector<uint32_t> mInternalArrayLengthBufferData = std::vector<uint32_t>(4);
+    ityp::vector<FlatBindingIndex, uint32_t> mInternalArrayLengthBufferData;
     // Tracking dirty byte range of the mInternalArrayLengthBufferData that needs to call
     // bufferSubData to update to the internal uniform buffer of mPipeline.
     VectorDirtyRangeInfo mDirtyRangeArrayLength;

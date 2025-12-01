@@ -28,8 +28,10 @@
 #include "dawn/tests/unittests/native/mocks/ShaderModuleMock.h"
 
 #include <memory>
+#include <utility>
 
 #include "dawn/native/ChainUtils.h"
+#include "dawn/native/ShaderModuleParseRequest.h"
 
 namespace dawn::native {
 
@@ -49,15 +51,17 @@ ShaderModuleMock::~ShaderModuleMock() = default;
 Ref<ShaderModuleMock> ShaderModuleMock::Create(
     DeviceMock* device,
     const UnpackedPtr<ShaderModuleDescriptor>& descriptor) {
-    ShaderModuleParseResult parseResult;
-    std::unique_ptr<OwnedCompilationMessages> compilationMessages =
-        std::make_unique<OwnedCompilationMessages>();
-    ParseShaderModule(device, descriptor, {}, &parseResult, compilationMessages.get())
-        .AcquireSuccess();
 
     Ref<ShaderModuleMock> shaderModule =
         AcquireRef(new NiceMock<ShaderModuleMock>(device, descriptor));
-    shaderModule->InitializeBase(&parseResult, &compilationMessages).AcquireSuccess();
+
+    ShaderModuleParseResult parseResult =
+        ParseShaderModule(BuildShaderModuleParseRequest(device, shaderModule->GetHash(), descriptor,
+                                                        {},
+                                                        /* needReflection*/ true))
+            .AcquireSuccess();
+
+    shaderModule->InitializeBase(&parseResult).AcquireSuccess();
     return shaderModule;
 }
 

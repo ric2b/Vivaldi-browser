@@ -65,7 +65,6 @@ class ParseTest(unittest.TestCase):
 
         # Dependency metadata with no entries at all are ignored.
         self.assertEqual(len(all_metadata), 3)
-
         # Check entries are added according to fields being one-liners.
         self.assertListEqual(
             all_metadata[0].get_entries(),
@@ -81,13 +80,14 @@ class ParseTest(unittest.TestCase):
                 ("License File", "LICENSE"),
                 ("Security Critical", "yes"),
                 ("Shipped", "yes"),
+                ("Update Mechanism", "Autoroll"),
                 ("CPEPrefix", "unknown"),
                 ("Description", "A test metadata file, with a\n"
                  " multi-line description."),
                 ("Local Modifications", "None,\nEXCEPT:\n* nothing."),
             ],
         )
-        self.assertEqual((1, 20),
+        self.assertEqual((1, 21),
                          all_metadata[0].get_first_and_last_line_number())
 
         # Check the parser handles different casing for field names, and
@@ -101,6 +101,7 @@ class ParseTest(unittest.TestCase):
                 ("URL", "file://home/drive/chromium/src/metadata"),
                 ("Version", "0"),
                 ("Date", "2020-12-03"),
+                ("Update Mechanism", "Autoroll"),
                 ("License", "MIT"),
                 ("Security critical", "yes"),
                 ("Shipped", "Yes"),
@@ -108,7 +109,7 @@ class ParseTest(unittest.TestCase):
                 ("Local Modifications", "None."),
             ],
         )
-        self.assertEqual((24, 46),
+        self.assertEqual((25, 48),
                          all_metadata[1].get_first_and_last_line_number())
 
         # Check repeated fields persist in the metadata's entries.
@@ -119,11 +120,13 @@ class ParseTest(unittest.TestCase):
                  "Test-C README for Chromium metadata (4 errors, 1 warning)"),
                 ("URL", "https://www.example.com/first"),
                 ("URL", "https://www.example.com/second"),
+                ("Update Mechanism", "Autoroll"),
                 ("Version", "N/A"),
                 ("Date", "2020-12-03"),
                 ("License", "Custom license"),
                 ("Security Critical", "yes"),
-                ("Description", """Test metadata with multiple entries for one field, and
+                ("Description",
+                 """Test metadata with multiple entries for one field, and
 missing a mandatory field.
 These are the expected errors (here for reference only):
 
@@ -140,10 +143,9 @@ warnings:
 (see https://source.chromium.org/chromium/chromiu
 m/tools/depot_tools/+/main:metadata/fields/custom/license_al
 lowlist.py). Licenses not allowlisted: 'Custom license'."""),
-
             ],
         )
-        self.assertEqual((51, 76),
+        self.assertEqual((53, 79),
                          all_metadata[2].get_first_and_last_line_number())
 
     def test_parse_multiple_local_modifications(self):

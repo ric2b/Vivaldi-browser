@@ -11,7 +11,7 @@ enum class AutoUpdateStatus;
 @interface SparkleUpdaterDelegate : NSObject<SPUUpdaterDelegate> {}
 
 - (void)updater:(SPUUpdater *)updater didFindValidUpdate:(SUAppcastItem *)item;
-- (void)updaterDidNotFindUpdate:(SPUUpdater *)updater;
+- (void)updaterDidNotFindUpdate:(SPUUpdater *)updater error:(NSError *)error;
 - (void)updater:(SPUUpdater *)updater willDownloadUpdate:(SUAppcastItem *)item withRequest:(NSMutableURLRequest *)request;
 - (void)updater:(SPUUpdater *)updater didDownloadUpdate:(SUAppcastItem *)item;
 - (void)updaterWillRelaunchApplication:(SPUUpdater *)updater;

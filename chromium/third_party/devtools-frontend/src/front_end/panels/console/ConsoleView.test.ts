@@ -9,6 +9,7 @@ import * as Root from '../../core/root/root.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as Protocol from '../../generated/protocol.js';
 import * as IssuesManager from '../../models/issues_manager/issues_manager.js';
+import * as TextUtils from '../../models/text_utils/text_utils.js';
 import {findMenuItemWithLabel, getContextMenuForElement} from '../../testing/ContextMenuHelpers.js';
 import {dispatchPasteEvent, renderElementIntoDOM} from '../../testing/DOMHelpers.js';
 import {createTarget, registerNoopActions} from '../../testing/EnvironmentHelpers.js';
@@ -35,9 +36,7 @@ describeWithMockConnection('ConsoleView', () => {
   it('adds a title to every checkbox label in the settings view', async () => {
     const consoleSettingsCheckboxes =
         consoleView.element.querySelector('devtools-toolbar')!.querySelectorAll('devtools-checkbox');
-    if (!consoleSettingsCheckboxes) {
-      assert.fail('No checkbox found in console settings');
-    }
+    assert.isOk(consoleSettingsCheckboxes, 'No checkbox found in console settings');
     for (const checkbox of consoleSettingsCheckboxes) {
       assert.isTrue(checkbox.shadowRoot?.querySelector('.devtools-checkbox-text')?.hasAttribute('title'));
     }
@@ -78,7 +77,8 @@ describeWithMockConnection('ConsoleView', () => {
     const fileManager = stubFileManager();
     const fileManagerCloseCall = expectCall(fileManager.close);
     contextMenu.invokeHandler(saveAsItem.id());
-    assert.isTrue(fileManager.save.calledOnceWith(FILENAME, '', true, false));
+    assert.isTrue(fileManager.save.calledOnceWith(
+        FILENAME, TextUtils.ContentData.EMPTY_TEXT_CONTENT_DATA, /* forceSaveAs=*/ true));
     await fileManagerCloseCall;
     assert.isTrue(fileManager.append.calledOnceWith(FILENAME, sinon.match('message 1\nmessage 2\n')));
   });

@@ -10,6 +10,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/check_is_test.h"
 #include "base/containers/contains.h"
 #include "base/feature_list.h"
 #include "base/files/file_util.h"
@@ -23,6 +24,7 @@
 #include "base/trace_event/trace_event.h"
 #include "components/services/storage/public/cpp/constants.h"
 #include "components/services/storage/service_worker/service_worker_disk_cache.h"
+#include "components/services/storage/service_worker/service_worker_resource_ops.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "net/base/completion_once_callback.h"
 #include "net/base/net_errors.h"
@@ -68,9 +70,20 @@ void RecordDeleteAndStartOverResult(DeleteAndStartOverResult result) {
 
 }  // namespace
 
+ServiceWorkerStorage::StorageSharedBuffer::StorageSharedBuffer()  // IN-TEST
+    : enable_registered_storage_keys_(true),
+      enable_registration_scopes_(true),
+      enable_find_registration_result_(true) {
+  CHECK_IS_TEST();
+}
+
 ServiceWorkerStorage::StorageSharedBuffer::StorageSharedBuffer(
-    bool enable_registered_storage_keys)
-    : enable_registered_storage_keys_(enable_registered_storage_keys) {}
+    bool enable_registered_storage_keys,
+    bool enable_registration_scopes,
+    bool enable_find_registration_result)
+    : enable_registered_storage_keys_(enable_registered_storage_keys),
+      enable_registration_scopes_(enable_registration_scopes),
+      enable_find_registration_result_(enable_find_registration_result) {}
 
 ServiceWorkerStorage::StorageSharedBuffer::~StorageSharedBuffer() = default;
 
@@ -96,6 +109,63 @@ ServiceWorkerStorage::StorageSharedBuffer::TakeRegisteredKeys() {
   std::optional<std::vector<blink::StorageKey>> keys;
   registered_keys_.swap(keys);
   return keys;
+}
+
+void ServiceWorkerStorage::StorageSharedBuffer::PutRegistrationScopes(
+    const blink::StorageKey& storage_key,
+    const std::vector<GURL>& scopes) {
+  if (!enable_registration_scopes_) {
+    return;
+  }
+  TRACE_EVENT(
+      "ServiceWorker",
+      "ServiceWorkerStorage::StorageSharedBuffer::PutRegistrationScopes");
+  base::AutoLock lock(lock_);
+  registration_scopes_[storage_key] = scopes;
+}
+
+std::map<blink::StorageKey, std::vector<GURL>>
+ServiceWorkerStorage::StorageSharedBuffer::TakeRegistrationScopes() {
+  if (!enable_registration_scopes_) {
+    return {};
+  }
+  TRACE_EVENT(
+      "ServiceWorker",
+      "ServiceWorkerStorage::StorageSharedBuffer::TakeRegistrationScopes");
+  base::AutoLock lock(lock_);
+  std::map<blink::StorageKey, std::vector<GURL>> scopes;
+  registration_scopes_.swap(scopes);
+  return scopes;
+}
+
+void ServiceWorkerStorage::StorageSharedBuffer::PutFindRegistrationResult(
+    const GURL& client_url,
+    const blink::StorageKey& key,
+    mojom::ServiceWorkerFindRegistrationResultPtr find_registration_result) {
+  if (!enable_find_registration_result_) {
+    return;
+  }
+  TRACE_EVENT(
+      "ServiceWorker",
+      "ServiceWorkerStorage::StorageSharedBuffer::PutFindRegistrationResult");
+  base::AutoLock lock(lock_);
+  find_registration_results_[std::make_pair(client_url, key)] =
+      std::move(find_registration_result);
+}
+
+mojom::ServiceWorkerFindRegistrationResultPtr
+ServiceWorkerStorage::StorageSharedBuffer::TakeFindRegistrationResult(
+    const GURL& client_url,
+    const blink::StorageKey& key) {
+  if (!enable_find_registration_result_) {
+    return nullptr;
+  }
+  TRACE_EVENT(
+      "ServiceWorker",
+      "ServiceWorkerStorage::StorageSharedBuffer::TakeFindRegistrationResult");
+  base::AutoLock lock(lock_);
+  auto result = find_registration_results_.extract(std::pair(client_url, key));
+  return !result.empty() ? std::move(result.mapped()) : nullptr;
 }
 
 void OverrideMaxServiceWorkerScopeUrlCountForTesting(  // IN-TEST
@@ -158,9 +228,7 @@ void ServiceWorkerStorage::GetRegisteredStorageKeys(
   std::copy(registered_keys_.begin(), registered_keys_.end(),
             std::back_inserter(registered_keys));
 
-  if (storage_shared_buffer_) {
-    storage_shared_buffer_->PutRegisteredKeys(registered_keys);
-  }
+  storage_shared_buffer().PutRegisteredKeys(registered_keys);
 
   std::move(callback).Run(std::move(registered_keys));
 }
@@ -197,6 +265,7 @@ void ServiceWorkerStorage::FindRegistrationForClientUrl(
   // Bypass database lookup when there is no stored registration.
   if (!base::Contains(registered_keys_, key)) {
     std::optional<std::vector<GURL>> scopes = std::vector<GURL>();
+    storage_shared_buffer().PutRegistrationScopes(key, *scopes);
     std::move(callback).Run(
         /*data=*/nullptr, /*resources=*/nullptr, /*scopes=*/scopes,
         ServiceWorkerDatabase::Status::kErrorNotFound);
@@ -1675,6 +1744,10 @@ void ServiceWorkerStorage::FindForClientUrlInDB(
     scopes = std::vector<GURL>();
     scopes->reserve(registration_data_list.size());
   }
+  // `blink::ServiceWorkerLongestScopeMatcher` finds the registration with the
+  // longest matching scope. To ensure we find the definitive longest match, we
+  // must iterate through the entire list of registrations. Therefore, we can't
+  // break the loop early, even after a match is found.
   for (const auto& registration_data : registration_data_list) {
     if (matcher.MatchLongest(registration_data->scope)) {
       match = registration_data->registration_id;
@@ -1685,6 +1758,10 @@ void ServiceWorkerStorage::FindForClientUrlInDB(
   }
   if (match != blink::mojom::kInvalidServiceWorkerRegistrationId)
     status = database_->ReadRegistration(match, key, &data, resources.get());
+
+  if (return_scopes && scopes.has_value()) {
+    storage_shared_buffer().PutRegistrationScopes(key, *scopes);
+  }
 
   std::move(callback).Run(std::move(data), std::move(resources), scopes,
                           status);

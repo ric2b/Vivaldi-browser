@@ -70,8 +70,8 @@ class CPDF_PageObjectHolder {
   using const_iterator =
       std::deque<std::unique_ptr<CPDF_PageObject>>::const_iterator;
 
-  CPDF_PageObjectHolder(CPDF_Document* pDoc,
-                        RetainPtr<CPDF_Dictionary> pDict,
+  CPDF_PageObjectHolder(CPDF_Document* doc,
+                        RetainPtr<CPDF_Dictionary> dict,
                         RetainPtr<CPDF_Dictionary> pPageResources,
                         RetainPtr<CPDF_Dictionary> pResources);
   virtual ~CPDF_PageObjectHolder();
@@ -87,8 +87,8 @@ class CPDF_PageObjectHolder {
   RetainPtr<CPDF_Dictionary> GetMutableDict() { return dict_; }
   RetainPtr<const CPDF_Dictionary> GetResources() const { return resources_; }
   RetainPtr<CPDF_Dictionary> GetMutableResources() { return resources_; }
-  void SetResources(RetainPtr<CPDF_Dictionary> pDict) {
-    resources_ = std::move(pDict);
+  void SetResources(RetainPtr<CPDF_Dictionary> dict) {
+    resources_ = std::move(dict);
   }
   RetainPtr<const CPDF_Dictionary> GetPageResources() const {
     return page_resources_;
@@ -100,6 +100,9 @@ class CPDF_PageObjectHolder {
   size_t GetActivePageObjectCount() const;
   CPDF_PageObject* GetPageObjectByIndex(size_t index) const;
   void AppendPageObject(std::unique_ptr<CPDF_PageObject> pPageObj);
+
+  bool InsertPageObjectAtIndex(size_t index,
+                               std::unique_ptr<CPDF_PageObject> page_obj);
 
   // Remove `pPageObj` if present, and transfer ownership to the caller.
   std::unique_ptr<CPDF_PageObject> RemovePageObject(CPDF_PageObject* pPageObj);

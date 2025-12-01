@@ -23,7 +23,7 @@ limitations under the License.
 #include <gtest/gtest.h>
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
-#include "xla/pjrt/compile_options.pb.h"
+#include "xla/pjrt/proto/compile_options.pb.h"
 #include "xla/service/computation_placer.h"
 #include "xla/service/test_compilation_environment.pb.h"
 #include "xla/shape.h"
@@ -104,7 +104,7 @@ TEST(ExecutableBuildOptionsTest, SerializationFailsOnNonSerializableFields) {
                                  1};
     options.set_compile_thread_pool(&pool);
     EXPECT_THAT(options.ToProto(),
-                tsl::testing::StatusIs(absl::StatusCode::kInvalidArgument));
+                absl_testing::StatusIs(absl::StatusCode::kInvalidArgument));
   }
   {
     ExecutableBuildOptions options;
@@ -114,7 +114,7 @@ TEST(ExecutableBuildOptionsTest, SerializationFailsOnNonSerializableFields) {
           return std::make_pair(std::vector<Shape>(), Shape());
         });
     EXPECT_THAT(options.ToProto(),
-                tsl::testing::StatusIs(absl::StatusCode::kInvalidArgument));
+                absl_testing::StatusIs(absl::StatusCode::kInvalidArgument));
   }
 }
 

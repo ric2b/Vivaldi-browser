@@ -18,12 +18,13 @@
 import $ from "../$.js";
 
 import {$childNodes, hideIfMatches, isVisible} from "../utils/dom.js";
-import {toRegExp} from "../utils/general.js";
+import {formatArguments, toRegExp} from "../utils/general.js";
 import {log} from "../introspection/log.js";
 import {debug} from "../introspection/debug.js";
+import {profile} from "../introspection/profile.js";
 import {raceWinner} from "../introspection/race.js";
 
-let {getComputedStyle, Map, WeakSet, parseFloat} = $(window);
+let {getComputedStyle, Map, WeakSet, parseFloat, DOMMatrix, Math} = $(window);
 
 const {ELEMENT_NODE, TEXT_NODE} = Node;
 
@@ -51,11 +52,15 @@ const {ELEMENT_NODE, TEXT_NODE} = Node;
 export function hideIfContainsVisibleText(search, selector,
                                           searchSelector = null,
                                           ...attributes) {
+  const {mark, end} = profile("hide-if-contains-visible-text");
+  const formattedArguments = formatArguments(arguments);
   let entries = $([]);
   const optionalParameters = new Map([
     ["-snippet-box-margin", "2"],
     ["-disable-bg-color-check", "false"],
-    ["-check-is-contained", "false"]
+    ["-check-is-contained", "false"],
+    ["-pseudo-box-margin", "2"],
+    ["-ignore-padding", "false"]
   ]);
 
   for (let attr of attributes) {
@@ -93,23 +98,46 @@ export function hideIfContainsVisibleText(search, selector,
    * @returns {bool} Whether the text is visible.
    * @private
    */
-  function isTextVisible(element, style, {bgColorCheck = true} = {}) {
+  function isTextVisible(element,
+                         style,
+                         {bgColorCheck = true, pseudoElemCheck = false} = {}) {
     if (!style)
       style = getComputedStyle(element);
-
     style = $(style);
-
     for (const [key, value] of attributesMap) {
       let valueAsRegex = toRegExp(value);
       if (valueAsRegex.test(style.getPropertyValue(key)))
         return false;
     }
-
-    let color = style.getPropertyValue("color");
-    if (bgColorCheck && style.getPropertyValue("background-color") == color)
+    const color = style.getPropertyValue("color");
+    if (bgColorCheck && style.getPropertyValue("background-color") === color)
       return false;
-
+    // Handle edge cases with ::first-line pseudo-element
+    if (!pseudoElemCheck) {
+      const firstLineStyle = getComputedStyle(element, "::first-line");
+      if (firstLineStyle) {
+        return isTextVisible(element,
+                             firstLineStyle,
+                             {bgColorCheck, pseudoElemCheck: true});
+      }
+    }
+    // Only consider text-shadow if it significantly affects visibility
+    const textShadow = style.getPropertyValue("text-shadow");
+    if (color.includes("rgba(0, 0, 0, 0)") &&
+        (textShadow === "none" ||
+        textShadow.includes("rgba(0, 0, 0, 0)"))
+    )
+      return false;
     return true;
+  }
+
+  function getTransformMatrix(element, pseudo = null) {
+    const style = getComputedStyle(element, pseudo);
+    let transform = style.transform;
+    // If transform is none, we need to set it to the identity matrix
+    if (transform === "none")
+      transform = "matrix(1, 0, 0, 1, 0, 0)";
+    return new DOMMatrix(transform);
   }
 
   /**
@@ -117,11 +145,15 @@ export function hideIfContainsVisibleText(search, selector,
    *
    * @param {Element} element The element to check visibility of.
    * @param {string} pseudo The `::before` or `::after` pseudo selector.
+   * @param {DOMMatrix} parentMatrix The combined DOMMatrix of the
+   * parent elements.
    * @return {string} The pseudo content or an empty string.
    * @private
    */
-  function getPseudoContent(element, pseudo, {bgColorCheck = true} = {}) {
+  function getPseudoContent(element, pseudo, parentMatrix,
+                            {bgColorCheck = true, translateThresh = 2} = {}) {
     let style = getComputedStyle(element, pseudo);
+
     if (!isVisible(element, style) ||
      !isTextVisible(element, style, {bgColorCheck}))
       return "";
@@ -129,6 +161,21 @@ export function hideIfContainsVisibleText(search, selector,
     let {content} = $(style);
     if (content && content !== "none") {
       let strings = $([]);
+
+      const domMatrix = getTransformMatrix(element, pseudo);
+      const resultMatrix = parentMatrix.multiply(domMatrix);
+
+      const angle = Math.atan2(resultMatrix.b, resultMatrix.a);
+      const angleDegrees = angle * (180 / Math.PI);
+      const rotated = Math.abs(angleDegrees) > 5;
+
+      if (rotated)
+        return "";
+
+      const translated = Math.abs(resultMatrix.e) > translateThresh ||
+                         Math.abs(resultMatrix.f) > translateThresh;
+      if (translated)
+        return "";
 
       // remove all strings, in quotes, including escaping chars, putting
       // instead `\x01${string-index}` in place, which is not valid CSS,
@@ -162,10 +209,29 @@ export function hideIfContainsVisibleText(search, selector,
    * @param {Element} parentNode
    * @param {Object?} conf
    * @param {Number?} conf.boxMargin
+   * @param {boolean?} conf.ignorePadding
    * @returns {boolean}
    */
-  function isContained(childNode, parentNode, {boxMargin = 2} = {}) {
-    const child = $(childNode).getBoundingClientRect();
+  function isContained(childNode, parentNode, {
+    boxMargin = 2,
+    ignorePadding = false
+  } = {}) {
+    let child = $(childNode).getBoundingClientRect();
+    if (ignorePadding) {
+      const style = getComputedStyle(childNode);
+      const paddingTop = parseFloat(style.paddingTop) || 0;
+      const paddingRight = parseFloat(style.paddingRight) || 0;
+      const paddingBottom = parseFloat(style.paddingBottom) || 0;
+      const paddingLeft = parseFloat(style.paddingLeft) || 0;
+
+      child = {
+        left: child.left + paddingLeft,
+        right: child.right - paddingRight,
+        top: child.top + paddingTop,
+        bottom: child.bottom - paddingBottom
+      };
+    }
+
     const parent = $(parentNode).getBoundingClientRect();
     const stretchedParent = {
       left: parent.left - boxMargin,
@@ -173,6 +239,7 @@ export function hideIfContainsVisibleText(search, selector,
       top: parent.top - boxMargin,
       bottom: parent.bottom + boxMargin
     };
+
     return (
       (stretchedParent.left <= child.left &&
          child.left <= stretchedParent.right &&
@@ -197,6 +264,8 @@ export function hideIfContainsVisibleText(search, selector,
    * @param {Element} originalElement The original element
    * @param {?Array.<Element>} shadowRootParents Optional list of
    *    shadow root parents.
+   * @param {DOMMatrix} domMatrix The combined transformation matrix
+   *  of the parent elements.
    * @param {?Object} conf Configuration object
    * @param {?Number} conf.boxMargin The optional parameter that
    *   can be used to specify how much to stretch the bounding box of the
@@ -212,10 +281,12 @@ export function hideIfContainsVisibleText(search, selector,
                              parentOverflowNode,
                              originalElement,
                              shadowRootParents,
+                             domMatrix,
                              {
                                boxMargin = 2,
                                bgColorCheck,
-                               checkIsContained
+                               checkIsContained,
+                               translateThresh
                              } = {}) {
     let checkClosest = !style;
     if (checkClosest)
@@ -232,7 +303,16 @@ export function hideIfContainsVisibleText(search, selector,
     )
       parentOverflowNode = element;
 
-    let text = getPseudoContent(element, ":before", {bgColorCheck});
+    if (!domMatrix)
+      domMatrix = getTransformMatrix(element);
+
+    else
+      domMatrix = domMatrix.multiply(getTransformMatrix(element));
+
+    let text = getPseudoContent(element,
+                                ":before",
+                                domMatrix,
+                                {bgColorCheck, translateThresh});
     for (let node of $childNodes($(element))) {
       switch ($(node).nodeType) {
         case ELEMENT_NODE:
@@ -242,10 +322,12 @@ export function hideIfContainsVisibleText(search, selector,
                                     parentOverflowNode,
                                     originalElement,
                                     shadowRootParents,
+                                    domMatrix,
                                     {
                                       boxMargin,
                                       bgColorCheck,
-                                      checkIsContained
+                                      checkIsContained,
+                                      translateThresh
                                     }
           );
           break;
@@ -255,20 +337,28 @@ export function hideIfContainsVisibleText(search, selector,
           // invisible. This clause checks against that. We fallback to the
           // current behaviour if no overflow parent.
           if (parentOverflowNode) {
-            if (isContained(element, parentOverflowNode, {boxMargin}) &&
-              isTextVisible(element, style, {bgColorCheck}))
+            if (isContained(element, parentOverflowNode, {
+              boxMargin,
+              ignorePadding
+            }) && isTextVisible(element, style, {bgColorCheck}))
               text += $(node).nodeValue;
           }
           else if (isTextVisible(element, style, {bgColorCheck})) {
-            if (checkIsContained &&
-               !isContained(element, originalElement, {boxMargin}))
+            if (checkIsContained && !isContained(element, originalElement, {
+              boxMargin,
+              ignorePadding
+            }))
               continue;
             text += $(node).nodeValue;
           }
           break;
       }
     }
-    return text + getPseudoContent(element, ":after", {bgColorCheck});
+    text += getPseudoContent(element,
+                             ":after",
+                             domMatrix,
+                             {bgColorCheck, translateThresh});
+    return text;
   }
 
   const boxMarginStr = optionalParameters.get("-snippet-box-margin");
@@ -280,28 +370,38 @@ export function hideIfContainsVisibleText(search, selector,
   const checkIsContainedStr = optionalParameters.get("-check-is-contained");
   const checkIsContained = (checkIsContainedStr === "true");
 
+  const ignorePaddingStr = optionalParameters.get("-ignore-padding");
+  const ignorePadding = (ignorePaddingStr === "true");
+
+  const translateThreshStr = optionalParameters.get("-pseudo-box-margin");
+  const translateThresh = parseFloat(translateThreshStr) || 0;
+
   let re = toRegExp(search);
   let seen = new WeakSet();
 
   const mo = hideIfMatches(
     (element, closest, rootParents) => {
+      mark();
       if (seen.has(element))
         return false;
 
       seen.add(element);
       let text = getVisibleContent(
-        element, closest, null, null, element, rootParents, {
+        element, closest, null, null, element, rootParents, null, {
           boxMargin,
           bgColorCheck,
-          checkIsContained
+          checkIsContained,
+          translateThresh
         }
       );
       let result = re.test(text);
       if (debug() && text.length) {
-        result ? log("success", result, re, text) :
+        result ?
+        // eslint-disable-next-line max-len
+        log("success", result, re, text, "\nFILTER: hide-if-contains-visible-text", formattedArguments) :
         log("info", result, re, text);
       }
-
+      end();
       return result;
     },
     selector,

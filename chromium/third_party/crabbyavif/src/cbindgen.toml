@@ -1,5 +1,5 @@
 language = "C++"
-include_guard = "AVIF_H"
+include_guard = "CRABBYAVIF_AVIF_H"
 tab_width = 4
 usize_is_size_t = true
 namespace = "crabbyavif"
@@ -17,7 +17,34 @@ using Box = T*;
 namespace crabbyavif {
 struct avifImage;
 struct avifIO;
+
+// Used to initialize avifROData/avifRWData on the stack.
+#define AVIF_DATA_EMPTY { NULL, 0 }
 }
+"""
+trailer = """
+#ifndef CRABBYAVIF_AVIF_CXX_H
+#define CRABBYAVIF_AVIF_CXX_H
+
+#include <memory>
+
+namespace crabbyavif {
+
+struct UniquePtrDeleter {
+    void operator()(avifEncoder * encoder) const { crabby_avifEncoderDestroy(encoder); }
+    void operator()(avifDecoder * decoder) const { crabby_avifDecoderDestroy(decoder); }
+    void operator()(avifImage * image) const { crabby_avifImageDestroy(image); }
+    void operator()(avifGainMap * gainMap) const { crabby_avifGainMapDestroy(gainMap); }
+};
+
+using EncoderPtr = std::unique_ptr<avifEncoder, UniquePtrDeleter>;
+using DecoderPtr = std::unique_ptr<avifDecoder, UniquePtrDeleter>;
+using ImagePtr = std::unique_ptr<avifImage, UniquePtrDeleter>;
+using GainMapPtr = std::unique_ptr<avifGainMap, UniquePtrDeleter>;
+
+} // namespace crabbyavif
+
+#endif // CRABBYAVIF_AVIF_CXX_H
 """
 
 [export.rename]

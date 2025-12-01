@@ -96,7 +96,7 @@ export const DEFAULT_VIEW: View = (input, _output, target) => {
         <div class="gray-info-message">${i18nString(UIStrings.noMatchingProperty)}</div>
       ` : nothing}
       ${input.treeOutlineElement}
-    </div>`, target, {host: input});
+    </div>`, target);
   // clang-format on
 };
 
@@ -131,7 +131,7 @@ export class PropertiesWidget extends UI.ThrottledWidget.ThrottledWidget {
     this.node = UI.Context.Context.instance().flavor(SDK.DOMModel.DOMNode);
 
     this.#view = view;
-    this.treeOutline = new ObjectUI.ObjectPropertiesSection.ObjectPropertiesSectionsTreeOutline();
+    this.treeOutline = new ObjectUI.ObjectPropertiesSection.ObjectPropertiesSectionsTreeOutline({readOnly: true});
     this.treeOutline.setShowSelectionOnKeyboardFocus(/* show */ true, /* preventTabOrder */ false);
 
     this.treeOutline.addEventListener(UI.TreeOutline.Events.ElementExpanded, () => {

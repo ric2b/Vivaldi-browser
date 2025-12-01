@@ -141,4 +141,7 @@ source_set("version_utils") {
       "//components/prefs",
       "//vivaldi/prefs:prefs_files_generated",
     ]
+    configs += [
+     "//vivaldi/gn/config:release_kind"
+    ]
 }

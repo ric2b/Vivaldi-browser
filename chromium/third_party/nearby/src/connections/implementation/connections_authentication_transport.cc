@@ -43,9 +43,9 @@ std::string ConnectionsAuthenticationTransport::ReadMessage() const {
   if (response.ok()) {
     return response.result().string_data();
   }
-  NEARBY_LOGS(WARNING) << "ConnectionsAuthenticationTransport: read failed "
-                          "with exception/result: "
-                       << response.exception();
+  LOG(WARNING) << "ConnectionsAuthenticationTransport: read failed "
+                  "with exception/result: "
+               << response.exception();
   return "";
 }
 

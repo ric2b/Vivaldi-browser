@@ -73,3 +73,14 @@ NSString* const kBadgeButtonTranslateActionIdentifier =
 
 NSString* const kBadgeButtonPermissionsActionIdentifier =
     @"badgeButtonPermissionsActionIdentifier";
+
+// Vivaldi
+NSString* const kBadgeButtonReaderModeAccessibilityIdentifier =
+    @"badgeButtonReaderModeAXID";
+
+NSString* const kBadgeButtonReaderModeAcceptedAccessibilityIdentifier =
+    @"badgeButtonReaderModeAcceptedAXID";
+
+NSString* const kBadgeButtonReaderModeActionIdentifier =
+    @"badgeButtonReaderModeActionIdentifier";
+// End Vivaldi

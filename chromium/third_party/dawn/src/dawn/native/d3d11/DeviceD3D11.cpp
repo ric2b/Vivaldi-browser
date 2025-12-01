@@ -203,7 +203,7 @@ MaybeError Device::Initialize(const UnpackedPtr<DeviceDescriptor>& descriptor) {
     Ref<Queue> queue;
     DAWN_TRY_ASSIGN(queue, Queue::Create(this, &descriptor->defaultQueue));
 
-    DAWN_TRY(DeviceBase::Initialize(queue));
+    DAWN_TRY(DeviceBase::Initialize(descriptor, queue));
     DAWN_TRY(queue->InitializePendingContext());
 
     SetLabelImpl();
@@ -287,10 +287,8 @@ ResultOrError<Ref<SamplerBase>> Device::CreateSamplerImpl(const SamplerDescripto
 ResultOrError<Ref<ShaderModuleBase>> Device::CreateShaderModuleImpl(
     const UnpackedPtr<ShaderModuleDescriptor>& descriptor,
     const std::vector<tint::wgsl::Extension>& internalExtensions,
-    ShaderModuleParseResult* parseResult,
-    std::unique_ptr<OwnedCompilationMessages>* compilationMessages) {
-    return ShaderModule::Create(this, descriptor, internalExtensions, parseResult,
-                                compilationMessages);
+    ShaderModuleParseResult* parseResult) {
+    return ShaderModule::Create(this, descriptor, internalExtensions, parseResult);
 }
 
 ResultOrError<Ref<SwapChainBase>> Device::CreateSwapChainImpl(Surface* surface,
@@ -368,11 +366,11 @@ ResultOrError<Ref<SharedFenceBase>> Device::ImportSharedFenceImpl(
     }
 }
 
-MaybeError Device::CopyFromStagingToBufferImpl(BufferBase* source,
-                                               uint64_t sourceOffset,
-                                               BufferBase* destination,
-                                               uint64_t destinationOffset,
-                                               uint64_t size) {
+MaybeError Device::CopyFromStagingToBuffer(BufferBase* source,
+                                           uint64_t sourceOffset,
+                                           BufferBase* destination,
+                                           uint64_t destinationOffset,
+                                           uint64_t size) {
     // D3D11 requires that buffers are unmapped before being used in a copy.
     DAWN_TRY(source->Unmap());
 
@@ -443,6 +441,7 @@ void Device::AppendDeviceLostMessage(ErrorData* error) {
         HRESULT result = mD3d11Device->GetDeviceRemovedReason();
         error->AppendBackendMessage("Device removed reason: %s (0x%08X)",
                                     d3d::HRESULTAsString(result), result);
+        RecordDeviceRemovedReason(result);
     }
 }
 

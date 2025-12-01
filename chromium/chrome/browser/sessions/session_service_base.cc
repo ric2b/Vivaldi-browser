@@ -14,6 +14,7 @@
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/to_string.h"
 #include "base/task/sequenced_task_runner.h"
 #include "build/build_config.h"
@@ -36,6 +37,9 @@
 #include "components/sessions/core/session_constants.h"
 #include "components/sessions/core/session_id.h"
 #include "components/sessions/core/session_types.h"
+#include "components/tabs/public/split_tab_data.h"
+#include "components/tabs/public/split_tab_id.h"
+#include "components/tabs/public/split_tab_visual_data.h"
 #include "components/tabs/public/tab_group.h"
 #include "content/public/browser/navigation_details.h"
 #include "content/public/browser/navigation_entry.h"
@@ -59,6 +63,7 @@
 
 #include "app/vivaldi_apptools.h"
 #include "components/sessions/vivaldi_session_service_commands.h"
+#include "ui/vivaldi_browser_ui_data.h"
 
 using base::Time;
 using content::NavigationEntry;
@@ -298,7 +303,7 @@ void SessionServiceBase::TabRestored(WebContents* tab, bool pinned) {
     return;
 
   BuildCommandsForTab(session_tab_helper->window_id(), tab, -1, std::nullopt,
-                      pinned, nullptr);
+                      std::nullopt, pinned, nullptr);
   command_storage_manager()->StartSaveTimer();
 }
 
@@ -559,6 +564,7 @@ void SessionServiceBase::BuildCommandsForTab(
     WebContents* tab,
     int index_in_window,
     std::optional<tab_groups::TabGroupId> group,
+    std::optional<split_tabs::SplitTabId> split,
     bool is_pinned,
     IdToRange* tab_to_available_range) {
   DCHECK(tab);
@@ -662,10 +668,12 @@ void SessionServiceBase::BuildCommandsForBrowser(
                                                   browser->user_title()));
   }
 
-  if (!browser->viv_ext_data().empty()) {
+  vivaldi::VivaldiBrowserUiData* browser_ui_data =
+      vivaldi::VivaldiBrowserUiData::From(browser);
+  if (browser_ui_data  && !browser_ui_data->viv_ext_data().empty()) {
     command_storage_manager()->AppendRebuildCommand(
-        sessions::CreateSetWindowVivExtDataCommand(browser->session_id(),
-                                                   browser->viv_ext_data()));
+        sessions::CreateSetWindowVivExtDataCommand(
+            browser->session_id(), browser_ui_data->viv_ext_data()));
   }
 
   command_storage_manager()->AppendRebuildCommand(
@@ -709,12 +717,23 @@ void SessionServiceBase::BuildCommandsForBrowser(
     }
   }
 
+  if (features::IsRestoringSplitViewEnabled()) {
+    for (split_tabs::SplitTabId split_id : tab_strip->ListSplits()) {
+      command_storage_manager()->AppendRebuildCommand(
+          sessions::CreateSplitTabDataUpdateCommand(
+              split_id, tab_strip->GetSplitData(split_id)->visual_data()));
+    }
+  }
+
   for (int i = 0; i < tab_strip->count(); ++i) {
     WebContents* tab = tab_strip->GetWebContentsAt(i);
     DCHECK(tab);
     const std::optional<tab_groups::TabGroupId> group_id =
         tab_strip->GetTabGroupForTab(i);
-    BuildCommandsForTab(browser->session_id(), tab, i, group_id,
+    const std::optional<split_tabs::SplitTabId> split_id =
+        tab_strip->GetSplitForTab(i);
+
+    BuildCommandsForTab(browser->session_id(), tab, i, group_id, split_id,
                         tab_strip->IsTabPinned(i), tab_to_available_range);
   }
 

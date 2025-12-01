@@ -14,6 +14,7 @@
 
 #include "connections/implementation/ble_advertisement.h"
 
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <utility>
@@ -26,6 +27,7 @@
 #include "internal/platform/bluetooth_utils.h"
 #include "internal/platform/byte_array.h"
 #include "internal/platform/logging.h"
+#include "internal/platform/mac_address.h"
 #include "internal/platform/stream_reader.h"
 
 namespace nearby {
@@ -113,7 +115,7 @@ absl::StatusOr<BleAdvertisement> BleAdvertisement::CreateBleAdvertisement(
   }
 
   ByteArray advertisement_bytes{ble_advertisement_bytes};
-  StreamReader stream_reader{advertisement_bytes};
+  StreamReader stream_reader{&advertisement_bytes};
   // The first 1 byte is supposed to be the version and pcp.
   auto version_and_pcp_byte = stream_reader.ReadUint8();
   if (!version_and_pcp_byte.has_value()) {
@@ -201,8 +203,22 @@ absl::StatusOr<BleAdvertisement> BleAdvertisement::CreateBleAdvertisement(
       return absl::InvalidArgumentError(
           "Cannot deserialize BleAdvertisement: bluetooth_mac_address.");
     }
-    bluetooth_mac_address =
-        BluetoothUtils::ToString(*bluetooth_mac_address_bytes);
+
+    absl::StatusOr<uint64_t> bluetooth_mac_address_bytes_uint64 =
+        bluetooth_mac_address_bytes->Read6BytesAsUint64();
+    MacAddress mac_address;
+    // TODO(b/420331699): Returning an empty string for the MAC address when
+    // there's an invalid ByteArray is problematic, determine where an invalid
+    // ByteArray is being passed in upstream so we can modify this to not use
+    // an empty string.
+    if (bluetooth_mac_address_bytes_uint64.ok() &&
+        MacAddress::FromUint64(bluetooth_mac_address_bytes_uint64.value(),
+                               mac_address) &&
+        mac_address.IsSet()) {
+      bluetooth_mac_address = mac_address.ToString();
+    } else {
+      bluetooth_mac_address = "";
+    }
   }
 
   // The next 1 byte is supposed to be the length of the uwb_address. If the

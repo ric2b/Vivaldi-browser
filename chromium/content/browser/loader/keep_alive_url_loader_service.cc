@@ -18,7 +18,6 @@
 #include "content/browser/renderer_host/frame_tree_node.h"
 #include "content/browser/renderer_host/policy_container_host.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
-#include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
@@ -169,13 +168,23 @@ class KeepAliveURLLoaderService::KeepAliveURLLoaderFactoriesBase {
   void ClearKeepAliveURLLoadersAttemptingRetry() {
     std::vector<mojo::ReceiverId> loader_ids_to_remove;
     for (const auto& [loader_id, weak_ptr_loader] : weak_ptr_loaders_) {
-      if (weak_ptr_loader && weak_ptr_loader->IsAttemptingRetry()) {
+      if (weak_ptr_loader &&
+          weak_ptr_loader->IsAttemptingRetry(/*include_failed_retry=*/true)) {
         loader_ids_to_remove.push_back(loader_id);
       }
     }
 
     for (auto loader_id : loader_ids_to_remove) {
       RemoveLoader(loader_id);
+    }
+  }
+
+  void DidObserveNewlyActiveDocumentWithNIK(
+      const net::NetworkIsolationKey& nik) {
+    for (const auto& [_, weak_ptr_loader] : weak_ptr_loaders_) {
+      if (weak_ptr_loader) {
+        weak_ptr_loader->DidObserveNewlyActiveDocumentWithNIK(nik);
+      }
     }
   }
 
@@ -196,10 +205,10 @@ class KeepAliveURLLoaderService::KeepAliveURLLoaderFactoriesBase {
   size_t NumDisconnectedLoadersForTesting() const {
     return disconnected_loaders_.size();
   }
-  size_t NumLoadersAttemptingRetryForTesting() const {
+  size_t NumLoadersAttemptingRetryForTesting(bool include_failed_retry) const {
     int count = 0;
     for (const auto& [_, weak_ptr_loader] : weak_ptr_loaders_) {
-      if (weak_ptr_loader->IsAttemptingRetry()) {
+      if (weak_ptr_loader->IsAttemptingRetry(include_failed_retry)) {
         count++;
       }
     }
@@ -257,7 +266,7 @@ class KeepAliveURLLoaderService::KeepAliveURLLoaderFactoriesBase {
         // hold another refptr to ensure `PolicyContainerHost` alive.
         context->policy_container_host, context->weak_document_ptr,
         context->network_isolation_key, context->ukm_source_id,
-        service_->browser_context_,
+        service_->storage_partition_,
         base::BindRepeating(&KeepAliveURLLoaderFactoriesBase::CreateThrottles,
                             base::Unretained(this)),
         base::PassKey<KeepAliveURLLoaderService>(),
@@ -306,7 +315,7 @@ class KeepAliveURLLoaderService::KeepAliveURLLoaderFactoriesBase {
     // in https://crrev.com/c/2552723/3 suggests that running them again in
     // browser is fine.
     return CreateContentBrowserURLLoaderThrottlesForKeepAlive(
-        service_->browser_context_, FrameTreeNodeId());
+        service_->storage_partition_->browser_context(), FrameTreeNodeId());
   }
 
   void OnLoaderDisconnected() {
@@ -583,11 +592,11 @@ class KeepAliveURLLoaderService::FetchLaterLoaderFactories final
 };
 
 KeepAliveURLLoaderService::KeepAliveURLLoaderService(
-    BrowserContext* browser_context)
-    : browser_context_(browser_context),
+    StoragePartitionImpl* storage_partition)
+    : storage_partition_(storage_partition),
       retry_counts_(kMaxRetryCountsCacheSize) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  CHECK(browser_context_);
+  CHECK(storage_partition_);
 
   url_loader_factories_ = std::make_unique<KeepAliveURLLoaderFactories>(this);
   fetch_later_loader_factories_ =
@@ -633,6 +642,12 @@ void KeepAliveURLLoaderService::Shutdown() {
   fetch_later_loader_factories_->Shutdown();
   // Notifies fetch keepalive loader factories for it to log debugging metrics.
   url_loader_factories_->Shutdown();
+}
+
+void KeepAliveURLLoaderService::DidObserveNewlyActiveDocumentWithNIK(
+    const net::NetworkIsolationKey& nik) {
+  url_loader_factories_->DidObserveNewlyActiveDocumentWithNIK(nik);
+  fetch_later_loader_factories_->DidObserveNewlyActiveDocumentWithNIK(nik);
 }
 
 bool KeepAliveURLLoaderService::CheckRetryEligibility(
@@ -682,11 +697,12 @@ size_t KeepAliveURLLoaderService::NumDisconnectedLoadersForTesting() const {
              ->NumDisconnectedLoadersForTesting();  // IN-TEST
 }
 
-size_t KeepAliveURLLoaderService::NumLoadersAttemptingRetryForTesting() const {
-  return url_loader_factories_
-             ->NumLoadersAttemptingRetryForTesting() +  // IN-TEST
-         fetch_later_loader_factories_
-             ->NumLoadersAttemptingRetryForTesting();  // IN-TEST
+size_t KeepAliveURLLoaderService::NumLoadersAttemptingRetryForTesting(
+    bool include_failed_retry) const {
+  return url_loader_factories_->NumLoadersAttemptingRetryForTesting(
+             include_failed_retry) +  // IN-TEST
+         fetch_later_loader_factories_->NumLoadersAttemptingRetryForTesting(
+             include_failed_retry);  // IN-TEST
 }
 
 void KeepAliveURLLoaderService::SetLoaderObserverForTesting(

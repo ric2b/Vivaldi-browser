@@ -1,7 +1,7 @@
 # DO NOT EDIT EXCEPT FOR LOCAL TESTING.
 
 vars = {
-  "upstream_commit_id": "I6bcf7a9b44efcc5efb0526d09afe6e15f55c3471",
+  "upstream_commit_id": "Ia10f1db344be6605e71cb14e14dee866a953facf",
 
   # The path of the sysroots.json file.
   # This is used by vendor builds like Electron.
@@ -370,6 +370,17 @@ hooks = [
     'action': [ 'python3',
                 'chromium/tools/update_pgo_profiles.py',
                 '--target=android-arm64',
+                'update',
+                '--gs-url-base=chromium-optimization-profiles/pgo_profiles',
+    ],
+  },
+  {
+    'name': 'Fetch PGO profiles for android-desktop-x64',
+    'pattern': '.',
+    'condition': 'checkout_pgo_profiles and checkout_android',
+    'action': [ 'python3',
+                'chromium/tools/update_pgo_profiles.py',
+                '--target=android-desktop-x64',
                 'update',
                 '--gs-url-base=chromium-optimization-profiles/pgo_profiles',
     ],

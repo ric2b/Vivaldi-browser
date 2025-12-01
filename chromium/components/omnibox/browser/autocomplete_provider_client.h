@@ -37,6 +37,7 @@ class TabMatcher;
 class ZeroSuggestCacheService;
 struct AutocompleteMatch;
 struct ProviderStateService;
+class AimEligibilityService;
 
 namespace bookmarks {
 class BookmarkModel;
@@ -122,6 +123,7 @@ class AutocompleteProviderClient : public OmniboxAction::Client {
   virtual base::CallbackListSubscription GetLensSuggestInputsWhenReady(
       LensOverlaySuggestInputsCallback callback) const = 0;
   virtual tab_groups::TabGroupSyncService* GetTabGroupSyncService() const = 0;
+  virtual AimEligibilityService* GetAimEligibilityService() const = 0;
 
   // The value to use for Accept-Languages HTTP header when making an HTTP
   // request.
@@ -268,7 +270,6 @@ class AutocompleteProviderClient : public OmniboxAction::Client {
   }
   virtual void SetFromSearchField(bool from_search_field) {}
   virtual bool GetFromSearchField() { return false; }
-  virtual bool VivaldiOnlyKeywordSearch() { return false; }
 
   // NOTE(ondrej@vivaldi.com): VB-116850
   virtual bool IsAddressBarAutocompleteEnabled() { return false; }

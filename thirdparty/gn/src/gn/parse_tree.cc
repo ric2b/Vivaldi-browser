@@ -26,6 +26,9 @@ const char kJsonNodeValue[] = "value";
 const char kJsonBeforeComment[] = "before_comment";
 const char kJsonSuffixComment[] = "suffix_comment";
 const char kJsonAfterComment[] = "after_comment";
+
+namespace {
+
 const char kJsonLocation[] = "location";
 const char kJsonLocationBeginLine[] = "begin_line";
 const char kJsonLocationBeginColumn[] = "begin_column";
@@ -35,8 +38,6 @@ const char kJsonLocationEndColumn[] = "end_column";
 // Used by Block and List.
 const char kJsonBeginToken[] = "begin_token";
 const char kJsonEnd[] = "end";
-
-namespace {
 
 enum DepsCategory {
   DEPS_CATEGORY_LOCAL,
@@ -231,25 +232,27 @@ base::Value ParseNode::CreateJSONNode(const char* type,
 }
 
 void ParseNode::AddCommentsJSONNodes(base::Value* out_value) const {
-  if (comments_) {
-    if (comments_->before().size()) {
-      base::Value comment_values(base::Value::Type::LIST);
-      for (const auto& token : comments_->before())
-        comment_values.GetList().push_back(base::Value(token.value()));
-      out_value->SetKey(kJsonBeforeComment, std::move(comment_values));
-    }
-    if (comments_->suffix().size()) {
-      base::Value comment_values(base::Value::Type::LIST);
-      for (const auto& token : comments_->suffix())
-        comment_values.GetList().push_back(base::Value(token.value()));
-      out_value->SetKey(kJsonSuffixComment, std::move(comment_values));
-    }
-    if (comments_->after().size()) {
-      base::Value comment_values(base::Value::Type::LIST);
-      for (const auto& token : comments_->after())
-        comment_values.GetList().push_back(base::Value(token.value()));
-      out_value->SetKey(kJsonAfterComment, std::move(comment_values));
-    }
+  if (!comments_) {
+    return;
+  }
+
+  if (comments_->before().size()) {
+    base::Value comment_values(base::Value::Type::LIST);
+    for (const auto& token : comments_->before())
+      comment_values.GetList().push_back(base::Value(token.value()));
+    out_value->SetKey(kJsonBeforeComment, std::move(comment_values));
+  }
+  if (comments_->suffix().size()) {
+    base::Value comment_values(base::Value::Type::LIST);
+    for (const auto& token : comments_->suffix())
+      comment_values.GetList().push_back(base::Value(token.value()));
+    out_value->SetKey(kJsonSuffixComment, std::move(comment_values));
+  }
+  if (comments_->after().size()) {
+    base::Value comment_values(base::Value::Type::LIST);
+    for (const auto& token : comments_->after())
+      comment_values.GetList().push_back(base::Value(token.value()));
+    out_value->SetKey(kJsonAfterComment, std::move(comment_values));
   }
 }
 
@@ -279,7 +282,7 @@ std::unique_ptr<ParseNode> ParseNode::BuildFromJSON(const base::Value& value) {
 #undef RETURN_IF_MATCHES_NAME
 
   NOTREACHED() << str_type;
-  return std::unique_ptr<ParseNode>();
+  return nullptr;
 }
 
 // AccessorNode ---------------------------------------------------------------
@@ -295,7 +298,7 @@ const AccessorNode* AccessorNode::AsAccessor() const {
 Value AccessorNode::Execute(Scope* scope, Err* err) const {
   if (subscript_)
     return ExecuteSubscriptAccess(scope, err);
-  else if (member_)
+  if (member_)
     return ExecuteScopeAccess(scope, err);
   NOTREACHED();
   return Value();
@@ -304,7 +307,7 @@ Value AccessorNode::Execute(Scope* scope, Err* err) const {
 LocationRange AccessorNode::GetRange() const {
   if (subscript_)
     return LocationRange(base_.location(), subscript_->GetRange().end());
-  else if (member_)
+  if (member_)
     return LocationRange(base_.location(), member_->GetRange().end());
   NOTREACHED();
   return LocationRange();
@@ -361,14 +364,15 @@ Value AccessorNode::ExecuteSubscriptAccess(Scope* scope, Err* err) const {
   }
   if (base_value->type() == Value::LIST) {
     return ExecuteArrayAccess(scope, base_value, err);
-  } else if (base_value->type() == Value::SCOPE) {
-    return ExecuteScopeSubscriptAccess(scope, base_value, err);
-  } else {
-    *err = MakeErrorDescribing(
-        std::string("Expecting either a list or a scope for subscript, got ") +
-        Value::DescribeType(base_value->type()) + ".");
-    return Value();
   }
+  if (base_value->type() == Value::SCOPE) {
+    return ExecuteScopeSubscriptAccess(scope, base_value, err);
+  }
+
+  *err = MakeErrorDescribing(
+      std::string("Expecting either a list or a scope for subscript, got ") +
+      Value::DescribeType(base_value->type()) + ".");
+  return Value();
 }
 
 Value AccessorNode::ExecuteArrayAccess(Scope* scope,
@@ -376,8 +380,9 @@ Value AccessorNode::ExecuteArrayAccess(Scope* scope,
                                        Err* err) const {
   size_t index = 0;
   if (!ComputeAndValidateListIndex(scope, base_value->list_value().size(),
-                                   &index, err))
+                                   &index, err)) {
     return Value();
+  }
   return base_value->list_value()[index];
 }
 
@@ -593,7 +598,8 @@ LocationRange BlockNode::GetRange() const {
   if (begin_token_.type() != Token::INVALID &&
       end_->value().type() != Token::INVALID) {
     return begin_token_.range().Union(end_->value().range());
-  } else if (!statements_.empty()) {
+  }
+  if (!statements_.empty()) {
     return statements_[0]->GetRange().Union(
         statements_[statements_.size() - 1]->GetRange());
   }
@@ -634,9 +640,9 @@ std::unique_ptr<BlockNode> BlockNode::NewFromJSON(const base::Value& value) {
   std::unique_ptr<BlockNode> ret;
 
   if (result_mode == kDumpResultModeReturnsScope) {
-    ret.reset(new BlockNode(BlockNode::RETURNS_SCOPE));
+    ret = std::make_unique<BlockNode>(BlockNode::RETURNS_SCOPE);
   } else if (result_mode == kDumpResultModeDiscardsResult) {
-    ret.reset(new BlockNode(BlockNode::DISCARDS_RESULT));
+    ret = std::make_unique<BlockNode>(BlockNode::DISCARDS_RESULT);
   } else {
     NOTREACHED();
   }
@@ -691,9 +697,8 @@ Value ConditionNode::Execute(Scope* scope, Err* err) const {
 }
 
 LocationRange ConditionNode::GetRange() const {
-  if (if_false_)
-    return if_token_.range().Union(if_false_->GetRange());
-  return if_token_.range().Union(if_true_->GetRange());
+  return if_token_.range().Union(if_false_ ? if_false_->GetRange()
+                                           : if_true_->GetRange());
 }
 
 Err ConditionNode::MakeErrorDescribing(const std::string& msg,
@@ -749,9 +754,8 @@ Value FunctionCallNode::Execute(Scope* scope, Err* err) const {
 LocationRange FunctionCallNode::GetRange() const {
   if (function_.type() == Token::INVALID)
     return LocationRange();  // This will be null in some tests.
-  if (block_)
-    return function_.range().Union(block_->GetRange());
-  return function_.range().Union(args_->GetRange());
+  return function_.range().Union(block_ ? block_->GetRange()
+                                        : args_->GetRange());
 }
 
 Err FunctionCallNode::MakeErrorDescribing(const std::string& msg,
@@ -859,7 +863,7 @@ void IdentifierNode::SetNewLocation(int line_number) {
 
 // ListNode -------------------------------------------------------------------
 
-ListNode::ListNode() {}
+ListNode::ListNode() = default;
 
 ListNode::~ListNode() = default;
 
@@ -938,11 +942,13 @@ void ListNode::SortList(Comparator comparator) {
       const ParseNode* node = contents_[i].get();
       if (!node->AsLiteral() && !node->AsIdentifier() && !node->AsAccessor()) {
         skip = true;
-        continue;
+        break;
       }
     }
-    if (skip)
+    if (skip) {
       continue;
+    }
+
     // Save the original line number so that we can re-assign ranges. We assume
     // they're contiguous lines because GetSortRanges() does so above. We need
     // to re-assign these line numbers primiarily because `gn format` uses them
@@ -986,6 +992,14 @@ void ListNode::SortList(Comparator comparator) {
             ->SetNewLocation(line_number);
       }
       prev = node;
+    }
+  }
+}
+
+void ListNode::ShortenTargets() {
+  for (auto& cur : contents_) {
+    if (cur->AsLiteral()) {
+      const_cast<LiteralNode*>(cur->AsLiteral())->ShortenTarget();
     }
   }
 }
@@ -1139,6 +1153,48 @@ std::unique_ptr<LiteralNode> LiteralNode::NewFromJSON(
 void LiteralNode::SetNewLocation(int line_number) {
   Location old = value_.location();
   value_.set_location(Location(old.file(), line_number, old.column_number()));
+}
+
+void LiteralNode::ShortenTarget() {
+  std::string_view str = value_.value();
+  DepsCategory category = GetDepsCategory(str);
+  if (category != DEPS_CATEGORY_RELATIVE &&
+      category != DEPS_CATEGORY_ABSOLUTE) {
+    return;
+  }
+
+  str = str.substr(1, str.length() - 2);  // Remove quotes.
+
+  // Slashes may not exist in relative paths.
+  size_t last_slash = str.rfind('/');
+  if (last_slash != std::string::npos) {
+    str = str.substr(last_slash + 1);
+  }
+
+  // Split on the last colon.
+  size_t last_separator = str.rfind(':');
+  if (last_separator == std::string::npos) {
+    return;
+  }
+
+  std::string_view lhs = str.substr(0, last_separator);
+  std::string_view rhs = str.substr(last_separator + 1);
+  if (lhs != rhs) {
+    return;
+  }
+
+  // Even if the two sides match, sanity check there are no other colons.
+  last_separator = lhs.rfind(':');
+  if (last_separator != std::string::npos) {
+    return;
+  }
+
+  // Accounts for ':' and '"'.
+  size_t new_length = value_.value().length() - lhs.length() - 2;
+  shortened_value_ = value_.value().substr(0, new_length);
+  // Then put the '"' back.
+  shortened_value_.push_back('"');
+  value_ = Token(value_.location(), value_.type(), shortened_value_);
 }
 
 // UnaryOpNode ----------------------------------------------------------------

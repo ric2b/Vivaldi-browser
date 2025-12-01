@@ -12,6 +12,7 @@ void VivaldiCreateTabsAndWindows(
   // window removal in Wayland. We do not use it here, but code inside the
   // call will.
   std::set<SessionID> discarded_window_ids;
-  CreateTabsAndWindows(data, tabs, tab_groups, windows, active_window_id,
+  SplitIdToSessionSplitTab split_tabs;
+  CreateTabsAndWindows(data, tabs, tab_groups, &split_tabs, windows, active_window_id,
     nullptr, &discarded_window_ids);
 }

@@ -6,9 +6,13 @@
 $assert ACTIVATION in ["LINEAR", "RELU", "MINMAX"]
 $assert ACTIVATION != "LINEAR" or not WASM
 #include <assert.h>
+#include <stddef.h>
+#include <stdint.h>
 
+#include "src/xnnpack/common.h"
 #include "src/xnnpack/igemm.h"
 #include "src/xnnpack/math.h"
+#include "src/xnnpack/microparams.h"
 
 
 $MIN_F32 = "__builtin_wasm_min_f32" if WASM else "math_min_f32"
@@ -27,7 +31,7 @@ void xnn_f32_igemm${SUFFIX}_ukernel_${MR}x${NR}__${"wasm" if WASM else "scalar"}
     size_t cn_stride,
     size_t a_offset,
     const float* zero,
-    const ${PARAMS} params[restrict XNN_MIN_ELEMENTS(1)])
+    const ${PARAMS}* restrict params)
 {
   assert(mr != 0);
   assert(mr <= ${MR});

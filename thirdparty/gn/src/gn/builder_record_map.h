@@ -53,7 +53,7 @@ class BuilderRecordMap : public HashTableBase<BuilderRecordNode> {
     }
     BuilderRecord* record = new BuilderRecord(type, label, request_from);
     node->record = record;
-    UpdateAfterInsert();
+    UpdateAfterInsert(false);
     return {true, record};
   }
 

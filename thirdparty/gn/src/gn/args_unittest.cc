@@ -79,3 +79,36 @@ TEST(ArgsTest, VerifyOverrideScope) {
   ASSERT_NE(nullptr, setup.scope()->GetValue("c"));
   EXPECT_EQ(Value(nullptr, "cvalue2"), *setup.scope()->GetValue("c"));
 }
+
+// Ensure that GetArgFromAllArguments() searches for an arg from all arguments.
+TEST(ArgsTest, VerifyGetArgFromAllArguments) {
+  TestWithScope setup;
+  Args args1;
+  Err err;
+
+  Scope::KeyValueMap key_value_map;
+  Value a_value = Value(nullptr, "avalue");
+  key_value_map["a"] = a_value;
+  EXPECT_TRUE(args1.DeclareArgs(key_value_map, setup.scope(), &err));
+
+  // Should not find "a" from overrides.
+  ASSERT_EQ(nullptr, args1.GetArgOverride("a"));
+
+  // Should find "a" from all args as it's declared.
+  EXPECT_EQ(a_value, *args1.GetArgFromAllArguments("a"));
+
+  // Should not find "b" from all args as it's not declared.
+  EXPECT_FALSE(args1.GetArgFromAllArguments("b"));
+
+  Args args2;
+  args2.AddArgOverrides(key_value_map);
+
+  // Should find "a" from overrides.
+  const Value* a_value_from_ovderrides = args2.GetArgOverride("a");
+  ASSERT_NE(nullptr, a_value_from_ovderrides);
+  EXPECT_EQ(a_value, *a_value_from_ovderrides);
+
+  // Should find "a" from all args since GetArgFromAllArguments() includes
+  // overrides.
+  EXPECT_EQ(a_value, *args2.GetArgFromAllArguments("a"));
+}

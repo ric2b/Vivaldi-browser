@@ -44,7 +44,6 @@ OP_TYPES = {
     "vlog": "Log",
     "vlrelu": "LeakyReLU",
     "vneg": "Negate",
-    "vrelu": "ReLU",
     "vrndd": "RoundDown",
     "vrndne": "RoundToNearestEven",
     "vrndu": "RoundUp",
@@ -64,6 +63,12 @@ SPECIAL_VALUES_F32 = {
         4,  # Number of elements.
         "{0.0f, -0.0f, 1.0f, -1.0f}",  # Inputs.
         "{0.0f, -0.0f, 1.0f, NAN}",  # Expected outputs.
+        1,  # Error margin in ULP.
+    ),
+    "ReciprocalSquareRoot": (
+        3,  # Number of elements.
+        "{INFINITY, -INFINITY, NAN}",  # Inputs.
+        "{0, NAN, NAN}",  # Expected outputs.
         1,  # Error margin in ULP.
     ),
     "TanH": (
@@ -113,7 +118,7 @@ SPECIAL_VALUES_F32 = {
 }
 
 TEST_TEMPLATE = """\
-#define XNN_UKERNEL_WITH_PARAMS(arch_flags, ukernel, batch_tile, vector_tile, datatype, params_type, init_params)
+#define XNN_UKERNEL(arch_flags, ukernel, batch_tile, vector_tile, datatype, params_type, init_params)
   TEST(ukernel, batch_eq) { TestBatchEq<TestInfo, datatype, datatype>(arch_flags, batch_tile, ukernel, init_params); }
   TEST(ukernel, batch_div) { TestBatchDiv<TestInfo, datatype, datatype>(arch_flags, batch_tile, ukernel, init_params); }
   TEST(ukernel, batch_lt) { TestBatchLT<TestInfo, datatype, datatype>(arch_flags, batch_tile, ukernel, init_params); }
@@ -262,8 +267,10 @@ using TestInfo = {op_type};
   if "rnd" in folder:
     folder = folder[0:8]
 
-  tests += f'#include "src/{folder}/{options.ukernel}.h"\n'
-  tests += "#undef XNN_UKERNEL_WITH_PARAMS\n"
+  tests += (
+      f'#include "src/{folder}/{options.ukernel}.inc"\n'
+  )
+  tests += "#undef XNN_UKERNEL\n"
   tests += "#undef XNN_QUANTIZED\n"
 
   xnncommon.overwrite_if_changed(options.output, tests)

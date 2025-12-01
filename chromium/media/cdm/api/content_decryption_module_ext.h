@@ -5,17 +5,13 @@
 #ifndef CDM_CONTENT_DECRYPTION_MODULE_EXT_H_
 #define CDM_CONTENT_DECRYPTION_MODULE_EXT_H_
 
+#include <cstdint>
+
 #if defined(_WIN32)
 #include <windows.h>
 #endif
 
 #include "content_decryption_module_export.h"
-
-#if defined(_MSC_VER)
-typedef unsigned int uint32_t;
-#else
-#include <stdint.h>
-#endif
 
 namespace cdm {
 

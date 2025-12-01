@@ -71,6 +71,7 @@ Napi::Object Initialize(Napi::Env env);
 {{-   else if IsInterface  $}}{{template "Interface" $}}
 {{-   else if IsEnum       $}}{{template "Enum" $}}
 {{-   else if IsTypedef    $}}{{template "Typedef" $}}
+{{-   else if IsCallback   $}}{{template "Callback" $}}
 {{-   end}}
 {{- end}}
 
@@ -137,8 +138,9 @@ public:
 */ -}}
 {{- define "Interface"}}
 // interface {{$.Name}}
-class {{$.Name}} {{- if $.Inherits }} : public {{$.Inherits}}{{end}} {
+class {{$.Name}} {{- if $.Inherits }} : public virtual {{$.Inherits}}{{end}} {
 public:
+{{-  if not (HasAnnotation $ "ManualImplementation")}}
   static Interface<{{$.Name}}> Bind(Napi::Env, std::unique_ptr<{{$.Name}}>&&);
   static {{$.Name}}* Unwrap(Napi::Object);
 
@@ -146,8 +148,8 @@ public:
   static inline Interface<{{$.Name}}> Create(Napi::Env env, ARGS&& ... args) {
     return Bind(env, std::make_unique<T>(std::forward<ARGS>(args)...));
   }
-
-  virtual ~{{$.Name}}();
+{{-  end}}
+  virtual ~{{$.Name}}() {{- if $.Inherits }} override{{end}};
   {{$.Name}}();
 {{-  if $s := SetlikeOf $}}
 {{-    template "InterfaceSetlike" $s}}
@@ -203,6 +205,17 @@ public:
 };
 
 std::ostream& operator<<(std::ostream& o, {{$.Name}});
+{{end}}
+
+
+{{- /*
+--------------------------------------------------------------------------------
+-- Callback emits the C++ header declaration that defines the interop type for
+-- the given ast.Callback
+--------------------------------------------------------------------------------
+*/ -}}
+{{- define "Callback"}}
+using {{$.Name}} = Napi::Function;
 {{end}}
 
 

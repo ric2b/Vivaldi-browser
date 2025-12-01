@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::coeffs::*;
 use super::rgb;
 use super::rgb::*;
 
@@ -23,31 +22,6 @@ use crate::internal_utils::*;
 use crate::*;
 
 use std::cmp::min;
-
-#[derive(Clone, Copy, PartialEq)]
-enum Mode {
-    YuvCoefficients(f32, f32, f32),
-    Identity,
-    Ycgco,
-    YcgcoRe,
-    YcgcoRo,
-}
-
-impl From<&image::Image> for Mode {
-    fn from(image: &image::Image) -> Self {
-        match image.matrix_coefficients {
-            MatrixCoefficients::Identity => Mode::Identity,
-            MatrixCoefficients::Ycgco => Mode::Ycgco,
-            MatrixCoefficients::YcgcoRe => Mode::YcgcoRe,
-            MatrixCoefficients::YcgcoRo => Mode::YcgcoRo,
-            _ => {
-                let coeffs =
-                    calculate_yuv_coefficients(image.color_primaries, image.matrix_coefficients);
-                Mode::YuvCoefficients(coeffs[0], coeffs[1], coeffs[2])
-            }
-        }
-    }
-}
 
 fn identity_yuv8_to_rgb8_full_range(image: &image::Image, rgb: &mut rgb::Image) -> AvifResult<()> {
     if image.yuv_format != PixelFormat::Yuv444 || rgb.format == Format::Rgb565 {

@@ -21,7 +21,6 @@ devtools_module("ai_assistance") {
     "agents/PatchAgent.ts",
     "agents/PerformanceAgent.ts",
     "agents/PerformanceAnnotationsAgent.ts",
-    "agents/PerformanceInsightsAgent.ts",
     "agents/StylingAgent.ts",
     "data_formatters/FileFormatter.ts",
     "data_formatters/NetworkRequestFormatter.ts",
@@ -60,6 +59,7 @@ devtools_entrypoint("bundle") {
     "../../panels/ai_assistance/*",
     "../../panels/settings/*",
     "../../panels/timeline/*",
+    "../ai_code_completion",
   ]
 
   visibility += devtools_models_visibility
@@ -80,7 +80,6 @@ ts_library("unittests") {
     "agents/PatchAgent.test.ts",
     "agents/PerformanceAgent.test.ts",
     "agents/PerformanceAnnotationsAgent.test.ts",
-    "agents/PerformanceInsightsAgent.test.ts",
     "agents/StylingAgent.test.ts",
     "data_formatters/FileFormatter.test.ts",
     "data_formatters/NetworkRequestFormatter.test.ts",

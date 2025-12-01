@@ -35,12 +35,16 @@
 namespace tint::core::ir {
 class Module;
 }
+namespace tint::spirv::writer {
+enum class SpvVersion : uint32_t;
+}
 
 namespace tint::spirv::writer::raise {
 
 /// The capabilities that the transform can support.
 const core::ir::Capabilities kForkExplicitLayoutTypesCapabilities{
     core::ir::Capability::kAllowAnyInputAttachmentIndexType,
+    core::ir::Capability::kAllowNonCoreTypes,
 };
 
 /// ForkExplicitLayoutTypes is a transform that forks array and structures types that are shared
@@ -48,7 +52,7 @@ const core::ir::Capabilities kForkExplicitLayoutTypesCapabilities{
 ///
 /// @param module the module to transform
 /// @returns success or failure
-Result<SuccessType> ForkExplicitLayoutTypes(core::ir::Module& module);
+Result<SuccessType> ForkExplicitLayoutTypes(core::ir::Module& module, SpvVersion version);
 
 }  // namespace tint::spirv::writer::raise
 

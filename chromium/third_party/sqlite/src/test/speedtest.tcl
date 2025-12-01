@@ -25,8 +25,10 @@ Other options include:
    --help                Show this help screen.
    --lean                "Lean" mode.
    --lookaside N SZ      Lookahead uses N slots of SZ bytes each.
+   --osmalloc            Use the OS native malloc() instead of MEMSYS5
    --pagesize N          Use N as the page size.
    --quiet | -q          "Quite".  Put results in file but don't pop up editor
+   --size N              Change the test size.  100 means 100%.  Default: 5.
    --testset TEST        Specify the specific testset to use.  The default
                          is "mix1".  Other options include: "main", "json",
                          "cte", "orm", "fp", "rtree".
@@ -39,7 +41,8 @@ set cc gcc
 set testset mix1
 set dryrun 0
 set quiet 0
-set speedtestflags {--shrink-memory --reprepare --stats --heap 40000000 64}
+set osmalloc 0
+set speedtestflags {--shrink-memory --reprepare --stats}
 lappend speedtestflags --journal wal --size 5
 
 for {set i 0} {$i<[llength $argv]} {incr i} {
@@ -78,10 +81,22 @@ for {set i 0} {$i<[llength $argv]} {incr i} {
         incr i
         set testset [lindex $argv $i]
       }
+      -size -
+      --size {
+        incr i
+        set newsize [lindex $argv $i]
+        if {$newsize<1} {set newsize 1}
+        set speedtestflags \
+          [regsub {.-size \d+} $speedtestflags "-size $newsize"]
+      }
       -n -
       -dryrun -
       --dryrun {
         set dryrun 1
+      }
+      -osmalloc -
+      --osmalloc {
+        set osmalloc 1
       }
       -? -
       -help -
@@ -130,10 +145,13 @@ for {set i 0} {$i<[llength $argv]} {incr i} {
 if {[lsearch -glob $cflags -O*]<0} {
   lappend cflags -Os
 }
-if {[lsearch -glob $cflags -DSQLITE_ENABLE_MEMSYS*]<0} {
+if {!$osmalloc} {
+  append speedtestflags { --heap 40000000 64}
+}
+if {!$osmalloc && [lsearch -glob $cflags {-DSQLITE_ENABLE_MEMSYS*}]<0} {
   lappend cflags -DSQLITE_ENABLE_MEMSYS5
 }
-if {[lsearch -glob $cflags -DSQLITE_ENABLE_RTREE*]<0} {
+if {[lsearch -glob $cflags {-DSQLITE_ENABLE_RTREE*}]<0} {
   lappend cflags -DSQLITE_ENABLE_RTREE
 }
 if {$srcfile==""} {
@@ -174,9 +192,14 @@ if {!$dryrun} {
 }
 lappend speedtestflags --testset $testset
 set stcmd [list valgrind --tool=cachegrind ./speedtest1 {*}$speedtestflags]
+lappend stcmd speedtest1.db
 lappend stcmd >valgrind-out.txt 2>valgrind-err.txt
 puts $stcmd
 if {!$dryrun} {
+   foreach file {speedtest1.db speedtest1.db-journal speedtest1.db-wal
+                 speedtest1.db-shm} {
+     if {[file exists $file]} {file delete $file}
+   }
    exec {*}$stcmd
 }
 

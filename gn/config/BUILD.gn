@@ -1,7 +1,6 @@
 import("features.gni")
 import("product.gni")
 import("//build/toolchain/cc_wrapper.gni")
-import("//build/toolchain/rbe.gni")
 import("//build/config/sanitizers/sanitizers.gni")
 
 if (is_ios) {

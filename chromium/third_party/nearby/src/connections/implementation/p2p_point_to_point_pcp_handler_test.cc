@@ -16,18 +16,29 @@
 // "third_party/nearby/connections/implementation/p2p_cluster_pcp_handler.h"
 #include "connections/implementation/p2p_point_to_point_pcp_handler.h"
 
-#include <memory>
+#include <cstdint>
 #include <string>
 #include <tuple>
 
-#include "gmock/gmock.h"
-#include "protobuf-matchers/protocol-buffer-matchers.h"
 #include "gtest/gtest.h"
 #include "absl/time/time.h"
+#include "connections/advertising_options.h"
+#include "connections/connection_options.h"
+#include "connections/discovery_options.h"
 #include "connections/implementation/bwu_manager.h"
+#include "connections/implementation/client_proxy.h"
+#include "connections/implementation/endpoint_channel_manager.h"
+#include "connections/implementation/endpoint_manager.h"
 #include "connections/implementation/flags/nearby_connections_feature_flags.h"
 #include "connections/implementation/injected_bluetooth_device_store.h"
+#include "connections/implementation/mediums/bluetooth_radio.h"
+#include "connections/implementation/mediums/mediums.h"
+#include "connections/listeners.h"
+#include "connections/medium_selector.h"
+#include "connections/status.h"
+#include "connections/strategy.h"
 #include "internal/flags/nearby_flags.h"
+#include "internal/platform/byte_array.h"
 #include "internal/platform/count_down_latch.h"
 #include "internal/platform/logging.h"
 #include "internal/platform/medium_environment.h"
@@ -77,26 +88,26 @@ class P2pPointToPointPcpHandlerTest
     : public testing::TestWithParam<std::tuple<BooleanMediumSelector, bool>> {
  protected:
   void SetUp() override {
-    NEARBY_LOGS(INFO) << "SetUp: begin";
+    LOG(INFO) << "SetUp: begin";
     NearbyFlags::GetInstance().OverrideBoolFlagValue(
         config_package_nearby::nearby_connections_feature::kEnableBleV2,
         std::get<1>(GetParam()));
     if (advertising_options_.allowed.ble) {
-      NEARBY_LOGS(INFO) << "SetUp: BLE enabled";
+      LOG(INFO) << "SetUp: BLE enabled";
     }
     if (advertising_options_.allowed.bluetooth) {
-      NEARBY_LOGS(INFO) << "SetUp: BT enabled";
+      LOG(INFO) << "SetUp: BT enabled";
     }
     if (advertising_options_.allowed.wifi_lan) {
-      NEARBY_LOGS(INFO) << "SetUp: WifiLan enabled";
+      LOG(INFO) << "SetUp: WifiLan enabled";
     }
     if (advertising_options_.allowed.wifi_hotspot) {
-      NEARBY_LOGS(INFO) << "SetUp: WifiLan enabled";
+      LOG(INFO) << "SetUp: WifiLan enabled";
     }
     if (advertising_options_.allowed.web_rtc) {
-      NEARBY_LOGS(INFO) << "SetUp: WebRTC enabled";
+      LOG(INFO) << "SetUp: WebRTC enabled";
     }
-    NEARBY_LOGS(INFO) << "SetUp: end";
+    LOG(INFO) << "SetUp: end";
   }
 
   ClientProxy client_a_;
@@ -172,7 +183,7 @@ TEST_P(P2pPointToPointPcpHandlerTest, CanConnect) {
                       .initiated_cb =
                           [&connect_latch](const std::string& endpoint_id,
                                            const ConnectionResponseInfo& info) {
-                            NEARBY_LOGS(INFO)
+                            LOG(INFO)
                                 << "StartAdvertising: initiated_cb called";
                             connect_latch.CountDown();
                           },
@@ -187,10 +198,9 @@ TEST_P(P2pPointToPointPcpHandlerTest, CanConnect) {
                             const std::string& endpoint_id,
                             const ByteArray& endpoint_info,
                             const std::string& service_id) {
-                          NEARBY_LOGS(INFO)
-                              << "Device discovered: id=" << endpoint_id
-                              << ", endpoint_info="
-                              << endpoint_info.AsStringView();
+                          LOG(INFO) << "Device discovered: id=" << endpoint_id
+                                    << ", endpoint_info="
+                                    << endpoint_info.AsStringView();
                           discovered = {
                               .endpoint_id = endpoint_id,
                               .endpoint_info = endpoint_info,
@@ -212,7 +222,7 @@ TEST_P(P2pPointToPointPcpHandlerTest, CanConnect) {
   connection_options_.connection_info.bssid = kBssid;
   connection_options_.connection_info.ap_frequency = kFreq;
   connection_options_.connection_info.ip_address.resize(4);
-  connection_options_.connection_info.ip_address = std::string(kIp4Bytes);
+  connection_options_.connection_info.ip_address = kIp4Bytes;
 
   client_b_.AddCancellationFlag(discovered.endpoint_id);
   handler_b.RequestConnection(
@@ -223,8 +233,7 @@ TEST_P(P2pPointToPointPcpHandlerTest, CanConnect) {
                .initiated_cb =
                    [&connect_latch](const std::string& endpoint_id,
                                     const ConnectionResponseInfo& info) {
-                     NEARBY_LOGS(INFO)
-                         << "RequestConnection: initiated_cb called";
+                     LOG(INFO) << "RequestConnection: initiated_cb called";
                      connect_latch.CountDown();
                    },
            }},
@@ -253,9 +262,12 @@ TEST_P(P2pPointToPointPcpHandlerTest, CanConnect) {
               mediums_b.GetWifi().GetInformation().ip_address_4_bytes);
   }
 
+  handler_a.StopAdvertising(&client_a_);
   handler_b.StopDiscovery(&client_b_);
   bwu_a.Shutdown();
   bwu_b.Shutdown();
+  handler_a.DisconnectFromEndpointManager();
+  handler_b.DisconnectFromEndpointManager();
   env_.Stop();
 }
 

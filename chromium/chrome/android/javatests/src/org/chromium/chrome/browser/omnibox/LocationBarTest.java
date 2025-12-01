@@ -9,6 +9,7 @@ import static androidx.test.espresso.assertion.ViewAssertions.matches;
 import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
 import static androidx.test.espresso.matcher.ViewMatchers.withEffectiveVisibility;
 import static androidx.test.espresso.matcher.ViewMatchers.withId;
+import static androidx.test.espresso.matcher.ViewMatchers.withParent;
 
 import static org.hamcrest.CoreMatchers.allOf;
 import static org.hamcrest.Matchers.not;
@@ -44,6 +45,8 @@ import org.chromium.base.test.util.Criteria;
 import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.DoNotBatch;
+import org.chromium.base.test.util.Features.DisableFeatures;
+import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.app.ChromeActivity;
@@ -53,6 +56,7 @@ import org.chromium.chrome.browser.lens.LensController;
 import org.chromium.chrome.browser.lifecycle.InflationObserver;
 import org.chromium.chrome.browser.locale.LocaleManager;
 import org.chromium.chrome.browser.locale.LocaleManagerDelegate;
+import org.chromium.chrome.browser.omnibox.status.StatusProperties.StatusIconResource;
 import org.chromium.chrome.browser.omnibox.voice.VoiceRecognitionHandler;
 import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
@@ -63,6 +67,7 @@ import org.chromium.chrome.test.transit.page.WebPageStation;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.OmniboxTestUtils;
 import org.chromium.components.embedder_support.util.UrlConstants;
+import org.chromium.components.omnibox.OmniboxFeatureList;
 import org.chromium.components.omnibox.OmniboxFeatures;
 import org.chromium.components.search_engines.TemplateUrl;
 import org.chromium.components.search_engines.TemplateUrlService;
@@ -212,7 +217,7 @@ public class LocationBarTest {
                     mediator.onPrimaryColorChanged();
                     mediator.onSecurityStateChanged();
                     mediator.onTemplateURLServiceChanged();
-                    mediator.onUrlChanged();
+                    mediator.onUrlChanged(false);
                 });
     }
 
@@ -334,14 +339,14 @@ public class LocationBarTest {
     @Test
     @MediumTest
     public void testEditingText_withRetainOmniboxOnFocusDisabled() {
-        OmniboxFeatures.setShouldRetainOmniboxOnFocusForTesting(Boolean.FALSE);
+        OmniboxFeatures.setShouldRetainOmniboxOnFocusForTesting(false);
         testEditingText(/* expectRetainOmniboxOnFocus= */ false);
     }
 
     @Test
     @MediumTest
     public void testEditingText_withRetainOmniboxOnFocusEnabled() {
-        OmniboxFeatures.setShouldRetainOmniboxOnFocusForTesting(Boolean.TRUE);
+        OmniboxFeatures.setShouldRetainOmniboxOnFocusForTesting(true);
         testEditingText(/* expectRetainOmniboxOnFocus= */ true);
     }
 
@@ -518,7 +523,10 @@ public class LocationBarTest {
         mActivityTestRule.loadUrl(UrlConstants.NTP_URL);
 
         Mockito.reset(mVoiceRecognitionHandler);
-        ViewUtils.waitForVisibleView(withId(R.id.voice_search_button));
+        onView(
+                allOf(
+                        withId(R.id.voice_search_button),
+                        withParent(withId(R.layout.new_tab_page_layout))));
 
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
@@ -603,8 +611,8 @@ public class LocationBarTest {
         doReturn(true).when(mLensController).isLensEnabled(any());
         doReturn(true).when(mTemplateUrlService).isDefaultSearchEngineGoogle();
         mActivityTestRule.loadUrlInNewTab(url, /* incognito= */ false);
-        updateLocationBar();
         onView(withId(R.id.lens_camera_button)).check(matches(not(isDisplayed())));
+        updateLocationBar();
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     mUrlBar.requestFocus();
@@ -622,7 +630,7 @@ public class LocationBarTest {
     @CommandLineFlags.Add({
         "disable-features=" + ChromeFeatureList.ADAPTIVE_BUTTON_IN_TOP_TOOLBAR_CUSTOMIZATION_V2
     })
-    @Restriction(DeviceFormFactor.TABLET)
+    @Restriction(DeviceFormFactor.TABLET_OR_DESKTOP)
     public void testFocusLogic_buttonVisibilityTablet() {
         testFocusLogic_buttonVisibilityTablet(
                 /* expectRetainOmniboxOnFocus= */ ThreadUtils.runOnUiThreadBlocking(
@@ -634,9 +642,9 @@ public class LocationBarTest {
     @CommandLineFlags.Add({
         "disable-features=" + ChromeFeatureList.ADAPTIVE_BUTTON_IN_TOP_TOOLBAR_CUSTOMIZATION_V2
     })
-    @Restriction(DeviceFormFactor.TABLET)
+    @Restriction(DeviceFormFactor.TABLET_OR_DESKTOP)
     public void testFocusLogic_buttonVisibilityTabletWithRetainOmniboxOnFocusDisabled() {
-        OmniboxFeatures.setShouldRetainOmniboxOnFocusForTesting(Boolean.FALSE);
+        OmniboxFeatures.setShouldRetainOmniboxOnFocusForTesting(false);
         testFocusLogic_buttonVisibilityTablet(/* expectRetainOmniboxOnFocus= */ false);
     }
 
@@ -645,9 +653,9 @@ public class LocationBarTest {
     @CommandLineFlags.Add({
         "disable-features=" + ChromeFeatureList.ADAPTIVE_BUTTON_IN_TOP_TOOLBAR_CUSTOMIZATION_V2
     })
-    @Restriction(DeviceFormFactor.TABLET)
+    @Restriction(DeviceFormFactor.TABLET_OR_DESKTOP)
     public void testFocusLogic_buttonVisibilityTabletWithRetainOmniboxOnFocusEnabled() {
-        OmniboxFeatures.setShouldRetainOmniboxOnFocusForTesting(Boolean.TRUE);
+        OmniboxFeatures.setShouldRetainOmniboxOnFocusForTesting(true);
         testFocusLogic_buttonVisibilityTablet(/* expectRetainOmniboxOnFocus= */ true);
     }
 
@@ -669,15 +677,6 @@ public class LocationBarTest {
                 .check(matches(withEffectiveVisibility(ViewMatchers.Visibility.GONE)));
         onView(withId(R.id.bookmark_button))
                 .check(matches(withEffectiveVisibility(ViewMatchers.Visibility.VISIBLE)));
-
-        // TODO(crbug.com/393394998): Remove all instances of this view after launching the feature.
-        if (ChromeFeatureList.sHideTabletToolbarDownloadButton.isEnabled()) {
-            onView(withId(R.id.save_offline_button))
-                    .check(matches(withEffectiveVisibility(ViewMatchers.Visibility.GONE)));
-        } else {
-            onView(withId(R.id.save_offline_button))
-                    .check(matches(withEffectiveVisibility(ViewMatchers.Visibility.VISIBLE)));
-        }
 
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
@@ -713,8 +712,6 @@ public class LocationBarTest {
                 });
 
         onView(withId(R.id.bookmark_button))
-                .check(matches(withEffectiveVisibility(ViewMatchers.Visibility.GONE)));
-        onView(withId(R.id.save_offline_button))
                 .check(matches(withEffectiveVisibility(ViewMatchers.Visibility.GONE)));
     }
 
@@ -760,18 +757,29 @@ public class LocationBarTest {
     @Test
     @SmallTest
     @Restriction(DeviceFormFactor.PHONE)
+    @EnableFeatures(OmniboxFeatureList.OMNIBOX_MOBILE_PARITY_UPDATE)
+    // TODO(https://crbug.com/426594110): Removes this once feature
+    // OmniboxFeatureList.OMNIBOX_MOBILE_PARITY_UPDATE_V2 is launched.
+    @DisableFeatures(OmniboxFeatureList.OMNIBOX_MOBILE_PARITY_UPDATE_V2)
     public void testOmniboxSearchEngineLogo_unfocusedOnSRP_nonGoogleSearchEngine() {
         setupSearchEngineLogo(NON_GOOGLE_URL);
         startActivityNormally();
 
         mActivityTestRule.loadUrl(UrlConstants.NTP_URL);
+
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    mSearchEngineUtils.setSearchEngineIcon(
+                            new StatusIconResource(R.drawable.ic_search, 0));
+                });
+
         onView(withId(R.id.location_bar_status_icon)).check(matches(isDisplayed()));
     }
 
     @Test
     @SmallTest
     @Restriction(DeviceFormFactor.PHONE)
-    @DisabledTest(message = "https://crbug.com/419252458")
+    @EnableFeatures(OmniboxFeatureList.OMNIBOX_MOBILE_PARITY_UPDATE)
     public void testOmniboxSearchEngineLogo_unfocusedOnSRP_incognito() {
         setupSearchEngineLogo(GOOGLE_URL);
         startActivityNormally();

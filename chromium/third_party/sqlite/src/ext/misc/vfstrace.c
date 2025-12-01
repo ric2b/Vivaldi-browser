@@ -120,7 +120,7 @@
 **
 ** Individual APIs can be enabled or disabled by name, with or without
 ** the initial "x" character.  For example, to set up for tracing lock
-** primatives only:
+** primitives only:
 **
 **    PRAGMA vfstrace('-all, +Lock,Unlock,ShmLock');
 **
@@ -581,7 +581,7 @@ static int vfstraceFileControl(sqlite3_file *pFile, int op, void *pArg){
       const char *const* a = (const char*const*)pArg;
       if( a[1] && strcmp(a[1],"vfstrace")==0 && a[2] ){
         const u8 *zArg = (const u8*)a[2];
-        if( zArg[0]>='0' && zArg[0]<=9 ){
+        if( zArg[0]>='0' && zArg[0]<='9' ){
           pInfo->mTrace = (sqlite3_uint64)strtoll(a[2], 0, 0);
         }else{
           static const struct {

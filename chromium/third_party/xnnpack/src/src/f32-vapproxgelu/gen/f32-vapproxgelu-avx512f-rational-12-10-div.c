@@ -11,10 +11,9 @@
 #include <assert.h>
 #include <stddef.h>
 
-#include "src/xnnpack/simd/f32-avx512f.h"
-
 #include "src/xnnpack/common.h"
 #include "src/xnnpack/microparams.h"
+#include "src/xnnpack/simd/f32-avx512f.h"
 #include "src/xnnpack/vunary.h"
 
 
@@ -22,7 +21,7 @@ void xnn_f32_vapproxgelu_ukernel__avx512f_rational_12_10_div_u16(
     size_t batch,
     const float* input,
     float* output,
-    const struct xnn_f32_default_params unused_params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f32_default_params* unused_params)
 {
   assert(batch != 0);
   assert(batch % sizeof(float) == 0);
@@ -128,7 +127,7 @@ void xnn_f32_vapproxgelu_ukernel__avx512f_rational_12_10_div_u32(
     size_t batch,
     const float* input,
     float* output,
-    const struct xnn_f32_default_params unused_params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f32_default_params* unused_params)
 {
   assert(batch != 0);
   assert(batch % sizeof(float) == 0);
@@ -290,7 +289,7 @@ void xnn_f32_vapproxgelu_ukernel__avx512f_rational_12_10_div_u48(
     size_t batch,
     const float* input,
     float* output,
-    const struct xnn_f32_default_params unused_params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f32_default_params* unused_params)
 {
   assert(batch != 0);
   assert(batch % sizeof(float) == 0);
@@ -471,7 +470,7 @@ void xnn_f32_vapproxgelu_ukernel__avx512f_rational_12_10_div_u64(
     size_t batch,
     const float* input,
     float* output,
-    const struct xnn_f32_default_params unused_params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f32_default_params* unused_params)
 {
   assert(batch != 0);
   assert(batch % sizeof(float) == 0);

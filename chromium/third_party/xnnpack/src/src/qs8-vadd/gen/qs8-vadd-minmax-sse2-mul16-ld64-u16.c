@@ -9,9 +9,13 @@
 // LICENSE file in the root directory of this source tree.
 
 #include <assert.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #include <emmintrin.h>
 
+#include "src/xnnpack/common.h"
+#include "src/xnnpack/microparams.h"
 #include "src/xnnpack/unaligned.h"
 #include "src/xnnpack/vbinary.h"
 
@@ -21,7 +25,7 @@ void xnn_qs8_vadd_minmax_ukernel__sse2_mul16_ld64_u16(
     const int8_t* input_a,
     const int8_t* input_b,
     int8_t* output,
-    const struct xnn_qs8_add_minmax_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
+    const struct xnn_qs8_add_minmax_params* restrict params) XNN_OOB_READS
 {
   assert(batch != 0);
   assert(batch % sizeof(int8_t) == 0);

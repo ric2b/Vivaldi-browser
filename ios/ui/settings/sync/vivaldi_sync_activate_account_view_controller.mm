@@ -6,6 +6,7 @@
 #import "base/strings/string_number_conversions.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/values.h"
+#import "components/application_locale_storage/application_locale_storage.h"
 #import "components/language/core/browser/pref_names.h"
 #import "components/prefs/pref_service.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
@@ -357,7 +358,7 @@ primaryActionForTextItem:(UITextItem*)textItem
   std::string locale =
     pref_service->HasPrefPath(language::prefs::kApplicationLocale)
         ? pref_service->GetString(language::prefs::kApplicationLocale)
-        : GetApplicationContext()->GetApplicationLocale();
+        : GetApplicationContext()->GetApplicationLocaleStorage()->Get();
 
   base::Value::Dict dict;
   dict.Set(vParamUsername, username);
@@ -389,7 +390,7 @@ primaryActionForTextItem:(UITextItem*)textItem
   std::string locale =
     pref_service->HasPrefPath(language::prefs::kApplicationLocale)
         ? pref_service->GetString(language::prefs::kApplicationLocale)
-        : GetApplicationContext()->GetApplicationLocale();
+        : GetApplicationContext()->GetApplicationLocaleStorage()->Get();
 
   base::Value::Dict dict;
   dict.Set(vParamUsername, username);

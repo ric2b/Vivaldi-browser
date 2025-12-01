@@ -26,6 +26,8 @@ public class BookmarkItem {
 
     private boolean mForceEditableForTesting;
 
+    private GURL mDisplayUrl; // Vivaldi
+
     public BookmarkItem(
             BookmarkId id,
             String title,
@@ -58,6 +60,8 @@ public class BookmarkItem {
         mThemeColor = 0;
         mCreated = 0;
         mGUID = "";
+        // Vivaldi
+        if (mDisplayUrl == null) mDisplayUrl = url;
     }
 
     /** Returns the title of the bookmark item. */
@@ -152,13 +156,14 @@ public class BookmarkItem {
     private String mGUID;
 
     /** Constructor used with Vivaldi. */
-    public BookmarkItem(BookmarkId id, String title, GURL url, boolean isFolder,
+    public BookmarkItem(BookmarkId id, String title, GURL url, GURL displayURL, boolean isFolder,
                          BookmarkId parentId, boolean isEditable, boolean isManaged,
                          long dateAdded, boolean read, boolean isSpeedDial,
                          String nickName, String description, int themeColor,
                          long created, String thumbnailPath, String guid) {
         this(id, title, url, isFolder, parentId, isEditable, isManaged, dateAdded, read,
                 created, false);
+        mDisplayUrl = displayURL;
         mIsSpeedDial = isSpeedDial;
         mNickName = nickName;
         mDescription = description;
@@ -196,4 +201,10 @@ public class BookmarkItem {
 
     /** Vivaldi **/
     public void setThumbnailPath(String path) { mThumbnailPath = path; }
+
+    /** Vivaldi **/
+    /** @return display url of partner bookmark */
+    public GURL nativeGetUrlForDisplay() {
+        return mDisplayUrl;
+    }
 }

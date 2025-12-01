@@ -35,9 +35,9 @@ bool IsWinAnsiOrMacRomanEncoding(FontEncoding encoding) {
 
 }  // namespace
 
-CPDF_TrueTypeFont::CPDF_TrueTypeFont(CPDF_Document* pDocument,
-                                     RetainPtr<CPDF_Dictionary> pFontDict)
-    : CPDF_SimpleFont(pDocument, std::move(pFontDict)) {}
+CPDF_TrueTypeFont::CPDF_TrueTypeFont(CPDF_Document* document,
+                                     RetainPtr<CPDF_Dictionary> font_dict)
+    : CPDF_SimpleFont(document, std::move(font_dict)) {}
 
 CPDF_TrueTypeFont::~CPDF_TrueTypeFont() = default;
 
@@ -186,7 +186,7 @@ bool CPDF_TrueTypeFont::HasAnyGlyphIndex() const {
 }
 
 CPDF_TrueTypeFont::CharmapType CPDF_TrueTypeFont::DetermineCharmapType() const {
-  if (UseTTCharmapMSUnicode(font_.GetFace())) {
+  if (UseTTCharmapUnicode(font_.GetFace())) {
     return CharmapType::kMSUnicode;
   }
 

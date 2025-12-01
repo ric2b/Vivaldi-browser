@@ -8,9 +8,9 @@ binary when run inside a gclient source tree, so users can just type
 "ninja" on the command line."""
 
 import os
-import subprocess
 import sys
 
+import caffeinate
 import gclient_paths
 import gn_helper
 
@@ -73,7 +73,7 @@ def fallback(ninja_args):
     ninja_path = find_ninja_in_path()
     if ninja_path:
         check_out_dir(ninja_args)
-        return subprocess.call([ninja_path] + ninja_args)
+        return caffeinate.run([ninja_path] + ninja_args)
 
     print(
         "depot_tools/ninja.py: Could not find Ninja in the third_party of "
@@ -124,7 +124,7 @@ def main(args):
         )
         if os.path.isfile(ninja_path):
             check_out_dir(args[1:])
-            return subprocess.call([ninja_path] + args[1:])
+            return caffeinate.run([ninja_path] + args[1:])
 
     return fallback(args[1:])
 

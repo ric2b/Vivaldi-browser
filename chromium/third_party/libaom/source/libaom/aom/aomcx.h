@@ -1140,6 +1140,10 @@ enum aome_enc_control_id {
    * - 4 = use modulation for user rating based perceptual quality optimization
    * - 5 = use modulation for HDR video
    * - 6 = use modulation for all intra using Variance Boost
+   *
+   * \attention Delta q modes 1-5 are unsupported and are silently ignored in
+   * non-RD mode. Non-RD mode is enabled by setting cpu-used >= 8 (all intra
+   * usage) and cpu-used >= 7 (realtime usage).
    */
   AV1E_SET_DELTAQ_MODE = 107,
 
@@ -1596,6 +1600,22 @@ enum aome_enc_control_id {
    */
   AV1E_SET_SCREEN_CONTENT_DETECTION_MODE = 171,
 
+  /*!\brief Codec control to enable adaptive sharpness, which modulates
+   * sharpness based on frame QP, unsigned int parameter.
+   *
+   * Adaptive sharpness helps mitigate blocking artifacts in the low to medium
+   * quality range.
+   *
+   * - 0 = disable (default)
+   * - 1 = enable
+   *
+   * \note When adaptive sharpness is enabled, AOME_SET_SHARPNESS acts as a
+   * "maximum sharpness" value. Adaptive sharpness can still modulate effective
+   * sharpness between 0 and the maximum sharpness. As a consequence, adaptive
+   * sharpness only has effects when sharpness is greater than 0.
+   */
+  AV1E_SET_ENABLE_ADAPTIVE_SHARPNESS = 172,
+
   // Any new encoder control IDs should be added above.
   // Maximum allowed encoder control ID is 229.
   // No encoder control ID should be added below.
@@ -1629,14 +1649,11 @@ typedef enum aom_scaling_mode_1d {
 /*!\brief  aom region of interest map
  *
  * These defines the data structures for the region of interest map
- *
- * TODO(yaowu): create a unit test for ROI map related APIs
- *
  */
 typedef struct aom_roi_map {
   /*! If ROI is enabled. */
   uint8_t enabled;
-  /*! An id between 0 and 7 for each 8x8 region within a frame. */
+  /*! An id between 0 and 7 for each 4x4 region within a frame. */
   unsigned char *roi_map;
   unsigned int rows;               /**< Number of rows. */
   unsigned int cols;               /**< Number of columns. */
@@ -1644,6 +1661,9 @@ typedef struct aom_roi_map {
   int delta_lf[AOM_MAX_SEGMENTS];  /**< Loop filter deltas. */
   int skip[AOM_MAX_SEGMENTS];      /**< Skip this block. */
   int ref_frame[AOM_MAX_SEGMENTS]; /**< Reference frame for this block. */
+  int delta_qp_enabled;            /**< Delta qp feature enabled. */
+  int reference_enabled;           /**< Reference frame feature enabled. */
+  int rdmult_delta_qp;             /**< RD mult for delta qp feature. */
 } aom_roi_map_t;
 
 /*!\brief  aom active region map
@@ -1709,6 +1729,9 @@ typedef enum {
  *   * --enable-cdef=3
  *   * --enable-chroma-deltaq=1
  *   * --deltaq-mode=6
+ *   * --screen-detection-mode=2
+ * AOM_TUNE_IQ additionally sets the following options:
+ *   * --enable-adaptive-sharpness=1
  */
 typedef enum {
   AOM_TUNE_PSNR = 0,
@@ -2332,6 +2355,9 @@ AOM_CTRL_USE_TYPE(AV1E_SET_ENABLE_LOW_COMPLEXITY_DECODE, unsigned int)
 AOM_CTRL_USE_TYPE(AV1E_SET_SCREEN_CONTENT_DETECTION_MODE,
                   int) /* aom_screen_detection_mode */
 #define AOM_CTRL_SET_SCREEN_CONTENT_DETECTION_MODE
+
+AOM_CTRL_USE_TYPE(AV1E_SET_ENABLE_ADAPTIVE_SHARPNESS, unsigned int)
+#define AOM_CTRL_AV1E_SET_ENABLE_ADAPTIVE_SHARPNESS
 
 /*!\endcond */
 /*! @} - end defgroup aom_encoder */

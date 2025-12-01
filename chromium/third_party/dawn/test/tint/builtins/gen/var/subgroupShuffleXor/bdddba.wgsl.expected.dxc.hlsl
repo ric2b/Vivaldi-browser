@@ -1,10 +1,10 @@
 //
 // fragment_main
 //
-RWByteAddressBuffer prevent_dce : register(u0);
 
+RWByteAddressBuffer prevent_dce : register(u0);
 int4 subgroupShuffleXor_bdddba() {
-  int4 arg_0 = (1).xxxx;
+  int4 arg_0 = (int(1)).xxxx;
   uint arg_1 = 1u;
   int4 res = WaveReadLaneAt(arg_0, (WaveGetLaneIndex() ^ arg_1));
   return res;
@@ -12,15 +12,15 @@ int4 subgroupShuffleXor_bdddba() {
 
 void fragment_main() {
   prevent_dce.Store4(0u, asuint(subgroupShuffleXor_bdddba()));
-  return;
 }
+
 //
 // compute_main
 //
-RWByteAddressBuffer prevent_dce : register(u0);
 
+RWByteAddressBuffer prevent_dce : register(u0);
 int4 subgroupShuffleXor_bdddba() {
-  int4 arg_0 = (1).xxxx;
+  int4 arg_0 = (int(1)).xxxx;
   uint arg_1 = 1u;
   int4 res = WaveReadLaneAt(arg_0, (WaveGetLaneIndex() ^ arg_1));
   return res;
@@ -29,5 +29,5 @@ int4 subgroupShuffleXor_bdddba() {
 [numthreads(1, 1, 1)]
 void compute_main() {
   prevent_dce.Store4(0u, asuint(subgroupShuffleXor_bdddba()));
-  return;
 }
+

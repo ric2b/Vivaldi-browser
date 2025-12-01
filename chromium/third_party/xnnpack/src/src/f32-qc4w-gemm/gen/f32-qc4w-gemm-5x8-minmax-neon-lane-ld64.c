@@ -8,12 +8,14 @@
 // This source code is licensed under the BSD-style license found in the
 // LICENSE file in the root directory of this source tree.
 
-
-#include <assert.h>
-
 #include <arm_neon.h>
+#include <assert.h>
+#include <stddef.h>
+#include <stdint.h>
 
+#include "src/xnnpack/common.h"
 #include "src/xnnpack/gemm.h"
+#include "src/xnnpack/microparams.h"
 
 
 void xnn_f32_qc4w_gemm_minmax_ukernel_5x8__neon_lane_ld64(
@@ -26,7 +28,7 @@ void xnn_f32_qc4w_gemm_minmax_ukernel_5x8__neon_lane_ld64(
     float* restrict c,
     size_t cm_stride,
     size_t cn_stride,
-    const struct xnn_f32_qc4w_minmax_params params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f32_qc4w_minmax_params* restrict params)
 {
   assert(mr != 0);
   assert(mr <= 5);

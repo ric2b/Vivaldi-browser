@@ -73,6 +73,7 @@ class MenuButtonMediator implements AppMenuObserver {
     private final Supplier<MenuButtonState> mMenuButtonStateSupplier;
     private final Runnable mOnMenuButtonClicked;
     private final TokenHolder mHideTokenHolder;
+    private final MenuButtonCoordinator.@Nullable VisibilityDelegate mVisibilityDelegate;
 
     private final int mUrlFocusTranslationX;
 
@@ -93,6 +94,7 @@ class MenuButtonMediator implements AppMenuObserver {
      * @param windowAndroid The WindowAndroid instance.
      * @param menuButtonStateSupplier Suplier of {@link MenuButtonState}.
      * @param onMenuButtonClicked Runnable to execute when menu button is clicked.
+     * @param visibilityDelegate Delegate for handling the visibility of the menu button.
      */
     MenuButtonMediator(
             PropertyModel propertyModel,
@@ -106,7 +108,8 @@ class MenuButtonMediator implements AppMenuObserver {
             OneshotSupplier<AppMenuCoordinator> appMenuCoordinatorSupplier,
             WindowAndroid windowAndroid,
             Supplier<MenuButtonState> menuButtonStateSupplier,
-            Runnable onMenuButtonClicked) {
+            Runnable onMenuButtonClicked,
+            MenuButtonCoordinator.@Nullable VisibilityDelegate visibilityDelegate) {
         mPropertyModel = propertyModel;
         mCanShowAppUpdateBadge = canShowAppUpdateBadge;
         mIsActivityFinishingSupplier = isActivityFinishingSupplier;
@@ -126,13 +129,19 @@ class MenuButtonMediator implements AppMenuObserver {
         mMenuButtonStateSupplier = menuButtonStateSupplier;
         mOnMenuButtonClicked = onMenuButtonClicked;
         mHideTokenHolder = new TokenHolder(this::updateMenuButtonVisibility);
+        mVisibilityDelegate = visibilityDelegate;
 
         mUrlFocusTranslationX =
                 mResources.getDimensionPixelSize(R.dimen.toolbar_url_focus_translation_x);
     }
 
     private void updateMenuButtonVisibility() {
-        mPropertyModel.set(MenuButtonProperties.IS_VISIBLE, !mHideTokenHolder.hasTokens());
+        boolean visible = !mHideTokenHolder.hasTokens();
+        if (mVisibilityDelegate != null) {
+            mVisibilityDelegate.setMenuButtonVisible(visible);
+        } else {
+            mPropertyModel.set(MenuButtonProperties.IS_VISIBLE, visible);
+        }
     }
 
     @Override
@@ -198,7 +207,11 @@ class MenuButtonMediator implements AppMenuObserver {
 
     void setVisibility(boolean visible) {
         if (mHideTokenHolder.hasTokens()) return;
-        mPropertyModel.set(MenuButtonProperties.IS_VISIBLE, visible);
+        if (mVisibilityDelegate != null) {
+            mVisibilityDelegate.setMenuButtonVisible(visible);
+        } else {
+            mPropertyModel.set(MenuButtonProperties.IS_VISIBLE, visible);
+        }
     }
 
     /**
@@ -228,7 +241,6 @@ class MenuButtonMediator implements AppMenuObserver {
             return;
         }
         mAppMenuPropertiesDelegate.loadingStateChanged(isLoading);
-        mAppMenuHandler.menuItemContentChanged(R.id.icon_row_menu_id);
     }
 
     ObservableSupplier<AppMenuButtonHelper> getMenuButtonHelperSupplier() {

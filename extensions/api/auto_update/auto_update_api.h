@@ -43,7 +43,7 @@ class AutoUpdateAPI : public BrowserContextKeyedAPI,
 
   static void SendDidFindValidUpdate(const std::string& url,
                                      const base::Version& version);
-  static void SendUpdaterDidNotFindUpdate();
+  static void SendUpdaterDidNotFindUpdate(const std::string& reason);
   static void SendWillDownloadUpdate(const base::Version& version);
   static void SendDidDownloadUpdate(const base::Version& version);
   static void SendWillInstallUpdateOnQuit(const base::Version& version);
@@ -241,7 +241,17 @@ class AutoUpdateNeedsCodecRestartFunction : public ExtensionFunction {
  private:
   ~AutoUpdateNeedsCodecRestartFunction() override = default;
   void DeliverResult(bool enabled);
+  ResponseAction Run() override;
+};
 
+class AutoUpdateRunStartupChecksFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("autoUpdate.runStartupChecks",
+                             AUTOUPDATE_RUNSTARTUPCHECKS)
+  AutoUpdateRunStartupChecksFunction() = default;
+
+ private:
+  ~AutoUpdateRunStartupChecksFunction() override = default;
   ResponseAction Run() override;
 };
 

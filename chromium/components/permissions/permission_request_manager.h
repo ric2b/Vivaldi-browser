@@ -24,8 +24,8 @@
 #include "components/permissions/features.h"
 #include "components/permissions/permission_prompt.h"
 #include "components/permissions/permission_request_queue.h"
-#include "components/permissions/permission_ui_selector.h"
 #include "components/permissions/permission_uma_util.h"
+#include "components/permissions/prediction_service/permission_ui_selector.h"
 #include "components/permissions/request_type.h"
 #include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/web_contents.h"
@@ -41,7 +41,8 @@ class RenderFrameHost;
 
 namespace test {
 class PermissionRequestManagerTestApi;
-}
+class MockPermissionRequestManager;
+}  // namespace test
 
 namespace permissions {
 class PermissionRequest;
@@ -237,7 +238,7 @@ class PermissionRequestManager
     current_request_first_display_time_ = time;
   }
 
-  std::optional<PermissionUmaUtil::PredictionGrantLikelihood>
+  std::optional<PermissionUiSelector::PredictionGrantLikelihood>
   prediction_grant_likelihood_for_testing() const {
     return prediction_grant_likelihood_;
   }
@@ -283,8 +284,11 @@ class PermissionRequestManager
   // PromptResolved metrics, for ask prompts.
   bool ShouldRecordUmaForCurrentPrompt() const;
 
+  void SetPromptOptions(PromptOptions prompt_options) override;
+
  private:
   friend class test::PermissionRequestManagerTestApi;
+  friend class test::MockPermissionRequestManager;
   friend class content::WebContentsUserData<PermissionRequestManager>;
   FRIEND_TEST_ALL_PREFIXES(PermissionRequestManagerTest, WeakDuplicateRequests);
   FRIEND_TEST_ALL_PREFIXES(PermissionRequestManagerTest,
@@ -323,10 +327,25 @@ class PermissionRequestManager
   // Return true if we keep showing the current request, otherwise return false
   bool ReprioritizeCurrentRequestIfNeeded();
 
-  // Validate the input request. If the request is invalid and
-  // |should_finalize| is set, cancel and remove it from *_map_ and *_set_.
-  // Return true if the request is valid, otherwise false.
-  bool ValidateRequest(PermissionRequest* request, bool should_finalize = true);
+  // Returns true if the request's source frame can be found and is active.
+  // This means, its render frame host is committed and lives inside a page
+  // presented to the user, i.e. its not a prerendered or back-forward cached
+  // page. Side effect: In the case of the RenderFrameHost is inactive, this
+  // ensures it will be never activated through the following:
+  //
+  // - For BackForwardCache: it evicts the document from the cache and
+  //   triggers deletion.
+  // - For Prerendering: it cancels prerendering and triggers deletion.
+  //
+  //  For more information see
+  //  RenderFrameHost::IsInactiveAndDisallowActivation()
+
+  bool HasActiveSourceFrameOrDisallowActivationOtherwise(
+      PermissionRequest* request) const;
+
+  // Cancels a request and removes it from |request_sources_map_| and
+  // |validated_requests_|.
+  void FinalizeAndCancelRequest(PermissionRequest* request);
 
   // Adds `request` into `pending_permission_requests_`, and request's
   // `source_frame` into `request_sources_map_`.
@@ -398,10 +417,10 @@ class PermissionRequestManager
   // Calls PermissionDenied on a request and all its duplicates.
   void PermissionDeniedIncludingDuplicates(PermissionRequest* request);
   // Calls Cancelled on a request and all its duplicates.
-  void CancelledIncludingDuplicates(PermissionRequest* request,
-                                    bool is_final_decision = true);
-  // Calls RequestFinished on a request and all its duplicates.
-  void RequestFinishedIncludingDuplicates(PermissionRequest* request);
+  void CancelRequestIncludingDuplicates(PermissionRequest* request,
+                                        bool is_final_decision = true);
+  // Erases a request and all its duplicates.
+  void FinishRequestIncludingDuplicates(PermissionRequest* request);
 
   void NotifyTabVisibilityChanged(content::Visibility visibility);
   void NotifyPromptAdded();
@@ -527,7 +546,7 @@ class PermissionRequestManager
 
   // The likelihood value returned by the Web Permission Predictions Service,
   // to be recorded in UKM.
-  std::optional<PermissionUmaUtil::PredictionGrantLikelihood>
+  std::optional<PermissionUiSelector::PredictionGrantLikelihood>
       prediction_grant_likelihood_;
 
   // The permission request relevance returned by an on-device ML model,

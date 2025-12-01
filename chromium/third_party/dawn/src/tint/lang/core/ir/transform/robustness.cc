@@ -216,13 +216,15 @@ struct State {
             // Generate a new constant index that is clamped to the limit.
             clamped_idx = b.Constant(u32(std::min(const_idx->Value()->ValueAs<uint32_t>(),
                                                   const_limit->Value()->ValueAs<uint32_t>())));
-        } else {
+        } else if (IndexMayOutOfBound(idx, limit)) {
             // Clamp it to the dynamic limit.
             clamped_idx = b.Call(ty.u32(), core::BuiltinFn::kMin, CastToU32(idx), limit)->Result();
         }
 
-        // Replace the index operand with the clamped version.
-        inst->SetOperand(op_idx, clamped_idx);
+        if (clamped_idx != nullptr) {
+            // Replace the index operand with the clamped version.
+            inst->SetOperand(op_idx, clamped_idx);
+        }
     }
 
     /// Check if operand @p idx may be less than 0 or greater than @p limit with integer range
@@ -243,8 +245,8 @@ struct State {
         }
 
         // Return true when we cannot get a valid range for `idx`.
-        const auto* integer_range = integer_range_analysis->GetInfo(idx);
-        if (!integer_range) {
+        const auto& integer_range = integer_range_analysis->GetInfo(idx);
+        if (!integer_range.IsValid()) {
             return true;
         }
 
@@ -256,11 +258,11 @@ struct State {
 
         // Return true when `idx` may be negative or the upper bound of `idx` is greater than
         // `limit`.
-        if (std::holds_alternative<UnsignedIntegerRange>(integer_range->range)) {
-            UnsignedIntegerRange range = std::get<UnsignedIntegerRange>(integer_range->range);
+        if (std::holds_alternative<UnsignedIntegerRange>(integer_range.range)) {
+            UnsignedIntegerRange range = std::get<UnsignedIntegerRange>(integer_range.range);
             return range.max_bound > static_cast<uint64_t>(const_limit_value);
         } else {
-            SignedIntegerRange range = std::get<SignedIntegerRange>(integer_range->range);
+            SignedIntegerRange range = std::get<SignedIntegerRange>(integer_range.range);
             if (range.min_bound < 0) {
                 return true;
             }
@@ -315,7 +317,7 @@ struct State {
                 });
 
             // If there's a dynamic limit that needs enforced, clamp the index operand.
-            if (limit && IndexMayOutOfBound(idx, limit)) {
+            if (limit) {
                 ClampOperand(access, ir::Access::kIndicesOperandOffset + i, limit);
             }
 
@@ -453,9 +455,13 @@ struct State {
 
         // Some matrix components types are packed together into a single array element.
         // Take that into account here by scaling the array length to number of components.
-        // TODO(crbug.com/403609083): I8 and U8 will be 4 components per element.
-        TINT_ASSERT((matrix_ty->Type()->IsAnyOf<type::F16, type::F32, type::I32, type::U32>()));
-        uint32_t components_per_element = 1;
+        uint32_t components_per_element = 0;
+        if (matrix_ty->Type()->IsAnyOf<type::I8, type::U8>()) {
+            components_per_element = 4;
+        } else {
+            TINT_ASSERT((matrix_ty->Type()->IsAnyOf<type::F16, type::F32, type::I32, type::U32>()));
+            components_per_element = 1;
+        }
 
         // Get the length of the array (in terms of matrix elements).
         auto* arr_ty = arr->Type()->UnwrapPtr()->As<core::type::Array>();
@@ -568,7 +574,7 @@ struct State {
 }  // namespace
 
 Result<SuccessType> Robustness(Module& ir, const RobustnessConfig& config) {
-    auto result = ValidateAndDumpIfNeeded(ir, "core.Robustness");
+    auto result = ValidateAndDumpIfNeeded(ir, "core.Robustness", kRobustnessCapabilities);
     if (result != Success) {
         return result;
     }

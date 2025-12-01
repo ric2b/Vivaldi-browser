@@ -12,6 +12,7 @@ using vivaldi_bookmark_kit::GetNickname;
 using vivaldi_bookmark_kit::GetThumbnail;
 using vivaldi_bookmark_kit::GetSpeeddial;
 using vivaldi_bookmark_kit::GetDescription;
+using vivaldi_bookmark_kit::GetDisplayURL;
 
 @interface VivaldiSpeedDialItem() <NSItemProviderWriting>{}
 @end
@@ -76,6 +77,13 @@ using vivaldi_bookmark_kit::GetDescription;
 
 - (NSString*)urlString {
   return base::SysUTF8ToNSString(self.url.spec());
+}
+
+- (NSString*)displayURL {
+  if (_bookmarkNode) {
+    return base::SysUTF8ToNSString(GetDisplayURL(_bookmarkNode));
+  }
+  return nil;
 }
 
 - (NSString*)host {

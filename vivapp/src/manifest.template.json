@@ -30,9 +30,12 @@
     "resources": [
       "markdowneditor-bundle.js",
       "richtexteditor-bundle.js",
+      "reader-bundle.js",
       "components/notes/richtexteditor/md.css",
       "rss/showfeed.html",
-      "rss/hidepage.css"
+      "rss/hidepage.css",
+      "components/reader/reader.html",
+      "components/reader/reader.css"
     ],
     "matches": [],
     "extension_ids": []
@@ -128,7 +131,6 @@
           "saga/saga.html",
           "components/mail/mail.html",
           "components/welcome/welcome.html",
-          "components/experiments/experiments.html",
           "components/session-recovery/session-recovery.html",
           "components/actionlog/actionlog.html",
           "style/*",

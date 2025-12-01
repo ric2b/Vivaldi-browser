@@ -156,6 +156,11 @@ protected:
   raw_ptr<Delegate> menu_delegate_ = nullptr;
   bool is_executing_command_ = false;
   bool is_webpage_widget_ = false;
+  // Used when setting up menus with code-modules from chrome. Those
+  // modules will call RenderViewContextMenuProxy functions we are overriden
+  // in this class, and when populating_menu_model_ is set that model will be
+  // used instead of the default Chrome wants to use. Allows sub menus where
+  // chrome wants a flat layout.
   raw_ptr<ui::SimpleMenuModel> populating_menu_model_ = nullptr;
   int window_id_ = -1;
 

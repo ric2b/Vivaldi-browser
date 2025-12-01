@@ -41,6 +41,7 @@ import * as Platform from '../../core/platform/platform.js';
 import * as ProtocolClient from '../../core/protocol_client/protocol_client.js';
 import * as Root from '../../core/root/root.js';
 import * as SDK from '../../core/sdk/sdk.js';
+import * as AiAssistanceModel from '../../models/ai_assistance/ai_assistance.js';
 import * as AutofillManager from '../../models/autofill_manager/autofill_manager.js';
 import * as Bindings from '../../models/bindings/bindings.js';
 import * as Breakpoints from '../../models/breakpoints/breakpoints.js';
@@ -55,6 +56,7 @@ import * as Workspace from '../../models/workspace/workspace.js';
 import * as Snippets from '../../panels/snippets/snippets.js';
 import * as Buttons from '../../ui/components/buttons/buttons.js';
 import * as IconButton from '../../ui/components/icon_button/icon_button.js';
+import * as Snackbar from '../../ui/components/snackbars/snackbars.js';
 import * as Components from '../../ui/legacy/components/utils/utils.js';
 import * as UI from '../../ui/legacy/legacy.js';
 import * as ThemeSupport from '../../ui/legacy/theme_support/theme_support.js';
@@ -162,8 +164,15 @@ export class MainImpl {
 
     Host.userMetrics.syncSetting(Common.Settings.Settings.instance().moduleSetting<boolean>('sync-preferences').get());
     const veLogging = config.devToolsVeLogging;
+
+    // Used by e2e_non_hosted to put VE Logs into "test mode".
+    const veLogsTestMode = Common.Settings.Settings.instance().createSetting('veLogsTestMode', false).get();
+
     if (veLogging?.enabled) {
-      if (veLogging?.testing) {
+      // Note: as of https://crrev.com/c/6734500 landing, veLogging.testing is hard-coded to false.
+      // But the e2e tests (test/conductor/frontend_tab.ts) use this to enable this flag for e2e tests.
+      // TODO(crbug.com/432411398): remove the host config for VE logs + find a better way to set this up in e2e tests.
+      if (veLogging?.testing || veLogsTestMode) {
         VisualLogging.setVeDebugLoggingEnabled(true, VisualLogging.DebugLoggingFormat.TEST);
         const options = {
           processingThrottler: new Common.Throttler.Throttler(0),
@@ -288,6 +297,7 @@ export class MainImpl {
     Root.Runtime.experiments.register('sampling-heap-profiler-timeline', 'Sampling heap profiler timeline', true);
     Root.Runtime.experiments.register(
         'show-option-tp-expose-internals-in-heap-snapshot', 'Show option to expose internals in heap snapshots');
+    Root.Runtime.experiments.register('vertical-drawer', 'Enable vertical drawer configuration');
 
     // Timeline
     Root.Runtime.experiments.register(
@@ -350,11 +360,8 @@ export class MainImpl {
         Root.Runtime.ExperimentName.TIMELINE_SHOW_POST_MESSAGE_EVENTS,
         'Performance panel: show postMessage dispatch and handling flows',
     );
-
     Root.Runtime.experiments.register(
-        Root.Runtime.ExperimentName.TIMELINE_EXPERIMENTAL_INSIGHTS,
-        'Performance panel: enable experimental performance insights',
-    );
+        Root.Runtime.ExperimentName.TIMELINE_SAVE_AS_GZ, 'Performance panel: enable saving traces as .gz');
 
     Root.Runtime.experiments.enableExperimentsByDefault([
       Root.Runtime.ExperimentName.FULL_ACCESSIBILITY_TREE,
@@ -389,6 +396,9 @@ export class MainImpl {
 
     // Request filesystems early, we won't create connections until callback is fired. Things will happen in parallel.
     const isolatedFileSystemManager = Persistence.IsolatedFileSystemManager.IsolatedFileSystemManager.instance();
+    isolatedFileSystemManager.addEventListener(
+        Persistence.IsolatedFileSystemManager.Events.FileSystemError,
+        event => Snackbar.Snackbar.Snackbar.show({message: event.data}));
 
     const defaultThemeSetting = 'systemPreferred';
     const themeSetting = Common.Settings.Settings.instance().createSetting('ui-theme', defaultThemeSetting);
@@ -443,10 +453,14 @@ export class MainImpl {
       resourceMapping,
       targetManager,
     });
+    Workspace.IgnoreListManager.IgnoreListManager.instance({
+      forceNew: true,
+    });
     Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding.instance({
       forceNew: true,
       resourceMapping,
       targetManager,
+      ignoreListManager: Workspace.IgnoreListManager.IgnoreListManager.instance(),
     });
     targetManager.setScopeTarget(targetManager.primaryPageTarget());
     UI.Context.Context.instance().addFlavorChangeListener(SDK.Target.Target, ({data}) => {
@@ -476,10 +490,6 @@ export class MainImpl {
         {forceNew: true, workspace: Workspace.Workspace.WorkspaceImpl.instance()});
 
     new ExecutionContextSelector(targetManager, UI.Context.Context.instance());
-    Bindings.IgnoreListManager.IgnoreListManager.instance({
-      forceNew: true,
-      debuggerWorkspaceBinding: Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding.instance(),
-    });
 
     const projectSettingsModel = ProjectSettings.ProjectSettingsModel.ProjectSettingsModel.instance({
       forceNew: true,
@@ -490,7 +500,6 @@ export class MainImpl {
 
     const automaticFileSystemManager = Persistence.AutomaticFileSystemManager.AutomaticFileSystemManager.instance({
       forceNew: true,
-      hostConfig: Root.Runtime.hostConfig,
       inspectorFrontendHost: Host.InspectorFrontendHost.InspectorFrontendHostInstance,
       projectSettingsModel,
     });
@@ -553,8 +562,8 @@ export class MainImpl {
       Timeline.TimelinePanel.LoadTimelineHandler.instance().handleQueryParam(value);
     }
 
-    // Initialize ARIAUtils.alert Element
-    UI.ARIAUtils.getOrCreateAlertElement();
+    // Initialize elements for the live announcer functionality for a11y.
+    UI.ARIAUtils.LiveAnnouncer.initializeAnnouncerElements();
     UI.DockController.DockController.instance().announceDockLocation();
 
     // Allow UI cycles to repaint prior to creating connection.
@@ -592,19 +601,23 @@ export class MainImpl {
       await runtimeModel?.addBinding({name: binding});
       runtimeModel?.addEventListener(SDK.RuntimeModel.Events.BindingCalled, event => {
         if (event.data.name === binding) {
-          VisualLogging.setVeDebuggingEnabled(event.data.payload === 'true', (query: string) => {
-            VisualLogging.setVeDebuggingEnabled(false);
-            void runtimeModel?.defaultExecutionContext()?.evaluate(
-                {
-                  expression: `window.inspect(${JSON.stringify(query)})`,
-                  includeCommandLineAPI: false,
-                  silent: true,
-                  returnByValue: false,
-                  generatePreview: false,
-                },
-                /* userGesture */ false,
-                /* awaitPromise */ false);
-          });
+          if (event.data.payload === 'true' || event.data.payload === 'false') {
+            VisualLogging.setVeDebuggingEnabled(event.data.payload === 'true', (query: string) => {
+              VisualLogging.setVeDebuggingEnabled(false);
+              void runtimeModel?.defaultExecutionContext()?.evaluate(
+                  {
+                    expression: `window.inspect(${JSON.stringify(query)})`,
+                    includeCommandLineAPI: false,
+                    silent: true,
+                    returnByValue: false,
+                    generatePreview: false,
+                  },
+                  /* userGesture */ false,
+                  /* awaitPromise */ false);
+            });
+          } else {
+            VisualLogging.setHighlightedVe(event.data.payload === 'null' ? null : event.data.payload);
+          }
         }
       });
     }
@@ -891,6 +904,21 @@ export class MainMenuItem implements UI.Toolbar.Provider {
       contextMenu.discard();
     }
 
+    const aiPreregisteredView = UI.ViewManager.getRegisteredViewExtensionForID('freestyler');
+    if (aiPreregisteredView) {
+      let additionalElement = undefined;
+      const promotionId = aiPreregisteredView.featurePromotionId();
+      if (promotionId) {
+        additionalElement = UI.UIUtils.maybeCreateNewBadge(promotionId);
+      }
+      contextMenu.defaultSection().appendItem(aiPreregisteredView.title(), () => {
+        void UI.ViewManager.ViewManager.instance().showView('freestyler', true, false);
+        if (promotionId) {
+          UI.UIUtils.PromotionManager.instance().recordFeatureInteraction(promotionId);
+        }
+      }, {additionalElement, jslogContext: 'freestyler'});
+    }
+
     if (dockController.dockSide() === UI.DockController.DockState.UNDOCKED) {
       const mainTarget = SDK.TargetManager.TargetManager.instance().primaryPageTarget();
       if (mainTarget && mainTarget.type() === SDK.Target.Type.FRAME) {
@@ -930,6 +958,10 @@ export class MainMenuItem implements UI.Toolbar.Provider {
         continue;
       }
       if (location !== 'drawer-view' && location !== 'panel') {
+        continue;
+      }
+      // Skip AI Assistance because we already show it in the main menu
+      if (id === 'freestyler') {
         continue;
       }
 
@@ -1019,3 +1051,94 @@ export class ReloadActionDelegate implements UI.ActionRegistration.ActionDelegat
     return false;
   }
 }
+
+type ExternalRequestInput = {
+  kind: 'LIVE_STYLE_DEBUGGER',
+  args: {prompt: string, selector: string},
+}|{
+  kind: 'PERFORMANCE_RELOAD_GATHER_INSIGHTS',
+}|{
+  kind: 'PERFORMANCE_ANALYZE_INSIGHT',
+  args: {insightTitle: string, prompt: string},
+}|{
+  kind: 'NETWORK_DEBUGGER',
+  args: {requestUrl: string, prompt: string},
+};
+
+// For backwards-compatibility we iterate over the generator and drop the
+// intermediate results. The final response is transformed to its legacy type.
+// Instead of sending responses of type error, errors are throws.
+export async function handleExternalRequest(input: ExternalRequestInput):
+    Promise<{response: string, devToolsLogs: object[]}> {
+  const generator = await handleExternalRequestGenerator(input);
+  let result: IteratorResult<AiAssistanceModel.ExternalRequestResponse, AiAssistanceModel.ExternalRequestResponse>;
+  do {
+    result = await generator.next();
+  } while (!result.done);
+  const response = result.value;
+  if (response.type === AiAssistanceModel.ExternalRequestResponseType.ERROR) {
+    throw new Error(response.message);
+  }
+  if (response.type === AiAssistanceModel.ExternalRequestResponseType.ANSWER) {
+    return {
+      response: response.message,
+      devToolsLogs: response.devToolsLogs,
+    };
+  }
+  throw new Error('Received no response of type answer or type error');
+}
+
+// @ts-expect-error
+globalThis.handleExternalRequest = handleExternalRequest;
+
+export async function handleExternalRequestGenerator(input: ExternalRequestInput):
+    Promise<AsyncGenerator<AiAssistanceModel.ExternalRequestResponse, AiAssistanceModel.ExternalRequestResponse>> {
+  switch (input.kind) {
+    case 'PERFORMANCE_RELOAD_GATHER_INSIGHTS': {
+      const TimelinePanel = await import('../../panels/timeline/timeline.js');
+      return TimelinePanel.TimelinePanel.TimelinePanel.handleExternalRecordRequest();
+    }
+    case 'PERFORMANCE_ANALYZE_INSIGHT': {
+      const AiAssistance = await import('../../panels/ai_assistance/ai_assistance.js');
+      const AiAssistanceModel = await import('../../models/ai_assistance/ai_assistance.js');
+      const panelInstance = await AiAssistance.AiAssistancePanel.instance();
+      return panelInstance.handleExternalRequest({
+        conversationType: AiAssistanceModel.ConversationType.PERFORMANCE_INSIGHT,
+        prompt: input.args.prompt,
+        insightTitle: input.args.insightTitle,
+      });
+    }
+    case 'NETWORK_DEBUGGER': {
+      const AiAssistance = await import('../../panels/ai_assistance/ai_assistance.js');
+      const AiAssistanceModel = await import('../../models/ai_assistance/ai_assistance.js');
+      const panelInstance = await AiAssistance.AiAssistancePanel.instance();
+      return panelInstance.handleExternalRequest({
+        conversationType: AiAssistanceModel.ConversationType.NETWORK,
+        prompt: input.args.prompt,
+        requestUrl: input.args.requestUrl,
+      });
+    }
+    case 'LIVE_STYLE_DEBUGGER': {
+      const AiAssistance = await import('../../panels/ai_assistance/ai_assistance.js');
+      const AiAssistanceModel = await import('../../models/ai_assistance/ai_assistance.js');
+      const panelInstance = await AiAssistance.AiAssistancePanel.instance();
+      return panelInstance.handleExternalRequest({
+        conversationType: AiAssistanceModel.ConversationType.STYLING,
+        prompt: input.args.prompt,
+        selector: input.args.selector,
+      });
+    }
+  }
+  // eslint-disable-next-line require-yield
+  return (async function*
+          (): AsyncGenerator<AiAssistanceModel.ExternalRequestResponse, AiAssistanceModel.ExternalRequestResponse> {
+            return {
+              type: AiAssistanceModel.ExternalRequestResponseType.ERROR,
+              // @ts-expect-error
+              message: `Debugging with an agent of type '${input.kind}' is not implemented yet.`,
+            };
+          })();
+}
+
+// @ts-expect-error
+globalThis.handleExternalRequestGenerator = handleExternalRequestGenerator;

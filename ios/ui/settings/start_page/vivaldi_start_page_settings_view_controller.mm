@@ -4,7 +4,7 @@
 
 #import "base/apple/foundation_util.h"
 #import "base/strings/sys_string_conversions.h"
-#import "ios/chrome/browser/features/vivaldi_features.h"
+#import "browser/features/vivaldi_features.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_detail_icon_item.h"
@@ -135,7 +135,7 @@ NSString* const kStartPageShowAddSettingsCellId =
   TableViewModel* model = self.tableViewModel;
   [model addSectionWithIdentifier:SectionIdentifierStartPageSettings];
 
-  if (IsTopSitesEnabled()) {
+  if (vivaldi_features::IsTopSitesEnabled()) {
     [model addItem:[self displayFrequentlyVisitedTableItem]
         toSectionWithIdentifier:SectionIdentifierStartPageSettings];
   }
@@ -227,7 +227,7 @@ NSString* const kStartPageShowAddSettingsCellId =
 #pragma mark - VivaldiStartPageSettingsConsumer
 
 - (void)setPreferenceShowFrequentlyVisitedPages:(BOOL)showFrequentlyVisited {
-  if (!IsTopSitesEnabled()) {
+  if (!vivaldi_features::IsTopSitesEnabled()) {
     return;
   }
 

@@ -1,7 +1,7 @@
 // Copyright 2022 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
-/* eslint-disable rulesdir/no-lit-render-outside-of-view, rulesdir/inject-checkbox-styles */
+/* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
 import './RequestHeaderSection.js';
 
@@ -326,8 +326,8 @@ export class RequestHeadersView extends LegacyWrapper.LegacyWrapper.WrappableCom
             width: '16px',
             height: '16px',
           } as IconButton.Icon.IconData}>
-        </devtools-icon
-      ></x-link>
+        </devtools-icon>
+      </x-link>
       <x-link
           @click=${revealHeadersFile}
           class="link devtools-link"
@@ -578,13 +578,10 @@ export class Category extends HTMLElement {
             </div>
             <div class="hide-when-closed">
               ${this.#checked !== undefined ? html`
-                <label><input
-                    type="checkbox"
-                    .checked=${this.#checked}
-                    @change=${this.#onCheckboxToggle}
-                    jslog=${VisualLogging.toggle('raw-headers').track({change: true})}
-                />${i18nString(UIStrings.raw)}</label>
-              ` : Lit.nothing}
+                <devtools-checkbox .checked=${this.#checked} @change=${this.#onCheckboxToggle}
+                         jslog=${VisualLogging.toggle('raw-headers').track({change: true})}>
+                  ${i18nString(UIStrings.raw)}
+              </devtools-checkbox>` : Lit.nothing}
             </div>
             <div class="hide-when-closed">${this.#additionalContent}</div>
           </div>

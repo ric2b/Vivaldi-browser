@@ -164,7 +164,20 @@ has no matching language, this function returns FcLangDifferentLang.
 Returns a string set of the default languages according to the environment variables on the system.
 This function looks for them in order of FC_LANG, LC_ALL, LC_CTYPE and LANG then.
 If there are no valid values in those environment variables, "en" will be set as fallback.
+  </para><para>
+This function has been replaced by <function>FcConfigGetDefaultLangs</function> and will be deprecated.
 @SINCE@         2.9.91
+@@
+
+@RET@           FcStrSet *
+@FUNC@          FcConfigGetDefaultLangs
+@TYPE1@         FcConfig *                      @ARG1@          config
+@PURPOSE@       Get the default languages list
+@DESC@
+Returns a string set of the default languages according to the environment variables on the system.
+This function looks for them in order of FC_LANG, LC_ALL, LC_CTYPE and LANG then.
+If there are no valid values in those environment variables, "en" will be set as fallback.
+@SINCE@         2.17.0
 @@
 
 @RET@           FcStrSet *

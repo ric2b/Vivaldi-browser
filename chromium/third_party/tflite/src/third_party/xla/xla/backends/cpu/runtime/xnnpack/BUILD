@@ -23,44 +23,35 @@ cc_library(
         "//xla/tsl/platform:logging",
         "@XNNPACK",
         "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/functional:function_ref",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
     ],
 )
 
 cc_library(
-    name = "xnn_threadpool",
-    srcs = ["xnn_threadpool.cc"],
-    hdrs = ["xnn_threadpool.h"],
-    # copybara:uncomment_begin(google-only)
-    # local_defines = select({
-    # "//xla/tsl:linux_any": [
-    # "XLA_CPU_USE_CUSTOM_PTHREADPOOL",
-    # ],
-    # "//conditions:default": [],
-    # }),
-    # copybara:uncomment_end
+    name = "xnn_scheduler",
+    srcs = ["xnn_scheduler.cc"],
+    hdrs = ["xnn_scheduler.h"],
     deps = [
-        "//xla/backends/cpu/runtime:parallel_loop_runner",
         "//xla/tsl/concurrency:async_value",
         "//xla/tsl/platform:env",
         "//xla/tsl/platform:logging",
-        "@com_google_absl//absl/base",
+        "@XNNPACK",
         "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/strings:str_format",
         "@eigen_archive//:eigen3",
         "@local_tsl//tsl/platform:platform_port",
-        "@pthreadpool",
     ],
 )
 
 xla_cc_test(
-    name = "xnn_threadpool_test",
-    srcs = ["xnn_threadpool_test.cc"],
+    name = "xnn_scheduler_test",
+    srcs = ["xnn_scheduler_test.cc"],
     deps = [
-        ":xnn_threadpool",
-        "//xla/backends/cpu/runtime:parallel_loop_runner",
+        ":xnn_scheduler",
         "//xla/tsl/concurrency:async_value",
         "//xla/tsl/platform:env",
         "//xla/tsl/platform:test",
@@ -68,7 +59,6 @@ xla_cc_test(
         "@XNNPACK",
         "@com_google_absl//absl/algorithm:container",
         "@eigen_archive//:eigen3",
-        "@pthreadpool",
     ],
 )
 
@@ -142,10 +132,12 @@ cc_library(
         "//xla/backends/cpu/runtime:dot_lib",
         "//xla/backends/cpu/runtime:thunk",
         "//xla/service:buffer_assignment",
+        "//xla/stream_executor:device_memory",
         "//xla/tsl/platform:errors",
         "//xla/tsl/platform:logging",
         "//xla/tsl/platform:statusor",
         "@XNNPACK",
+        "@com_google_absl//absl/functional:bind_front",
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
@@ -182,9 +174,8 @@ cc_library(
     hdrs = ["xnn_fusion_thunk.h"],
     deps = [
         ":xnn_interop",
-        ":xnn_threadpool",
+        ":xnn_scheduler",
         "//xla:shape_util",
-        "//xla/backends/cpu/runtime:parallel_loop_runner",
         "//xla/backends/cpu/runtime:thunk",
         "//xla/runtime:buffer_use",
         "//xla/runtime:object_pool",
@@ -195,18 +186,18 @@ cc_library(
         "//xla/tsl/platform:logging",
         "//xla/tsl/platform:statusor",
         "@XNNPACK",
-        "@com_google_absl//absl/base:core_headers",
-        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/algorithm:container",
         "@com_google_absl//absl/container:inlined_vector",
         "@com_google_absl//absl/functional:any_invocable",
+        "@com_google_absl//absl/functional:bind_front",
         "@com_google_absl//absl/functional:function_ref",
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/memory",
+        "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/types:span",
-        "@pthreadpool",
     ],
 )
 
@@ -228,6 +219,7 @@ xla_cc_test(
         "//xla/tsl/platform:test",
         "@XNNPACK",
         "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:span",
         "@com_google_googletest//:gtest_main",
         "@eigen_archive//:eigen3",

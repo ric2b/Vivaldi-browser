@@ -18,7 +18,11 @@ class SyncedTabDelegate;
 
 class VivaldiBrowserSyncedWindowDelegate : public BrowserSyncedWindowDelegate {
  public:
-  explicit VivaldiBrowserSyncedWindowDelegate(Browser* browser);
+  explicit VivaldiBrowserSyncedWindowDelegate(
+      Browser* browser,
+      TabStripModel* tab_strip_model,
+      SessionID session_id,
+      BrowserWindowInterface::Type type);
   ~VivaldiBrowserSyncedWindowDelegate() override;
   VivaldiBrowserSyncedWindowDelegate(
       const VivaldiBrowserSyncedWindowDelegate&) = delete;

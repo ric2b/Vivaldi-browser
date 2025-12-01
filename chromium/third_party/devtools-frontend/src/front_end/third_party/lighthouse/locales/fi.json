@@ -660,7 +660,7 @@
     "message": "Jakele animaatiosisältöä videomuodossa"
   },
   "core/audits/byte-efficiency/legacy-javascript.js | description": {
-    "message": "Polyfills and transforms enable legacy browsers to use new JavaScript features. However, many aren't necessary for modern browsers. Consider modifying your JavaScript build process to not transpile [Baseline](https://web.dev/baseline) features, unless you know you must support legacy browsers. [Learn why most sites can deploy ES6+ code without transpiling](https://philipwalton.com/articles/the-state-of-es5-on-the-web/)"
+    "message": "Polyfill- ja transform-merkintöjen avulla vanhat selaimet voivat käyttää uusia JavaScript-ominaisuuksia. Monia ei kuitenkaan tarvita nykyaikaisissa selaimissa. Harkitse JavaScript-käännösprosessin muuttamista niin, että [Baseline](https://web.dev/baseline)-ominaisuuksia ei transpiloida, ellet tiedä, että sinun on tuettava vanhoja selaimia. [Lue lisää siitä, miksi useimmat sivustot voivat ottaa käyttöön ES6+-koodin ilman transpilointia](https://philipwalton.com/articles/the-state-of-es5-on-the-web/)"
   },
   "core/audits/byte-efficiency/legacy-javascript.js | detectedCoreJs2Warning": {
     "message": "Sivulla havaittiin core-js:n versio 2. Päivitä versioon 3, niin saat käyttöösi useita suorituskyvyn parannuksia."
@@ -1188,7 +1188,7 @@
     "message": "Käyttäjien ensitoiminnon suurin mahdollinen viive on sama kuin pisimmän tehtävän kesto. [Lue lisää Suurin mahdollinen ensimmäisen toiminnon viive ‑mittarista](https://developer.chrome.com/docs/lighthouse/performance/lighthouse-max-potential-fid/)."
   },
   "core/audits/metrics/speed-index.js | description": {
-    "message": "Nopeusindeksi kertoo, kuinka nopeasti sivun sisältö tulee näkyviin. [Lue lisää Nopeusindeksi-mittarista](https://developer.chrome.com/docs/lighthouse/performance/speed-index/)."
+    "message": "Speed Index kertoo, kuinka nopeasti sivun sisältö tulee näkyviin. [Lue lisää Speed Index -mittarista](https://developer.chrome.com/docs/lighthouse/performance/speed-index/)."
   },
   "core/audits/metrics/total-blocking-time.js | description": {
     "message": "Kaikkien FCP:n ja interaktiivisuutta edeltävän ajan väliset ajanjaksot yhteenlaskettuna, kun tehtävän pituus on yli 50 ms (ilmoitettu millisekunteina). [Lue lisää Estoaika yhteensä ‐mittarista](https://developer.chrome.com/docs/lighthouse/performance/lighthouse-total-blocking-time/)."
@@ -1440,7 +1440,7 @@
     "message": "Palvelimen vasteaika alussa oli lyhyt"
   },
   "core/audits/third-party-cookies.js | description": {
-    "message": "Chromessa siirrytään uuteen käyttökokemukseen, jossa käyttäjät voivat valita selaamisen ilman kolmannen osapuolen evästeitä. [Lue lisää kolmannen osapuolen evästeistä](https://developers.google.com/privacy-sandbox/cookies)."
+    "message": "Kolmannen osapuolen evästeet saatetaan estää joissakin yhteyksissä. [Lue lisää kolmannen osapuolen evästeiden rajoituksiin valmistautumisesta](https://privacysandbox.google.com/cookies/prepare/overview)."
   },
   "core/audits/third-party-cookies.js | displayValue": {
     "message": "{itemCount,plural, =1{1 eväste löytyi}other{# evästettä löytyi}}"
@@ -1492,6 +1492,18 @@
   },
   "core/audits/third-party-summary.js | title": {
     "message": "Minimoi kolmannen osapuolen käyttö"
+  },
+  "core/audits/trusted-types-xss.js | columnSeverity": {
+    "message": "Vakavuus"
+  },
+  "core/audits/trusted-types-xss.js | description": {
+    "message": "`Content-Security-Policy` (CSP) ‑otsikon `require-trusted-types-for`-sääntö kehottaa käyttäjäagentteja hallitsemaan DOM XSS ‑nielufunktioille välitettyä dataa. [Lue lisää DOM-pohjaisen XSS:n estämisestä luotettavilla tyypeillä](https://developer.chrome.com/docs/lighthouse/best-practices/trusted-types-xss)."
+  },
+  "core/audits/trusted-types-xss.js | noTrustedTypesToMitigateXss": {
+    "message": "Luotetut tyypit ‑säännön `Content-Security-Policy`-otsikkoa ei löytynyt"
+  },
+  "core/audits/trusted-types-xss.js | title": {
+    "message": "DOM-pohjaisen XSS:n lieventäminen Trusted Types ‑ominaisuudella"
   },
   "core/audits/unsized-images.js | description": {
     "message": "Lisää kuvaelementeille kiinteä leveys ja pituus, jotta asettelu muuttuu vähemmän ja CLS paranee. [Katso, miten voit valita kuvan mitat](https://web.dev/articles/optimize-cls#images_without_dimensions)."
@@ -1676,11 +1688,17 @@
   "core/config/default-config.js | firstPaintImprovementsGroupTitle": {
     "message": "Ensimmäistä renderöintiä koskevat parannusehdotukset"
   },
+  "core/config/default-config.js | insightsGroupDescription": {
+    "message": "Nämä vinkit ovat saatavilla myös Chrome DevToolsin tulospaneelissa – [tallenna jälki](https://developer.chrome.com/docs/devtools/performance/reference), niin näet tarkempia tietoja."
+  },
+  "core/config/default-config.js | insightsGroupTitle": {
+    "message": "Tilastot"
+  },
   "core/config/default-config.js | metricGroupTitle": {
     "message": "Tiedot"
   },
   "core/config/default-config.js | overallImprovementsGroupDescription": {
-    "message": "Paranna latauskokemusta kokonaisuutena, jotta sivu on responsiivisempi ja käytettävissä mahdollisimman pian. Tärkeimmät mittarit ovat interaktiivisuutta edeltävä aika ja nopeusindeksi."
+    "message": "Paranna latauskokemusta kokonaisuutena, jotta sivu on responsiivisempi ja käytettävissä mahdollisimman pian. Tärkeimmät mittarit ovat interaktiivisuutta edeltävä aika ja Speed Index."
   },
   "core/config/default-config.js | overallImprovementsGroupTitle": {
     "message": "Yleiset parannusehdotukset"
@@ -1857,22 +1875,22 @@
     "message": "URL-osoite"
   },
   "core/lib/i18n/i18n.js | columnWastedBytes": {
-    "message": "Potentiaalinen säästö"
+    "message": "Arvioitu säästö"
   },
   "core/lib/i18n/i18n.js | columnWastedMs": {
-    "message": "Potentiaalinen säästö"
+    "message": "Arvioitu säästö"
   },
   "core/lib/i18n/i18n.js | cumulativeLayoutShiftMetric": {
     "message": "Cumulative Layout Shift"
   },
   "core/lib/i18n/i18n.js | displayValueByteSavings": {
-    "message": "Potentiaalinen säästö: {wastedBytes, number, bytes} KiB"
+    "message": "Arvioitu säästö: {wastedBytes, number, bytes} KiB"
   },
   "core/lib/i18n/i18n.js | displayValueElementsFound": {
     "message": "{nodeCount,plural, =1{1 elementti löydetty}other{# elementtiä löydetty}}"
   },
   "core/lib/i18n/i18n.js | displayValueMsSavings": {
-    "message": "Potentiaalinen säästö: {wastedMs, number, milliseconds} ms"
+    "message": "Arvioitu säästö: {wastedMs, number, milliseconds} ms"
   },
   "core/lib/i18n/i18n.js | documentResourceType": {
     "message": "Dokumentti"
@@ -2070,7 +2088,7 @@
     "message": "Nouda Lighthouse-suorituskykyprosentti."
   },
   "flow-report/src/i18n/ui-strings.js | helpUseCaseNavigation2": {
-    "message": "Mittaa sivulatauksia sivun latautumisajan ja nopeusindeksin kaltaisilla mittareilla."
+    "message": "Mittaa sivulatauksia sivun latautumisajan ja Speed Indexin kaltaisilla mittareilla."
   },
   "flow-report/src/i18n/ui-strings.js | helpUseCaseNavigation3": {
     "message": "Arvioi progressiivisten web-sovellusten ominaisuuksia."
@@ -2191,9 +2209,6 @@
   },
   "node_modules/@paulirish/trace_engine/generated/Deprecation.js | CrossOriginWindowConfirm": {
     "message": "window.confirmin käynnistäminen eri lähteistä peräisin olevista iframeista on poistettu käytöstä ja poistetaan kokonaan tulevaisuudessa."
-  },
-  "node_modules/@paulirish/trace_engine/generated/Deprecation.js | DOMMutationEvents": {
-    "message": "DOM-muutostapahtumat, kuten DOMSubtreeModified, DOMNodeInserted, DOMNodeRemoved, DOMNodeRemovedFromDocument, DOMNodeInsertedIntoDocument ja DOMCharacterDataModified, on poistettu käytöstä (https://w3c.github.io/uievents/#legacy-event-types) ja poistetaan. Käytä sen sijaan tätä: MutationObserver."
   },
   "node_modules/@paulirish/trace_engine/generated/Deprecation.js | DataUrlInSvgUse": {
     "message": "Datatuki: URL-osoitteet SVGUseElement-elementissä on poistettu käytöstä, ja se poistetaan tulevaisuudessa."
@@ -2336,9 +2351,6 @@
   "node_modules/@paulirish/trace_engine/models/trace/insights/CLSCulprits.js | description": {
     "message": "Asettelun muutoksia tapahtuu, kun elementit liikkuvat ilman käyttäjän interaktioita. [Tutki asettelun muutosten syitä](https://web.dev/articles/optimize-cls), kuten elementtien lisäämistä, poistamista tai fonttien vaihtumista sivun latauksen aikana."
   },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/CLSCulprits.js | fontRequest": {
-    "message": "Fonttipyyntö"
-  },
   "node_modules/@paulirish/trace_engine/models/trace/insights/CLSCulprits.js | injectedIframe": {
     "message": "Lisätty iframe"
   },
@@ -2357,8 +2369,8 @@
   "node_modules/@paulirish/trace_engine/models/trace/insights/CLSCulprits.js | topCulprits": {
     "message": "Asettelun muutoksen yleisimmät aiheuttajat"
   },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/CLSCulprits.js | unsizedImages": {
-    "message": "Kuvien kokoa ei ole asetettu"
+  "node_modules/@paulirish/trace_engine/models/trace/insights/CLSCulprits.js | unsizedImage": {
+    "message": "Kuvaelementti, jonka kokoa ei ole asetettu"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/CLSCulprits.js | worstCluster": {
     "message": "Huonoin klusteri"
@@ -2412,10 +2424,10 @@
     "message": "Ensimmäinen verkkopyyntö on tärkein.  Vähennä viivettä välttämällä uudelleenohjauksia, varmistamalla nopea palvelimen vaste ja ottamalla tekstin pakkaus käyttöön."
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/DocumentLatency.js | failedRedirects": {
-    "message": "Uudelleenohjauksia"
+    "message": "Uudelleenohjauksia ({PH1} uudelleenohjausta, +{PH2})"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/DocumentLatency.js | failedServerResponseTime": {
-    "message": "Palvelin vastasi hitaasti"
+    "message": "Palvelin vastasi hitaasti (havaittu {PH1})"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/DocumentLatency.js | failedTextCompression": {
     "message": "Ei pakattu"
@@ -2424,7 +2436,7 @@
     "message": "Välttää uudelleenohjaukset"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/DocumentLatency.js | passingServerResponseTime": {
-    "message": "Palvelin vastaa nopeasti"
+    "message": "Palvelin vastaa nopeasti (havaittu {PH1})"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/DocumentLatency.js | passingTextCompression": {
     "message": "Pakkaa tekstin"
@@ -2465,6 +2477,9 @@
   "node_modules/@paulirish/trace_engine/models/trace/insights/FontDisplay.js | wastedTimeColumn": {
     "message": "Hukattu aika"
   },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/ForcedReflow.js | anonymous": {
+    "message": "(nimettömät)"
+  },
   "node_modules/@paulirish/trace_engine/models/trace/insights/ForcedReflow.js | description": {
     "message": "Monet APIt, jotka yleensä lukevat asettelun geometriaa, pakottavat renderöintimoottorin keskeyttämään skriptin suorittamisen, jotta tyyli ja asettelu voidaan laskea. Lue lisää [pakotetusta uudelleenlaskemisesta](https://developers.google.com/web/fundamentals/performance/rendering/avoid-large-complex-layouts-and-layout-thrashing#avoid-forced-synchronous-layouts) ja sen torjunnasta."
   },
@@ -2481,7 +2496,7 @@
     "message": "Uudelleenlaskemisaika yhteensä"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/ForcedReflow.js | unattributed": {
-    "message": "Määrittämätön"
+    "message": "[määrittämätön]"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/ImageDelivery.js | description": {
     "message": "Kuvien latausajan lyhentäminen voi parantaa sivun havaittua latausaikaa ja LCP:tä. [Lue lisää kuvakoon optimoinnista](https://developer.chrome.com/docs/lighthouse/performance/uses-optimized-images/)"
@@ -2513,30 +2528,6 @@
   "node_modules/@paulirish/trace_engine/models/trace/insights/ImageDelivery.js | useVideoFormat": {
     "message": "Videomuotojen käyttö GIF-tiedostojen sijaan voi parantaa animoidun sisällön latauskokoa."
   },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/InteractionToNextPaint.js | description": {
-    "message": "Aloita tutkinta pisimmästä vaiheesta. [Viiveet voidaan minimoida](https://web.dev/articles/optimize-inp#optimize_interactions). Voit lyhentää käsittelyaikaa [optimoimalla pääsäikeen kustannukset](https://web.dev/articles/optimize-long-tasks), usein JS:n."
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/InteractionToNextPaint.js | duration": {
-    "message": "Kesto"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/InteractionToNextPaint.js | inputDelay": {
-    "message": "Syötteen viive"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/InteractionToNextPaint.js | noInteractions": {
-    "message": "Interaktioita ei havaittu"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/InteractionToNextPaint.js | phase": {
-    "message": "Vaihe"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/InteractionToNextPaint.js | presentationDelay": {
-    "message": "Esityksen viive"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/InteractionToNextPaint.js | processingDuration": {
-    "message": "Käsittelyn kesto"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/InteractionToNextPaint.js | title": {
-    "message": "INP vaiheittain"
-  },
   "node_modules/@paulirish/trace_engine/models/trace/insights/LCPDiscovery.js | description": {
     "message": "Optimoi LCP tekemällä LCP-kuvasta [löydettävä](https://web.dev/articles/optimize-lcp#1_eliminate_resource_load_delay) HTML:stä heti ja [välttämällä laiskaa latautumista](https://web.dev/articles/lcp-lazy-loading)"
   },
@@ -2564,36 +2555,6 @@
   "node_modules/@paulirish/trace_engine/models/trace/insights/LCPDiscovery.js | title": {
     "message": "LCP-pyynnön löytäminen"
   },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | description": {
-    "message": "Kullakin [vaiheella on omat parantamisen strategiat](https://web.dev/articles/optimize-lcp#lcp-breakdown). Ihanteellisesti suurin osa LCP-ajasta pitäisi käyttää resurssien lataamiseen, ei viivästyksiin."
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | duration": {
-    "message": "Kesto"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | elementRenderDelay": {
-    "message": "Elementin renderöintiviive"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | fieldDuration": {
-    "message": "Kentän 75. prosenttipiste"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | noLcp": {
-    "message": "LCP:tä ei havaittu"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | phase": {
-    "message": "Vaihe"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | resourceLoadDelay": {
-    "message": "Resurssin latausviive"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | resourceLoadDuration": {
-    "message": "Resurssin latauksen kesto"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | timeToFirstByte": {
-    "message": "Ensimmäistä tavua edeltävä aika"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | title": {
-    "message": "LCP vaiheittain"
-  },
   "node_modules/@paulirish/trace_engine/models/trace/insights/LegacyJavaScript.js | columnScript": {
     "message": "Skripti"
   },
@@ -2601,7 +2562,7 @@
     "message": "Hukatut tavut"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/LegacyJavaScript.js | description": {
-    "message": "Polyfill- ja transform-merkintöjen avulla vanhat selaimet voivat käyttää uusia JavaScript-ominaisuuksia. Monia ei kuitenkaan tarvita nykyaikaisissa selaimissa. Harkitse JavaScript-käännösprosessin muuttamista niin, että [Baseline](https://web.dev/articles/baseline-and-polyfills)-ominaisuuksien ohjelmkointikoodin kieltä ei käännetä, ellet tiedä, että sinun on tuettava vanhoja selaimia. [Lue lisää siitä, miksi useimmat sivustot voivat ottaa käyttöön ES6+-koodin ilman ohjelmointikoodin kielen kääntämistä](https://philipwalton.com/articles/the-state-of-es5-on-the-web/)"
+    "message": "Polyfill- ja transform-merkintöjen avulla vanhemmat selaimet voivat käyttää uusia JavaScript-ominaisuuksia. Monia ei kuitenkaan tarvita nykyaikaisissa selaimissa. Harkitse JavaScript-käännösprosessin muuttamista niin, että [Baseline](https://web.dev/articles/baseline-and-polyfills)-ominaisuuksien ohjelmkointikoodin kieltä ei käännetä, ellet tiedä, että sinun on tuettava vanhempia selaimia. [Lue lisää siitä, miksi useimmat sivustot voivat ottaa käyttöön ES6+-koodin ilman ohjelmointikoodin kielen kääntämistä](https://philipwalton.com/articles/the-state-of-es5-on-the-web/)"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/LegacyJavaScript.js | title": {
     "message": "Vanha JavaScript"
@@ -2621,8 +2582,32 @@
   "node_modules/@paulirish/trace_engine/models/trace/insights/ModernHTTP.js | title": {
     "message": "Moderni HTTP"
   },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | columnOrigin": {
+    "message": "Alkuperä"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | columnRequest": {
+    "message": "Pyyntö"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | columnSource": {
+    "message": "Lähde"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | columnTime": {
+    "message": "Aika"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | columnWastedMs": {
+    "message": "Arvioidut LCP-säästöt"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | crossoriginWarning": {
+    "message": "Käyttämätön ennakkoyhteys. Varmista, että crossorigin-määritettä käytetään oikein."
+  },
   "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | description": {
     "message": "[Vältä kriittisten pyyntöjen ketjuttamista](https://developer.chrome.com/docs/lighthouse/performance/critical-request-chains) lyhentämällä ketjuja, pienentämällä resurssien latauskokoa ja lykkäämällä tarpeettomien resurssien lataamista."
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | estSavingTableDescription": {
+    "message": "Lisää [ennakkoyhdistämisen](https://developer.chrome.com/docs/lighthouse/performance/uses-rel-preconnect/) vihjeitä tärkeimpiin alkuperiin, mutta pyri käyttämään enintään neljää."
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | estSavingTableTitle": {
+    "message": "Ennakkoyhteydet"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | maxCriticalPathLatency": {
     "message": "Kriittisen polun enimmäisviive:"
@@ -2630,14 +2615,32 @@
   "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | noNetworkDependencyTree": {
     "message": "Verkko-ohjelmat eivät vaikuta mihinkään renderöintitehtävään"
   },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | noPreconnectCandidates": {
+    "message": "Yksikään muu alkuperä ei sovellu ennakkoyhteyden muodostamiseen"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | noPreconnectOrigins": {
+    "message": "lähteitä ei yhdistetty ennakkoon"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | preconnectOriginsTableDescription": {
+    "message": "[ennakkoyhdistämisen](https://developer.chrome.com/docs/lighthouse/performance/uses-rel-preconnect/) vihjeet auttavat selainta muodostamaan yhteyden aikaisemmin sivun latauksen aikana, jolloin kyseisen kohteen ensimmäinen pyyntö on nopeampi. Seuraavat ovat alkuperä, joihin sivu on muodostanut yhteyden etukäteen."
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | preconnectOriginsTableTitle": {
+    "message": "Ennakkoon yhdistetyt alkuperät"
+  },
   "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | title": {
     "message": "Verkon riippuvuuspuu"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | tooManyPreconnectLinksWarning": {
+    "message": "preconnect-yhteyksiä löytyi enemmän kuin neljä. Niitä tulee käyttää säästeliäästi ja vain tärkeimpiin alkuperiin."
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | unusedWarning": {
+    "message": "Käyttämätön ennakkoyhteys. Valitse preconnect vain alkuperille, joita sivu todennäköisesti pyytää."
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | warningDescription": {
     "message": "Vältä kriittisten pyyntöjen ketjuttamista lyhentämällä ketjuja, pienentämällä resurssien latauskokoa ja lykkäämällä tarpeettomien resurssien lataamista sivun latausajan parantamiseksi."
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/RenderBlocking.js | description": {
-    "message": "Pyynnöt estävät sivun ensimmäisen renderöinnin, joten LCP:ssä voi olla viiveitä. [Siirtäminen myöhemmäksi tai sisällyttäminen](https://web.dev/learn/performance/understanding-the-critical-path#render-blocking_resources/) voi poistaa nämä verkkopyynnöt kriittiseltä polulta."
+    "message": "Pyynnöt estävät sivun ensimmäisen renderöinnin, joten LCP:ssä voi olla viiveitä. [Siirtäminen myöhemmäksi tai sisällyttäminen](https://web.dev/learn/performance/understanding-the-critical-path#render-blocking_resources) voi poistaa nämä verkkopyynnöt kriittiseltä polulta."
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/RenderBlocking.js | duration": {
     "message": "Kesto"
@@ -2685,7 +2688,7 @@
     "message": "Siirron koko"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/ThirdParties.js | description": {
-    "message": "Kolmannen osapuolen koodi voi vaikuttaa lataustehokkuuteen merkittävästi. [Vähennä ja lykkää kolmannen osapuolen koodin lataamista](https://developers.google.com/web/fundamentals/performance/optimizing-content-efficiency/loading-third-party-javascript/) sivun sisällön priorisoimiseksi."
+    "message": "Kolmannen osapuolen koodi voi vaikuttaa lataustehokkuuteen merkittävästi. [Vähennä ja lykkää kolmannen osapuolen koodin lataamista](https://web.dev/articles/optimizing-content-efficiency-loading-third-party-javascript/) sivun sisällön priorisoimiseksi."
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/ThirdParties.js | noThirdParties": {
     "message": "Kolmansia osapuolia ei löytynyt"
@@ -2695,6 +2698,9 @@
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/Viewport.js | description": {
     "message": "Napautusinteraktiot voivat [viivästyä jopa 300 ms:lla](https://developer.chrome.com/blog/300ms-tap-delay-gone-away/), jos näkymää ei ole optimoitu mobiililaitteille."
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/Viewport.js | mobileTapDelayLabel": {
+    "message": "Mobiililaitteen napautuksen viive"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/Viewport.js | title": {
     "message": "Optimoi näkymä mobiililaitteille"
@@ -3587,8 +3593,14 @@
   "report/renderer/report-utils.js | footerIssue": {
     "message": "Ilmoita ongelmasta"
   },
+  "report/renderer/report-utils.js | goBackToAudits": {
+    "message": "Palaa tarkastuksiin"
+  },
   "report/renderer/report-utils.js | hide": {
     "message": "Piilota"
+  },
+  "report/renderer/report-utils.js | insightsNotice": {
+    "message": "Myöhemmin tänä vuonna vinkit korvaavat tulostarkastukset. [Lue lisää ja anna palautetta täällä](https://github.com/GoogleChrome/lighthouse/discussions/16462)."
   },
   "report/renderer/report-utils.js | labDataTitle": {
     "message": "Laboratoriodata"
@@ -3689,6 +3701,9 @@
   "report/renderer/report-utils.js | toplevelWarningsMessage": {
     "message": "Lighthousen suorituksessa havaittiin ongelmia:"
   },
+  "report/renderer/report-utils.js | tryInsights": {
+    "message": "Kokeile vinkkejä"
+  },
   "report/renderer/report-utils.js | unattributable": {
     "message": "Ei määritettävissä"
   },
@@ -3719,14 +3734,20 @@
   "treemap/app/src/util.js | duplicateModulesLabel": {
     "message": "Moduulien kaksoiskappaleet"
   },
+  "treemap/app/src/util.js | duplicatedBytesLabel": {
+    "message": "Päällekkäiset tavut"
+  },
   "treemap/app/src/util.js | resourceBytesLabel": {
-    "message": "Resurssin tavut"
+    "message": "Tiedoston tavut"
   },
   "treemap/app/src/util.js | tableColumnName": {
     "message": "Nimi"
   },
   "treemap/app/src/util.js | toggleTableButtonLabel": {
     "message": "Näytä/piilota taulukko"
+  },
+  "treemap/app/src/util.js | transferBytesLabel": {
+    "message": "Siirrettävät tavut"
   },
   "treemap/app/src/util.js | unusedBytesLabel": {
     "message": "Käyttämättömät tavut"

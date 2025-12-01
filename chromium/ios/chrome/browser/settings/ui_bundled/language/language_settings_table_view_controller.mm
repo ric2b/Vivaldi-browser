@@ -40,6 +40,12 @@
 #import "net/base/apple/url_conversions.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "prefs/vivaldi_pref_names.h"
+#import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
+// End Vivaldi
+
 namespace {
 
 typedef NS_ENUM(NSInteger, SectionIdentifier) {
@@ -53,6 +59,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
   ItemTypeAddLanguage,
   ItemTypeTranslateSwitch,
   ItemTypeTranslateManaged,
+  ItemTypeTranslateDisableInfobarSwitch, // Vivaldi
 };
 
 }  // namespace
@@ -80,6 +87,12 @@ typedef NS_ENUM(NSInteger, ItemType) {
 // A reference to the presented AddLanguageTableViewController, if any.
 @property(nonatomic, weak)
     AddLanguageTableViewController* addLanguageTableViewController;
+
+// Vivaldi
+// A reference to the Translate Disable Infobar switch item for quick access.
+@property(nonatomic, weak)
+    TableViewSwitchItem* translateDisableInfobarSwitchItem;
+// End Vivaldi
 
 @end
 
@@ -167,6 +180,11 @@ typedef NS_ENUM(NSInteger, ItemType) {
     [model addItem:translateSwitchItem
         toSectionWithIdentifier:SectionIdentifierTranslate];
   }
+
+  if (vivaldi::IsVivaldiRunning()) {
+    [self addTranslateDisableInfobarBannerSwitch];
+  } // End Vivaldi
+
 }
 
 #pragma mark - SettingsRootTableViewController
@@ -278,6 +296,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
     }
     case ItemTypeHeader:
     case ItemTypeTranslateSwitch:
+    case ItemTypeTranslateDisableInfobarSwitch: // Vivaldi
     case ItemTypeTranslateManaged:
       // Not handled.
       break;
@@ -385,6 +404,18 @@ typedef NS_ENUM(NSInteger, ItemType) {
                       forControlEvents:UIControlEventValueChanged];
       break;
     }
+
+    // Vivaldi
+    case ItemTypeTranslateDisableInfobarSwitch: {
+      TableViewSwitchCell* switchCell =
+          base::apple::ObjCCastStrict<TableViewSwitchCell>(cell);
+      [switchCell.switchView addTarget:self
+                action:@selector(translateDisableInfobarSwitchChanged:)
+                      forControlEvents:UIControlEventValueChanged];
+      break;
+    }
+    // End Vivaldi
+
     case ItemTypeTranslateManaged: {
       TableViewInfoButtonCell* managedCell =
           base::apple::ObjCCastStrict<TableViewInfoButtonCell>(cell);
@@ -614,6 +645,45 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
 - (void)didTapLinkURL:(NSURL*)URL {
   [self view:nil didTapLinkURL:[[CrURL alloc] initWithNSURL:URL]];
+}
+
+#pragma mark - Vivaldi
+
+- (void)addTranslateDisableInfobarBannerSwitch {
+  TableViewSwitchItem* translateDisableInfobarSwitchItem =
+      [[TableViewSwitchItem alloc]
+          initWithType:ItemTypeTranslateDisableInfobarSwitch];
+  self.translateDisableInfobarSwitchItem = translateDisableInfobarSwitchItem;
+  translateDisableInfobarSwitchItem.accessibilityIdentifier =
+      kTranslateSwitchAccessibilityIdentifier;
+  translateDisableInfobarSwitchItem.text = l10n_util::GetNSString(
+      IDS_IOS_LANGUAGE_SETTINGS_DISABLE_TRANSLATE_INFOBAR_SWITCH_TITLE);
+  translateDisableInfobarSwitchItem.on =
+      [self.dataSource translateInfobarDisabled];
+  [self.tableViewModel addItem:translateDisableInfobarSwitchItem
+       toSectionWithIdentifier:SectionIdentifierTranslate];
+}
+
+- (void)translateDisableInfobarSwitchChanged:(UISwitch*)switchView {
+  // Inform the command handler.
+  [self.commandHandler setTranslateInfobarDisabled:switchView.isOn];
+
+  // Update the model and the table view.
+  [self translateDisableInfobarDisabled:switchView.isOn];
+}
+
+// MARK: LanguageSettingsConsumer
+- (void)translateDisableInfobarDisabled:(BOOL)disabled {
+  // Ignore pref changes while in edit mode.
+  if (self.isEditing) {
+    return;
+  }
+
+  // Update the model.
+  self.translateDisableInfobarSwitchItem.on = disabled;
+  // Update the table view.
+  [self reconfigureCellsForItems:@[ self.translateDisableInfobarSwitchItem ]];
+  [self updateLanguagesSection];
 }
 
 @end

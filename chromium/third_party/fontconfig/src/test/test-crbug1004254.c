@@ -42,7 +42,7 @@ run_query (void)
     FcPatternAddString (pat, FC_FAMILY, (const FcChar8 *)"sans-serif");
     FcPatternAddBool (pat, FC_SCALABLE, FcTrue);
     FcConfigSubstitute (NULL, pat, FcMatchPattern);
-    FcDefaultSubstitute (pat);
+    FcConfigSetDefaultSubstitute (NULL, pat);
     match = FcFontMatch (NULL, pat, &result);
     if (result != FcResultMatch || !match) {
 	fprintf (stderr, "ERROR: No matches found\n");

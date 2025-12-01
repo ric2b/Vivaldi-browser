@@ -488,7 +488,6 @@ class Target : public Item {
   bool CheckTestonly(Err* err) const;
   bool CheckAssertNoDeps(Err* err) const;
   void CheckSourcesGenerated() const;
-  void CheckSourceGenerated(const SourceFile& source) const;
   bool CheckSourceSetLanguages(Err* err) const;
 
   OutputType output_type_ = UNKNOWN;

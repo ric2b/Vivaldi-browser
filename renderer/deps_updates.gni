@@ -3,7 +3,6 @@ update_target("//chrome/renderer:renderer") {
   deps += [
     "//vivaldi/ui:skia_utils",
     "//vivaldi/renderer/mojo:frame_service",
-    "//ppapi/buildflags",
   ]
 }
 

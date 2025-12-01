@@ -59,7 +59,7 @@ request [standards positions](#standards-positions):
 
 The [W3C TAG](https://www.w3.org/2001/tag/) is most effective when it can
 suggest changes early in a feature's design. To get this input at the right
-time, try to [request an "early design
+time, try to [request an "early design/incubation
 review"](https://github.com/w3ctag/design-reviews/issues/new/choose) when you
 have a solid description of the problem you're trying to solve, a collection of
 alternative solutions, and one solution prototyped to demonstrate that it's
@@ -72,9 +72,10 @@ review. If they didn't close the early design review, or if your final
 specification does not differ in any significant way from the the form reviewed
 by the TAG, just comment on the early design review saying that a specification
 is ready. No need to reopen the issue in that case. Otherwise (the early design
-review is closed and the design has changed in any significant way), [open a new
-"specification
-review"](https://github.com/w3ctag/design-reviews/issues/new/choose).
+review is closed and the design has changed in any significant way), [open either
+a "Review of a new feature by a WG" or an "Other specification
+review"](https://github.com/w3ctag/design-reviews/issues/new/choose) depending
+on whether a Working Group supports the feature.
 
 <div id="slow-tag-review">
 

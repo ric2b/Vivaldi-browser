@@ -19,6 +19,7 @@
 #include <memory>
 #include <mutex>
 #include <set>
+#include <span>
 #include <tuple>
 #include <unordered_map>
 #include <utility>
@@ -45,6 +46,9 @@ using FutureID = uint64_t;
 static constexpr FutureID kNullFutureId = 0;
 using InstanceID = uint64_t;
 static constexpr InstanceID kNullInstanceId = 0;
+
+static constexpr size_t kTimedWaitAnyMaxCountMax = INT32_MAX;
+static constexpr size_t kTimedWaitAnyMaxCountDefault = 64;
 
 // ----------------------------------------------------------------------------
 // Declarations for JS emwgpu functions (defined in library_webgpu.js)
@@ -123,6 +127,8 @@ void emwgpuShaderModuleGetCompilationInfo(WGPUShaderModule shader,
                                           WGPUCompilationInfo* compilationInfo);
 }  // extern "C"
 
+namespace {
+
 // ----------------------------------------------------------------------------
 // Implementation details that are not exposed upwards in the API.
 // ----------------------------------------------------------------------------
@@ -153,7 +159,7 @@ class NonMovable : NonCopyable {
 // For some objects we may do additional cleanup routines, i.e. Destroy if the
 // object was natively created via the API. However, if the object was imported
 // from JS, we don't do the additional cleanup because they may still be used
-// outside of the WASM API.
+// outside of the Wasm API.
 struct ImportedFromJSTag {};
 static constexpr ImportedFromJSTag kImportedFromJS;
 
@@ -429,7 +435,7 @@ class TrackedEvent : NonMovable {
   }
 
  private:
-  friend class EventManager;
+  friend EventManager;
 
   // Events need to keep track of the instance they came from for validation.
   const InstanceID mInstanceId;
@@ -712,6 +718,8 @@ static EventManager& GetEventManager() {
   return kEventManager;
 }
 
+}  // namespace
+
 // ----------------------------------------------------------------------------
 // WGPU struct declarations.
 // ----------------------------------------------------------------------------
@@ -727,6 +735,11 @@ struct WGPUAdapterImpl final : public EventSource, public RefCounted {
  public:
   WGPUAdapterImpl(const EventSource* source);
 };
+
+namespace {
+// Forward declare so this can be used as a friend below.
+class MapAsyncEvent;
+}  // namespace
 
 struct WGPUBufferImpl final : public EventSource,
                               public RefCountedWithExternalCount {
@@ -748,7 +761,7 @@ struct WGPUBufferImpl final : public EventSource,
   void Unmap();
 
  private:
-  friend class MapAsyncEvent;
+  friend MapAsyncEvent;
 
   void WillDropLastExternalRef() override;
 
@@ -803,7 +816,7 @@ struct WGPUDeviceImpl final : public EventSource,
 // Instance is specially implemented in order to handle Futures implementation.
 struct WGPUInstanceImpl final : public EventSource, public RefCounted {
  public:
-  WGPUInstanceImpl(const WGPUInstanceDescriptor* desc);
+  static Ref<WGPUInstanceImpl> Create(const WGPUInstanceDescriptor* desc);
   ~WGPUInstanceImpl();
 
   void ProcessEvents();
@@ -812,10 +825,18 @@ struct WGPUInstanceImpl final : public EventSource, public RefCounted {
                          uint64_t timeoutNS);
 
  private:
+  WGPUInstanceImpl();
+
   static InstanceID GetNextInstanceId();
 
-  WGPUInstanceCapabilities mCapabilities = {};
+  // Zero means TimedWaitAny is not supported at all.
+  size_t mTimedWaitAnyMaxCount = 0;
 };
+
+namespace {
+// Forward declare so this can be used as a friend below.
+class CompilationInfoEvent;
+}  // namespace
 
 struct WGPUShaderModuleImpl final : public EventSource, public RefCounted {
  public:
@@ -824,7 +845,7 @@ struct WGPUShaderModuleImpl final : public EventSource, public RefCounted {
   WGPUFuture GetCompilationInfo(WGPUCompilationInfoCallbackInfo callbackInfo);
 
  private:
-  friend class CompilationInfoEvent;
+  friend CompilationInfoEvent;
 
   struct WGPUCompilationInfoDeleter {
     void operator()(WGPUCompilationInfo* compilationInfo) {
@@ -832,14 +853,15 @@ struct WGPUShaderModuleImpl final : public EventSource, public RefCounted {
         return;
       }
 
+      // Free allocations iff there were any.
       if (compilationInfo->messageCount) {
         // Since we allocate all the messages in a single block, we only need to
         // free the first pointer.
         free(const_cast<char*>(compilationInfo->messages[0].message.data));
-      }
-      if (compilationInfo->messages) {
+        // We also allocate all the Utf16 structs in a single array.
         free(reinterpret_cast<WGPUDawnCompilationMessageUtf16*>(
             compilationInfo->messages[0].nextInChain));
+        // Finally, free the array of messages.
         free(const_cast<WGPUCompilationMessage*>(compilationInfo->messages));
       }
       delete compilationInfo;
@@ -853,6 +875,8 @@ struct WGPUShaderModuleImpl final : public EventSource, public RefCounted {
 // ----------------------------------------------------------------------------
 // Future events.
 // ----------------------------------------------------------------------------
+
+namespace {
 
 class CompilationInfoEvent final : public TrackedEvent {
  public:
@@ -1235,11 +1259,13 @@ class WorkDoneEvent final : public TrackedEvent {
   void ReadyHook(WGPUQueueWorkDoneStatus status) { mStatus = status; }
 
   void Complete(FutureID, EventCompletionType type) override {
+    std::string message;
     if (type == EventCompletionType::Shutdown) {
       mStatus = WGPUQueueWorkDoneStatus_CallbackCancelled;
+      message = "A valid external Instance reference no longer exists.";
     }
     if (mCallback) {
-      mCallback(mStatus, mUserdata1, mUserdata2);
+      mCallback(mStatus, ToOutputStringView(message), mUserdata1, mUserdata2);
     }
   }
 
@@ -1250,6 +1276,8 @@ class WorkDoneEvent final : public TrackedEvent {
 
   WGPUQueueWorkDoneStatus mStatus;
 };
+
+}  // namespace
 
 // ----------------------------------------------------------------------------
 // Definitions for C++ emwgpu functions (callable from library_webgpu.js)
@@ -1561,7 +1589,7 @@ WGPUQueue WGPUDeviceImpl::GetQueue() const {
 
 WGPUFuture WGPUDeviceImpl::GetLostFuture() const {
   if (IsImported()) {
-    DEBUG_PRINTF("GetLostFuture cannot be called on an imported device.");
+    DEBUG_PRINTF("GetLostFuture cannot be called on an imported device.\n");
     assert(false);
   }
   assert(mDeviceLostFutureId != kNullFutureId);
@@ -1595,16 +1623,69 @@ void WGPUDeviceImpl::WillDropLastExternalRef() {
 // WGPUInstanceImpl implementations.
 // ----------------------------------------------------------------------------
 
-WGPUInstanceImpl::WGPUInstanceImpl(const WGPUInstanceDescriptor* desc)
-    : EventSource(GetNextInstanceId()) {
+Ref<WGPUInstanceImpl> WGPUInstanceImpl::Create(
+    const WGPUInstanceDescriptor* desc) {
+  auto instance = AcquireRef(new WGPUInstanceImpl());
+
+  // Validate and apply the descriptor
   if (desc) {
-    mCapabilities = desc->capabilities;
-    if (mCapabilities.timedWaitAnyMaxCount < 64) {
-      mCapabilities.timedWaitAnyMaxCount = 64;
+    // Features
+    auto features =
+        std::span(desc->requiredFeatures, desc->requiredFeatureCount);
+    for (auto feature : features) {
+      switch (feature) {
+        case WGPUInstanceFeatureName_TimedWaitAny:
+          if (!emscripten_has_asyncify()) {
+            DEBUG_PRINTF(
+                "timedWaitAnyEnable requested, but requires Asyncify or JSPI "
+                "which is not available.\n");
+            return {};
+          }
+          if (desc->requiredLimits) {
+            if (desc->requiredLimits->timedWaitAnyMaxCount >
+                kTimedWaitAnyMaxCountMax) {
+              DEBUG_PRINTF("timedWaitAnyMaxCount %zu not supported (max %zu)\n",
+                           desc->requiredLimits->timedWaitAnyMaxCount,
+                           kTimedWaitAnyMaxCountMax);
+              return {};
+            }
+            instance->mTimedWaitAnyMaxCount =
+                desc->requiredLimits->timedWaitAnyMaxCount;
+          }
+          if (instance->mTimedWaitAnyMaxCount < kTimedWaitAnyMaxCountDefault) {
+            instance->mTimedWaitAnyMaxCount = kTimedWaitAnyMaxCountDefault;
+          }
+          continue;
+        case WGPUInstanceFeatureName_MultipleDevicesPerAdapter:
+          DEBUG_PRINTF(
+              "MultipleDevicesPerAdapter requested, but not supported in "
+              "Wasm.\n");
+          return {};
+        case WGPUInstanceFeatureName_ShaderSourceSPIRV:
+          DEBUG_PRINTF(
+              "ShaderSourceSPIRV requested, but not supported in Wasm.\n");
+          return {};
+        case WGPUInstanceFeatureName_Force32:
+          return {};
+      }
+      // Reject any unrecognized feature name.
+      return {};
+    }
+
+    // Limits
+    if (desc->requiredLimits && desc->requiredLimits->nextInChain != nullptr) {
+      DEBUG_PRINTF("No WGPULimits extensions are supported.\n");
+      return {};
     }
   }
+
+  return instance;
+}
+
+WGPUInstanceImpl::WGPUInstanceImpl() : EventSource(GetNextInstanceId()) {
   GetEventManager().RegisterInstance(GetInstanceId());
 }
+
 WGPUInstanceImpl::~WGPUInstanceImpl() {
   GetEventManager().UnregisterInstance(GetInstanceId());
 }
@@ -1617,11 +1698,11 @@ WGPUWaitStatus WGPUInstanceImpl::WaitAny(size_t count,
                                          WGPUFutureWaitInfo* infos,
                                          uint64_t timeoutNS) {
   if (timeoutNS > 0) {
-    if (!mCapabilities.timedWaitAnyEnable) {
+    if (mTimedWaitAnyMaxCount == 0) {
       // Timed wait not valid unless enabled on the instance.
       DEBUG_PRINTF(
           "WaitAny timeoutNS (%" PRIu64
-          ") > 0, but timedWaitAnyEnable not enabled at wgpuCreateInstance\n",
+          ") > 0, but TimedWaitAny not enabled at wgpuCreateInstance\n",
           timeoutNS);
       return WGPUWaitStatus_Error;
     }
@@ -1631,11 +1712,11 @@ WGPUWaitStatus WGPUInstanceImpl::WaitAny(size_t count,
     // (and emwgpuWaitAny) when building without Asyncify.
     assert(emscripten_has_asyncify());
 
-    if (count > mCapabilities.timedWaitAnyMaxCount) {
+    if (count > mTimedWaitAnyMaxCount) {
       DEBUG_PRINTF(
           "WaitAny count (%zu) > the timedWaitAnyMaxCount (%zu) which was "
           "enabled at wgpuCreateInstance\n",
-          count, mCapabilities.timedWaitAnyMaxCount);
+          count, mTimedWaitAnyMaxCount);
       return WGPUWaitStatus_Error;
     }
   }
@@ -1673,7 +1754,7 @@ WGPUFuture WGPUShaderModuleImpl::GetCompilationInfo(
   // If we already have the compilation info cached, we don't need to call into
   // JS.
   if (mCompilationInfo) {
-    emwgpuOnCompilationInfoCompleted(futureId,
+    emwgpuOnCompilationInfoCompleted(double(futureId),
                                      WGPUCompilationInfoRequestStatus_Success,
                                      mCompilationInfo.get());
   } else {
@@ -1741,26 +1822,57 @@ void wgpuSurfaceCapabilitiesFreeMembers(WGPUSurfaceCapabilities) {
   // wgpuSurfaceCapabilities doesn't currently allocate anything.
 }
 
+void wgpuSupportedInstanceFeaturesFreeMembers(WGPUSupportedInstanceFeatures) {
+  // Nothing to do, .features is statically allocated.
+}
+
 // ----------------------------------------------------------------------------
 // Standalone (non-method) functions
 // ----------------------------------------------------------------------------
 
-bool ValidateInstanceDescriptor(const WGPUInstanceDescriptor& descriptor) {
-  if (descriptor.capabilities.timedWaitAnyEnable &&
-      !emscripten_has_asyncify()) {
-    DEBUG_PRINTF(
-        "timedWaitAnyEnable requested, but requires Asyncify or JSPI.");
-    return false;
+namespace {
+
+const std::span<WGPUInstanceFeatureName> GetSupportedFeatures() {
+  static std::optional<std::vector<WGPUInstanceFeatureName>> sSupportedFeatures;
+  if (!sSupportedFeatures) {
+    sSupportedFeatures = std::vector<WGPUInstanceFeatureName>();
+    if (emscripten_has_asyncify()) {
+      sSupportedFeatures->push_back(WGPUInstanceFeatureName_TimedWaitAny);
+    }
   }
-  return true;
+  return *sSupportedFeatures;
+}
+
+}  // namespace
+
+WGPUBool wgpuHasInstanceFeature(WGPUInstanceFeatureName feature) {
+  auto supportedFeatures = GetSupportedFeatures();
+  return std::find(supportedFeatures.begin(), supportedFeatures.end(),
+                   feature) != supportedFeatures.end();
+}
+
+void wgpuGetInstanceFeatures(WGPUSupportedInstanceFeatures* features) {
+  assert(features != nullptr);
+
+  auto supportedFeatures = GetSupportedFeatures();
+  features->featureCount = supportedFeatures.size();
+  features->features = supportedFeatures.data();
+}
+
+WGPUStatus wgpuGetInstanceLimits(WGPUInstanceLimits* limits) {
+  assert(limits != nullptr);
+  if (limits->nextInChain != nullptr) {
+    DEBUG_PRINTF("No WGPULimits extensions are supported.\n");
+    return WGPUStatus_Error;
+  }
+
+  limits->timedWaitAnyMaxCount = kTimedWaitAnyMaxCountMax;
+  return WGPUStatus_Success;
 }
 
 WGPUInstance wgpuCreateInstance(
     [[maybe_unused]] const WGPUInstanceDescriptor* descriptor) {
-  if (descriptor && !ValidateInstanceDescriptor(*descriptor)) {
-    return nullptr;
-  }
-  return new WGPUInstanceImpl(descriptor);
+  return ReturnToAPI(WGPUInstanceImpl::Create(descriptor));
 }
 
 // ----------------------------------------------------------------------------
@@ -1874,12 +1986,12 @@ void wgpuBufferUnmap(WGPUBuffer buffer) {
 
 WGPUBuffer wgpuDeviceCreateBuffer(WGPUDevice device,
                                   const WGPUBufferDescriptor* descriptor) {
-  WGPUBuffer buffer = new WGPUBufferImpl(device, descriptor->mappedAtCreation);
-  if (!emwgpuDeviceCreateBuffer(device, descriptor, buffer)) {
-    delete buffer;
+  Ref<WGPUBufferImpl> buffer =
+      AcquireRef(new WGPUBufferImpl(device, descriptor->mappedAtCreation));
+  if (!emwgpuDeviceCreateBuffer(device, descriptor, buffer.Get())) {
     return nullptr;
   }
-  return buffer;
+  return ReturnToAPI(std::move(buffer));
 }
 
 WGPUFuture wgpuDeviceCreateComputePipelineAsync(

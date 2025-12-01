@@ -153,13 +153,14 @@ def use_reclient_value(output_dir):
                       '0.0')
                 autoninja.main(['autoninja.py', '-C', out_dir])
                 siso_main.assert_called_once_with([
-                    'siso', 'ninja', '-project=', '-reapi_instance=', '-C',
-                    out_dir
+                    'siso', 'ninja', '-project=', '-reapi_instance=',
+                    '-reapi_address=', '-C', out_dir
                 ])
         self.assertEqual(len(reclient_helper_calls), 1)
-        self.assertEqual(
-            reclient_helper_calls[0][0],
-            ['siso', 'ninja', '-project=', '-reapi_instance=', '-C', out_dir])
+        self.assertEqual(reclient_helper_calls[0][0], [
+            'siso', 'ninja', '-project=', '-reapi_instance=', '-reapi_address=',
+            '-C', out_dir
+        ])
         self.assertEqual(reclient_helper_calls[0][1], 'autosiso')
 
     @mock.patch('sys.platform', 'win32')

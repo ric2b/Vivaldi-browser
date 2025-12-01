@@ -4,6 +4,9 @@
 
 package org.chromium.chrome.browser.download;
 
+import static org.chromium.build.NullUtil.assertNonNull;
+import static org.chromium.build.NullUtil.assumeNonNull;
+
 import android.app.Activity;
 import android.app.DownloadManager;
 import android.content.ActivityNotFoundException;
@@ -21,8 +24,6 @@ import android.text.style.ClickableSpan;
 import android.text.style.StyleSpan;
 
 import androidx.annotation.MainThread;
-import androidx.annotation.Nullable;
-import androidx.browser.customtabs.CustomTabsIntent;
 
 import org.jni_zero.CalledByNative;
 import org.jni_zero.JniType;
@@ -35,6 +36,8 @@ import org.chromium.base.ContextUtils;
 import org.chromium.base.FileUtils;
 import org.chromium.base.IntentUtils;
 import org.chromium.base.Log;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.IntentHandler;
@@ -56,6 +59,7 @@ import org.chromium.chrome.browser.profiles.ProfileManager;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.document.ChromeAsyncTabLauncher;
+import org.chromium.chrome.browser.ui.native_page.NativePage;
 import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
 import org.chromium.components.background_task_scheduler.TaskIds;
 import org.chromium.components.download.DownloadState;
@@ -82,6 +86,7 @@ import org.vivaldi.browser.panels.PanelUtils;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 
 /** A class containing some utility static methods. */
+@NullMarked
 public class DownloadUtils {
     private static final String TAG = "download";
 
@@ -89,7 +94,7 @@ public class DownloadUtils {
             "org.chromium.chrome.browser.download.OTR_PROFILE_ID";
     private static final String MIME_TYPE_ZIP = "application/zip";
     private static final String DOCUMENTS_UI_PACKAGE_NAME = "com.android.documentsui";
-    private static Boolean sIsDownloadRestrictedByPolicyForTesting;
+    private static @Nullable Boolean sIsDownloadRestrictedByPolicyForTesting;
 
     /**
      * Displays the download manager UI. Note the UI is different on tablets and on phones.
@@ -149,7 +154,7 @@ public class DownloadUtils {
         // If the profile is off-the-record and it does not exist, then do not start the activity.
         if (OtrProfileId.isOffTheRecord(otrProfileId)
                 && !ProfileManager.getLastUsedRegularProfile()
-                        .hasOffTheRecordProfile(otrProfileId)) {
+                        .hasOffTheRecordProfile(assertNonNull(otrProfileId))) {
             return false;
         }
 
@@ -163,12 +168,15 @@ public class DownloadUtils {
             // Download Home shows up as a tab on tablets.
             LoadUrlParams params = new LoadUrlParams(UrlConstants.DOWNLOADS_URL);
             if ((ChromeFeatureList.sAndroidNativePagesInNewTab.isEnabled()
-                    && ChromeFeatureList.sAndroidNativePagesInNewTabDownloadsEnabled.getValue())
-                    || tab == null || !tab.isInitialized()) {
+                            && ChromeFeatureList.sAndroidNativePagesInNewTabDownloadsEnabled
+                                    .getValue())
+                    || tab == null
+                    || !tab.isInitialized()) {
                 // Open a new tab, which pops Chrome into the foreground.
-                ChromeAsyncTabLauncher delegate = new ChromeAsyncTabLauncher(
-                        /* incognito= */ OtrProfileId.isOffTheRecord(otrProfileId));
-                delegate.launchNewTab(params, TabLaunchType.FROM_CHROME_UI, null);
+                ChromeAsyncTabLauncher delegate =
+                        new ChromeAsyncTabLauncher(
+                                /* incognito= */ OtrProfileId.isOffTheRecord(otrProfileId));
+                delegate.launchNewTab(params, TabLaunchType.FROM_CHROME_UI, /* parent= */ tab);
             } else {
                 // Download Home shows up inside an existing tab, but only if the last Activity was
                 // the ChromeTabbedActivity.
@@ -214,8 +222,8 @@ public class DownloadUtils {
      * @param intent An {@link Intent} instance.
      * @return The {@link OtrProfileId} that is attached to the given intent.
      */
-    public static OtrProfileId getOtrProfileIdFromIntent(Intent intent) {
-        String serializedId = IntentUtils.safeGetString(intent.getExtras(), EXTRA_OTR_PROFILE_ID);
+    public static @Nullable OtrProfileId getOtrProfileIdFromIntent(Intent intent) {
+        String serializedId = IntentUtils.safeGetStringExtra(intent, EXTRA_OTR_PROFILE_ID);
         return OtrProfileId.deserialize(serializedId);
     }
 
@@ -229,7 +237,7 @@ public class DownloadUtils {
             return false;
         }
 
-        String serializedId = IntentUtils.safeGetString(intent.getExtras(), EXTRA_OTR_PROFILE_ID);
+        String serializedId = IntentUtils.safeGetStringExtra(intent, EXTRA_OTR_PROFILE_ID);
         OtrProfileId otrProfileId = OtrProfileId.deserializeWithoutVerify(serializedId);
 
         return otrProfileId == null
@@ -284,7 +292,8 @@ public class DownloadUtils {
      */
     public static void downloadOfflinePage(Context context, Tab tab, boolean fromAppMenu) {
         Tracker tracker = TrackerFactory.getTrackerForProfile(tab.getProfile());
-        if (tab.isNativePage() && tab.getNativePage().isPdf()) {
+        NativePage nativePage = tab.getNativePage();
+        if (nativePage != null && nativePage.isPdf()) {
             DownloadController.downloadUrl(tab.getUrl().getSpec(), tab);
             if (fromAppMenu) {
                 tracker.notifyEvent(EventConstants.APP_MENU_PDF_PAGE_DOWNLOADED);
@@ -293,10 +302,11 @@ public class DownloadUtils {
         }
         OfflinePageOrigin origin = new OfflinePageOrigin(context, tab);
 
-        if (tab.isShowingErrorPage()) {
+        if (tab.isShowingErrorPage() && !tab.isIncognito()) {
             // The download needs to be scheduled to happen at later time due to current network
-            // error.
+            // error. This is not available in incognito mode.
             final OfflinePageBridge bridge = OfflinePageBridge.getForProfile(tab.getProfile());
+            assumeNonNull(bridge);
             bridge.scheduleDownload(
                     tab.getWebContents(),
                     OfflinePageBridge.ASYNC_NAMESPACE,
@@ -406,13 +416,13 @@ public class DownloadUtils {
                             new Intent(DownloadManager.ACTION_VIEW_DOWNLOADS)
                                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
         } else if (source == DownloadOpenSource.DOWNLOAD_PROGRESS_MESSAGE
-                && offlineItem.mimeType.equals(MimeTypeUtils.PDF_MIME_TYPE)
+                && MimeTypeUtils.PDF_MIME_TYPE.equals(offlineItem.mimeType)
                 && PdfUtils.shouldOpenPdfInline(OtrProfileId.isOffTheRecord(otrProfileId))) {
             if (!openFileWithExternalApps(
-                    offlineItem.filePath,
+                    assertNonNull(offlineItem.filePath),
                     offlineItem.mimeType,
-                    offlineItem.originalUrl.getSpec(),
-                    offlineItem.referrerUrl.getSpec(),
+                    assumeNonNull(offlineItem.originalUrl).getSpec(),
+                    assumeNonNull(offlineItem.referrerUrl).getSpec(),
                     context == null ? ContextUtils.getApplicationContext() : context,
                     OpenWithExternalAppsSource.DOWNLOAD_PROGRESS_MESSAGE)) {
                 DownloadUtils.showDownloadManager(null, null, otrProfileId, source);
@@ -420,7 +430,8 @@ public class DownloadUtils {
         } else {
             OpenParams openParams = new OpenParams(LaunchLocation.PROGRESS_BAR);
             openParams.openInIncognito = OtrProfileId.isOffTheRecord(otrProfileId);
-            OfflineContentAggregatorFactory.get().openItem(openParams, offlineItem.id);
+            OfflineContentAggregatorFactory.get()
+                    .openItem(openParams, assertNonNull(offlineItem.id));
         }
     }
 
@@ -438,9 +449,9 @@ public class DownloadUtils {
      */
     public static boolean openFile(
             String filePath,
-            String mimeType,
-            String downloadGuid,
-            OtrProfileId otrProfileId,
+            @Nullable String mimeType,
+            @Nullable String downloadGuid,
+            @Nullable OtrProfileId otrProfileId,
             String originalUrl,
             String referrer,
             @DownloadOpenSource int source,
@@ -470,9 +481,6 @@ public class DownloadUtils {
                             !isAutomotive,
                             !isAutomotive,
                             context);
-            intent.putExtra(
-                    CustomTabsIntent.EXTRA_ENABLE_EPHEMERAL_BROWSING,
-                    ChromeFeatureList.sCctEphemeralMediaViewerExperiment.isEnabled());
             IntentHandler.startActivityForTrustedIntent(context, intent);
             service.updateLastAccessTime(downloadGuid, otrProfileId);
             return true;
@@ -562,7 +570,9 @@ public class DownloadUtils {
         if (PdfUtils.shouldOpenPdfInline(isIncognito)
                 && newMimeType.equals(MimeTypeUtils.PDF_MIME_TYPE)) {
             String fileUri = getUriForItem(filePath).toString();
-            LoadUrlParams params = new LoadUrlParams(PdfUtils.encodePdfPageUrl(fileUri));
+            String encodedPdfUrl = PdfUtils.encodePdfPageUrl(fileUri);
+            assertNonNull(encodedPdfUrl);
+            LoadUrlParams params = new LoadUrlParams(encodedPdfUrl);
             ChromeAsyncTabLauncher delegate = new ChromeAsyncTabLauncher(isIncognito);
             delegate.launchNewTab(params, TabLaunchType.FROM_CHROME_UI, /* parent= */ null);
             return;
@@ -603,7 +613,7 @@ public class DownloadUtils {
                     "Activity not found for "
                             + intent.getType()
                             + " over "
-                            + intent.getData().getScheme(),
+                            + assumeNonNull(intent.getData()).getScheme(),
                     ex);
         } catch (SecurityException ex) {
             Log.d(TAG, "cannot open intent: " + intent, ex);
@@ -800,7 +810,7 @@ public class DownloadUtils {
 
     public static boolean openFileWithExternalApps(
             String filePath,
-            String mimeType,
+            @Nullable String mimeType,
             String originalUrl,
             String referrer,
             Context context,

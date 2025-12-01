@@ -7,7 +7,7 @@
 #import "ios/chrome/browser/settings/ui_bundled/settings_root_table_view_controller.h"
 #import "ios/ui/settings/search_engine/vivaldi_search_engine_settings_consumer.h"
 
-class ProfileIOS;
+class Browser;
 
 @class VivaldiSearchEngineSettingsViewController;
 
@@ -30,8 +30,8 @@ class ProfileIOS;
     : SettingsRootTableViewController <SettingsControllerProtocol,
                                        VivaldiSearchEngineSettingsConsumer>
 
-// The designated initializer. `profile` must not be nil.
-- (instancetype)initWithProfile:(ProfileIOS*)profile
+// The designated initializer. `browser` must not be nil.
+- (instancetype)initWithBrowser:(Browser*)browser
     NS_DESIGNATED_INITIALIZER;
 - (instancetype)initWithStyle:(UITableViewStyle)style NS_UNAVAILABLE;
 

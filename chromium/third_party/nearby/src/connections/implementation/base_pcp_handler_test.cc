@@ -681,7 +681,7 @@ class BasePcpHandlerTest
     EXPECT_EQ(pcp_handler->RequestConnection(client, endpoint_id, info,
                                              connection_options),
               expected_result);
-    NEARBY_LOGS(INFO) << "Stopping Encryption Runner";
+    LOG(INFO) << "Stopping Encryption Runner";
   }
 
   void RequestConnectionV3(
@@ -800,17 +800,16 @@ class BasePcpHandlerTest
                                 MockPcpHandler::DiscoveredEndpoint* endpoint) {
               if (endpoint->medium ==
                   location::nearby::proto::connections::WIFI_LAN) {
-                NEARBY_LOGS(INFO) << "Connect with Medium WIFI_LAN failed.";
+                LOG(INFO) << "Connect with Medium WIFI_LAN failed.";
                 return MockPcpHandler::ConnectImplResult{
                     .medium = endpoint->medium,
                     .status = {Status::kError},
                     .endpoint_channel = nullptr,
                 };
               } else {
-                NEARBY_LOGS(INFO)
-                    << "Connect with Medium: "
-                    << location::nearby::proto::connections::Medium_Name(
-                           endpoint->medium);
+                LOG(INFO) << "Connect with Medium: "
+                          << location::nearby::proto::connections::Medium_Name(
+                                 endpoint->medium);
                 return MockPcpHandler::ConnectImplResult{
                     .medium = endpoint->medium,
                     .status = {Status::kSuccess},
@@ -844,7 +843,7 @@ class BasePcpHandlerTest
     EXPECT_EQ(pcp_handler->RequestConnection(client, endpoint_id, info,
                                              connection_options),
               expected_result);
-    NEARBY_LOGS(INFO) << "Stopping Encryption Runner";
+    LOG(INFO) << "Stopping Encryption Runner";
   }
   MockConnectionListener mock_connection_listener_;
   MockDiscoveryListener mock_discovery_listener_;
@@ -1126,7 +1125,7 @@ TEST_F(BasePcpHandlerTest, WifiMediumFailFallBackToBT) {
   EXPECT_CALL(mock_connection_listener_.rejected_cb, Call).Times(AtLeast(0));
   RequestConnectionWifiLanFail(endpoint_id, std::move(channel_a),
                                channel_b.get(), &client, &pcp_handler);
-  NEARBY_LOGS(INFO) << "RequestConnection complete";
+  LOG(INFO) << "RequestConnection complete";
   channel_b->Close();
   bwu.Shutdown();
   pcp_handler.DisconnectFromEndpointManager();
@@ -1152,7 +1151,7 @@ TEST_P(BasePcpHandlerTest, RequestConnectionChangesState) {
   EXPECT_CALL(mock_connection_listener_.rejected_cb, Call).Times(AtLeast(0));
   RequestConnection("1234", std::move(channel_a), channel_b.get(), &client,
                     &pcp_handler, connect_medium);
-  NEARBY_LOGS(INFO) << "RequestConnection complete";
+  LOG(INFO) << "RequestConnection complete";
   channel_b->Close();
   bwu.Shutdown();
   pcp_handler.DisconnectFromEndpointManager();
@@ -1197,7 +1196,7 @@ TEST_P(BasePcpHandlerTest, CanRequestConnectionPresence) {
   EXPECT_CALL(mock_connection_listener_.rejected_cb, Call).Times(AtLeast(0));
   RequestConnection("1234", std::move(channel_a), channel_b.get(), &client,
                     &pcp_handler, connect_medium);
-  NEARBY_LOGS(INFO) << "RequestConnection complete";
+  LOG(INFO) << "RequestConnection complete";
   channel_b->Close();
   bwu.Shutdown();
   pcp_handler.DisconnectFromEndpointManager();
@@ -1227,7 +1226,7 @@ TEST_P(BasePcpHandlerTest, CanRequestConnectionLegacy) {
   EXPECT_CALL(mock_connection_listener_.rejected_cb, Call).Times(AtLeast(0));
   RequestConnection("1234", std::move(channel_a), channel_b.get(), &client,
                     &pcp_handler, connect_medium);
-  NEARBY_LOGS(INFO) << "RequestConnection complete";
+  LOG(INFO) << "RequestConnection complete";
   channel_b->Close();
   bwu.Shutdown();
   pcp_handler.DisconnectFromEndpointManager();
@@ -1258,7 +1257,7 @@ TEST_P(BasePcpHandlerTest, RequestConnectionV3) {
   EXPECT_CALL(mock_connection_listener_.rejected_cb, Call).Times(AtLeast(0));
   RequestConnectionV3(mock_device_, std::move(channel_a), channel_b.get(),
                       &client, &pcp_handler, connect_medium, &provider);
-  NEARBY_LOGS(INFO) << "RequestConnectionV3 complete";
+  LOG(INFO) << "RequestConnectionV3 complete";
   channel_b->Close();
   bwu.Shutdown();
   pcp_handler.DisconnectFromEndpointManager();
@@ -1293,7 +1292,7 @@ TEST_P(BasePcpHandlerTest, RequestConnectionV3_AuthenticationFailure) {
       &pcp_handler, connect_medium, &provider, /*flag=*/nullptr,
       /*expected_result=*/{Status::kSuccess},
       /*expected_authentication_status=*/AuthenticationStatus::kFailure);
-  NEARBY_LOGS(INFO) << "RequestConnectionV3 complete";
+  LOG(INFO) << "RequestConnectionV3 complete";
   channel_b->Close();
   bwu.Shutdown();
   pcp_handler.DisconnectFromEndpointManager();
@@ -1369,7 +1368,7 @@ TEST_P(BasePcpHandlerTest, RequestConnectionV3_ConnectImplFailure) {
   EXPECT_EQ(pcp_handler.RequestConnectionV3(&client, mock_device_, info,
                                             connection_options),
             expected_result);
-  NEARBY_LOGS(INFO) << "RequestConnectionV3 complete";
+  LOG(INFO) << "RequestConnectionV3 complete";
   channel_b->Close();
   bwu.Shutdown();
   pcp_handler.DisconnectFromEndpointManager();
@@ -1444,7 +1443,7 @@ TEST_P(BasePcpHandlerTest, RequestConnection_ConnectImplFailure) {
   EXPECT_EQ(pcp_handler.RequestConnection(&client, std::string(kTestEndpointId),
                                           info, connection_options),
             expected_result);
-  NEARBY_LOGS(INFO) << "RequestConnection complete";
+  LOG(INFO) << "RequestConnection complete";
   channel_b->Close();
   bwu.Shutdown();
   pcp_handler.DisconnectFromEndpointManager();
@@ -1472,7 +1471,7 @@ TEST_P(BasePcpHandlerTest, IoError_RequestConnectionV3Fails) {
   RequestConnectionV3(mock_device_, std::move(channel_a), channel_b.get(),
                       &client, &pcp_handler, connect_medium, nullptr, nullptr,
                       {Status::kEndpointIoError});
-  NEARBY_LOGS(INFO) << "RequestConnectionV3 complete";
+  LOG(INFO) << "RequestConnectionV3 complete";
   channel_b->Close();
   bwu.Shutdown();
   pcp_handler.DisconnectFromEndpointManager();
@@ -1501,7 +1500,7 @@ TEST_P(BasePcpHandlerTest, IoError_RequestConnectionFails) {
   RequestConnection(endpoint_id, std::move(channel_a), channel_b.get(), &client,
                     &pcp_handler, connect_medium, nullptr,
                     {Status::kEndpointIoError});
-  NEARBY_LOGS(INFO) << "RequestConnection complete";
+  LOG(INFO) << "RequestConnection complete";
   channel_b->Close();
   bwu.Shutdown();
   pcp_handler.DisconnectFromEndpointManager();
@@ -1527,11 +1526,11 @@ TEST_P(BasePcpHandlerTest, AcceptConnectionChangesState) {
   EXPECT_CALL(*channel_b, CloseImpl).Times(1);
   RequestConnection(endpoint_id, std::move(channel_a), channel_b.get(), &client,
                     &pcp_handler, connect_medium);
-  NEARBY_LOGS(INFO) << "Attempting to accept connection: id=" << endpoint_id;
+  LOG(INFO) << "Attempting to accept connection: id=" << endpoint_id;
   EXPECT_EQ(pcp_handler.AcceptConnection(&client, endpoint_id, {}),
             Status{Status::kSuccess});
   EXPECT_CALL(mock_connection_listener_.rejected_cb, Call).Times(AtLeast(0));
-  NEARBY_LOGS(INFO) << "Closing connection: id=" << endpoint_id;
+  LOG(INFO) << "Closing connection: id=" << endpoint_id;
   channel_b->Close();
   bwu.Shutdown();
   pcp_handler.DisconnectFromEndpointManager();
@@ -1555,10 +1554,10 @@ TEST_P(BasePcpHandlerTest, RejectConnectionChangesState) {
   EXPECT_CALL(mock_connection_listener_.rejected_cb, Call).Times(1);
   RequestConnection(endpoint_id, std::move(channel_pair.first), channel_b.get(),
                     &client, &pcp_handler, connect_medium);
-  NEARBY_LOGS(INFO) << "Attempting to reject connection: id=" << endpoint_id;
+  LOG(INFO) << "Attempting to reject connection: id=" << endpoint_id;
   EXPECT_EQ(pcp_handler.RejectConnection(&client, endpoint_id),
             Status{Status::kSuccess});
-  NEARBY_LOGS(INFO) << "Closing connection: id=" << endpoint_id;
+  LOG(INFO) << "Closing connection: id=" << endpoint_id;
   channel_b->Close();
   bwu.Shutdown();
   pcp_handler.DisconnectFromEndpointManager();
@@ -1585,20 +1584,20 @@ TEST_P(BasePcpHandlerTest, OnIncomingFrameChangesState) {
   EXPECT_CALL(*channel_b, CloseImpl).Times(1);
   RequestConnection(endpoint_id, std::move(channel_a), channel_b.get(), &client,
                     &pcp_handler, connect_medium);
-  NEARBY_LOGS(INFO) << "Attempting to accept connection: id=" << endpoint_id;
+  LOG(INFO) << "Attempting to accept connection: id=" << endpoint_id;
   EXPECT_CALL(mock_connection_listener_.accepted_cb, Call).Times(1);
   EXPECT_CALL(mock_connection_listener_.disconnected_cb, Call)
       .Times(AtLeast(0));
   EXPECT_EQ(pcp_handler.AcceptConnection(&client, endpoint_id, {}),
             Status{Status::kSuccess});
-  NEARBY_LOGS(INFO) << "Simulating remote accept: id=" << endpoint_id;
+  LOG(INFO) << "Simulating remote accept: id=" << endpoint_id;
   OsInfo os_info;
   auto frame = parser::FromBytes(parser::ForConnectionResponse(
       Status::kSuccess, os_info, /*multiplex_socket_bitmask=*/0));
   EXPECT_CALL(mock_connection_listener_.bandwidth_changed_cb, Call).Times(1);
   pcp_handler.OnIncomingFrame(frame.result(), endpoint_id, &client,
                               connect_medium, packet_meta_data);
-  NEARBY_LOGS(INFO) << "Closing connection: id=" << endpoint_id;
+  LOG(INFO) << "Closing connection: id=" << endpoint_id;
   channel_b->Close();
   bwu.Shutdown();
   pcp_handler.DisconnectFromEndpointManager();
@@ -1628,11 +1627,11 @@ TEST_P(BasePcpHandlerTest, DestructorIsCalledOnProtocolEndpoint) {
     RequestConnection(endpoint_id, std::move(channel_a), channel_b.get(),
                       &client, &pcp_handler, connect_medium, &destroyed_flag);
     mediums_count = mediums.size();
-    NEARBY_LOGS(INFO) << "Attempting to accept connection: id=" << endpoint_id;
+    LOG(INFO) << "Attempting to accept connection: id=" << endpoint_id;
     EXPECT_EQ(pcp_handler.AcceptConnection(&client, endpoint_id, {}),
               Status{Status::kSuccess});
     EXPECT_CALL(mock_connection_listener_.rejected_cb, Call).Times(AtLeast(0));
-    NEARBY_LOGS(INFO) << "Closing connection: id=" << endpoint_id;
+    LOG(INFO) << "Closing connection: id=" << endpoint_id;
     channel_b->Close();
     bwu.Shutdown();
     pcp_handler.DisconnectFromEndpointManager();
@@ -1672,7 +1671,7 @@ TEST_P(BasePcpHandlerTest, MultipleMediumsProduceSingleEndpointLostEvent) {
                       &client, &pcp_handler, connect_medium, &destroyed_flag);
     auto allowed_mediums = pcp_handler.GetDiscoveryMediums(&client);
     mediums_count = allowed_mediums.size();
-    NEARBY_LOGS(INFO) << "Attempting to accept connection: id=" << endpoint_id;
+    LOG(INFO) << "Attempting to accept connection: id=" << endpoint_id;
     EXPECT_EQ(pcp_handler.AcceptConnection(&client, endpoint_id, {}),
               Status{Status::kSuccess});
     EXPECT_CALL(mock_connection_listener_.rejected_cb, Call).Times(AtLeast(0));
@@ -1685,7 +1684,7 @@ TEST_P(BasePcpHandlerTest, MultipleMediumsProduceSingleEndpointLostEvent) {
     }
     EXPECT_EQ(pcp_handler.GetDiscoveredEndpoint(endpoint_id), nullptr);
     EXPECT_FALSE(client.IsConnectedToEndpoint(endpoint_id));
-    NEARBY_LOGS(INFO) << "Closing connection: id=" << endpoint_id;
+    LOG(INFO) << "Closing connection: id=" << endpoint_id;
     channel_b->Close();
     bwu.Shutdown();
     pcp_handler.DisconnectFromEndpointManager();

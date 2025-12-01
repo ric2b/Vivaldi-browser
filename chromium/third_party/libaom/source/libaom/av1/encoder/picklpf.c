@@ -222,6 +222,23 @@ void av1_pick_filter_level(const YV12_BUFFER_CONFIG *sd, AV1_COMP *cpi,
   lf->sharpness_level =
       cpi->oxcf.mode == ALLINTRA ? cpi->oxcf.algo_cfg.sharpness : 0;
 
+  if (cpi->oxcf.algo_cfg.enable_adaptive_sharpness) {
+    // Loop filter sharpness levels are highly nonlinear. Visually, lf sharpness
+    // 1 is closer to 7 than it is to 0, so in practice adaptive sharpness is
+    // written to pick levels 0, 1 and 7 to keep it simple.
+    int max_lf_sharpness;
+
+    if (cm->quant_params.base_qindex <= 120) {
+      max_lf_sharpness = 7;
+    } else if (cm->quant_params.base_qindex <= 160) {
+      max_lf_sharpness = 1;
+    } else {
+      max_lf_sharpness = 0;
+    }
+
+    lf->sharpness_level = AOMMIN(lf->sharpness_level, max_lf_sharpness);
+  }
+
   if (cpi->oxcf.tune_cfg.content == AOM_CONTENT_SCREEN &&
       cpi->oxcf.q_cfg.aq_mode == CYCLIC_REFRESH_AQ &&
       cpi->sf.rt_sf.skip_lf_screen)

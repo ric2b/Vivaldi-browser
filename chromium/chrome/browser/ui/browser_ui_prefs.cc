@@ -76,6 +76,10 @@ void RegisterBrowserPrefs(PrefRegistrySimple* registry) {
   registry->RegisterIntegerPref(prefs::kDefaultBrowserDeclinedCount, 0);
   registry->RegisterTimePref(prefs::kDefaultBrowserFirstShownTime,
                              base::Time());
+#if BUILDFLAG(IS_WIN)
+  registry->RegisterTimePref(prefs::kPinInfoBarLastShown, base::Time());
+  registry->RegisterIntegerPref(prefs::kPinInfoBarTimesShown, 0);
+#endif  // BUILDFLAG(IS_WIN)
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
   registry->RegisterTimePref(prefs::kPdfInfoBarLastShown, base::Time());
   registry->RegisterIntegerPref(prefs::kPdfInfoBarTimesShown, 0);
@@ -127,6 +131,7 @@ void RegisterBrowserUserPrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterStringPref(prefs::kWebRTCIPHandlingPolicy,
                                blink::kWebRTCIPHandlingDefault);
   registry->RegisterListPref(prefs::kWebRTCIPHandlingUrl, base::Value::List());
+  registry->RegisterBooleanPref(prefs::kWebRTCPostQuantumKeyAgreement, false);
   registry->RegisterStringPref(prefs::kWebRTCUDPPortRange, std::string());
   registry->RegisterBooleanPref(prefs::kWebRtcEventLogCollectionAllowed, false);
   registry->RegisterListPref(prefs::kWebRtcLocalIpsAllowedUrls);

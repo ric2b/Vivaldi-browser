@@ -204,7 +204,7 @@ struct ResultType {
   template <typename L, typename R, typename... Args>                   \
   constexpr CLASS##Numeric<                                             \
       typename ResultType<CLASS##OP_NAME##Op, L, R, Args...>::type>     \
-      CL_ABBR##OP_NAME(const L lhs, const R rhs, const Args... args) {  \
+  CL_ABBR##OP_NAME(const L lhs, const R rhs, const Args... args) {      \
     return CL_ABBR##MathOp<CLASS##OP_NAME##Op, L, R, Args...>(lhs, rhs, \
                                                               args...); \
   }

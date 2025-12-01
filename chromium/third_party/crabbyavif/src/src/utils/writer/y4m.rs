@@ -105,7 +105,9 @@ impl Y4MWriter {
 
 impl Writer for Y4MWriter {
     fn write_frame(&mut self, file: &mut File, image: &Image) -> AvifResult<()> {
-        if !self.skip_headers {
+        if self.skip_headers {
+            self.write_alpha = true;
+        } else {
             self.write_header(file, image)?;
             let frame_marker = "FRAME\n";
             file.write_all(frame_marker.as_bytes())

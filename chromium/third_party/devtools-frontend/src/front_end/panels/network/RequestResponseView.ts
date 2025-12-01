@@ -94,7 +94,7 @@ export const DEFAULT_VIEW: View = (input: ViewInput, output: ViewOutput, target:
     widget = html`<devtools-widget
                     .widgetConfig=${widgetConfig(element => new SourceFrame.ResourceSourceFrame.SearchableContainer(
                         input.request, input.mimeType, element))}
-                    ${widgetRef(SourceFrame.ResourceSourceFrame.SearchableContainer, widget => {output.revealPosition = widget.revealPosition.bind(this);})}></devtools-widget>`;
+                    ${widgetRef(SourceFrame.ResourceSourceFrame.SearchableContainer, widget => {output.revealPosition = widget.revealPosition.bind(widget);})}></devtools-widget>`;
     // clang-format on
   } else {
     // clang-format off
@@ -105,7 +105,7 @@ export const DEFAULT_VIEW: View = (input: ViewInput, output: ViewOutput, target:
     // clang-format on
   }
 
-  render(widget, target, {host: input});
+  render(widget, target);
 };
 
 export class RequestResponseView extends UI.Widget.VBox {

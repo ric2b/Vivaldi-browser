@@ -3,18 +3,18 @@ struct S {
   int b;
 };
 
-ByteAddressBuffer sb : register(t0);
 
-S sb_load(uint offset) {
-  S tint_symbol_3 = {asfloat(sb.Load4((offset + 0u))), asint(sb.Load((offset + 16u)))};
-  return tint_symbol_3;
+ByteAddressBuffer sb : register(t0);
+S v(uint offset) {
+  S v_1 = {asfloat(sb.Load4((offset + 0u))), asint(sb.Load((offset + 16u)))};
+  return v_1;
 }
 
 [numthreads(1, 1, 1)]
 void main() {
-  uint tint_symbol_1 = 0u;
-  sb.GetDimensions(tint_symbol_1);
-  uint tint_symbol_2 = (tint_symbol_1 / 32u);
-  S x = sb_load((32u * min(1u, (tint_symbol_2 - 1u))));
-  return;
+  uint v_2 = 0u;
+  sb.GetDimensions(v_2);
+  uint v_3 = ((v_2 / 32u) - 1u);
+  S x = v((0u + (min(uint(int(1)), v_3) * 32u)));
 }
+

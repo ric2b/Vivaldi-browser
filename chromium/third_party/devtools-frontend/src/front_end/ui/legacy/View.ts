@@ -34,7 +34,7 @@ export class SimpleView extends VBox implements View {
   readonly #viewId: Lowercase<string>;
 
   constructor(title: Platform.UIString.LocalizedString, useShadowDom?: boolean, viewId?: Lowercase<string>) {
-    super(useShadowDom);
+    super({useShadowDom});
     this.#title = title;
     if (viewId) {
       if (!Platform.StringUtilities.isExtendedKebabCase(viewId)) {
@@ -89,6 +89,7 @@ export interface ViewLocation {
   appendView(view: View, insertBefore?: View|null): void;
   showView(view: View, insertBefore?: View|null, userGesture?: boolean): Promise<void>;
   removeView(view: View): void;
+  isViewVisible(view: View): boolean;
   widget(): Widget;
 }
 

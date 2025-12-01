@@ -129,7 +129,6 @@ tint_add_target(tint_lang_wgsl_resolver_test test
   lang/wgsl/resolver/f16_extension_test.cc
   lang/wgsl/resolver/framebuffer_fetch_extension_test.cc
   lang/wgsl/resolver/function_validation_test.cc
-  lang/wgsl/resolver/graphite_extension_test.cc
   lang/wgsl/resolver/host_shareable_validation_test.cc
   lang/wgsl/resolver/increment_decrement_validation_test.cc
   lang/wgsl/resolver/inferred_type_test.cc
@@ -140,6 +139,7 @@ tint_add_target(tint_lang_wgsl_resolver_test test
   lang/wgsl/resolver/materialize_test.cc
   lang/wgsl/resolver/override_test.cc
   lang/wgsl/resolver/pixel_local_extension_test.cc
+  lang/wgsl/resolver/primitive_id_extension_test.cc
   lang/wgsl/resolver/ptr_ref_test.cc
   lang/wgsl/resolver/ptr_ref_validation_test.cc
   lang/wgsl/resolver/resolver_behavior_test.cc
@@ -153,6 +153,7 @@ tint_add_target(tint_lang_wgsl_resolver_test test
   lang/wgsl/resolver/struct_pipeline_stage_use_test.cc
   lang/wgsl/resolver/subgroup_matrix_test.cc
   lang/wgsl/resolver/subgroups_extension_test.cc
+  lang/wgsl/resolver/texel_buffer_test.cc
   lang/wgsl/resolver/type_validation_test.cc
   lang/wgsl/resolver/unresolved_identifier_test.cc
   lang/wgsl/resolver/validation_test.cc

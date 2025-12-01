@@ -19,6 +19,8 @@
 #include "base/functional/callback_helpers.h"
 #include "base/i18n/break_iterator.h"
 #include "base/i18n/message_formatter.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/collaboration/internal/messaging/data_sharing_change_notifier_impl.h"
 #include "components/collaboration/internal/messaging/storage/collaboration_message_util.h"
@@ -989,8 +991,10 @@ void MessagingBackendServiceImpl::OnTabUpdated(
       (is_local || triggering_user_is_self)
           ? DirtyType::kNone
           : (is_selected ? DirtyType::kChip : DirtyType::kDotAndChip);
-  if (HasSeenTabUpdate(updated_tab)) {
-    dirty_type = DirtyType::kNone;
+  if (HasSeenTabUpdate(updated_tab) && dirty_type != DirtyType::kNone) {
+    // If the tab has been seen before, we should not show dirty dots, only
+    // the chip.
+    dirty_type = DirtyType::kChip;
   }
 
   collaboration_pb::Message message =

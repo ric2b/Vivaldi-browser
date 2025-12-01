@@ -139,6 +139,16 @@
             continuationProvider:continuationProvider];
 }
 
+- (void)dealloc {
+  CHECK(!self.navigationController, base::NotFatalUntil::M142);
+  CHECK(!self.defaultAccountCoordinator, base::NotFatalUntil::M142);
+  CHECK(!self.alertCoordinator, base::NotFatalUntil::M142);
+  CHECK(!self.accountChooserCoordinator, base::NotFatalUntil::M142);
+  CHECK(!self.addAccountCoordinator, base::NotFatalUntil::M142);
+  CHECK(!self.reauthCoordinator, base::NotFatalUntil::M142);
+  CHECK(!self.consistencyPromoSigninMediator, base::NotFatalUntil::M142);
+}
+
 #pragma mark - ChromeCoordinator
 
 - (void)start {
@@ -225,7 +235,7 @@
                     completionIdentity:completionIdentity];
 }
 
-#pragma mark - StopAnimatedSigninCoordinator
+#pragma mark - AnimatedCoordinator
 
 - (void)stopAnimated:(BOOL)animated {
   [self stopAlertCoordinator];
@@ -242,6 +252,7 @@
   // nothing.
   [self disconnectMediatorWithResult:SigninCoordinatorResultInterrupted];
   [self stopAccountChooserCoordinator];
+  [self stopReauthCoordinator];
   [super stopAnimated:animated];
 }
 
@@ -277,7 +288,7 @@
       initWithBaseViewController:self.navigationController
                          browser:self.browser
                          account:account
-                     accessPoint:self.accessPoint];
+               signinAccessPoint:self.accessPoint];
   self.reauthCoordinator.delegate = self;
   [self.reauthCoordinator start];
 }
@@ -307,6 +318,7 @@
 }
 
 - (void)stopReauthCoordinator {
+  self.reauthCoordinator.delegate = nil;
   [self.reauthCoordinator stop];
   self.reauthCoordinator = nil;
 }
@@ -350,6 +362,10 @@
 // If `hasAccounts == NO`, the added account will be used to sign in to Chrome
 // directly after the AddAccountSigninCoordinator finishes.
 - (void)openAddAccountCoordinatorWithHasAccounts:(BOOL)hasAccounts {
+  // In case of double-tap, we must stop the first coordinator. This may occur
+  // because, up to iOS 18, the view may have disappeared without calling the
+  // signin completion. See crbug.com/395959814
+  [self.addAccountCoordinator stop];
   if (hasAccounts) {
     RecordConsistencyPromoUserAction(
         signin_metrics::AccountConsistencyPromoAction::ADD_ACCOUNT_STARTED,
@@ -360,7 +376,6 @@
             ADD_ACCOUNT_STARTED_WITH_NO_DEVICE_ACCOUNT,
         self.accessPoint);
   }
-  DCHECK(!self.addAccountCoordinator);
   self.addAccountCoordinator = [SigninCoordinator
       addAccountCoordinatorWithBaseViewController:self.navigationController
                                           browser:self.browser
@@ -408,6 +423,14 @@
   [self openAddAccountCoordinatorWithHasAccounts:YES];
 }
 
+- (void)consistencyAccountChooserCoordinatorWantsToBeStopped:
+    (ConsistencyAccountChooserCoordinator*)coordinator {
+  CHECK_EQ(coordinator, self.accountChooserCoordinator,
+           base::NotFatalUntil::M140);
+  [self stopAccountChooserCoordinator];
+  [self.navigationController popViewControllerAnimated:YES];
+}
+
 #pragma mark - ConsistencyDefaultAccountCoordinatorDelegate
 
 - (void)consistencyDefaultAccountCoordinatorSkip:
@@ -430,12 +453,12 @@
     (ConsistencyDefaultAccountCoordinator*)coordinator {
   self.accountChooserCoordinator = [[ConsistencyAccountChooserCoordinator alloc]
       initWithBaseViewController:self.navigationController
-                         browser:self.browser];
+                         browser:self.browser
+                selectedIdentity:self.defaultAccountCoordinator
+                                     .selectedIdentity];
   self.accountChooserCoordinator.delegate = self;
   self.accountChooserCoordinator.layoutDelegate = self;
-  [self.accountChooserCoordinator
-      startWithSelectedIdentity:self.defaultAccountCoordinator
-                                    .selectedIdentity];
+  [self.accountChooserCoordinator start];
   [self.navigationController
       pushViewController:self.accountChooserCoordinator.viewController
                 animated:YES];
@@ -514,6 +537,8 @@
   if (self.navigationController.viewControllers.count == 1 &&
       self.accountChooserCoordinator) {
     // AccountChooserCoordinator has been removed by "Back" button.
+    base::RecordAction(base::UserMetricsAction(
+        "Signin_BottomSheet_IdentityChooser_ClosedByUser"));
     [self stopAccountChooserCoordinator];
   }
 }
@@ -547,6 +572,15 @@
   [self dismissViewControllerAnimated:YES];
   [self runCompletionWithSigninResult:SigninCoordinatorResultSuccess
                    completionIdentity:completionIdentity];
+}
+
+- (void)consistencyPromoSigninMediatorSignInIsImpossible:
+    (ConsistencyPromoSigninMediator*)mediator {
+  CHECK_EQ(self.consistencyPromoSigninMediator, mediator,
+           base::NotFatalUntil::M143);
+  [self dismissViewControllerAnimated:YES];
+  [self runCompletionWithSigninResult:SigninCoordinatorResultInterrupted
+                   completionIdentity:nil];
 }
 
 - (void)consistencyPromoSigninMediatorSignInCancelled:

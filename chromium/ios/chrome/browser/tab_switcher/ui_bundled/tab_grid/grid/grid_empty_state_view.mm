@@ -7,6 +7,7 @@
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/tab_grid_constants.h"
+#import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util.h"
@@ -33,18 +34,7 @@ const CGFloat kImageWidth = 150.0;
 UIImage* ImageForPage(TabGridPage page) {
 
   if (IsVivaldiRunning()) {
-    switch (page) {
-      case TabGridPageIncognitoTabs:
-        return [UIImage imageNamed:vTabGridEmptyStatePrivateTabsImage];
-      case TabGridPageRegularTabs:
-        return [UIImage imageNamed:vTabGridEmptyStateRegularTabsImage];
-      case TabGridPageRemoteTabs:
-        return [UIImage imageNamed:vTabGridEmptyStateSyncedTabsImage];
-      case TabGridPageClosedTabs:
-        return [UIImage imageNamed:vTabGridEmptyStateClosedTabsImage];
-      case TabGridPageTabGroups:
-        return [[UIImage alloc] init];
-    }
+    return nil;
   } // End Vivaldi
 
   switch (page) {
@@ -52,13 +42,11 @@ UIImage* ImageForPage(TabGridPage page) {
       return [UIImage imageNamed:@"tab_grid_incognito_tabs_empty"];
     case TabGridPageRegularTabs:
       return [UIImage imageNamed:@"tab_grid_regular_tabs_empty"];
-    case TabGridPageRemoteTabs:
-      // No-op. Empty page.
-      break;
     case TabGridPageTabGroups:
       return [UIImage imageNamed:@"tab_grid_tab_groups_empty"];
 
     // Vivaldi
+    case TabGridPageRemoteTabs:
     case TabGridPageClosedTabs:
       break;
     // End Vivaldi
@@ -88,7 +76,8 @@ NSString* TitleForPageAndMode(TabGridPage page, TabGridMode mode) {
         return l10n_util::GetNSString(
             IDS_VIVALDI_TAB_SWITCHER_RECENTLY_CLOSED_TABS_EMPTY_TITLE);
       case TabGridPageTabGroups:
-        return @"";
+        return l10n_util::GetNSString(
+             IDS_VIVALDI_TAB_SWITCHER_TAB_STACKS_EMPTY_TITLE);
     }
   } // End Vivaldi
 
@@ -98,15 +87,13 @@ NSString* TitleForPageAndMode(TabGridPage page, TabGridMode mode) {
           IDS_IOS_TAB_GRID_INCOGNITO_TABS_EMPTY_TITLE);
     case TabGridPageRegularTabs:
       return l10n_util::GetNSString(IDS_IOS_TAB_GRID_REGULAR_TABS_EMPTY_TITLE);
-    case TabGridPageRemoteTabs:
-      // No-op. Empty page.
-      break;
     case TabGridPageTabGroups:
       return l10n_util::GetNSString(IDS_IOS_TAB_GRID_TAB_GROUPS_EMPTY_TITLE);
 
 
     // Vivaldi
     // The enum case has to be covered within switch statement
+    case TabGridPageRemoteTabs:
     case TabGridPageClosedTabs:
       break;
     // End Vivaldi
@@ -137,7 +124,8 @@ NSString* BodyTextForPageAndMode(TabGridPage page, TabGridMode mode) {
         return l10n_util::GetNSString(
             IDS_VIVALDI_TAB_SWITCHER_RECENTLY_CLOSED_TABS_EMPTY_MESSAGE);
       case TabGridPageTabGroups:
-        return @"";
+        return l10n_util::GetNSString(
+           IDS_VIVALDI_TAB_SWITCHER_TAB_STACKS_EMPTY_MESSAGE);
     }
   } // End Vivaldi
 
@@ -148,13 +136,11 @@ NSString* BodyTextForPageAndMode(TabGridPage page, TabGridMode mode) {
     case TabGridPageRegularTabs:
       return l10n_util::GetNSString(
           IDS_IOS_TAB_GRID_REGULAR_TABS_EMPTY_MESSAGE);
-    case TabGridPageRemoteTabs:
-      // No-op. Empty page.
-      break;
     case TabGridPageTabGroups:
       return l10n_util::GetNSString(IDS_IOS_TAB_GRID_TAB_GROUPS_EMPTY_MESSAGE);
 
     // Vivaldi
+    case TabGridPageRemoteTabs:
     case TabGridPageClosedTabs:
       break;
     // End Vivaldi
@@ -350,7 +336,7 @@ const CGFloat buttonContentsPadding = 20;
   _topLabel = topLabel;
   topLabel.translatesAutoresizingMaskIntoConstraints = NO;
   topLabel.text = TitleForPageAndMode(_activePage, _tabGridMode);
-  topLabel.textColor = UIColorFromRGB(kTabGridEmptyStateTitleTextColor);
+  topLabel.textColor = [UIColor colorNamed:kStaticGrey50Color];
   topLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleTitle2];
   topLabel.adjustsFontForContentSizeCategory = YES;
   topLabel.numberOfLines = 0;
@@ -360,7 +346,7 @@ const CGFloat buttonContentsPadding = 20;
   _bottomLabel = bottomLabel;
   bottomLabel.translatesAutoresizingMaskIntoConstraints = NO;
   bottomLabel.text = BodyTextForPageAndMode(_activePage, _tabGridMode);
-  bottomLabel.textColor = UIColorFromRGB(kTabGridEmptyStateBodyTextColor);
+  bottomLabel.textColor = [UIColor colorNamed:kStaticGrey400Color];
   bottomLabel.font =
       [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline];
   bottomLabel.adjustsFontForContentSizeCategory = YES;

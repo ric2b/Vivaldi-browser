@@ -23,6 +23,7 @@
 #include <string.h>
 
 #include "avtextwriters.h"
+#include "libavutil/avassert.h"
 
 #include "libavutil/error.h"
 
@@ -36,12 +37,14 @@ typedef struct IOWriterContext {
     int close_on_uninit;
 } IOWriterContext;
 
-static av_cold void iowriter_uninit(AVTextWriterContext *wctx)
+static av_cold int iowriter_uninit(AVTextWriterContext *wctx)
 {
     IOWriterContext *ctx = wctx->priv;
+    int ret = 0;
 
     if (ctx->close_on_uninit)
-        avio_closep(&ctx->avio_context);
+        ret = avio_closep(&ctx->avio_context);
+    return ret;
 }
 
 static void io_w8(AVTextWriterContext *wctx, int b)
@@ -53,17 +56,14 @@ static void io_w8(AVTextWriterContext *wctx, int b)
 static void io_put_str(AVTextWriterContext *wctx, const char *str)
 {
     IOWriterContext *ctx = wctx->priv;
-    avio_write(ctx->avio_context, str, strlen(str));
+    avio_write(ctx->avio_context, (const unsigned char *)str, (int)strlen(str));
 }
 
-static void io_printf(AVTextWriterContext *wctx, const char *fmt, ...)
+static void io_vprintf(AVTextWriterContext *wctx, const char *fmt, va_list vl)
 {
     IOWriterContext *ctx = wctx->priv;
-    va_list ap;
 
-    va_start(ap, fmt);
-    avio_vprintf(ctx->avio_context, fmt, ap);
-    va_end(ap);
+    avio_vprintf(ctx->avio_context, fmt, vl);
 }
 
 
@@ -72,7 +72,7 @@ const AVTextWriter avtextwriter_avio = {
     .priv_size            = sizeof(IOWriterContext),
     .uninit               = iowriter_uninit,
     .writer_put_str       = io_put_str,
-    .writer_printf        = io_printf,
+    .writer_vprintf       = io_vprintf,
     .writer_w8            = io_w8
 };
 
@@ -81,6 +81,10 @@ int avtextwriter_create_file(AVTextWriterContext **pwctx, const char *output_fil
     IOWriterContext *ctx;
     int ret;
 
+    if (!output_filename || !output_filename[0]) {
+        av_log(NULL, AV_LOG_ERROR, "The output_filename cannot be NULL or empty\n");
+        return AVERROR(EINVAL);
+    }
 
     ret = avtextwriter_context_open(pwctx, &avtextwriter_avio);
     if (ret < 0)
@@ -105,6 +109,8 @@ int avtextwriter_create_avio(AVTextWriterContext **pwctx, AVIOContext *avio_ctx,
 {
     IOWriterContext *ctx;
     int ret;
+
+    av_assert0(avio_ctx);
 
     ret = avtextwriter_context_open(pwctx, &avtextwriter_avio);
     if (ret < 0)

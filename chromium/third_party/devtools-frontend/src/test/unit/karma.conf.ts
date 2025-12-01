@@ -5,7 +5,7 @@
 /* eslint @typescript-eslint/no-explicit-any: 0 */
 
 import * as path from 'path';
-import type {Page, Target} from 'puppeteer-core';
+import type {Page, ScreenshotOptions, Target} from 'puppeteer-core';
 import puppeteer from 'puppeteer-core';
 
 import {formatAsPatch, resultAssertionsDiff, ResultsDBReporter} from '../../test/conductor/karma-resultsdb-reporter.js';
@@ -18,7 +18,10 @@ import {assertElementScreenshotUnchanged} from '../shared/screenshots.js';
 const COVERAGE_OUTPUT_DIRECTORY = 'karma-coverage';
 const REMOTE_DEBUGGING_PORT = 7722;
 
-const tests = loadTests(path.join(GEN_DIR, 'front_end'));
+const tests = [
+  ...loadTests(path.join(GEN_DIR, 'front_end')),
+  ...loadTests(path.join(GEN_DIR, 'inspector_overlay')),
+];
 
 function* reporters() {
   if (ResultsDb.available()) {
@@ -40,7 +43,7 @@ const CustomChrome = function(this: any, _baseBrowserDecorator: unknown, args: B
   this._execCommand = async function(_cmd: string, args: string[]) {
     const url = args.pop()!;
     const browser = await puppeteer.launch({
-      headless: !TestConfig.debug || TestConfig.headless,
+      headless: TestConfig.headless,
       executablePath: TestConfig.chromeBinary,
       defaultViewport: null,
       dumpio: true,
@@ -56,26 +59,40 @@ const CustomChrome = function(this: any, _baseBrowserDecorator: unknown, args: B
     const page = await browser.newPage();
 
     async function setupBindings(page: Page) {
-      await page.exposeFunction('assertScreenshot', async (elementSelector: string, filename: string) => {
-        try {
-          // Karma sometimes runs tests in an iframe or in the main frame.
-          const testFrame = page.frames()[1] ?? page.mainFrame();
-          const element = await testFrame.waitForSelector(elementSelector);
+      await page.exposeFunction(
+          'assertScreenshot',
+          async (
+              elementSelector: string,
+              filename: NonNullable<ScreenshotOptions['path']>,
+              ) => {
+            try {
+              // Karma sometimes runs tests in an iframe or in the main frame.
+              const testFrame = page.frames()[1] ?? page.mainFrame();
+              const element = await testFrame.waitForSelector(elementSelector);
 
-          await assertElementScreenshotUnchanged(element, filename, {
-            captureBeyondViewport: false,
+              await assertElementScreenshotUnchanged(element, filename, {
+                captureBeyondViewport: false,
+              });
+              return undefined;
+            } catch (error) {
+              if (error instanceof ScreenshotError) {
+                ScreenshotError.errors.push(error);
+              }
+              return `ScreenshotError: ${error.message}`;
+            }
           });
-          return undefined;
-        } catch (error) {
-          if (error instanceof ScreenshotError) {
-            ScreenshotError.errors.push(error);
-          }
-          return `ScreenshotError: ${error.message}`;
-        }
-      });
     }
 
-    await setupBindings(page);
+    async function disableAnimations(page: Page) {
+      const session = await page.createCDPSession();
+      await session.send('Animation.enable');
+      await session.send('Animation.setPlaybackRate', {playbackRate: 30_000});
+    }
+
+    await Promise.all([
+      setupBindings(page),
+      disableAnimations(page),
+    ]);
 
     browser.on('targetcreated', async (target: Target) => {
       if (target.type() === 'page') {
@@ -83,7 +100,10 @@ const CustomChrome = function(this: any, _baseBrowserDecorator: unknown, args: B
         if (!page) {
           return;
         }
-        await setupBindings(page);
+        await Promise.all([
+          setupBindings(page),
+          disableAnimations(page),
+        ]);
       }
     });
 
@@ -102,6 +122,7 @@ const CustomChrome = function(this: any, _baseBrowserDecorator: unknown, args: B
       '--disable-lcd-text',
       '--force-device-scale-factor=1',
       '--disable-device-discovery-notifications',
+      '--window-size=1280,768',
       ...args.flags,
       url,
     ];
@@ -165,6 +186,8 @@ module.exports = function(config: any) {
       {pattern: path.join(GEN_DIR, 'front_end/**/*.css'), served: true, included: false},
       {pattern: path.join(GEN_DIR, 'front_end/**/*.js'), served: true, included: false},
       {pattern: path.join(GEN_DIR, 'front_end/**/*.js.map'), served: true, included: false, watched: true},
+      {pattern: path.join(GEN_DIR, 'front_end/**/*.json'), served: true, included: false},
+      {pattern: path.join(GEN_DIR, 'front_end/**/*.md'), served: true, included: false},
       {pattern: path.join(GEN_DIR, 'front_end/**/*.mjs'), served: true, included: false},
       {pattern: path.join(GEN_DIR, 'front_end/**/*.mjs.map'), served: true, included: false},
       {pattern: path.join(SOURCE_ROOT, 'front_end/**/*.ts'), served: true, included: false, watched: false},
@@ -191,7 +214,7 @@ module.exports = function(config: any) {
       mocha: {
         ...TestConfig.mochaGrep,
         retries: TestConfig.retries,
-        timeout: 5_000,
+        timeout: TestConfig.debug ? 0 : 5_000,
       },
       remoteDebuggingPort: REMOTE_DEBUGGING_PORT,
     },

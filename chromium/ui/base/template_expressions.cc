@@ -157,6 +157,15 @@ bool ReplaceTemplateExpressionsInternal(
       break;
     }
 
+    size_t comment_pos = source.find("<!--", current_pos);
+    if (comment_pos != std::string::npos && comment_pos < next_pos) {
+      size_t comment_end = source.find("-->", comment_pos+ 4);
+      CHECK_NE(comment_end, std::string::npos);
+      formatted->append(source.data() + current_pos, comment_pos - current_pos);
+      current_pos = comment_end + 3;
+      continue;
+    }
+
     formatted->append(source.data() + current_pos, next_pos - current_pos);
     current_pos = next_pos + kLeaderSize;
 

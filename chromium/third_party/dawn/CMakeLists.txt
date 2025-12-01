@@ -26,13 +26,11 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 # As per https://github.com/google/oss-policies-info/blob/main/foundational-cxx-support-matrix.md
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.22)
 
 # - Since we are past CMake 3.12 we can add CONFIGURE_DEPENDS to DawnGenerator to rerun CMake
 #   in case any of the generator files changes. We should also remove the CACHE "" FORCE stuff to
 #   override options in third_party dependencies.
-# - When upgrading to CMake 3.20 we can take advantage of the GENERATED property being global in
-#   DawnGenerator. We should also use the path utilities in dawn_install_target.
 
 project(
     Dawn
@@ -183,7 +181,7 @@ option(DAWN_BUILD_TESTS "Enables building Dawn's tests" ${BUILD_TESTS})
 option(DAWN_BUILD_NODE_BINDINGS "Enables building Dawn's NodeJS bindings" OFF)
 option(DAWN_ENABLE_SWIFTSHADER "Enables building Swiftshader as part of the build and Vulkan adapter discovery" OFF)
 option(DAWN_BUILD_BENCHMARKS "Build Dawn benchmarks" OFF)
-option(DAWN_BUILD_PROTOBUF "Build the protobuf dependencies" OFF)
+option(DAWN_BUILD_PROTOBUF "Build the protobuf dependencies" ON)
 
 option(DAWN_WERROR "Build with -Werror (or equivalent)" OFF)
 option(DAWN_ENABLE_PIC "Build with Position-Independent-Code enabled" OFF)
@@ -238,13 +236,7 @@ option(TINT_BUILD_SPV_WRITER "Build the SPIR-V output writer" ${DAWN_ENABLE_VULK
 option(TINT_BUILD_WGSL_WRITER "Build the WGSL output writer" ON)
 option(TINT_BUILD_SYNTAX_TREE_WRITER "Build the syntax tree writer" OFF)
 
-if (DAWN_BUILD_PROTOBUF AND TARGET libprotobuf)
-  set(TINT_DEFAULT_BUILD_IR_BINARY ON)
-else()
-  set(TINT_DEFAULT_BUILD_IR_BINARY OFF)
-endif()
-
-option(TINT_BUILD_IR_BINARY "Build IR binary format support" ${TINT_DEFAULT_BUILD_IR_BINARY})
+option(TINT_BUILD_IR_BINARY "Build IR binary format support" ${DAWN_BUILD_PROTOBUF})
 option(TINT_BUILD_FUZZERS "Build fuzzers" OFF)
 option(TINT_BUILD_BENCHMARKS "Build Tint benchmarks" OFF)
 option(TINT_BUILD_TESTS "Build tests" ON)
@@ -335,11 +327,23 @@ message(STATUS "Webgpu IDL path: ${WEBGPU_IDL_PATH}")
 message(STATUS "Go exe: ${GO_EXECUTABLE}")
 message(STATUS "")
 
-option(DAWN_FETCH_DEPENDENCIES "Use fetch_dawn_dependencies.py as an alternative to using depot_tools" OFF)
-option(DAWN_BUILD_MONOLITHIC_LIBRARY "Bundle all dawn components into a single shared library." ON)
+# Handling of the type of monolithic library to build, if any.
+set(DAWN_BUILD_MONOLITHIC_LIBRARY "OFF" CACHE STRING "Build monolithic library: SHARED, STATIC, or OFF.")
+set_property(CACHE DAWN_BUILD_MONOLITHIC_LIBRARY PROPERTY STRINGS SHARED SHARED STATIC)
 
-message(STATUS "Dawn fetch dependencies: ${DAWN_FETCH_DEPENDENCIES}")
+string(TOUPPER "${DAWN_BUILD_MONOLITHIC_LIBRARY}" _option_upper)
+if(NOT _option_upper STREQUAL "OFF" AND
+   NOT _option_upper STREQUAL "SHARED" AND
+   NOT _option_upper STREQUAL "STATIC")
+    message(FATAL_ERROR "DAWN_BUILD_MONOLITHIC_LIBRARY must be SHARED, STATIC, or OFF, but was \"${DAWN_BUILD_MONOLITHIC_LIBRARY}\".")
+endif()
+if (DAWN_BUILD_MONOLITHIC_LIBRARY AND BUILD_SHARED_LIBS)
+    message(FATAL_ERROR "DAWN_BUILD_MONOLITHIC_LIBRARY SHARED/STATIC requires BUILD_SHARED_LIBS=OFF. Otherwise the bundled library will depend on other shared libraries which defeats the purpose.")
+endif()
 message(STATUS "Dawn build monolithic library: ${DAWN_BUILD_MONOLITHIC_LIBRARY}")
+
+option(DAWN_FETCH_DEPENDENCIES "Use fetch_dawn_dependencies.py as an alternative to using depot_tools" OFF)
+message(STATUS "Dawn fetch dependencies: ${DAWN_FETCH_DEPENDENCIES}")
 message(STATUS "")
 
 # Much of the backend code is shared among desktop OpenGL and OpenGL ES
@@ -387,7 +391,8 @@ endif()
 find_package(Python3 REQUIRED)
 message(STATUS "Dawn: using python at ${Python3_EXECUTABLE}")
 
-# Compile definitions for the internal config
+# Options and compile definitions for the internal config
+add_dependencies(dawn_internal_config dawn_warnings_config)
 if (DAWN_ALWAYS_ASSERT OR IS_DEBUG_BUILD)
     target_compile_definitions(dawn_internal_config INTERFACE "DAWN_ENABLE_ASSERTS")
 endif()

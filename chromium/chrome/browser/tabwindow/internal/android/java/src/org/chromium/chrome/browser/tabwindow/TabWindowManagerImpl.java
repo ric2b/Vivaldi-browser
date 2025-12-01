@@ -10,8 +10,6 @@ import android.app.Activity;
 import android.app.ActivityManager;
 import android.app.ActivityManager.AppTask;
 import android.content.Context;
-import android.os.Build.VERSION;
-import android.os.Build.VERSION_CODES;
 import android.util.Pair;
 import android.util.SparseArray;
 
@@ -136,11 +134,6 @@ public class TabWindowManagerImpl implements TabWindowManager {
     }
 
     @Override
-    public int getMaxSimultaneousSelectors() {
-        return mMaxSelectors;
-    }
-
-    @Override
     public @Nullable Pair<@WindowId Integer, TabModelSelector> requestSelector(
             Activity activity,
             ModalDialogManager modalDialogManager,
@@ -149,12 +142,12 @@ public class TabWindowManagerImpl implements TabWindowManager {
             NextTabPolicySupplier nextTabPolicySupplier,
             MismatchedIndicesHandler mismatchedIndicesHandler,
             @WindowId int windowId) {
-        if (windowId < 0 || windowId >= mMaxSelectors) return null;
+        if (windowId == INVALID_WINDOW_ID) return null;
 
         // Return the already existing selector if found.
         if (mActivityAssignments.get(activity) != null) {
             TabModelSelector assignedSelector = mActivityAssignments.get(activity);
-            for (int i = 0; i < mMaxSelectors; i++) {
+            for (Integer i : mSelectorsToWindowId.values()) {
                 if (mWindowIdToSelectors.get(i) == assignedSelector) {
                     @WindowId
                     int existingWindowId =
@@ -228,7 +221,7 @@ public class TabWindowManagerImpl implements TabWindowManager {
     @Override
     public @Nullable TabModelSelector requestSelectorWithoutActivity(
             @WindowId int windowId, Profile profile) {
-        if (windowId < 0 || windowId >= mMaxSelectors) return null;
+        if (windowId == INVALID_WINDOW_ID) return null;
 
         if (mWindowIdToSelectors.containsKey(windowId)) {
             return mWindowIdToSelectors.get(windowId);
@@ -271,9 +264,7 @@ public class TabWindowManagerImpl implements TabWindowManager {
             Activity newActivity,
             MismatchedIndicesHandler mismatchedIndicesHandler) {
         @WindowId int assignedWindowId = originallyAssignedWindowId;
-        if (requestedWindowId == originallyAssignedWindowId
-                // Needed for ActivityManager.RecentTaskInfo.taskId
-                || VERSION.SDK_INT < VERSION_CODES.Q) {
+        if (requestedWindowId == originallyAssignedWindowId) {
             return assignedWindowId;
         }
 
@@ -548,7 +539,7 @@ public class TabWindowManagerImpl implements TabWindowManager {
     }
 
     @Override
-    public void setArchivedTabModelSelector(TabModelSelector archivedTabModelSelector) {
+    public void setArchivedTabModelSelector(@Nullable TabModelSelector archivedTabModelSelector) {
         mArchivedTabModelSelector = archivedTabModelSelector;
     }
 

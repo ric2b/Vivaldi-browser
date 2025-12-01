@@ -94,3 +94,54 @@ impl From<&GainMap> for avifGainMap {
         }
     }
 }
+
+impl From<&avifGainMap> for GainMap {
+    fn from(gainmap: &avifGainMap) -> Self {
+        Self {
+            image: deref_const!(gainmap.image).into(),
+            metadata: GainMapMetadata {
+                min: gainmap.gainMapMin,
+                max: gainmap.gainMapMax,
+                gamma: gainmap.gainMapGamma,
+                base_offset: gainmap.baseOffset,
+                alternate_offset: gainmap.alternateOffset,
+                base_hdr_headroom: gainmap.baseHdrHeadroom,
+                alternate_hdr_headroom: gainmap.alternateHdrHeadroom,
+                use_base_color_space: gainmap.useBaseColorSpace != 0,
+            },
+            alt_icc: (&gainmap.altICC).into(),
+            alt_color_primaries: gainmap.altColorPrimaries,
+            alt_transfer_characteristics: gainmap.altTransferCharacteristics,
+            alt_matrix_coefficients: gainmap.altMatrixCoefficients,
+            alt_yuv_range: gainmap.altYUVRange,
+            alt_plane_depth: gainmap.altDepth as u8,
+            alt_plane_count: gainmap.altPlaneCount as u8,
+            alt_clli: gainmap.altCLLI,
+        }
+    }
+}
+
+/// # Safety
+/// C API function that does not perform any unsafe operation.
+#[no_mangle]
+pub unsafe extern "C" fn crabby_avifGainMapCreate() -> *mut avifGainMap {
+    Box::into_raw(Box::<avifGainMap>::default())
+}
+
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if gainmap is not null, it has to point to a buffer allocated by crabby_avifGainMapCreate.
+#[no_mangle]
+pub unsafe extern "C" fn crabby_avifGainMapDestroy(gainmap: *mut avifGainMap) {
+    if gainmap.is_null() {
+        return;
+    }
+    // SAFETY: Safe because of the pre-condition and the null check.
+    let gainmap = unsafe { Box::from_raw(gainmap) };
+    if !gainmap.image.is_null() {
+        // SAFETY: Pre-conditions are met to call this function.
+        unsafe {
+            crabby_avifImageDestroy(gainmap.image);
+        }
+    }
+}

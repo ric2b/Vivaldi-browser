@@ -9,6 +9,8 @@
  * PATENTS file, you can obtain it at www.aomedia.org/license/patent.
  */
 
+#include <stdbool.h>
+
 #include "av1/common/av1_common_int.h"
 #include "av1/common/cfl.h"
 #include "av1/common/reconintra.h"
@@ -376,6 +378,28 @@ void av1_count_colors_highbd(const uint8_t *src8, int stride, int rows,
     }
     *num_colors = n;
   }
+}
+
+bool av1_count_colors_with_threshold(const uint8_t *src, int stride, int rows,
+                                     int cols, int num_colors_threshold,
+                                     int *num_colors) {
+  bool has_color[1 << 8] = { false };
+  *num_colors = 0;
+
+  for (int r = 0; r < rows; ++r) {
+    for (int c = 0; c < cols; ++c) {
+      const int this_val = src[r * stride + c];
+      if (!has_color[this_val]) {
+        has_color[this_val] = true;
+        (*num_colors)++;
+        if (*num_colors > num_colors_threshold) {
+          // We're over the threshold, so we can exit early
+          return false;
+        }
+      }
+    }
+  }
+  return true;
 }
 
 void set_y_mode_and_delta_angle(const int mode_idx, MB_MODE_INFO *const mbmi,

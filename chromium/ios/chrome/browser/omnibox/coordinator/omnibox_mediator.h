@@ -9,7 +9,6 @@
 
 #import "ios/chrome/browser/omnibox/model/omnibox_text_controller_delegate.h"
 #import "ios/chrome/browser/omnibox/ui/omnibox_mutator.h"
-#import "ios/chrome/browser/omnibox/ui/omnibox_view_controller.h"
 
 class FaviconLoader;
 @protocol LensCommands;
@@ -21,15 +20,21 @@ class FaviconLoader;
 @class SceneState;
 class TemplateURLService;
 class UrlLoadingBrowserAgent;
+class PlaceholderService;
 
 namespace feature_engagement {
 class Tracker;
 }
 
+// Vivaldi
+namespace ios {
+class VivaldiFaviconLoader;
+}
+// End Vivaldi
+
 /// A mediator object that updates the omnibox according to the model changes.
-@interface OmniboxMediator : NSObject <OmniboxMutator,
-                                       OmniboxTextControllerDelegate,
-                                       OmniboxViewControllerPasteDelegate>
+@interface OmniboxMediator
+    : NSObject <OmniboxMutator, OmniboxTextControllerDelegate>
 
 /// Delegate for events in this class.
 @property(nonatomic, weak) id<OmniboxMediatorDelegate> delegate;
@@ -40,6 +45,9 @@ class Tracker;
 /// The templateURLService used by this mediator to extract whether the default
 /// search engine supports search-by-image.
 @property(nonatomic, assign) TemplateURLService* templateURLService;
+
+/// The placeholder used by this mediator to extract placeholder text and image.
+@property(nonatomic, assign) PlaceholderService* placeholderService;
 
 /// The `URLLoadingBrowserAgent` used by this mediator to start search-by-image.
 @property(nonatomic, assign) UrlLoadingBrowserAgent* URLLoadingBrowserAgent;
@@ -66,6 +74,11 @@ class Tracker;
 
 /// Sets the image used in image search.
 - (void)setThumbnailImage:(UIImage*)image;
+
+// Vivaldi
+@property(nonatomic, assign) ios::VivaldiFaviconLoader* vivaldiFaviconLoader;
+// End Vivaldi
+
 @end
 
 #endif  // IOS_CHROME_BROWSER_OMNIBOX_COORDINATOR_OMNIBOX_MEDIATOR_H_

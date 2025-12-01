@@ -7,14 +7,10 @@ import * as Common from '../common/common.js';
 
 import {RemoteObject} from './RemoteObject.js';
 import {SDKModel} from './SDKModel.js';
-import {Capability, type Target} from './Target.js';
+import {Capability} from './Target.js';
 
 export class IOModel extends SDKModel<void> {
-  constructor(target: Target) {
-    super(target);
-  }
-
-  async read(handle: Protocol.IO.StreamHandle, size?: number, offset?: number): Promise<string|ArrayBuffer|null> {
+  async read(handle: Protocol.IO.StreamHandle, size?: number, offset?: number): Promise<string|Uint8Array|null> {
     const result = await this.target().ioAgent().invoke_read({handle, offset, size});
     if (result.getError()) {
       throw new Error(result.getError());
@@ -56,13 +52,39 @@ export class IOModel extends SDKModel<void> {
         strings.push(decoder.decode());
         break;
       }
-      if (data instanceof ArrayBuffer) {
+      if (data instanceof Uint8Array) {
         strings.push(decoder.decode(data, {stream: true}));
       } else {
         strings.push(data);
       }
     }
     return strings.join('');
+  }
+
+  async readToBuffer(handle: Protocol.IO.StreamHandle): Promise<Uint8Array> {
+    const items: Uint8Array[] = [];
+    for (;;) {
+      const data = await this.read(handle, 1024 * 1024);
+      if (data === null) {
+        break;
+      }
+      if (data instanceof Uint8Array) {
+        items.push(data);
+      } else {
+        throw new Error('Unexpected stream data type: expected binary, got a string');
+      }
+    }
+    let length = 0;
+    for (const item of items) {
+      length += item.length;
+    }
+    const result = new Uint8Array(length);
+    let offset = 0;
+    for (const item of items) {
+      result.set(item, offset);
+      offset += item.length;
+    }
+    return result;
   }
 }
 

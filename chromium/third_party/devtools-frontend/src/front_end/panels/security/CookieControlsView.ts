@@ -95,7 +95,7 @@ const UIStrings = {
    */
   enterpriseTooltip: 'This setting is managed by your organization',
   /**
-    +*@description Button with the enterpise disclaimer that takes the user to the relevant enterprise cookie chrome setting
+   * +*@description Button with the enterpise disclaimer that takes the user to the relevant enterprise cookie chrome setting
    */
   viewDetails: 'View details',
   /**
@@ -305,7 +305,7 @@ export class CookieControlsView extends UI.Widget.VBox {
     `, target, {host: this});
     // clang-format on
   }) {
-    super(true, undefined, element);
+    super(element, {useShadowDom: true});
     this.#view = view;
     this.#isGracePeriodActive = false;
     this.#thirdPartyControlsDict = Root.Runtime.hostConfig.thirdPartyCookieControls;

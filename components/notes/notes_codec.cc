@@ -448,25 +448,24 @@ void NotesCodec::ReassignIDsHelper(NoteNode* node) {
 }
 
 void NotesCodec::UpdateChecksum(const std::string& str) {
-  base::MD5Update(&md5_context_, str);
+  md5_context_.Update(str);
 }
 
 void NotesCodec::UpdateChecksum(const std::u16string& str) {
   std::string_view temp(reinterpret_cast<const char*>(str.data()),
                          str.length() * sizeof(str[0]));
-  base::MD5Update(&md5_context_,
-                  std::string_view(reinterpret_cast<const char*>(str.data()),
+  md5_context_.Update(
+      std::string_view(reinterpret_cast<const char*>(str.data()),
                                     str.length() * sizeof(str[0])));
 }
 
 void NotesCodec::InitializeChecksum() {
-  base::MD5Init(&md5_context_);
+  md5_context_ = crypto::obsolete::Md5();
 }
 
 void NotesCodec::FinalizeChecksum() {
-  base::MD5Digest digest;
-  base::MD5Final(&digest, &md5_context_);
-  computed_checksum_ = base::MD5DigestToBase16(digest);
+  computed_checksum_ =
+      base::ToLowerASCII(base::HexEncode(md5_context_.Finish()));
 }
 
 }  // namespace vivaldi

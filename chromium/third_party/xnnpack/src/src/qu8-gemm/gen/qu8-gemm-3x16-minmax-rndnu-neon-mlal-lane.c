@@ -8,12 +8,14 @@
 // This source code is licensed under the BSD-style license found in the
 // LICENSE file in the root directory of this source tree.
 
-#include <assert.h>
-
 #include <arm_neon.h>
+#include <assert.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #include "src/xnnpack/common.h"
 #include "src/xnnpack/gemm.h"
+#include "src/xnnpack/microparams.h"
 
 
 void xnn_qu8_gemm_minmax_rndnu_ukernel_3x16__neon_mlal_lane(
@@ -26,7 +28,7 @@ void xnn_qu8_gemm_minmax_rndnu_ukernel_3x16__neon_mlal_lane(
     uint8_t* restrict c,
     size_t cm_stride,
     size_t cn_stride,
-    const union xnn_qu8_conv_minmax_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
+    const union xnn_qu8_conv_minmax_params* restrict params) XNN_OOB_READS
 {
   assert(mr != 0);
   assert(mr <= 3);

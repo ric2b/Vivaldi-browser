@@ -21,7 +21,6 @@
 #include "absl/functional/any_invocable.h"
 #include "absl/status/statusor.h"
 #include "sharing/internal/api/sharing_rpc_client.h"
-#include "sharing/internal/api/sharing_rpc_notifier.h"
 #include "sharing/proto/certificate_rpc.pb.h"
 #include "sharing/proto/contact_rpc.pb.h"
 #include "sharing/proto/device_rpc.pb.h"
@@ -36,28 +35,9 @@ class FakeNearbyShareClient : public nearby::sharing::api::SharingRpcClient {
   FakeNearbyShareClient() = default;
   ~FakeNearbyShareClient() override = default;
 
-  std::vector<nearby::sharing::proto::UpdateDeviceRequest>&
-  update_device_requests() {
-    return update_device_requests_;
-  }
-
   std::vector<nearby::sharing::proto::ListContactPeopleRequest>&
   list_contact_people_requests() {
     return list_contact_people_requests_;
-  }
-
-  std::vector<nearby::sharing::proto::ListPublicCertificatesRequest>&
-  list_public_certificates_requests() {
-    return list_public_certificates_requests_;
-  }
-
-  absl::StatusOr<proto::UpdateDeviceResponse>& update_device_response() {
-    return update_device_response_;
-  }
-
-  void SetUpdateDeviceResponse(
-      absl::StatusOr<proto::UpdateDeviceResponse> response) {
-    update_device_response_ = response;
   }
 
   void SetListContactPeopleResponses(
@@ -65,41 +45,16 @@ class FakeNearbyShareClient : public nearby::sharing::api::SharingRpcClient {
     list_contact_people_responses_ = responses;
   }
 
-  void SetListPublicCertificatesResponses(
-      std::vector<absl::StatusOr<proto::ListPublicCertificatesResponse>>
-          responses) {
-    list_public_certificates_responses_ = responses;
-  }
-
-  void UpdateDevice(
-      const proto::UpdateDeviceRequest& request,
-      absl::AnyInvocable<
-          void(const absl::StatusOr<proto::UpdateDeviceResponse>& response) &&>
-          callback) override;
   void ListContactPeople(
       const proto::ListContactPeopleRequest& request,
       absl::AnyInvocable<void(const absl::StatusOr<
                               proto::ListContactPeopleResponse>& response) &&>
           callback) override;
-  void ListPublicCertificates(
-      const proto::ListPublicCertificatesRequest& request,
-      absl::AnyInvocable<
-          void(const absl::StatusOr<proto::ListPublicCertificatesResponse>&
-                   response) &&>
-          callback) override;
 
-  std::vector<nearby::sharing::proto::UpdateDeviceRequest>
-      update_device_requests_;
   std::vector<nearby::sharing::proto::ListContactPeopleRequest>
       list_contact_people_requests_;
-  std::vector<nearby::sharing::proto::ListPublicCertificatesRequest>
-      list_public_certificates_requests_;
-
-  absl::StatusOr<proto::UpdateDeviceResponse> update_device_response_;
   std::vector<absl::StatusOr<proto::ListContactPeopleResponse>>
       list_contact_people_responses_;
-  std::vector<absl::StatusOr<proto::ListPublicCertificatesResponse>>
-      list_public_certificates_responses_;
 };
 
 // A fake implementation of the Nearby Identity RPC client that stores all
@@ -190,9 +145,6 @@ class FakeNearbyShareClientFactory
   std::vector<FakeNearbyShareClient*>& instances() { return instances_; }
   std::vector<FakeNearbyIdentityClient*>& identity_instances() {
     return identity_instances_;
-  }
-  nearby::sharing::api::SharingRpcNotifier* GetRpcNotifier() const override {
-    return nullptr;
   }
 
  private:

@@ -168,7 +168,7 @@ main (int argc, char **argv)
     if (do_config)
 	FcConfigSubstitute (0, pat, FcMatchPattern);
     if (do_default)
-	FcDefaultSubstitute (pat);
+	FcConfigSetDefaultSubstitute (0, pat);
 
     if (os) {
 	FcPattern *new;

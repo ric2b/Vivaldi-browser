@@ -33,7 +33,9 @@ template("vivaldi_strings_grit_action") {
   }
   outputs = [ output_header ]
   foreach(locale, locales_with_pseudolocales + vivaldi_pending_locales + vivaldi_pending_mobile_locales + vivaldi_pending_ios_locales - ["ca@valencia"] + ["ca-valencia"]) {
-    outputs += [ "${source_name}_$locale.pak" ]
+    foreach(_gender_suffix, gender_suffixes) {
+      outputs += [ "${source_name}_$locale${_gender_suffix}.pak" ]
+    }
   }
   grit(name) {
     forward_variables_from(invoker, [
@@ -41,6 +43,9 @@ template("vivaldi_strings_grit_action") {
                              "output_dir",
                              "resource_ids",
                            ])
+    if (translate_genders) {
+      grit_flags = [ "--translate-genders" ]
+    }
   }
 
   group(target_name) {

@@ -44,6 +44,10 @@
 #include "media/filters/vpx_video_decoder.h"
 #endif
 
+#if BUILDFLAG(ENABLE_SYMPHONIA)
+#include "media/filters/symphonia_audio_decoder.h"
+#endif
+
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
 #include "platform_media/decoders/vivaldi_decoder_config.h"
 #endif
@@ -77,6 +81,13 @@ void DefaultDecoderFactory::CreateAudioDecoders(
   audio_decoders->push_back(
       std::make_unique<PassthroughDTSAudioDecoder>(task_runner, media_log));
 #endif  // BUILDFLAG(ENABLE_PLATFORM_DTS_AUDIO) && BUILDFLAG(IS_WIN)
+
+#if BUILDFLAG(ENABLE_SYMPHONIA)
+  if (base::FeatureList::IsEnabled(kSymphoniaAudioDecoding)) {
+    audio_decoders->push_back(
+        std::make_unique<SymphoniaAudioDecoder>(task_runner, media_log));
+  }
+#endif
 
 #if BUILDFLAG(ENABLE_FFMPEG)
   audio_decoders->push_back(

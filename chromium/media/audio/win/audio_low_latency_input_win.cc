@@ -13,6 +13,7 @@
 #include <combaseapi.h>
 #include <ksmedia.h>
 #include <propkey.h>
+#include <stddef.h>
 
 #include <algorithm>
 #include <cmath>
@@ -20,6 +21,7 @@
 #include <utility>
 
 #include "base/check_deref.h"
+#include "base/check_op.h"
 #include "base/compiler_specific.h"
 #include "base/containers/span.h"
 #include "base/functional/callback.h"
@@ -27,6 +29,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/numerics/checked_math.h"
 #include "base/process/process.h"
 #include "base/strings/strcat.h"
 #include "base/strings/stringprintf.h"
@@ -778,7 +781,9 @@ AudioInputStream::OpenOutcome WASAPIAudioInputStream::Open() {
   // Failure will not prevent opening but the method must succeed to be able
   // to select raw input capture mode.
   WORD audio_engine_channels = 0;
-  hr = GetAudioEngineNumChannels(&audio_engine_channels);
+  if (!AudioDeviceDescription::IsLoopbackDevice(device_id_)) {
+    hr = GetAudioEngineNumChannels(&audio_engine_channels);
+  }
 
   // Attempt to enable communications category and raw capture mode on the
   // audio stream. Ignoring return value since the method logs its own error
@@ -1362,8 +1367,33 @@ void WASAPIAudioInputStream::PullCaptureDataAndPushToSink() {
       fifo_->PushSilence(num_frames_to_read);
     } else {
       const int bytes_per_sample = input_format_.Format.wBitsPerSample / 8;
-      peak_detector_.FindPeak(data_ptr, num_frames_to_read, bytes_per_sample);
-      fifo_->Push(data_ptr, num_frames_to_read, bytes_per_sample);
+
+      // SAFETY:
+      // https://learn.microsoft.com/en-us/windows/win32/api/audioclient/nf-audioclient-iaudiocaptureclient-getbuffer
+      // `data_ptr` is the starting address of the next data packet read.
+      //
+      // `num_frames_to_read` is the frame count (number of audio frames
+      // available in the packet).
+      //
+      // The document also mentions: The size of a frame in an audio stream is
+      // specified by the `nBlockAlign` member of the WAVEFORMATEX (or
+      // WAVEFORMATEXTENSIBLE) structure that specifies the stream format. The
+      // size, in bytes, of an audio frame equals the number of channels in the
+      // stream multiplied by the sample size per channel. For example, for a
+      // stereo (2-channel) stream with 16-bit samples, the frame size is four
+      // bytes.
+      //
+      // So actually in bytes. Our size is `num_frames_to_read` *
+      // `input_format_.Format.nBlockAlign`.
+      CHECK_EQ(input_format_.Format.nBlockAlign,
+               bytes_per_sample * input_format_.Format.nChannels);
+      UNSAFE_BUFFERS(base::span<const uint8_t> audio_frames(
+          reinterpret_cast<const uint8_t*>(data_ptr),
+          base::CheckMul<size_t>(num_frames_to_read,
+                                 input_format_.Format.nBlockAlign)
+              .ValueOrDie()));
+      peak_detector_.FindPeak(audio_frames, bytes_per_sample);
+      fifo_->Push(audio_frames, num_frames_to_read, bytes_per_sample);
     }
 
     hr = audio_capture_client_->ReleaseBuffer(num_frames_to_read);

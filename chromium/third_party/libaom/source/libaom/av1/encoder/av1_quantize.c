@@ -883,7 +883,8 @@ void av1_set_quantizer(AV1_COMMON *const cm, int min_qmlevel, int max_qmlevel,
   quant_params->base_qindex = AOMMAX(cm->delta_q_info.delta_q_present_flag, q);
   quant_params->y_dc_delta_q = 0;
 
-  if (enable_chroma_deltaq) {
+  // Disable deltaq in lossless mode.
+  if (enable_chroma_deltaq && q) {
     if (is_allintra &&
         (tuning == AOM_TUNE_IQ || tuning == AOM_TUNE_SSIMULACRA2)) {
       int chroma_dc_delta_q = 0;
@@ -964,7 +965,7 @@ void av1_set_quantizer(AV1_COMMON *const cm, int min_qmlevel, int max_qmlevel,
 
   // following section 8.3.2 in T-REC-H.Sup15 document
   // to apply to AV1 qindex in the range of [0, 255]
-  if (enable_hdr_deltaq) {
+  if (enable_hdr_deltaq && q) {
     int dqpCb = adjust_hdr_cb_deltaq(quant_params->base_qindex);
     int dqpCr = adjust_hdr_cr_deltaq(quant_params->base_qindex);
     quant_params->u_dc_delta_q = quant_params->u_ac_delta_q = dqpCb;

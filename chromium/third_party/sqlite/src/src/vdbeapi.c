@@ -1808,7 +1808,7 @@ int sqlite3_bind_text64(
   assert( xDel!=SQLITE_DYNAMIC );
   if( enc!=SQLITE_UTF8 ){
     if( enc==SQLITE_UTF16 ) enc = SQLITE_UTF16NATIVE;
-    nData &= ~(u16)1;
+    nData &= ~(u64)1;
   }
   return bindText(pStmt, i, zData, nData, xDel, enc);
 }
@@ -2216,7 +2216,7 @@ int sqlite3_preupdate_old(sqlite3 *db, int iIdx, sqlite3_value **ppValue){
       if( !aRec ) goto preupdate_old_out;
       rc = sqlite3BtreePayload(p->pCsr->uc.pCursor, 0, nRec, aRec);
       if( rc==SQLITE_OK ){
-        p->pUnpacked = vdbeUnpackRecord(&p->keyinfo, nRec, aRec);
+        p->pUnpacked = vdbeUnpackRecord(p->pKeyinfo, nRec, aRec);
         if( !p->pUnpacked ) rc = SQLITE_NOMEM;
       }
       if( rc!=SQLITE_OK ){
@@ -2233,7 +2233,9 @@ int sqlite3_preupdate_old(sqlite3 *db, int iIdx, sqlite3_value **ppValue){
       Column *pCol = &p->pTab->aCol[iIdx];
       if( pCol->iDflt>0 ){
         if( p->apDflt==0 ){
-          int nByte = sizeof(sqlite3_value*)*p->pTab->nCol;
+          int nByte;
+          assert( sizeof(sqlite3_value*)*UMXV(p->pTab->nCol) < 0x7fffffff );
+          nByte = sizeof(sqlite3_value*)*p->pTab->nCol;
           p->apDflt = (sqlite3_value**)sqlite3DbMallocZero(db, nByte);
           if( p->apDflt==0 ) goto preupdate_old_out;
         }
@@ -2279,7 +2281,7 @@ int sqlite3_preupdate_count(sqlite3 *db){
 #else
   p = db->pPreUpdate;
 #endif
-  return (p ? p->keyinfo.nKeyField : 0);
+  return (p ? p->pKeyinfo->nKeyField : 0);
 }
 #endif /* SQLITE_ENABLE_PREUPDATE_HOOK */
 
@@ -2362,7 +2364,7 @@ int sqlite3_preupdate_new(sqlite3 *db, int iIdx, sqlite3_value **ppValue){
       Mem *pData = &p->v->aMem[p->iNewReg];
       rc = ExpandBlob(pData);
       if( rc!=SQLITE_OK ) goto preupdate_new_out;
-      pUnpack = vdbeUnpackRecord(&p->keyinfo, pData->n, pData->z);
+      pUnpack = vdbeUnpackRecord(p->pKeyinfo, pData->n, pData->z);
       if( !pUnpack ){
         rc = SQLITE_NOMEM;
         goto preupdate_new_out;
@@ -2383,7 +2385,8 @@ int sqlite3_preupdate_new(sqlite3 *db, int iIdx, sqlite3_value **ppValue){
     */
     assert( p->op==SQLITE_UPDATE );
     if( !p->aNew ){
-      p->aNew = (Mem *)sqlite3DbMallocZero(db, sizeof(Mem) * p->pCsr->nField);
+      assert( sizeof(Mem)*UMXV(p->pCsr->nField) < 0x7fffffff );
+      p->aNew = (Mem *)sqlite3DbMallocZero(db, sizeof(Mem)*p->pCsr->nField);
       if( !p->aNew ){
         rc = SQLITE_NOMEM;
         goto preupdate_new_out;

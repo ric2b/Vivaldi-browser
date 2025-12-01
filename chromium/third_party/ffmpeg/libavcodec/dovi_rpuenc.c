@@ -20,16 +20,17 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include "libavutil/attributes.h"
 #include "libavutil/avassert.h"
 #include "libavutil/crc.h"
 #include "libavutil/mem.h"
+#include "libavutil/refstruct.h"
 
 #include "avcodec.h"
 #include "dovi_rpu.h"
 #include "itut35.h"
 #include "put_bits.h"
 #include "put_golomb.h"
-#include "libavutil/refstruct.h"
 
 static const struct {
     uint64_t pps; // maximum pixels per second
@@ -52,10 +53,18 @@ static const struct {
     [13] = {7680*4320*120u, 7680, 240, 800},
 };
 
-int ff_dovi_configure_ext(DOVIContext *s, AVCodecParameters *codecpar,
-                          const AVDOVIMetadata *metadata,
-                          enum AVDOVICompression compression,
-                          int strict_std_compliance)
+static av_cold int dovi_configure_ext(DOVIContext *s, enum AVCodecID codec_id,
+                                      const AVDOVIMetadata *metadata,
+                                      enum AVDOVICompression compression,
+                                      int strict_std_compliance,
+                                      int width, int height,
+                                      AVRational framerate,
+                                      enum AVPixelFormat pix_format,
+                                      enum AVColorSpace color_space,
+                                      enum AVColorPrimaries color_primaries,
+                                      enum AVColorTransferCharacteristic color_trc,
+                                      AVPacketSideData **coded_side_data,
+                                      int *nb_coded_side_data)
 {
     AVDOVIDecoderConfigurationRecord *cfg;
     const AVDOVIRpuDataHeader *hdr = NULL;
@@ -76,7 +85,7 @@ int ff_dovi_configure_ext(DOVIContext *s, AVCodecParameters *codecpar,
         compression > AV_DOVI_COMPRESSION_EXTENDED)
         return AVERROR(EINVAL);
 
-    switch (codecpar->codec_id) {
+    switch (codec_id) {
     case AV_CODEC_ID_AV1:  dv_profile = 10; break;
     case AV_CODEC_ID_H264: dv_profile = 9;  break;
     case AV_CODEC_ID_HEVC:
@@ -86,25 +95,23 @@ int ff_dovi_configure_ext(DOVIContext *s, AVCodecParameters *codecpar,
         }
 
         /* This is likely to be proprietary IPTPQc2 */
-        if (codecpar->color_space == AVCOL_SPC_IPT_C2 ||
-            (codecpar->color_space == AVCOL_SPC_UNSPECIFIED &&
-             codecpar->color_trc == AVCOL_TRC_UNSPECIFIED))
+        if (color_space == AVCOL_SPC_IPT_C2 ||
+            (color_space == AVCOL_SPC_UNSPECIFIED &&
+             color_trc == AVCOL_TRC_UNSPECIFIED))
             dv_profile = 5;
         else
             dv_profile = 8;
         break;
     default:
-        /* No other encoder should be calling this! */
-        av_assert0(0);
-        return AVERROR_BUG;
+        av_unreachable("ff_dovi_configure only used with AV1, H.264 and HEVC");
     }
 
     if (strict_std_compliance > FF_COMPLIANCE_UNOFFICIAL) {
         if (dv_profile == 9) {
-            if (codecpar->format != AV_PIX_FMT_YUV420P)
+            if (pix_format != AV_PIX_FMT_YUV420P)
                 dv_profile = 0;
         } else {
-            if (codecpar->format != AV_PIX_FMT_YUV420P10)
+            if (pix_format != AV_PIX_FMT_YUV420P10)
                 dv_profile = 0;
         }
     }
@@ -131,17 +138,17 @@ int ff_dovi_configure_ext(DOVIContext *s, AVCodecParameters *codecpar,
         }
         /* fall through */
     case 8: /* HEVC (or AV1) with BL compatibility */
-        if (codecpar->color_space == AVCOL_SPC_BT2020_NCL &&
-            codecpar->color_primaries == AVCOL_PRI_BT2020 &&
-            codecpar->color_trc == AVCOL_TRC_SMPTE2084) {
+        if (color_space == AVCOL_SPC_BT2020_NCL &&
+            color_primaries == AVCOL_PRI_BT2020 &&
+            color_trc == AVCOL_TRC_SMPTE2084) {
             bl_compat_id = 1;
-        } else if (codecpar->color_space == AVCOL_SPC_BT2020_NCL &&
-                   codecpar->color_primaries == AVCOL_PRI_BT2020 &&
-                   codecpar->color_trc == AVCOL_TRC_ARIB_STD_B67) {
+        } else if (color_space == AVCOL_SPC_BT2020_NCL &&
+                   color_primaries == AVCOL_PRI_BT2020 &&
+                   color_trc == AVCOL_TRC_ARIB_STD_B67) {
             bl_compat_id = 4;
-        } else if (codecpar->color_space == AVCOL_SPC_BT709 &&
-                   codecpar->color_primaries == AVCOL_PRI_BT709 &&
-                   codecpar->color_trc == AVCOL_TRC_BT709) {
+        } else if (color_space == AVCOL_SPC_BT709 &&
+                   color_primaries == AVCOL_PRI_BT709 &&
+                   color_trc == AVCOL_TRC_BT709) {
             bl_compat_id = 2;
         }
     }
@@ -175,9 +182,9 @@ int ff_dovi_configure_ext(DOVIContext *s, AVCodecParameters *codecpar,
         }
     }
 
-    pps = codecpar->width * codecpar->height;
-    if (codecpar->framerate.num) {
-        pps = pps * codecpar->framerate.num / codecpar->framerate.den;
+    pps = width * height;
+    if (framerate.num) {
+        pps = pps * framerate.num / framerate.den;
     } else {
         pps *= 25; /* sanity fallback */
     }
@@ -186,7 +193,7 @@ int ff_dovi_configure_ext(DOVIContext *s, AVCodecParameters *codecpar,
     for (int i = 1; i < FF_ARRAY_ELEMS(dv_levels); i++) {
         if (pps > dv_levels[i].pps)
             continue;
-        if (codecpar->width > dv_levels[i].width)
+        if (width > dv_levels[i].width)
             continue;
         /* In theory, we should also test the bitrate when known, and
          * distinguish between main and high tier. In practice, just ignore
@@ -199,12 +206,12 @@ int ff_dovi_configure_ext(DOVIContext *s, AVCodecParameters *codecpar,
     if (!dv_level) {
         if (strict_std_compliance >= FF_COMPLIANCE_STRICT) {
             av_log(s->logctx, AV_LOG_ERROR, "Coded PPS (%"PRIu64") and width (%d) "
-                   "exceed Dolby Vision limitations\n", pps, codecpar->width);
+                   "exceed Dolby Vision limitations\n", pps, width);
             return AVERROR(EINVAL);
         } else {
             av_log(s->logctx, AV_LOG_WARNING, "Coded PPS (%"PRIu64") and width (%d) "
                    "exceed Dolby Vision limitations. Ignoring, resulting file "
-                   "may be non-conforming.\n", pps, codecpar->width);
+                   "may be non-conforming.\n", pps, width);
             dv_level = FF_ARRAY_ELEMS(dv_levels) - 1;
         }
     }
@@ -213,8 +220,8 @@ int ff_dovi_configure_ext(DOVIContext *s, AVCodecParameters *codecpar,
     if (!cfg)
         return AVERROR(ENOMEM);
 
-    if (!av_packet_side_data_add(&codecpar->coded_side_data,
-                                 &codecpar->nb_coded_side_data,
+    if (!av_packet_side_data_add(coded_side_data,
+                                 nb_coded_side_data,
                                  AV_PKT_DATA_DOVI_CONF, cfg, cfg_size, 0)) {
         av_free(cfg);
         return AVERROR(ENOMEM);
@@ -238,19 +245,22 @@ skip:
     return 0;
 }
 
-int ff_dovi_configure(DOVIContext *s, AVCodecContext *avctx)
+av_cold int ff_dovi_configure_from_codedpar(DOVIContext *s, AVCodecParameters *par,
+                                            const AVDOVIMetadata *metadata,
+                                            enum AVDOVICompression compression,
+                                            int strict_std_compliance)
 {
-    int ret;
-    const AVFrameSideData *sd;
+    return dovi_configure_ext(s, par->codec_id, metadata, compression,
+                              strict_std_compliance, par->width, par->height,
+                              par->framerate, par->format, par->color_space,
+                              par->color_primaries, par->color_trc,
+                              &par->coded_side_data, &par->nb_coded_side_data);
+}
+
+av_cold int ff_dovi_configure(DOVIContext *s, AVCodecContext *avctx)
+{
     const AVDOVIMetadata *metadata = NULL;
-    AVCodecParameters *codecpar = avcodec_parameters_alloc();
-    if (!codecpar)
-        return AVERROR(ENOMEM);
-
-    ret = avcodec_parameters_from_context(codecpar, avctx);
-    if (ret < 0)
-        goto fail;
-
+    const AVFrameSideData *sd;
     sd = av_frame_side_data_get(avctx->decoded_side_data,
                                 avctx->nb_decoded_side_data,
                                 AV_FRAME_DATA_DOVI_METADATA);
@@ -258,16 +268,11 @@ int ff_dovi_configure(DOVIContext *s, AVCodecContext *avctx)
         metadata = (const AVDOVIMetadata *) sd->data;
 
     /* Current encoders cannot handle metadata compression during encoding */
-    ret = ff_dovi_configure_ext(s, codecpar, metadata, AV_DOVI_COMPRESSION_NONE,
-                                avctx->strict_std_compliance);
-    if (ret < 0)
-        goto fail;
-
-    ret = avcodec_parameters_to_context(avctx, codecpar);
-
-fail:
-    avcodec_parameters_free(&codecpar);
-    return ret;
+    return dovi_configure_ext(s, avctx->codec_id, metadata, AV_DOVI_COMPRESSION_NONE,
+                              avctx->strict_std_compliance, avctx->width,
+                              avctx->height, avctx->framerate, avctx->pix_fmt,
+                              avctx->colorspace, avctx->color_primaries, avctx->color_trc,
+                              &avctx->coded_side_data, &avctx->nb_coded_side_data);
 }
 
 /* Compares only the static DM metadata parts of AVDOVIColorMetadata (excluding

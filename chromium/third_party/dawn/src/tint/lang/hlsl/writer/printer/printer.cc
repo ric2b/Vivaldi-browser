@@ -31,19 +31,17 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
-#include "src/tint/lang/core/access.h"
-#include "src/tint/lang/core/address_space.h"
-#include "src/tint/lang/core/builtin_value.h"
 #include "src/tint/lang/core/constant/splat.h"
 #include "src/tint/lang/core/constant/value.h"
+#include "src/tint/lang/core/enums.h"
 #include "src/tint/lang/core/fluent_types.h"
-#include "src/tint/lang/core/interpolation_sampling.h"
-#include "src/tint/lang/core/interpolation_type.h"
 #include "src/tint/lang/core/ir/access.h"
+#include "src/tint/lang/core/ir/analysis/for_loop_analysis.h"
 #include "src/tint/lang/core/ir/bitcast.h"
 #include "src/tint/lang/core/ir/block.h"
 #include "src/tint/lang/core/ir/break_if.h"
@@ -79,7 +77,6 @@
 #include "src/tint/lang/core/ir/validator.h"
 #include "src/tint/lang/core/ir/value.h"
 #include "src/tint/lang/core/ir/var.h"
-#include "src/tint/lang/core/texel_format.h"
 #include "src/tint/lang/core/type/array.h"
 #include "src/tint/lang/core/type/array_count.h"
 #include "src/tint/lang/core/type/atomic.h"
@@ -110,6 +107,7 @@
 #include "src/tint/lang/hlsl/type/int8_t4_packed.h"
 #include "src/tint/lang/hlsl/type/rasterizer_ordered_texture_2d.h"
 #include "src/tint/lang/hlsl/type/uint8_t4_packed.h"
+#include "src/tint/lang/hlsl/writer/common/options.h"
 #include "src/tint/utils/containers/hashmap.h"
 #include "src/tint/utils/containers/map.h"
 #include "src/tint/utils/ice/ice.h"
@@ -175,12 +173,7 @@ class Printer : public tint::TextGenerator {
 
     /// @returns the generated HLSL shader
     tint::Result<Output> Generate() {
-        core::ir::Capabilities capabilities{
-            core::ir::Capability::kAllowModuleScopeLets,
-            core::ir::Capability::kAllowVectorElementPointer,
-            core::ir::Capability::kAllowClipDistancesOnF32,
-        };
-        auto valid = core::ir::ValidateAndDumpIfNeeded(ir_, "hlsl.Printer", capabilities);
+        auto valid = core::ir::ValidateAndDumpIfNeeded(ir_, "hlsl.Printer", kPrinterCapabilities);
         if (valid != Success) {
             return std::move(valid.Failure());
         }
@@ -326,9 +319,18 @@ class Printer : public tint::TextGenerator {
     }
 
     void EmitBlock(const core::ir::Block* block) {
+        auto pred = [](const core::ir::Instruction*) -> bool { return true; };
+        EmitBlock(block, pred);
+    }
+
+    template <typename T>
+    void EmitBlock(const core::ir::Block* block, T&& predicate) {
         TINT_SCOPED_ASSIGNMENT(current_block_, block);
 
         for (auto* inst : *block) {
+            if (!predicate(inst)) {
+                continue;
+            }
             Switch(
                 inst,
                 // Discard and TerminateInvocation must come before Call.
@@ -507,6 +509,14 @@ class Printer : public tint::TextGenerator {
         //   }
         // }
 
+        // Analysis to detect loop condition. FXC appears to require this to do its own uniformity
+        // analysis for expressions that include shader uniforms.
+        // See crbug.com/429187478 why this specific workaround exists.
+        std::unique_ptr<core::ir::analysis::ForLoopAnalysis> analysis(
+            options_.compiler == Options::Compiler::kFXC
+                ? new core::ir::analysis::ForLoopAnalysis(*l)
+                : nullptr);
+
         auto emit_continuing = [&] {
             Line() << "{";
             {
@@ -522,10 +532,29 @@ class Printer : public tint::TextGenerator {
             const ScopedIndent init(current_buffer_);
             EmitBlock(l->Initializer());
 
-            Line() << "while(true) {";
+            bool has_loop_condition = false;
+            if (analysis) {
+                if (auto* if_cond = analysis->GetIfCondition()) {
+                    auto while_construct_line = Line();
+                    while_construct_line << "while(";
+                    has_loop_condition = true;
+                    EmitValue(while_construct_line, if_cond);
+                    while_construct_line << ") {";
+                }
+            }
+            if (!has_loop_condition) {
+                Line() << "while(true) {";
+            }
+
             {
                 const ScopedIndent si(current_buffer_);
-                EmitBlock(l->Body());
+                if (has_loop_condition) {
+                    EmitBlock(l->Body(), [&analysis](const core::ir::Instruction* inst) {
+                        return !analysis->IsBodyRemovedInstruction(inst);
+                    });
+                } else {
+                    EmitBlock(l->Body());
+                }
             }
             Line() << "}";
         }
@@ -1672,6 +1701,8 @@ class Printer : public tint::TextGenerator {
                 return "SV_SampleIndex";
             case core::BuiltinValue::kSampleMask:
                 return "SV_Coverage";
+            case core::BuiltinValue::kPrimitiveId:
+                return "SV_PrimitiveId";
             default:
                 break;
         }
@@ -1791,21 +1822,43 @@ class Printer : public tint::TextGenerator {
     const char* ImageFormatToRWtextureType(core::TexelFormat image_format) {
         switch (image_format) {
             case core::TexelFormat::kR8Unorm:
+            case core::TexelFormat::kR8Snorm:
+            case core::TexelFormat::kRg8Unorm:
+            case core::TexelFormat::kRg8Snorm:
             case core::TexelFormat::kBgra8Unorm:
             case core::TexelFormat::kRgba8Unorm:
             case core::TexelFormat::kRgba8Snorm:
+            case core::TexelFormat::kR16Unorm:
+            case core::TexelFormat::kR16Snorm:
+            case core::TexelFormat::kRg16Unorm:
+            case core::TexelFormat::kRg16Snorm:
+            case core::TexelFormat::kRgba16Unorm:
+            case core::TexelFormat::kRgba16Snorm:
+            case core::TexelFormat::kR16Float:
+            case core::TexelFormat::kRg16Float:
             case core::TexelFormat::kRgba16Float:
             case core::TexelFormat::kR32Float:
             case core::TexelFormat::kRg32Float:
             case core::TexelFormat::kRgba32Float:
+            case core::TexelFormat::kRgb10A2Unorm:
+            case core::TexelFormat::kRg11B10Ufloat:
                 return "float4";
+            case core::TexelFormat::kR8Uint:
+            case core::TexelFormat::kRg8Uint:
+            case core::TexelFormat::kR16Uint:
+            case core::TexelFormat::kRg16Uint:
             case core::TexelFormat::kRgba8Uint:
             case core::TexelFormat::kRgba16Uint:
             case core::TexelFormat::kR32Uint:
             case core::TexelFormat::kRg32Uint:
             case core::TexelFormat::kRgba32Uint:
+            case core::TexelFormat::kRgb10A2Uint:
                 return "uint4";
+            case core::TexelFormat::kR8Sint:
+            case core::TexelFormat::kRg8Sint:
             case core::TexelFormat::kRgba8Sint:
+            case core::TexelFormat::kR16Sint:
+            case core::TexelFormat::kRg16Sint:
             case core::TexelFormat::kRgba16Sint:
             case core::TexelFormat::kR32Sint:
             case core::TexelFormat::kRg32Sint:

@@ -1,0 +1,36 @@
+# Copyright (c) 2025 Vivaldi Technologies AS. All rights reserved
+
+source_set("types") {
+  sources = [
+    "adblock_types.cc",
+    "adblock_types.h",
+    "adblock_request_filter_rule.cc",
+    "adblock_request_filter_rule.h",
+  ]
+  deps = [
+    "//base",
+    "//url",
+  ]
+}
+
+source_set("core") {
+  sources = [
+    "adblock_known_sources_handler.cc",
+    "adblock_known_sources_handler.h",
+    "adblock_rule_manager.cc",
+    "adblock_rule_manager.h",
+    "adblock_rule_service_core.cc",
+    "adblock_rule_service_core.h",
+    "adblock_stats_data.cc",
+    "adblock_stats_data.h",
+    "adblock_stats_store.cc",
+    "adblock_stats_store.h",
+  ]
+  public_deps = [
+    ":types",
+  ]
+  deps = [
+    "//base",
+    "//url",
+  ]
+}

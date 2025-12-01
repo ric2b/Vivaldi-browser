@@ -73,8 +73,10 @@ base::LazyInstance<RoutingIDFrameProxyMap>::DestructorAtExit
 
 using TokenFrameMap =
     absl::flat_hash_map<blink::RemoteFrameToken, RenderFrameProxyHost*>;
-base::LazyInstance<TokenFrameMap>::Leaky g_token_frame_proxy_map =
-    LAZY_INSTANCE_INITIALIZER;
+TokenFrameMap& GetTokenFrameProxyMap() {
+  static base::NoDestructor<TokenFrameMap> token_frame_proxy_map;
+  return *token_frame_proxy_map;
+}
 
 // TODO(https://crbug.com/339512240): Remove this killswitch once the
 // optimization for postMessage proxy creation finishes rolling out.
@@ -105,7 +107,7 @@ RenderFrameProxyHost* RenderFrameProxyHost::FromFrameToken(
     int process_id,
     const blink::RemoteFrameToken& frame_token) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  TokenFrameMap* frames = g_token_frame_proxy_map.Pointer();
+  TokenFrameMap* frames = &GetTokenFrameProxyMap();
   auto it = frames->find(frame_token);
   // The check against |process_id| isn't strictly necessary, but represents
   // an extra level of protection against a renderer trying to force a frame
@@ -120,7 +122,7 @@ RenderFrameProxyHost* RenderFrameProxyHost::FromFrameToken(
 bool RenderFrameProxyHost::IsFrameTokenInUse(
     const blink::RemoteFrameToken& frame_token) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  TokenFrameMap* frames = g_token_frame_proxy_map.Pointer();
+  TokenFrameMap* frames = &GetTokenFrameProxyMap();
   return frames->find(frame_token) != frames->end();
 }
 
@@ -146,7 +148,7 @@ RenderFrameProxyHost::RenderFrameProxyHost(
                                        routing_id_),
                 this))
             .second);
-  CHECK(g_token_frame_proxy_map.Get()
+  CHECK(GetTokenFrameProxyMap()
             .insert(std::make_pair(frame_token_, this))
             .second);
   CHECK(render_view_host_ ||
@@ -199,7 +201,7 @@ RenderFrameProxyHost::~RenderFrameProxyHost() {
   GetAgentSchedulingGroup().RemoveRoute(routing_id_);
   g_routing_id_frame_proxy_map.Get().erase(
       RenderFrameProxyHostID(GetProcess()->GetDeprecatedID(), routing_id_));
-  g_token_frame_proxy_map.Get().erase(frame_token_);
+  GetTokenFrameProxyMap().erase(frame_token_);
   TRACE_EVENT_END("navigation.debug", perfetto::Track::FromPointer(this));
 }
 
@@ -213,14 +215,6 @@ void RenderFrameProxyHost::SetChildRWHView(RenderWidgetHostViewChildFrame* view,
 
 RenderViewHostImpl* RenderFrameProxyHost::GetRenderViewHost() {
   return render_view_host_.get();
-}
-
-bool RenderFrameProxyHost::Send(IPC::Message* msg) {
-  return GetAgentSchedulingGroup().Send(msg);
-}
-
-bool RenderFrameProxyHost::OnMessageReceived(const IPC::Message& msg) {
-  return false;
 }
 
 std::string RenderFrameProxyHost::ToDebugString() {

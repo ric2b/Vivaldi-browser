@@ -12,19 +12,21 @@ load(
 )
 
 SUBGRAPH_TEST_DEPS = [
+    ":calculate_quantization_params",
+    ":fake_dynamic_quantize",
     ":runtime_flags",
     ":subgraph_tester",
-    "//:XNNPACK",
     "//:buffer",
     "//:common",
     "//:datatype",
     "//:math",
     "//:node_type",
-    "//:operators",
     "//:operator_utils",
     "//:reference_ukernels",
     "//:requantization",
-    "//:subgraph",
+    "//:subgraph_h",
+    "//:XNNPACK",
+    "//src/configs:hardware_config",
     "//test:replicable_random_device",
 ]
 
@@ -44,6 +46,31 @@ xnnpack_cxx_library(
     deps = [
         "//:buffer",
         "//:math",
+    ],
+)
+
+xnnpack_cxx_library(
+    name = "fake_dynamic_quantize",
+    testonly = True,
+    hdrs = ["fake-dynamic-quantize.h"],
+    deps = xnnpack_test_deps_for_library() + [
+        "//:buffer",
+        "//:common",
+        "//:datatype",
+        "//:microparams_h",
+        "//:quantization",
+        "//:xnnpack_h",
+    ],
+)
+
+xnnpack_cxx_library(
+    name = "calculate_quantization_params",
+    testonly = True,
+    hdrs = ["calculate_quantization_params.h"],
+    deps = xnnpack_test_deps_for_library() + [
+        "//:buffer",
+        "//:datatype",
+        "//:xnnpack_h",
     ],
 )
 
@@ -103,6 +130,7 @@ xnnpack_unit_test(
     deps = SUBGRAPH_TEST_DEPS,
 ) for operator in [
     "copy",
+    "broadcast",
     "softmax",
     "space_to_depth_2d",
     "depth_to_space_2d",
@@ -115,13 +143,17 @@ xnnpack_unit_test(
 xnnpack_unit_test(
     name = "workspace_test",
     srcs = ["workspace.cc"],
-    deps = SUBGRAPH_TEST_DEPS + ["//:allocation_type"],
+    deps = SUBGRAPH_TEST_DEPS + [
+        "//:allocation_type",
+        "//:operators",
+        "//:subgraph",
+    ],
 )
 
 xnnpack_unit_test(
-    name = "persistent_test",
-    srcs = ["persistent.cc"],
-    deps = SUBGRAPH_TEST_DEPS + ["//:allocation_type"],
+    name = "input_output_test",
+    srcs = ["input-output.cc"],
+    deps = SUBGRAPH_TEST_DEPS,
 )
 
 xnnpack_unit_test(
@@ -205,6 +237,7 @@ xnnpack_unit_test(
 xnnpack_unit_test(
     name = "static_reduce_test",
     srcs = ["static-reduce.cc"],
+    shard_count = 5,
     deps = SUBGRAPH_TEST_DEPS,
 )
 
@@ -314,7 +347,9 @@ xnnpack_unit_test(
         "//:buffer",
         "//:math",
         "//:node_type",
+        "//:operator_h",
         "//:params",
+        "//:subgraph",
         "//:subgraph_h",
         "//:xnnpack_h",
         "//test:replicable_random_device",

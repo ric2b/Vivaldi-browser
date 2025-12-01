@@ -17,6 +17,7 @@
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "components/omnibox/browser/actions/contextual_search_action.h"
 #include "components/omnibox/browser/actions/omnibox_answer_action.h"
 #include "components/omnibox/browser/autocomplete_controller.h"
 #include "components/omnibox/browser/autocomplete_enums.h"
@@ -41,6 +42,10 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/omnibox_proto/answer_type.pb.h"
 #include "third_party/omnibox_proto/rich_answer_template.pb.h"
+
+using ::testing::ElementsAre;
+using ::testing::Pair;
+using ::testing::WhenSorted;
 
 class AutocompleteControllerTest : public testing::Test {
  public:
@@ -2165,7 +2170,8 @@ TEST_F(AutocompleteControllerTest, ExtraHeaders) {
   }
 
   // Populate template URL service with starter pack entries.
-  for (auto& turl_data : TemplateURLStarterPackData::GetStarterPackEngines()) {
+  for (auto& turl_data :
+       template_url_starter_pack_data::GetStarterPackEngines()) {
     controller_.template_url_service_->Add(
         std::make_unique<TemplateURL>(std::move(*turl_data)));
   }
@@ -2182,7 +2188,9 @@ TEST_F(AutocompleteControllerTest, ExtraHeaders) {
         std::make_unique<TemplateURLRef::SearchTermsArgs>(u"search term");
 
     controller_.SetMatchDestinationURL(&match);
-    EXPECT_EQ(match.extra_headers, "X-Omnibox-Gemini:search%20term");
+    EXPECT_THAT(
+        match.extra_headers,
+        WhenSorted(ElementsAre(Pair("X-Omnibox-Gemini", "search%20term"))));
     EXPECT_EQ(match.destination_url, expected_gemini_url);
   }
   {
@@ -2199,7 +2207,9 @@ TEST_F(AutocompleteControllerTest, ExtraHeaders) {
         std::make_unique<TemplateURLRef::SearchTermsArgs>(u"search term?");
 
     controller_.SetMatchDestinationURL(&match);
-    EXPECT_EQ(match.extra_headers, "X-Omnibox-Gemini:search%20term%3F");
+    EXPECT_THAT(
+        match.extra_headers,
+        WhenSorted(ElementsAre(Pair("X-Omnibox-Gemini", "search%20term%3F"))));
     EXPECT_EQ(match.destination_url, "https://example.com/");
   }
   {
@@ -2210,7 +2220,9 @@ TEST_F(AutocompleteControllerTest, ExtraHeaders) {
         std::make_unique<TemplateURLRef::SearchTermsArgs>(u"search term\n");
 
     controller_.SetMatchDestinationURL(&match);
-    EXPECT_EQ(match.extra_headers, "X-Omnibox-Gemini:search%20term%0A");
+    EXPECT_THAT(
+        match.extra_headers,
+        WhenSorted(ElementsAre(Pair("X-Omnibox-Gemini", "search%20term%0A"))));
     EXPECT_EQ(match.destination_url, expected_gemini_url);
   }
   {
@@ -2221,8 +2233,10 @@ TEST_F(AutocompleteControllerTest, ExtraHeaders) {
         u"what is http://example.com for?");
 
     controller_.SetMatchDestinationURL(&match);
-    EXPECT_EQ(match.extra_headers,
-              "X-Omnibox-Gemini:what%20is%20http%3A%2F%2Fexample.com%20for%3F");
+    EXPECT_THAT(match.extra_headers,
+                WhenSorted(ElementsAre(
+                    Pair("X-Omnibox-Gemini",
+                         "what%20is%20http%3A%2F%2Fexample.com%20for%3F"))));
     EXPECT_EQ(match.destination_url, expected_gemini_url);
   }
   {
@@ -2233,9 +2247,10 @@ TEST_F(AutocompleteControllerTest, ExtraHeaders) {
         std::make_unique<TemplateURLRef::SearchTermsArgs>(u"こんにちは\n");
 
     controller_.SetMatchDestinationURL(&match);
-    EXPECT_EQ(
-        match.extra_headers,
-        "X-Omnibox-Gemini:%E3%81%93%E3%82%93%E3%81%AB%E3%81%A1%E3%81%AF%0A");
+    EXPECT_THAT(match.extra_headers,
+                WhenSorted(ElementsAre(
+                    Pair("X-Omnibox-Gemini",
+                         "%E3%81%93%E3%82%93%E3%81%AB%E3%81%A1%E3%81%AF%0A"))));
     EXPECT_EQ(match.destination_url, expected_gemini_url);
   }
   {
@@ -2246,7 +2261,7 @@ TEST_F(AutocompleteControllerTest, ExtraHeaders) {
         std::make_unique<TemplateURLRef::SearchTermsArgs>(u"search term");
 
     controller_.SetMatchDestinationURL(&match);
-    EXPECT_EQ(match.extra_headers, "");
+    EXPECT_TRUE(match.extra_headers.empty());
     EXPECT_EQ(match.destination_url, "chrome://bookmarks/?q=search+term");
   }
   {
@@ -2254,7 +2269,7 @@ TEST_F(AutocompleteControllerTest, ExtraHeaders) {
     auto match = CreateSearchMatch("search term", true, 1300);
 
     controller_.SetMatchDestinationURL(&match);
-    EXPECT_EQ(match.extra_headers, "");
+    EXPECT_TRUE(match.extra_headers.empty());
     EXPECT_EQ(match.destination_url, "https://google.com/search?q=search+term");
   }
 }
@@ -2267,7 +2282,7 @@ TEST_F(AutocompleteControllerTest, ShouldRunProvider_StarterPack) {
 
   // Populate template URL service with starter pack entries.
   std::vector<std::unique_ptr<TemplateURLData>> turls =
-      TemplateURLStarterPackData::GetStarterPackEngines();
+      template_url_starter_pack_data::GetStarterPackEngines();
   for (auto& turl : turls) {
     controller_.template_url_service_->Add(
         std::make_unique<TemplateURL>(std::move(*turl)));
@@ -2677,7 +2692,8 @@ TEST_F(AutocompleteControllerTest,
   EXPECT_NE(nullptr, provider_client()->GetPedalProvider());
 
   // Populate template URL service with starter pack entries.
-  for (auto& turl_data : TemplateURLStarterPackData::GetStarterPackEngines()) {
+  for (auto& turl_data :
+       template_url_starter_pack_data::GetStarterPackEngines()) {
     controller_.template_url_service_->Add(
         std::make_unique<TemplateURL>(std::move(*turl_data)));
   }
@@ -2707,6 +2723,54 @@ TEST_F(AutocompleteControllerTest,
   EXPECT_EQ(
       OmniboxActionId::CONTEXTUAL_SEARCH_FULFILLMENT,
       controller_.internal_result_.match_at(1)->takeover_action->ActionId());
+}
+
+TEST_F(AutocompleteControllerTest, ContextualQueryAppendsSearchboxStats) {
+  omnibox_feature_configs::ScopedConfigForTesting<
+      omnibox_feature_configs::ContextualSearch>
+      contextual_search_config;
+  contextual_search_config.Get().contextual_zero_suggest_lens_fulfillment =
+      true;
+  TemplateURLData turl_data;
+  turl_data.SetShortName(u"Contextual");
+  turl_data.SetKeyword(u"contextual");
+  turl_data.SetURL(
+      "https://google.com/search?q={searchTerms}/{google:assistedQueryStats}");
+  controller_.template_url_service_->Add(
+      std::make_unique<TemplateURL>(turl_data));
+
+  // Create input with lens searchbox page classification.
+  controller_.input_ = AutocompleteInput(u"", metrics::OmniboxEventProto::OTHER,
+                                         TestSchemeClassifier());
+  controller_.input_.set_focus_type(
+      metrics::OmniboxFocusType::INTERACTION_FOCUS);
+
+  SetAutocompleteMatches(
+      {CreateZeroSuggestContextualSearchMatch(u"Summary"),
+       CreateZeroSuggestContextualSearchMatch(u"Summarize this page")});
+
+  controller_.AttachActions();
+  UpdateSearchboxStats();
+
+  // The takeover action should be for the contextual search action, not pedals.
+  ASSERT_TRUE(controller_.internal_result_.match_at(0)->takeover_action);
+  auto* contextual_takover_action_0 =
+      ContextualSearchFulfillmentAction::FromAction(
+          controller_.internal_result_.match_at(0)->takeover_action.get());
+  EXPECT_EQ(OmniboxActionId::CONTEXTUAL_SEARCH_FULFILLMENT,
+            contextual_takover_action_0->ActionId());
+  EXPECT_TRUE(base::Contains(
+      contextual_takover_action_0->get_fulfillment_url_for_testing().spec(),
+      "gs_lcrp="));
+  ASSERT_TRUE(controller_.internal_result_.match_at(1)->takeover_action);
+  auto* contextual_takover_action_1 =
+      ContextualSearchFulfillmentAction::FromAction(
+          controller_.internal_result_.match_at(1)->takeover_action.get());
+  EXPECT_EQ(OmniboxActionId::CONTEXTUAL_SEARCH_FULFILLMENT,
+            contextual_takover_action_1->ActionId());
+  EXPECT_TRUE(base::Contains(
+      contextual_takover_action_1->get_fulfillment_url_for_testing().spec(),
+      "gs_lcrp="));
 }
 
 TEST_F(AutocompleteControllerTest,
@@ -3056,3 +3120,132 @@ TEST_F(AutocompleteControllerTest, CheckWhetherDefaultMatchChanged) {
     EXPECT_FALSE(check_change(match, u"assoc1"));
   }
 }
+
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+TEST_F(AutocompleteControllerTest,
+       AttachContextualSearchOpenLensActionToMatches) {
+  omnibox_feature_configs::ScopedConfigForTesting<
+      omnibox_feature_configs::ContextualSearch>
+      contextual_search_config;
+  contextual_search_config.Get().contextual_zero_suggest_lens_fulfillment =
+      true;
+  contextual_search_config.Get().suggestions_fulfilled_by_lens_supported = true;
+
+  // Create a zero-suggest input.
+  controller_.input_ = AutocompleteInput(u"", metrics::OmniboxEventProto::OTHER,
+                                         TestSchemeClassifier());
+  controller_.input_.set_focus_type(
+      metrics::OmniboxFocusType::INTERACTION_FOCUS);
+
+  ACMatches matches;
+
+  // Match 1: Contextual search suggestion with Lens action.
+  AutocompleteMatch match1;
+  match1.subtypes.insert(omnibox::SuggestSubtype::SUBTYPE_CONTEXTUAL_SEARCH);
+  match1.suggest_template = omnibox::SuggestTemplateInfo();
+  auto* action1 = match1.suggest_template->add_action_suggestions();
+  action1->set_action_type(
+      omnibox::SuggestTemplateInfo_TemplateAction_ActionType_CHROME_LENS);
+  matches.push_back(match1);
+
+  // Match 2: Contextual search suggestion without Lens action.
+  AutocompleteMatch match2;
+  match2.subtypes.insert(omnibox::SuggestSubtype::SUBTYPE_CONTEXTUAL_SEARCH);
+  matches.push_back(match2);
+
+  // Match 3: Non-contextual search suggestion with Lens action.
+  AutocompleteMatch match3;
+  match3.suggest_template = omnibox::SuggestTemplateInfo();
+  auto* action3 = match3.suggest_template->add_action_suggestions();
+  action3->set_action_type(
+      omnibox::SuggestTemplateInfo_TemplateAction_ActionType_CHROME_LENS);
+  matches.push_back(match3);
+
+  // Match 4: Non-contextual search suggestion without Lens action.
+  AutocompleteMatch match4;
+  matches.push_back(match4);
+
+  SetAutocompleteMatches(matches);
+  controller_.AttachActions();
+
+  ASSERT_EQ(4u, controller_.internal_result_.size());
+
+  // Match 1 should have the open Lens takeover action.
+  EXPECT_TRUE(controller_.internal_result_.match_at(0)->takeover_action);
+  EXPECT_EQ(
+      controller_.internal_result_.match_at(0)->takeover_action->ActionId(),
+      OmniboxActionId::CONTEXTUAL_SEARCH_OPEN_LENS);
+
+  // Others should not.
+  EXPECT_FALSE(
+      controller_.internal_result_.match_at(1)->takeover_action->ActionId() ==
+      OmniboxActionId::CONTEXTUAL_SEARCH_OPEN_LENS);
+  EXPECT_FALSE(controller_.internal_result_.match_at(2)->takeover_action);
+  EXPECT_FALSE(controller_.internal_result_.match_at(3)->takeover_action);
+}
+
+TEST_F(AutocompleteControllerTest,
+       ContextualSearchOpenLensActionAttachedPageKeywordMode) {
+  omnibox_feature_configs::ScopedConfigForTesting<
+      omnibox_feature_configs::ContextualSearch>
+      contextual_search_config;
+  contextual_search_config.Get().suggestions_fulfilled_by_lens_supported = true;
+
+  // Create a pedal provider to ensure that the contextual search action takes
+  // precedence over the pedal.
+  std::unordered_map<OmniboxPedalId, scoped_refptr<OmniboxPedal>> pedals;
+  const auto add = [&](OmniboxPedal* pedal) {
+    pedals.insert(
+        std::make_pair(pedal->PedalId(), base::WrapRefCounted(pedal)));
+  };
+  add(new TestOmniboxPedalClearBrowsingData());
+  provider_client()->set_pedal_provider(std::make_unique<OmniboxPedalProvider>(
+      *provider_client(), std::move(pedals)));
+  EXPECT_NE(nullptr, provider_client()->GetPedalProvider());
+
+  // Populate template URL service with starter pack entries.
+  for (auto& turl_data :
+       template_url_starter_pack_data::GetStarterPackEngines()) {
+    controller_.template_url_service_->Add(
+        std::make_unique<TemplateURL>(std::move(*turl_data)));
+  }
+
+  // Create input with lens searchbox page classification.
+  controller_.input_ =
+      AutocompleteInput(u"@page Summar", metrics::OmniboxEventProto::OTHER,
+                        TestSchemeClassifier());
+  controller_.input_.set_keyword_mode_entry_method(
+      metrics::OmniboxEventProto::SPACE_AT_END);
+
+  AutocompleteMatch match1 = CreateContextualSearchMatch(u"Summary");
+  match1.suggest_template = omnibox::SuggestTemplateInfo();
+  auto* action1 = match1.suggest_template->add_action_suggestions();
+  action1->set_action_type(
+      omnibox::SuggestTemplateInfo_TemplateAction_ActionType_CHROME_LENS);
+
+  AutocompleteMatch match2 =
+      CreateContextualSearchMatch(u"Summarize this page");
+  match2.suggest_template = omnibox::SuggestTemplateInfo();
+  auto* action2 = match2.suggest_template->add_action_suggestions();
+  action2->set_action_type(
+      omnibox::SuggestTemplateInfo_TemplateAction_ActionType_CHROME_LENS);
+
+  SetAutocompleteMatches({match1, match2});
+
+  static_cast<FakeTabMatcher&>(
+      const_cast<TabMatcher&>(provider_client()->GetTabMatcher()))
+      .set_url_substring_match("matches");
+
+  controller_.AttachActions();
+
+  // The takeover action should be for the contextual search action, not pedals.
+  ASSERT_TRUE(controller_.internal_result_.match_at(0)->takeover_action);
+  EXPECT_EQ(
+      OmniboxActionId::CONTEXTUAL_SEARCH_OPEN_LENS,
+      controller_.internal_result_.match_at(0)->takeover_action->ActionId());
+  ASSERT_TRUE(controller_.internal_result_.match_at(1)->takeover_action);
+  EXPECT_EQ(
+      OmniboxActionId::CONTEXTUAL_SEARCH_OPEN_LENS,
+      controller_.internal_result_.match_at(1)->takeover_action->ActionId());
+}
+#endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)

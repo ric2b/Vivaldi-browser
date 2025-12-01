@@ -659,6 +659,7 @@ class InputApi(object):
         r'.+\.js$',
         r'.+\.ts$',
         r'.+\.py$',
+        r'.+\.star$',
         r'.+\.sh$',
         r'.+\.rb$',
         r'.+\.pl$',

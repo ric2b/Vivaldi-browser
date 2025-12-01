@@ -34,10 +34,8 @@
 #include "spirv/unified1/GLSL.std.450.h"
 #include "spirv/unified1/spirv.h"
 
-#include "src/tint/lang/core/access.h"
-#include "src/tint/lang/core/address_space.h"
-#include "src/tint/lang/core/builtin_value.h"
 #include "src/tint/lang/core/constant/value.h"
+#include "src/tint/lang/core/enums.h"
 #include "src/tint/lang/core/fluent_types.h"
 #include "src/tint/lang/core/ir/access.h"
 #include "src/tint/lang/core/ir/bitcast.h"
@@ -73,7 +71,6 @@
 #include "src/tint/lang/core/ir/user_call.h"
 #include "src/tint/lang/core/ir/validator.h"
 #include "src/tint/lang/core/ir/var.h"
-#include "src/tint/lang/core/texel_format.h"
 #include "src/tint/lang/core/type/array.h"
 #include "src/tint/lang/core/type/atomic.h"
 #include "src/tint/lang/core/type/binding_array.h"
@@ -91,6 +88,7 @@
 #include "src/tint/lang/core/type/vector.h"
 #include "src/tint/lang/core/type/void.h"
 #include "src/tint/lang/spirv/ir/builtin_call.h"
+#include "src/tint/lang/spirv/ir/copy_logical.h"
 #include "src/tint/lang/spirv/ir/literal_operand.h"
 #include "src/tint/lang/spirv/type/explicit_layout_array.h"
 #include "src/tint/lang/spirv/type/sampled_image.h"
@@ -217,9 +215,24 @@ class Printer {
             return res.Failure();
         }
 
+        uint32_t version = 0u;
+        switch (options_.spirv_version) {
+            case SpvVersion::kSpv13:
+                version = 0x10300u;
+                break;
+            case SpvVersion::kSpv14:
+                version = 0x10400u;
+                break;
+            case SpvVersion::kSpv15:
+                version = 0x10500u;
+                break;
+            default:
+                TINT_ICE() << "unsupported SPIR-V version";
+        }
+
         // Serialize the module into binary SPIR-V.
         BinaryWriter writer;
-        writer.WriteHeader(module_.IdBound(), kWriterVersion);
+        writer.WriteHeader(module_.IdBound(), kWriterVersion, version);
         writer.WriteModule(module_);
 
         output_.spirv = std::move(writer.Result());
@@ -386,6 +399,10 @@ class Printer {
             case core::BuiltinValue::kClipDistances:
                 module_.PushCapability(SpvCapabilityClipDistance);
                 return SpvBuiltInClipDistance;
+            case core::BuiltinValue::kPrimitiveId:
+                // TODO(dsinclair): This come be others, but use geometry for now.
+                module_.PushCapability(SpvCapabilityGeometry);
+                return SpvBuiltInPrimitiveId;
             case core::BuiltinValue::kUndefined:
                 return SpvBuiltInMax;
         }
@@ -433,6 +450,13 @@ class Printer {
                     module_.PushType(spv::Op::OpConstant, {Type(ty), id, constant->ValueAs<u32>()});
                 },
                 [&](const core::type::U32*) {
+                    module_.PushType(spv::Op::OpConstant,
+                                     {Type(ty), id, U32Operand(constant->ValueAs<i32>())});
+                },
+                [&](const core::type::I8*) {
+                    module_.PushType(spv::Op::OpConstant, {Type(ty), id, constant->ValueAs<u32>()});
+                },
+                [&](const core::type::U8*) {
                     module_.PushType(spv::Op::OpConstant,
                                      {Type(ty), id, U32Operand(constant->ValueAs<i32>())});
                 },
@@ -550,6 +574,14 @@ class Printer {
                 [&](const core::type::U32*) {
                     module_.PushType(spv::Op::OpTypeInt, {id, 32u, 0u});
                 },
+                [&](const core::type::I8*) {
+                    module_.PushCapability(SpvCapabilityInt8);
+                    module_.PushType(spv::Op::OpTypeInt, {id, 8u, 1u});
+                },
+                [&](const core::type::U8*) {
+                    module_.PushCapability(SpvCapabilityInt8);
+                    module_.PushType(spv::Op::OpTypeInt, {id, 8u, 0u});
+                },
                 [&](const core::type::F32*) { module_.PushType(spv::Op::OpTypeFloat, {id, 32u}); },
                 [&](const core::type::F16*) {
                     module_.PushCapability(SpvCapabilityFloat16);
@@ -635,6 +667,8 @@ class Printer {
                         } else {
                             module_.PushCapability(SpvCapabilitySampled1D);
                         }
+                    } else if (img->GetDim() == type::Dim::kBuffer) {
+                        module_.PushCapability(SpvCapabilityImageBuffer);
                     } else if (img->GetDim() == type::Dim::kSubpassData) {
                         module_.PushCapability(SpvCapabilityInputAttachment);
                     } else if (img->GetDim() == type::Dim::kCube &&
@@ -862,27 +896,35 @@ class Printer {
             }
 
             auto* ptr = var->Result()->Type()->As<core::type::Pointer>();
-            if (!(ptr->AddressSpace() == core::AddressSpace::kIn ||
-                  ptr->AddressSpace() == core::AddressSpace::kOut)) {
-                continue;
-            }
+            if (options_.spirv_version < SpvVersion::kSpv14) {
+                // In SPIR-V 1.3 or earlier, OpEntryPoint should list only statically used
+                // input/output variables.
+                if (!(ptr->AddressSpace() == core::AddressSpace::kIn ||
+                      ptr->AddressSpace() == core::AddressSpace::kOut)) {
+                    continue;
+                }
 
-            // Determine if this IO variable is used by the entry point.
-            bool used = false;
-            for (const auto& use : var->Result()->UsagesUnsorted()) {
-                auto* block = use->instruction->Block();
-                while (block->Parent()) {
-                    block = block->Parent()->Block();
+                // Determine if this IO variable is used by the entry point.
+                bool used = false;
+                for (const auto& use : var->Result()->UsagesUnsorted()) {
+                    auto* block = use->instruction->Block();
+                    while (block->Parent()) {
+                        block = block->Parent()->Block();
+                    }
+                    if (block == func->Block()) {
+                        used = true;
+                        break;
+                    }
                 }
-                if (block == func->Block()) {
-                    used = true;
-                    break;
+                if (!used) {
+                    continue;
                 }
+                operands.push_back(Value(var));
+            } else {
+                // In SPIR-V 1.4 or later, OpEntryPoint must list all global variables statically
+                // used by the entry point. It may be a superset of the used variables though.
+                operands.push_back(Value(var));
             }
-            if (!used) {
-                continue;
-            }
-            operands.push_back(Value(var));
 
             // Add the `DepthReplacing` execution mode if `frag_depth` is used.
             if (var->Attributes().builtin == core::BuiltinValue::kFragDepth) {
@@ -986,6 +1028,7 @@ class Printer {
                 [&](core::ir::If* i) { EmitIf(i); },                                  //
                 [&](core::ir::Terminator* t) { EmitTerminator(t); },                  //
                 [&](core::ir::Discard* t) { EmitDiscard(t); },                        //
+                [&](spirv::ir::CopyLogical* c) { EmitCopyLogical(c); },               //
                 TINT_ICE_ON_NO_MATCH);
 
             // Set the name for the SPIR-V result ID if provided in the module.
@@ -1444,6 +1487,12 @@ class Printer {
             case spirv::BuiltinFn::kImageSampleDrefExplicitLod:
                 op = spv::Op::OpImageSampleDrefExplicitLod;
                 break;
+            case spirv::BuiltinFn::kImageSampleProjDrefImplicitLod:
+                op = spv::Op::OpImageSampleProjDrefImplicitLod;
+                break;
+            case spirv::BuiltinFn::kImageSampleProjDrefExplicitLod:
+                op = spv::Op::OpImageSampleProjDrefExplicitLod;
+                break;
             case spirv::BuiltinFn::kImageWrite:
                 op = spv::Op::OpImageWrite;
                 break;
@@ -1482,6 +1531,9 @@ class Printer {
                 break;
             case spirv::BuiltinFn::kNormalize:
                 ext_inst(GLSLstd450Normalize);
+                break;
+            case spirv::BuiltinFn::kImage:
+                op = spv::Op::OpImage;
                 break;
             case spirv::BuiltinFn::kSampledImage:
                 op = spv::Op::OpSampledImage;
@@ -1639,6 +1691,36 @@ class Printer {
             case BuiltinFn::kOuterProduct:
                 op = spv::Op::OpOuterProduct;
                 break;
+            case BuiltinFn::kGroupNonUniformBroadcast:
+                op = spv::Op::OpGroupNonUniformBroadcast;
+                break;
+            case BuiltinFn::kGroupNonUniformBroadcastFirst:
+                op = spv::Op::OpGroupNonUniformBroadcastFirst;
+                break;
+            case BuiltinFn::kGroupNonUniformQuadBroadcast:
+                op = spv::Op::OpGroupNonUniformQuadBroadcast;
+                break;
+            case BuiltinFn::kGroupNonUniformQuadSwap:
+                op = spv::Op::OpGroupNonUniformQuadSwap;
+                break;
+            case BuiltinFn::kGroupNonUniformShuffle:
+                op = spv::Op::OpGroupNonUniformShuffle;
+                break;
+            case BuiltinFn::kGroupNonUniformShuffleXor:
+                op = spv::Op::OpGroupNonUniformShuffleXor;
+                break;
+            case BuiltinFn::kGroupNonUniformShuffleDown:
+                op = spv::Op::OpGroupNonUniformShuffleDown;
+                break;
+            case BuiltinFn::kGroupNonUniformShuffleUp:
+                op = spv::Op::OpGroupNonUniformShuffleUp;
+                break;
+            case BuiltinFn::kGroupNonUniformSMin:
+                op = spv::Op::OpGroupNonUniformSMin;
+                break;
+            case BuiltinFn::kGroupNonUniformSMax:
+                op = spv::Op::OpGroupNonUniformSMax;
+                break;
             case spirv::BuiltinFn::kNone:
                 TINT_ICE() << "undefined spirv ir function";
         }
@@ -1647,6 +1729,16 @@ class Printer {
             operands.push_back(Value(arg));
         }
         current_function_.PushInst(op, operands);
+    }
+
+    /// Emit an OpCopyLogical instruction.
+    /// @param copy The logical copy instruction to emit
+    void EmitCopyLogical(spirv::ir::CopyLogical* copy) {
+        auto id = Value(copy);
+
+        OperandList operands = {Type(copy->Result()->Type()), id};
+        operands.push_back(Value(copy->Arg()));
+        current_function_.PushInst(spv::Op::OpCopyLogical, operands);
     }
 
     uint32_t ImportGlslStd450() {
@@ -1839,7 +1931,7 @@ class Printer {
                 break;
             case core::BuiltinFn::kMax:
                 if (result_ty->IsFloatScalarOrVector()) {
-                    glsl_ext_inst(GLSLstd450FMax);
+                    glsl_ext_inst(GLSLstd450NMax);
                 } else if (result_ty->IsSignedIntegerScalarOrVector()) {
                     glsl_ext_inst(GLSLstd450SMax);
                 } else if (result_ty->IsUnsignedIntegerScalarOrVector()) {
@@ -1848,7 +1940,7 @@ class Printer {
                 break;
             case core::BuiltinFn::kMin:
                 if (result_ty->IsFloatScalarOrVector()) {
-                    glsl_ext_inst(GLSLstd450FMin);
+                    glsl_ext_inst(GLSLstd450NMin);
                 } else if (result_ty->IsSignedIntegerScalarOrVector()) {
                     glsl_ext_inst(GLSLstd450SMin);
                 } else if (result_ty->IsUnsignedIntegerScalarOrVector()) {
@@ -2765,6 +2857,63 @@ class Printer {
             case core::TexelFormat::kR8Unorm:
                 module_.PushCapability(SpvCapabilityStorageImageExtendedFormats);
                 return SpvImageFormatR8;
+            case core::TexelFormat::kR8Snorm:
+                module_.PushCapability(SpvCapabilityStorageImageExtendedFormats);
+                return SpvImageFormatR8Snorm;
+            case core::TexelFormat::kR8Uint:
+                module_.PushCapability(SpvCapabilityStorageImageExtendedFormats);
+                return SpvImageFormatR8ui;
+            case core::TexelFormat::kR8Sint:
+                module_.PushCapability(SpvCapabilityStorageImageExtendedFormats);
+                return SpvImageFormatR8i;
+            case core::TexelFormat::kRg8Unorm:
+                module_.PushCapability(SpvCapabilityStorageImageExtendedFormats);
+                return SpvImageFormatRg8;
+            case core::TexelFormat::kRg8Snorm:
+                module_.PushCapability(SpvCapabilityStorageImageExtendedFormats);
+                return SpvImageFormatRg8Snorm;
+            case core::TexelFormat::kRg8Uint:
+                module_.PushCapability(SpvCapabilityStorageImageExtendedFormats);
+                return SpvImageFormatRg8ui;
+            case core::TexelFormat::kRg8Sint:
+                module_.PushCapability(SpvCapabilityStorageImageExtendedFormats);
+                return SpvImageFormatRg8i;
+            case core::TexelFormat::kR16Uint:
+                module_.PushCapability(SpvCapabilityStorageImageExtendedFormats);
+                return SpvImageFormatR16ui;
+            case core::TexelFormat::kR16Sint:
+                module_.PushCapability(SpvCapabilityStorageImageExtendedFormats);
+                return SpvImageFormatR16i;
+            case core::TexelFormat::kR16Float:
+                module_.PushCapability(SpvCapabilityStorageImageExtendedFormats);
+                return SpvImageFormatR16f;
+            case core::TexelFormat::kRg16Uint:
+                module_.PushCapability(SpvCapabilityStorageImageExtendedFormats);
+                return SpvImageFormatRg16ui;
+            case core::TexelFormat::kRg16Sint:
+                module_.PushCapability(SpvCapabilityStorageImageExtendedFormats);
+                return SpvImageFormatRg16i;
+            case core::TexelFormat::kRg16Float:
+                module_.PushCapability(SpvCapabilityStorageImageExtendedFormats);
+                return SpvImageFormatRg16f;
+            case core::TexelFormat::kR16Unorm:
+                module_.PushCapability(SpvCapabilityStorageImageExtendedFormats);
+                return SpvImageFormatR16;
+            case core::TexelFormat::kR16Snorm:
+                module_.PushCapability(SpvCapabilityStorageImageExtendedFormats);
+                return SpvImageFormatR16Snorm;
+            case core::TexelFormat::kRg16Unorm:
+                module_.PushCapability(SpvCapabilityStorageImageExtendedFormats);
+                return SpvImageFormatRg16;
+            case core::TexelFormat::kRg16Snorm:
+                module_.PushCapability(SpvCapabilityStorageImageExtendedFormats);
+                return SpvImageFormatRg16Snorm;
+            case core::TexelFormat::kRgba16Unorm:
+                module_.PushCapability(SpvCapabilityStorageImageExtendedFormats);
+                return SpvImageFormatRgba16;
+            case core::TexelFormat::kRgba16Snorm:
+                module_.PushCapability(SpvCapabilityStorageImageExtendedFormats);
+                return SpvImageFormatRgba16Snorm;
             case core::TexelFormat::kR32Uint:
                 return SpvImageFormatR32ui;
             case core::TexelFormat::kR32Sint:
@@ -2800,6 +2949,15 @@ class Printer {
                 return SpvImageFormatRgba32i;
             case core::TexelFormat::kRgba32Float:
                 return SpvImageFormatRgba32f;
+            case core::TexelFormat::kRgb10A2Uint:
+                module_.PushCapability(SpvCapabilityStorageImageExtendedFormats);
+                return SpvImageFormatRgb10a2ui;
+            case core::TexelFormat::kRgb10A2Unorm:
+                module_.PushCapability(SpvCapabilityStorageImageExtendedFormats);
+                return SpvImageFormatRgb10A2;
+            case core::TexelFormat::kRg11B10Ufloat:
+                module_.PushCapability(SpvCapabilityStorageImageExtendedFormats);
+                return SpvImageFormatR11fG11fB10f;
             case core::TexelFormat::kUndefined:
                 return SpvImageFormatUnknown;
         }

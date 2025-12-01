@@ -6,10 +6,11 @@
 #import "browser/removed_partners_tracker.h"
 #import "browser/search_engines/vivaldi_search_engines_updater.h"
 #import "browser/vivaldi_default_bookmarks.h"
+#import "components/application_locale_storage/application_locale_storage.h"
 #import "components/bookmarks/browser/bookmark_model.h"
 #import "components/keyed_service/core/service_access_type.h"
 #import "components/search_engines/default_search_engine_observer.h"
-#import "ios/ad_blocker/adblock_rule_service_factory.h"
+#import "ios/chrome/browser/ad_blocker/adblock_rule_service_factory.h"
 #import "ios/chrome/browser/bookmarks/model/bookmark_model_factory.h"
 #import "ios/chrome/browser/favicon/model/favicon_service_factory.h"
 #import "ios/chrome/browser/search_engines/model/template_url_service_factory.h"
@@ -63,7 +64,7 @@ PrefService* UpdaterClientImpl::GetPrefService() {
 }
 
 const std::string& UpdaterClientImpl::GetApplicationLocale() {
-  return GetApplicationContext()->GetApplicationLocale();
+  return GetApplicationContext()->GetApplicationLocaleStorage()->Get();
 }
 
 FaviconServiceGetter UpdaterClientImpl::GetFaviconServiceGetter() {

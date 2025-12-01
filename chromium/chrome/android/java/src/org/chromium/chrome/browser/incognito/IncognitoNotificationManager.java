@@ -8,6 +8,7 @@ import android.app.Notification;
 import android.content.Context;
 
 import org.chromium.base.ContextUtils;
+import org.chromium.build.annotations.NullMarked;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.notifications.NotificationConstants;
 import org.chromium.chrome.browser.notifications.NotificationUmaTracker;
@@ -21,6 +22,7 @@ import org.chromium.components.browser_ui.notifications.NotificationWrapperBuild
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 
 /** Manages the notification indicating that there are incognito tabs opened in Document mode. */
+@NullMarked
 public class IncognitoNotificationManager {
     public static final String INCOGNITO_TABS_OPEN_TAG = "incognito_tabs_open";
     private static final int INCOGNITO_TABS_OPEN_ID = 100;

@@ -22,6 +22,7 @@ import {targetForEvent} from './TargetForEvent.js';
 import * as ThirdPartyTreeView from './ThirdPartyTreeView.js';
 import {TimelineRegExp} from './TimelineFilters.js';
 import {rangeForSelection, type TimelineSelection} from './TimelineSelection.js';
+import timelineTreeViewStyles from './timelineTreeView.css.js';
 import {TimelineUIUtils} from './TimelineUIUtils.js';
 import * as Utils from './utils/utils.js';
 
@@ -133,7 +134,7 @@ const UIStrings = {
    */
   timelineStack: 'Timeline stack',
   /**
-  /*@description Text to search by matching case of the input button
+   * /*@description Text to search by matching case of the input button
    */
   matchCase: 'Match case',
   /**
@@ -207,6 +208,7 @@ export class TimelineTreeView extends
     super();
     this.#selectedEvents = null;
     this.element.classList.add('timeline-tree-view');
+    this.registerRequiredCSS(timelineTreeViewStyles);
 
     this.searchResults = [];
   }
@@ -571,7 +573,7 @@ export class TimelineTreeView extends
     if (selectedNode && this.showDetailsForNode(selectedNode)) {
       return;
     }
-    const banner = this.detailsView.element.createChild('div', 'full-widget-dimmed-banner');
+    const banner = this.detailsView.element.createChild('div', 'empty-state');
     UI.UIUtils.createTextChild(banner, i18nString(UIStrings.selectItemForDetails));
   }
 

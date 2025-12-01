@@ -1,24 +1,31 @@
 SKIP: INVALID
 
-RWByteAddressBuffer prevent_dce : register(u0);
+//
+// fragment_main
+//
 
+RWByteAddressBuffer prevent_dce : register(u0);
 uint subgroupBroadcast_49de94() {
-  uint res = WaveReadLaneAt(1u, 1);
+  uint res = WaveReadLaneAt(1u, int(1));
   return res;
 }
 
 void fragment_main() {
-  prevent_dce.Store(0u, asuint(subgroupBroadcast_49de94()));
-  return;
+  prevent_dce.Store(0u, subgroupBroadcast_49de94());
+}
+
+//
+// compute_main
+//
+
+RWByteAddressBuffer prevent_dce : register(u0);
+uint subgroupBroadcast_49de94() {
+  uint res = WaveReadLaneAt(1u, int(1));
+  return res;
 }
 
 [numthreads(1, 1, 1)]
 void compute_main() {
-  prevent_dce.Store(0u, asuint(subgroupBroadcast_49de94()));
-  return;
+  prevent_dce.Store(0u, subgroupBroadcast_49de94());
 }
-FXC validation failure:
-<scrubbed_path>(4,14-34): error X3004: undeclared identifier 'WaveReadLaneAt'
 
-
-tint executable returned error: exit status 1

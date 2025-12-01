@@ -169,7 +169,7 @@ void Queue::OnGLUsed() {
     mHasPendingCommands = true;
 }
 
-ResultOrError<bool> Queue::WaitForQueueSerial(ExecutionSerial serial, Nanoseconds timeout) {
+ResultOrError<bool> Queue::WaitForQueueSerialImpl(ExecutionSerial serial, Nanoseconds timeout) {
     // Search for the first fence >= serial.
     return mFencesInFlight.Use([&](auto fencesInFlight) -> ResultOrError<bool> {
         Ref<WrappedEGLSync> sync;
@@ -275,12 +275,15 @@ bool Queue::HasPendingCommands() const {
     return mHasPendingCommands;
 }
 
-MaybeError Queue::SubmitPendingCommands() {
+MaybeError Queue::SubmitPendingCommandsImpl() {
     DAWN_TRY(SubmitFenceSync());
     return {};
 }
 
 ResultOrError<ExecutionSerial> Queue::CheckAndUpdateCompletedSerials() {
+    // TODO(crbug.com/40643114): Revisit whether this lock is needed for this backend.
+    auto deviceGuard = GetDevice()->GetGuard();
+
     return mFencesInFlight.Use([&](auto fencesInFlight) -> ResultOrError<ExecutionSerial> {
         ExecutionSerial fenceSerial{0};
         while (!fencesInFlight->empty()) {
@@ -297,8 +300,6 @@ ResultOrError<ExecutionSerial> Queue::CheckAndUpdateCompletedSerials() {
             fenceSerial = tentativeSerial;
 
             fencesInFlight->pop_front();
-
-            DAWN_ASSERT(fenceSerial > GetCompletedCommandSerial());
         }
         return fenceSerial;
     });

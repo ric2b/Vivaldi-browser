@@ -19,9 +19,10 @@ import $ from "../$.js";
 
 import {$$, $closest, getComputedCSSText, hideElement} from "../utils/dom.js";
 import {raceWinner} from "../introspection/race.js";
-import {toRegExp} from "../utils/general.js";
+import {formatArguments, toRegExp} from "../utils/general.js";
 import {debug} from "../introspection/debug.js";
 import {getDebugger} from "../introspection/log.js";
+import {profile} from "../introspection/profile.js";
 import {waitUntilEvent} from "../utils/execution.js";
 
 let {MutationObserver, WeakSet, getComputedStyle} = $(window);
@@ -65,7 +66,9 @@ export function hideIfHasAndMatchesStyle(search,
                                          windowWidthMin = null,
                                          windowWidthMax = null
 ) {
+  const formattedArguments = formatArguments(arguments);
   const debugLog = getDebugger("hide-if-has-and-matches-style");
+  const {mark, end} = profile("hide-if-has-and-matches-style");
   const hiddenMap = new WeakSet();
   const logMap = debug() && new WeakSet();
   if (searchSelector == null)
@@ -75,6 +78,7 @@ export function hideIfHasAndMatchesStyle(search,
   const searchStyleRegExp = searchStyle ? toRegExp(searchStyle) : null;
   const mainLogic = () => {
     const callback = () => {
+      mark();
       if ((windowWidthMin && window.innerWidth < windowWidthMin) ||
          (windowWidthMax && window.innerWidth > windowWidthMax)
       )
@@ -96,8 +100,8 @@ export function hideIfHasAndMatchesStyle(search,
                      closest,
                      "which contains: ",
                      element,
-                     " for params: ",
-                     ...arguments);
+                     "\nFILTER: hide-if-has-and-matches-style",
+                     formattedArguments);
           }
           else {
             if (!logMap || logMap.has(closest))
@@ -122,6 +126,7 @@ export function hideIfHasAndMatchesStyle(search,
           logMap.add(element);
         }
       }
+      end();
     };
 
     const mo = new MutationObserver(callback);

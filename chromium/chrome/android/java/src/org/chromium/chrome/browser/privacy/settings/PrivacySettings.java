@@ -9,7 +9,6 @@ import static org.chromium.components.content_settings.PrefNames.COOKIE_CONTROLS
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.drawable.Drawable;
-import android.os.Build;
 import android.os.Bundle;
 import android.text.SpannableString;
 import android.text.style.ClickableSpan;
@@ -121,6 +120,10 @@ public class PrivacySettings extends ChromeBaseSettingsFragment
     @VisibleForTesting static final String PREF_TRACKING_PROTECTION = "tracking_protection";
     private static final String PREF_ADVANCED_PROTECTION_INFO = "advanced_protection_info";
 
+    @VisibleForTesting
+    static final String TRACKING_PROTECTIONS_OPENED_USER_ACTION =
+            "Settings.TrackingProtections.OpenedFromPrivacyPage";
+
     // Vivaldi
     private static final String PREF_CLEAR_SESSION_BROWSING_DATA = "clear_session_browsing_data";
     private static final String PREF_CONTEXTUAL_SEARCH = "contextual_search";
@@ -136,6 +139,7 @@ public class PrivacySettings extends ChromeBaseSettingsFragment
             "default";
     private static final String WEBRTC_IP_HANDLING_POLICY_DISABLE_NON_PROXIED_UDP =
             "disable_non_proxied_udp";
+    // End Vivaldi
 
     private IncognitoLockSettings mIncognitoLockSettings;
     private final ObservableSupplierImpl<String> mPageTitle = new ObservableSupplierImpl<>();
@@ -173,6 +177,11 @@ public class PrivacySettings extends ChromeBaseSettingsFragment
                 findPreference(PREF_INCOGNITO_TRACKING_PROTECTIONS);
         incognitoTrackingProtectionsPreference.setVisible(
                 shouldShowIncognitoTrackingProtectionsUi());
+        incognitoTrackingProtectionsPreference.setOnPreferenceClickListener(
+                preference -> {
+                    RecordUserAction.record(TRACKING_PROTECTIONS_OPENED_USER_ACTION);
+                    return false;
+                });
 
         Preference sandboxPreference = findPreference(PREF_PRIVACY_SANDBOX);
         // Overwrite the click listener to pass a correct referrer to the fragment.
@@ -326,7 +335,11 @@ public class PrivacySettings extends ChromeBaseSettingsFragment
             if (phoneAsASecurityKeyPreference != null)
                 getPreferenceScreen().removePreference(phoneAsASecurityKeyPreference);
 
-            ChromeBasePreference viewPrivacyReportButton = findPreference("view_privacy_report");
+            ChromeBasePreference viewPrivacyReportButton =
+                    findPreference(VivaldiPreferences.PREF_VIEW_PRIVACY_REPORT);
+            if (ChromeApplicationImpl.isVivaldi() && viewPrivacyReportButton != null) {
+                getPreferenceScreen().removePreference(viewPrivacyReportButton);
+            } else
             if (viewPrivacyReportButton != null) {
                 viewPrivacyReportButton.setOnPreferenceClickListener((preference) -> {
                     LaunchIntentDispatcher.dispatch(
@@ -336,21 +349,13 @@ public class PrivacySettings extends ChromeBaseSettingsFragment
             }
 
             ChromeBasePreference enablePrivacyReportButton =
-                    findPreference("enable_weekly_reports");
+                    findPreference(VivaldiPreferences.PREF_ENABLE_WEEKLY_REPORTS);
+            if (ChromeApplicationImpl.isVivaldi() && enablePrivacyReportButton != null) {
+                getPreferenceScreen().removePreference(enablePrivacyReportButton);
+            } else
             if (enablePrivacyReportButton != null) {
-                Intent intent;
-                if (ContextCompat.checkSelfPermission(
-                            getContext(), Manifest.permission.POST_NOTIFICATIONS)
-                        == PackageManager.PERMISSION_GRANTED) {
-                    intent = new Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS);
-                    intent.putExtra(Settings.EXTRA_APP_PACKAGE,
-                            ContextUtils.getApplicationContext().getPackageName());
-                    intent.putExtra(Settings.EXTRA_CHANNEL_ID, "privacy_report");
-                } else { // VAB-11433 Enter the general notification settings instead
-                    intent = new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS);
-                    intent.putExtra(Settings.EXTRA_APP_PACKAGE,
-                            ContextUtils.getApplicationContext().getPackageName());
-                }
+                Intent intent =
+                        VivaldiUtils.getNotificationChannelIntent(getContext(), "privacy_report");
                 PackageManager pm = getActivity().getPackageManager();
                 if (pm != null && intent.resolveActivity(pm) != null) {
                     enablePrivacyReportButton.setOnPreferenceClickListener(preference -> {
@@ -557,8 +562,7 @@ public class PrivacySettings extends ChromeBaseSettingsFragment
 
         Preference usageStatsPref = findPreference(PREF_USAGE_STATS);
         if (usageStatsPref != null) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
-                    && UserPrefs.get(getProfile()).getBoolean(Pref.USAGE_STATS_ENABLED)) {
+            if (UserPrefs.get(getProfile()).getBoolean(Pref.USAGE_STATS_ENABLED)) {
                 usageStatsPref.setOnPreferenceClickListener(
                         preference -> {
                             UsageStatsConsentDialog.create(

@@ -29,7 +29,7 @@ extern "C" {
 // Border for Loop restoration buffer
 #define AOM_RESTORATION_FRAME_BORDER 32
 #define CLIP(x, lo, hi) ((x) < (lo) ? (lo) : (x) > (hi) ? (hi) : (x))
-#define RINT(x) ((x) < 0 ? (int)((x)-0.5) : (int)((x) + 0.5))
+#define RINT(x) ((x) < 0 ? (int)((x) - 0.5) : (int)((x) + 0.5))
 
 #define RESTORATION_PROC_UNIT_SIZE 64
 

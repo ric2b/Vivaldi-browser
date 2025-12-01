@@ -102,10 +102,11 @@ const callback = (environment, ...filters) => {
   const worldEnvDefined = "world" in libEnvironment;
   const isIsolatedWorld = worldEnvDefined && libEnvironment.world === "ISOLATED";
   const isMainWorld = worldEnvDefined && libEnvironment.world === "MAIN";
-  const isChrome = typeof chrome === "object" && !!chrome.runtime;
-  const isOtherThanChrome = typeof browser === "object" && !!browser.runtime;
+
+  const chromeObjAvailable = typeof chrome === "object" && !!chrome.runtime;
+  const browserObjAvailable = typeof browser === "object" && !!browser.runtime;
   const isExtensionContext$2 = !isMainWorld &&
-    (isIsolatedWorld || isChrome || isOtherThanChrome);
+    (isIsolatedWorld || chromeObjAvailable || browserObjAvailable);
   const copyIfExtension = value => isExtensionContext$2 ?
     value :
     create(value, getOwnPropertyDescriptors(value));
@@ -121,7 +122,7 @@ const callback = (environment, ...filters) => {
 
   const invokes = bound(globalThis);
   const classes = isExtensionContext$2 ? globalThis : secure(globalThis);
-  const {Map: Map$b, RegExp: RegExp$1, Set: Set$2, WeakMap: WeakMap$4, WeakSet: WeakSet$b} = classes;
+  const {Map: Map$g, RegExp: RegExp$4, Set: Set$3, WeakMap: WeakMap$6, WeakSet: WeakSet$c} = classes;
 
   const augment = (source, target, method = null) => {
     const known = ownKeys(target);
@@ -158,40 +159,41 @@ const callback = (environment, ...filters) => {
   };
 
   const variables$3 = freeze({
-    frozen: new WeakMap$4(),
-    hidden: new WeakSet$b(),
+    frozen: new WeakMap$6(),
+    hidden: new WeakSet$c(),
     iframePropertiesToAbort: {
-      read: new Set$2(),
-      write: new Set$2()
+      read: new Set$3(),
+      write: new Set$3()
     },
-    abortedIframes: new WeakMap$4()
+    abortedIframes: new WeakMap$6()
   });
 
-  const startsCapitalized = new RegExp$1("^[A-Z]");
+  const startsCapitalized = new RegExp$4("^[A-Z]");
+  const extensionApi = (
+    isExtensionContext$2 && (
+      (chromeObjAvailable && chrome) ||
+      (browserObjAvailable && browser)
+    )
+  ) || void 0;
 
-  var env = new Proxy(new Map$b([
+  var env = new Proxy(new Map$g([
 
-    ["chrome", (
-      isExtensionContext$2 && (
-        (isChrome && chrome) ||
-        (isOtherThanChrome && browser)
-      )
-    ) || void 0],
+    ["chrome", extensionApi],
+    ["browser", extensionApi],
     ["isExtensionContext", isExtensionContext$2],
     ["variables", variables$3],
 
     ["console", copyIfExtension(console)],
     ["document", globalThis.document],
-    ["performance", copyIfExtension(performance)],
     ["JSON", copyIfExtension(JSON)],
-    ["Map", Map$b],
+    ["Map", Map$g],
     ["Math", copyIfExtension(Math)],
     ["Number", isExtensionContext$2 ? Number : primitive("Number")],
-    ["RegExp", RegExp$1],
-    ["Set", Set$2],
+    ["RegExp", RegExp$4],
+    ["Set", Set$3],
     ["String", isExtensionContext$2 ? String : primitive("String")],
-    ["WeakMap", WeakMap$4],
-    ["WeakSet", WeakSet$b],
+    ["WeakMap", WeakMap$6],
+    ["WeakSet", WeakSet$c],
 
     ["MouseEvent", MouseEvent]
   ]), {
@@ -241,7 +243,7 @@ const callback = (environment, ...filters) => {
     };
   }
 
-  const {Map: Map$a, WeakMap: WeakMap$3, WeakSet: WeakSet$a, setTimeout: setTimeout$3} = env;
+  const {Map: Map$f, WeakMap: WeakMap$5, WeakSet: WeakSet$b, setTimeout: setTimeout$3} = env;
 
   let cleanup = true;
   let cleanUpCallback = map => {
@@ -250,10 +252,10 @@ const callback = (environment, ...filters) => {
   };
 
   var transformer = transformOnce.bind({
-    WeakMap: WeakMap$3,
-    WeakSet: WeakSet$a,
+    WeakMap: WeakMap$5,
+    WeakSet: WeakSet$b,
 
-    WeakValue: class extends Map$a {
+    WeakValue: class extends Map$f {
       set(key, value) {
         if (cleanup) {
           cleanup = !cleanup;
@@ -269,11 +271,11 @@ const callback = (environment, ...filters) => {
   const globals = secure(globalThis);
 
   const {
-    Map: Map$9,
-    WeakMap: WeakMap$2
+    Map: Map$e,
+    WeakMap: WeakMap$4
   } = globals;
 
-  const map = new Map$9;
+  const map = new Map$e;
   const descriptors = target => {
     const chain = [];
     let current = target;
@@ -322,16 +324,16 @@ const callback = (environment, ...filters) => {
 
   const {
     isExtensionContext: isExtensionContext$1,
-    Array: Array$3,
+    Array: Array$8,
     Number: Number$1,
     String: String$1,
-    Object: Object$9
+    Object: Object$g
   } = env;
 
-  const {isArray} = Array$3;
-  const {getOwnPropertyDescriptor: getOwnPropertyDescriptor$1, setPrototypeOf: setPrototypeOf$1} = Object$9;
+  const {isArray} = Array$8;
+  const {getOwnPropertyDescriptor: getOwnPropertyDescriptor$1, setPrototypeOf: setPrototypeOf$1} = Object$g;
 
-  const {toString: toString$1} = Object$9.prototype;
+  const {toString: toString$1} = Object$g.prototype;
   const {slice} = String$1.prototype;
   const getBrand = value => call(slice, call(toString$1, value), 8, -1);
 
@@ -361,7 +363,7 @@ const callback = (environment, ...filters) => {
       return chained[hint](value);
 
     if (isArray(value))
-      return setPrototypeOf$1(value, Array$3.prototype);
+      return setPrototypeOf$1(value, Array$8.prototype);
 
     const brand = getBrand(value);
     if (brand in chained)
@@ -425,6 +427,60 @@ const callback = (environment, ...filters) => {
 
   const accessor = target => new $$1(target, handler);
 
+  let {Math: Math$5, setInterval: setInterval$1, performance} = $(window);
+
+  const noopProfile = {
+    mark() {},
+    end() {},
+    toString() {
+      return "{mark(){},end(){}}";
+    }
+  };
+
+  let inactive = true;
+
+  function setProfile() {
+    inactive = false;
+  }
+
+  function profile(id, rate = 10) {
+    if (inactive)
+      return noopProfile;
+    function processSamples() {
+      let samples = $([]);
+
+      for (let {name, duration} of performance.getEntriesByType("measure"))
+        samples.push({name, duration});
+
+      if (samples.length)
+        performance.clearMeasures();
+    }
+
+    if (!profile[id]) {
+      profile[id] = setInterval$1(processSamples,
+                                Math$5.round(60000 / Math$5.min(60, rate)));
+    }
+
+    return {
+      mark() {
+        performance.mark(id);
+      },
+      end(clear = false) {
+        performance.measure(id, id);
+        const measures = performance.getEntriesByName(id, "measure");
+        const measureObj = measures.length > 0 ?
+                           measures[measures.length - 1] : null;
+        console.log("PROFILER:", measureObj);
+        performance.clearMarks(id);
+        if (clear) {
+          clearInterval(profile[id]);
+          delete profile[id];
+          processSamples();
+        }
+      }
+    };
+  }
+
   let debugging = false;
 
   function debug() {
@@ -440,6 +496,7 @@ const callback = (environment, ...filters) => {
   const noop = () => {};
 
   function log(...args) {
+    let {mark, end} = profile("log");
     if (debug()) {
       const logArgs = ["%c DEBUG", "font-weight: bold;"];
 
@@ -470,14 +527,16 @@ const callback = (environment, ...filters) => {
 
       $(args).unshift(...logArgs);
     }
+    mark();
     console$4.log(...args);
+    end();
   }
 
   function getDebugger(name) {
     return bind(debug() ? log : noop, null, name);
   }
 
-  let {Math: Math$2, RegExp} = $(window);
+  let {Array: Array$7, Math: Math$4, RegExp: RegExp$3} = $(window);
 
   function regexEscape(string) {
     return $(string).replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&");
@@ -494,28 +553,48 @@ const callback = (environment, ...filters) => {
         if (!isCaseSensitive)
           args.push("i");
 
-        return new RegExp(...args);
+        return new RegExp$3(...args);
       }
     }
 
-    return new RegExp(regexEscape(pattern));
+    return new RegExp$3(regexEscape(pattern));
   }
 
   function randomId() {
 
-    return $(Math$2.floor(Math$2.random() * 2116316160 + 60466176)).toString(36);
+    return $(Math$4.floor(Math$4.random() * 2116316160 + 60466176)).toString(36);
+  }
+
+  function formatArguments(args) {
+    return $(Array$7.from(args)).map(arg => `'${arg}'`).join(" ");
+  }
+
+  function toHex(number, length = 2) {
+    let hex = $(number).toString(16);
+
+    if (hex.length < length)
+      hex = $("0").repeat(length - hex.length) + hex;
+
+    return hex;
+  }
+
+  function uint8ArrayToHex(uint8Array) {
+    return uint8Array.reduce((hex, byte) => hex + toHex(byte), "");
   }
 
   let {
-    parseFloat: parseFloat$3,
+    parseFloat: parseFloat$4,
     variables: variables$2,
-    Array: Array$2,
-    Error: Error$9,
-    Map: Map$8,
-    Object: Object$8,
+    clearTimeout,
+    fetch: fetch$1,
+    setTimeout: setTimeout$2,
+    Array: Array$6,
+    Error: Error$d,
+    Map: Map$d,
+    Object: Object$f,
     ReferenceError: ReferenceError$2,
-    Set: Set$1,
-    WeakMap: WeakMap$1
+    Set: Set$2,
+    WeakMap: WeakMap$3
   } = $(window);
 
   let {onerror} = accessor(window);
@@ -531,11 +610,11 @@ const callback = (environment, ...filters) => {
     let dotIndex = $property.indexOf(".");
     if (dotIndex == -1) {
 
-      let currentDescriptor = Object$8.getOwnPropertyDescriptor(object, property);
+      let currentDescriptor = Object$f.getOwnPropertyDescriptor(object, property);
       if (currentDescriptor && !currentDescriptor.configurable)
         return;
 
-      let newDescriptor = Object$8.assign({}, descriptor, {
+      let newDescriptor = Object$f.assign({}, descriptor, {
         configurable: setConfigurable
       });
 
@@ -544,7 +623,7 @@ const callback = (environment, ...filters) => {
         newDescriptor.get = () => propertyValue;
       }
 
-      Object$8.defineProperty(object, property, newDescriptor);
+      Object$f.defineProperty(object, property, newDescriptor);
       return;
     }
 
@@ -554,15 +633,15 @@ const callback = (environment, ...filters) => {
     if (value && (typeof value == "object" || typeof value == "function"))
       wrapPropertyAccess(value, property, descriptor);
 
-    let currentDescriptor = Object$8.getOwnPropertyDescriptor(object, name);
+    let currentDescriptor = Object$f.getOwnPropertyDescriptor(object, name);
     if (currentDescriptor && !currentDescriptor.configurable)
       return;
 
     if (!propertyAccessors)
-      propertyAccessors = new WeakMap$1();
+      propertyAccessors = new WeakMap$3();
 
     if (!propertyAccessors.has(object))
-      propertyAccessors.set(object, new Map$8());
+      propertyAccessors.set(object, new Map$d());
 
     let properties = propertyAccessors.get(object);
     if (properties.has(name)) {
@@ -570,9 +649,9 @@ const callback = (environment, ...filters) => {
       return;
     }
 
-    let toBeWrapped = new Map$8([[property, descriptor]]);
+    let toBeWrapped = new Map$d([[property, descriptor]]);
     properties.set(name, toBeWrapped);
-    Object$8.defineProperty(object, name, {
+    Object$f.defineProperty(object, name, {
       get: () => value,
       set(newValue) {
         value = newValue;
@@ -597,7 +676,8 @@ const callback = (environment, ...filters) => {
     });
   }
 
-  function abortOnRead(loggingPrefix, context, property,
+  function abortOnRead(loggingPrefix, context,
+                              property, formattedProperties = "",
                               setConfigurable = true) {
     let debugLog = getDebugger(loggingPrefix);
 
@@ -609,7 +689,7 @@ const callback = (environment, ...filters) => {
     let rid = randomId();
 
     function abort() {
-      debugLog("success", `${property} access aborted`);
+      debugLog("success", `${property} access aborted`, `\nFILTER: ${loggingPrefix} ${formattedProperties}`);
       throw new ReferenceError$2(rid);
     }
 
@@ -622,7 +702,9 @@ const callback = (environment, ...filters) => {
     overrideOnError(rid);
   }
 
-  function abortOnWrite(loggingPrefix, context, property,
+  function abortOnWrite(loggingPrefix,
+                               context, property,
+                               formattedProperties = "",
                                setConfigurable = true) {
     let debugLog = getDebugger(loggingPrefix);
 
@@ -634,7 +716,7 @@ const callback = (environment, ...filters) => {
     let rid = randomId();
 
     function abort() {
-      debugLog("success", `setting ${property} aborted`);
+      debugLog("success", `setting ${property} aborted`, `\nFILTER: ${loggingPrefix} ${formattedProperties}`);
       throw new ReferenceError$2(rid);
     }
 
@@ -652,22 +734,28 @@ const callback = (environment, ...filters) => {
     let abortedIframes = variables$2.abortedIframes;
     let iframePropertiesToAbort = variables$2.iframePropertiesToAbort;
 
-    for (let frame of Array$2.from(window.frames)) {
+    const formattedPropertiesToLog = formatArguments(properties);
+
+    for (let frame of Array$6.from(window.frames)) {
       if (abortedIframes.has(frame)) {
         for (let property of properties) {
           if (abortRead)
-            abortedIframes.get(frame).read.add(property);
+
+            abortedIframes.get(frame).read.add({property, formattedProperties: formattedPropertiesToLog});
           if (abortWrite)
-            abortedIframes.get(frame).write.add(property);
+
+            abortedIframes.get(frame).write.add({property, formattedProperties: formattedPropertiesToLog});
         }
       }
     }
 
     for (let property of properties) {
       if (abortRead)
-        iframePropertiesToAbort.read.add(property);
+
+        iframePropertiesToAbort.read.add({property, formattedProperties: formattedPropertiesToLog});
       if (abortWrite)
-        iframePropertiesToAbort.write.add(property);
+
+        iframePropertiesToAbort.write.add({property, formattedProperties: formattedPropertiesToLog});
     }
 
     queryAndProxyIframe();
@@ -677,29 +765,37 @@ const callback = (environment, ...filters) => {
     }
 
     function queryAndProxyIframe() {
-      for (let frame of Array$2.from(window.frames)) {
+      for (let frame of Array$6.from(window.frames)) {
 
         if (!abortedIframes.has(frame)) {
           abortedIframes.set(frame, {
-            read: new Set$1(iframePropertiesToAbort.read),
-            write: new Set$1(iframePropertiesToAbort.write)
+            read: new Set$2(iframePropertiesToAbort.read),
+            write: new Set$2(iframePropertiesToAbort.write)
           });
         }
 
         let readProps = abortedIframes.get(frame).read;
         if (readProps.size > 0) {
-          let props = Array$2.from(readProps);
+          let props = Array$6.from(readProps);
           readProps.clear();
-          for (let property of props)
-            abortOnRead("abort-on-iframe-property-read", frame, property);
+          for (let {property, formattedProperties} of props) {
+            abortOnRead("abort-on-iframe-property-read",
+                        frame,
+                        property,
+                        formattedProperties);
+          }
         }
 
         let writeProps = abortedIframes.get(frame).write;
         if (writeProps.size > 0) {
-          let props = Array$2.from(writeProps);
+          let props = Array$6.from(writeProps);
           writeProps.clear();
-          for (let property of props)
-            abortOnWrite("abort-on-iframe-property-write", frame, property);
+          for (let {property, formattedProperties} of props) {
+            abortOnWrite("abort-on-iframe-property-write",
+                         frame,
+                         property,
+                         formattedProperties);
+          }
         }
       }
     }
@@ -741,7 +837,7 @@ const callback = (environment, ...filters) => {
     }
 
     function getInnerHTMLDescriptor(target, property) {
-      let desc = Object$8.getOwnPropertyDescriptor(target, property);
+      let desc = Object$f.getOwnPropertyDescriptor(target, property);
       let {set: prevSetter} = desc || {};
       return {
         set(val) {
@@ -809,9 +905,9 @@ const callback = (environment, ...filters) => {
         return value;
       default:
         if (decimals.test(value))
-          return parseFloat$3(value);
+          return parseFloat$4(value);
 
-        throw new Error$9("[override-property-read snippet]: " +
+        throw new Error$d("[override-property-read snippet]: " +
                         `Value "${value}" is not valid.`);
     }
   }
@@ -878,11 +974,88 @@ const callback = (environment, ...filters) => {
     }
   }
 
-  let {HTMLScriptElement: HTMLScriptElement$1, Object: Object$7, ReferenceError: ReferenceError$1} = $(window);
-  let Script = Object$7.getPrototypeOf(HTMLScriptElement$1);
+  function matchesStackTrace(stackNeedle, debugLog) {
+    if (!stackNeedle || !stackNeedle.length)
+      return true;
+
+    const token = randomId();
+    const error = new Error$d(token);
+
+    const locHref = new URL(self.location.href);
+    locHref.hash = "";
+
+    const lineRegex = /(.*?@)?(\S+)(:\d+):\d+\)?$/;
+    const lines = [];
+    for (let line of error.stack.split(/[\n\r]+/)) {
+      if ($(line).includes(token))
+        continue;
+
+      line = $(line).trim();
+      const match = $(lineRegex).exec(line);
+      if (match === null)
+        continue;
+
+      let url = match[2];
+      if ($(url).startsWith("("))
+        url = $(url).slice(1);
+
+      if (url === locHref.href)
+        url = "inlineScript";
+      else if ($(url).startsWith("<anonymous>"))
+        url = "injectedScript";
+
+      let functionName = match[1] ?
+        $(match[1]).slice(0, -1) :
+        $(line).slice(0, $(match).index).trim();
+
+      if ($(functionName).startsWith("at"))
+        functionName = $(functionName).slice(2).trim();
+
+      let linePosition = match[3];
+      $(lines).push(" " + `${functionName} ${url}${linePosition}:1`.trim());
+    }
+
+    lines[0] = `stackDepth:${lines.length - 1}`;
+    const normalizedStack = $(lines).join("\n");
+
+    for (let needle of stackNeedle) {
+      const regex = toRegExp(needle);
+      if (regex.test(normalizedStack)) {
+        debugLog("info", `Found needle in stack trace: ${needle}`);
+        return true;
+      }
+    }
+
+    debugLog("info", `Stack trace does not match any needle. Stack trace: ${normalizedStack}`);
+    return false;
+  }
+
+  let fetchContentMap = new Map$d();
+
+  function fetchContent(url, {as = "arrayBuffer", cleanup = 60000} = {}) {
+
+    let uid = as + ":" + url;
+    let details = fetchContentMap.get(uid) || {
+      remove: () => fetchContentMap.delete(uid),
+      result: null,
+      timer: 0
+    };
+    clearTimeout(details.timer);
+    details.timer = setTimeout$2(details.remove, cleanup);
+    if (!details.result) {
+      details.result = fetch$1(url).then(res => res[as]()).catch(details.remove);
+      fetchContentMap.set(uid, details);
+    }
+    return details.result;
+  }
+
+  let {HTMLScriptElement: HTMLScriptElement$1, Object: Object$e, ReferenceError: ReferenceError$1} = $(window);
+  let Script = Object$e.getPrototypeOf(HTMLScriptElement$1);
 
   function abortCurrentInlineScript(api, search = null) {
+    const formattedArguments = formatArguments(arguments);
     const debugLog = getDebugger("abort-current-inline-script");
+    const {mark, end} = profile("abort-current-inline-script");
     const re = search ? toRegExp(search) : null;
 
     const rid = randomId();
@@ -902,7 +1075,7 @@ const callback = (environment, ...filters) => {
     }
 
     const {get: prevGetter, set: prevSetter} =
-      Object$7.getOwnPropertyDescriptor(object, name) || {};
+      Object$e.getOwnPropertyDescriptor(object, name) || {};
 
     let currentValue = object[name];
     if (typeof currentValue === "undefined")
@@ -914,7 +1087,12 @@ const callback = (environment, ...filters) => {
           $(element, "HTMLScriptElement").src == "" &&
           element != us &&
           (!re || re.test($(element).textContent))) {
-        debugLog("success", path, " is aborted \n", element);
+        debugLog("success",
+                 path,
+                 " is aborted \n",
+                 element,
+                 "\nFILTER: abort-current-inline-script",
+                 formattedArguments);
         throw new ReferenceError$1(rid);
       }
     };
@@ -938,37 +1116,291 @@ const callback = (environment, ...filters) => {
       }
     };
 
-    wrapPropertyAccess(object, name, descriptor);
+    mark();
+    wrapPropertyAccess(object,
+                       name,
+                       descriptor);
+    end();
 
     overrideOnError(rid);
   }
 
   function abortOnIframePropertyRead(...properties) {
+    const {mark, end} = profile("abort-on-iframe-property-read");
+    mark();
     abortOnIframe(properties, true, false);
+    end();
   }
 
   function abortOnIframePropertyWrite(...properties) {
+    const {mark, end} = profile("abort-on-iframe-property-write");
+    mark();
     abortOnIframe(properties, false, true);
+    end();
   }
 
   function abortOnPropertyRead(property, setConfigurable) {
     const configurableFlag = !(setConfigurable === "false");
-    abortOnRead("abort-on-property-read", window, property, configurableFlag);
+    const formattedArguments = formatArguments(arguments);
+    const {mark, end} = profile("abort-on-property-read");
+    mark();
+    abortOnRead("abort-on-property-read",
+                window,
+                property,
+                formattedArguments,
+                configurableFlag);
+    end();
   }
 
   function abortOnPropertyWrite(property, setConfigurable) {
+    const formattedArguments = formatArguments(arguments);
+    const {mark, end} = profile("abort-on-property-write");
     const configurableFlag = !(setConfigurable === "false");
-    abortOnWrite("abort-on-property-write", window, property, configurableFlag);
+    mark();
+    abortOnWrite("abort-on-property-write",
+                 window,
+                 property,
+                 formattedArguments,
+                 configurableFlag);
+    end();
   }
 
-  let {Error: Error$8, URL: URL$1} = $(window);
+  const {Error: Error$c, Object: Object$d, Array: Array$5, Map: Map$c} = $(window);
+
+  let arrayValues = null;
+
+  function hasMatchingProperty(val, needle, pathSegments) {
+
+    let current = val;
+    for (const segment of pathSegments) {
+
+      if (!current || !hasOwnProperty(current, segment))
+        return false;
+      current = current[segment];
+    }
+
+    if (typeof current === "string" || typeof current === "number"){
+      const currStr = current.toString();
+      return needle.test(currStr);
+    }
+
+    return false;
+  }
+
+  function arrayOverride(method, needle, returnValue = "false",
+                                path, stack) {
+    if (!method)
+      throw new Error$c("[array-override snippet]: Missing method to override.");
+
+    if (!needle)
+      throw new Error$c("[array-override snippet]: Missing needle.");
+
+    if (!arrayValues)
+      arrayValues = new Map$c();
+
+    let debugLog = getDebugger("array-override");
+    const {mark, end} = profile("array-override");
+    const formattedArgsToLog = formatArguments(arguments);
+
+    if (method === "push" && !arrayValues.has("push")) {
+      mark();
+      const {push} = Array$5.prototype;
+      arrayValues.set("push", $([]));
+
+      Object$d.defineProperty(window.Array.prototype, "push", {
+        value: proxy(push, function(val) {
+          const overrideVals = arrayValues.get("push");
+          for (const {needleRegex, pathSegments, stackNeedles} of overrideVals) {
+
+            if (!pathSegments.length && (typeof val === "string" ||
+                typeof val === "number")) {
+              const valStr = val.toString();
+              if (valStr.match && valStr.match(needleRegex) &&
+                  matchesStackTrace(stackNeedles, debugLog)) {
+                debugLog("success", `Array.push is ignored for needle: ${needleRegex}\nFILTER: array-override ${formattedArgsToLog}`);
+                return;
+              }
+            }
+
+            else if (pathSegments.length && typeof val === "object" &&
+                     val !== null) {
+              if (hasMatchingProperty(val, needleRegex, pathSegments) &&
+                  matchesStackTrace(stackNeedles, debugLog)) {
+                debugLog("success", `Array.push is ignored for object containing needle: ${needleRegex}\nFILTER: array-override ${formattedArgsToLog}`);
+                return;
+              }
+            }
+          }
+          return apply$2(push, this, arguments);
+        })
+      });
+      debugLog("info", "Wrapped Array.prototype.push");
+      end();
+    }
+
+    else if (method === "includes" && !arrayValues.has("includes")) {
+      mark();
+      const {includes} = Array$5.prototype;
+      arrayValues.set("includes", $([]));
+
+      Object$d.defineProperty(window.Array.prototype, "includes", {
+        value: proxy(includes, function(val) {
+          const overrideVals = arrayValues.get("includes");
+          for (const {
+            needleRegex,
+            retVal,
+            pathSegments,
+            stackNeedles
+          } of overrideVals) {
+
+            if (!pathSegments.length && (typeof val === "string" ||
+                 typeof val === "number")) {
+              if (val.toString().match &&
+                  val.toString().match(needleRegex) &&
+                  matchesStackTrace(stackNeedles, debugLog)) {
+                debugLog("success", `Array.includes returned ${retVal} for ${needleRegex}\nFILTER: array-override ${formattedArgsToLog}`);
+                return retVal;
+              }
+            }
+
+            else if (pathSegments.length && typeof val === "object" &&
+                     val !== null) {
+              if (hasMatchingProperty(val, needleRegex, pathSegments) &&
+                  matchesStackTrace(stackNeedles, debugLog)) {
+                debugLog("success", `Array.includes returned ${retVal} for object containing ${needleRegex}\nFILTER: array-override ${formattedArgsToLog}`);
+                return retVal;
+              }
+            }
+          }
+          return apply$2(includes, this, arguments);
+        })
+      });
+      debugLog("info", "Wrapped Array.prototype.includes");
+      end();
+    }
+
+    else if (method === "forEach" && !arrayValues.has("forEach")) {
+      mark();
+      const {forEach} = Array$5.prototype;
+      arrayValues.set("forEach", $([]));
+
+      Object$d.defineProperty(window.Array.prototype, "forEach", {
+        value: proxy(forEach, function(callback, thisArg) {
+          const overrideVals = arrayValues.get("forEach");
+
+          const filteredCallback = function(item, index, array) {
+            for (const {needleRegex, pathSegments, stackNeedles} of
+              overrideVals) {
+
+              if (!pathSegments.length && (typeof item === "string" ||
+                  typeof item === "number")) {
+                const itemStr = item.toString();
+                if (itemStr.match &&
+                    itemStr.match(needleRegex) &&
+                    matchesStackTrace(stackNeedles, debugLog)) {
+                  debugLog("success", `Array.forEach skipped callback for item matching needle: ${needleRegex}\nFILTER: array-override ${formattedArgsToLog}`);
+                  return;
+                }
+              }
+
+              else if (pathSegments.length && typeof item === "object" &&
+                       item !== null) {
+                if (hasMatchingProperty(item, needleRegex, pathSegments) &&
+                    matchesStackTrace(stackNeedles, debugLog)) {
+                  debugLog("success", `Array.forEach skipped callback for object containing needle: ${needleRegex}\nFILTER: array-override ${formattedArgsToLog}`);
+                  return;
+                }
+              }
+            }
+
+            return apply$2(callback, thisArg || this, [item, index, array]);
+          };
+          return apply$2(forEach, this, [filteredCallback, thisArg]);
+        })
+      });
+      debugLog("info", "Wrapped Array.prototype.forEach");
+      end();
+    }
+
+    const needleRegex = toRegExp(needle);
+    let pathSegments = [];
+    if (path)
+      pathSegments = path.split(".");
+
+    let stackNeedles = [];
+    if (stack)
+      stackNeedles = stack.split(",").map(s => s.trim());
+
+    const overrideVals = arrayValues.get(method);
+    const retVal = returnValue === "true";
+    overrideVals.push({needleRegex, retVal, pathSegments, stackNeedles});
+    arrayValues.set(method, overrideVals);
+  }
+
+  const {Array: Array$4, Blob, Error: Error$b, Object: Object$c, Reflect: Reflect$2} = $(window);
+
+  const blobRules = [];
+
+  function blobOverride(search, replacement = "", needle = null) {
+    if (!search) {
+      throw new Error$b(
+        "[blob-override snippet]: Missing parameter search."
+      );
+    }
+    const debugLog = getDebugger("blob-override");
+    const formattedArgsToLog = formatArguments(arguments);
+    const {mark, end} = profile("blob-override");
+    mark();
+
+    blobRules.push({
+      match: toRegExp(search),
+      replaceWith: replacement,
+      needle: needle ? toRegExp(needle) : null,
+      formattedArgs: formattedArgsToLog
+    });
+
+    if (blobRules.length > 1)
+      return;
+
+    const OriginalBlob = Blob;
+    function PatchedBlob(data, options = {}) {
+      if (Array$4.isArray(data)) {
+        let combinedData = $(data).join("");
+
+        for (const rule of $(blobRules)) {
+          if (
+            (!rule.needle || rule.needle.test(combinedData)) &&
+            rule.match.test(combinedData)
+          ) {
+            combinedData = combinedData.replace(rule.match, rule.replaceWith);
+            debugLog("success", `Replaced: ${rule.match} → ${rule.replaceWith},\nFILTER: blob-override ${rule.formattedArgs}`);
+          }
+        }
+        data = [combinedData];
+      }
+
+      const blob = Reflect$2.construct(OriginalBlob, [data, options]);
+      Object$c.setPrototypeOf(blob, PatchedBlob.prototype);
+      return blob;
+    }
+
+    PatchedBlob.prototype = OriginalBlob.prototype;
+    Object$c.setPrototypeOf(PatchedBlob, OriginalBlob);
+    window.Blob = PatchedBlob;
+    debugLog("info", "Wrapped Blob constructor in context ");
+    end();
+  }
+
+  let {Error: Error$a, URL: URL$1} = $(window);
   let {cookie: documentCookies} = accessor(document);
 
   function cookieRemover(cookie, autoRemoveCookie = false) {
     if (!cookie)
-      throw new Error$8("[cookie-remover snippet]: No cookie to remove.");
+      throw new Error$a("[cookie-remover snippet]: No cookie to remove.");
 
+    const formattedArguments = formatArguments(arguments);
     let debugLog = getDebugger("cookie-remover");
+    const {mark, end} = profile("cookie-remover");
     let re = toRegExp(cookie);
 
     if (!$(/^http|^about/).test(location.protocol)) {
@@ -983,6 +1415,7 @@ const callback = (environment, ...filters) => {
 
     const mainLogic = () => {
       debugLog("info", "Parsing cookies for matches");
+      mark();
       for (const pair of $(getCookieMatches())) {
         let $hostname = $(location.hostname);
 
@@ -1000,9 +1433,10 @@ const callback = (environment, ...filters) => {
             domainParts.slice(domainParts.length - numDomainParts).join(".");
           documentCookies(`${$(name).trim()}=;${expires};${path};domain=${domain}`);
           documentCookies(`${$(name).trim()}=;${expires};${path};domain=.${domain}`);
-          debugLog("success", `Set expiration date on ${name}`);
+          debugLog("success", `Set expiration date on ${name}`, "\nFILTER: cookie-remover", formattedArguments);
         }
       }
+      end();
     };
 
     mainLogic();
@@ -1024,22 +1458,171 @@ const callback = (environment, ...filters) => {
     }
   }
 
+  const {Map: Map$b, Object: Object$b, Reflect: Reflect$1, WeakMap: WeakMap$2} = $(window);
+
+  const originalAddEventListener = window.EventTarget.prototype.addEventListener;
+  const originalRemoveEventListener = window.EventTarget.
+                                      prototype.removeEventListener;
+
+  const listenerMap = new WeakMap$2();
+  let eventOverrides = [];
+
+  function eventOverride(eventType,
+                                mode,
+                                needle = null) {
+    const formattedArgs = formatArguments(arguments);
+    const overrideConfig = {
+      eventType,
+      mode,
+      needle: needle ? toRegExp(needle) : null,
+      formattedArgs
+    };
+
+    if (!eventOverrides.includes(overrideConfig))
+      eventOverrides.push(overrideConfig);
+
+    if (eventOverrides.length > 1)
+      return;
+
+    let debugLog = getDebugger("[event-override]");
+    const {mark, end} = profile("event-override");
+
+    const addEventListenerDescriptor = Object$b.getOwnPropertyDescriptor(
+      window.EventTarget.prototype,
+      "addEventListener"
+    );
+
+    if (addEventListenerDescriptor.configurable) {
+      Object$b.defineProperty(window.EventTarget.prototype, "addEventListener", {
+        ...addEventListenerDescriptor,
+        value: proxy(
+          originalAddEventListener,
+          function(type, listener, options) {
+            mark();
+
+            const filteredEvents = eventOverrides.filter(
+              ev => ev.eventType === type
+            );
+
+            if (!filteredEvents.length || type !== filteredEvents[0].eventType) {
+              end();
+              return apply$2(originalAddEventListener, this, arguments);
+            }
+
+            const disabledEvent = filteredEvents.find(
+              ev =>
+                (ev.mode === "disable") &&
+                (ev.needle ? ev.needle.test(listener.toString()) : true)
+            );
+
+            if (disabledEvent) {
+              debugLog("success", `Disabling ${disabledEvent.eventType} event, \nFILTER: event-override ${disabledEvent.formattedArgs}`);
+              end();
+              return;
+            }
+
+            const changedEvents = filteredEvents.filter(
+              ev =>
+                (ev.mode === "trusted") &&
+                (ev.needle ? ev.needle.test(listener.toString()) : true)
+            );
+
+            if (typeof listener !== "function" &&
+                !(listener && typeof listener.handleEvent === "function") ||
+                !changedEvents.length || type !== changedEvents[0].eventType) {
+              end();
+              return apply$2(originalAddEventListener, this, arguments);
+            }
+
+            const wrappedListener = function(originalEvent) {
+              const customEvent = new Proxy(originalEvent, {
+                get(target, prop) {
+                  if (prop === "isTrusted") {
+                    debugLog("success", `Providing trusted value for ${originalEvent.type} event`);
+                    return true;
+                  }
+
+                  const val = Reflect$1.get(target, prop);
+
+                  if (typeof val === "function") {
+                    return function(...args) {
+                      return apply$2(val, target, args);
+                    };
+                  }
+
+                  return val;
+                }
+              });
+
+              if (typeof listener === "function")
+                return call(listener, this, customEvent);
+
+              return call(listener.handleEvent, listener, customEvent);
+            };
+
+            wrappedListener.originalListener = listener;
+
+            if (!listenerMap.has(listener))
+              listenerMap.set(listener, new Map$b());
+
+            listenerMap.get(listener).set(type, wrappedListener);
+            debugLog("info", `\nWrapping event listener for ${type}`);
+
+            end();
+            return apply$2(
+              originalAddEventListener,
+              this,
+              [type, wrappedListener, options]
+            );
+          })
+      });
+    }
+
+    const removeEventListenerDescriptor = Object$b.getOwnPropertyDescriptor(
+      window.EventTarget.prototype,
+      "removeEventListener"
+    );
+    if (removeEventListenerDescriptor.configurable) {
+      Object$b.defineProperty(window.EventTarget.prototype, "removeEventListener", {
+        ...removeEventListenerDescriptor,
+        value: proxy(
+          originalRemoveEventListener,
+          function(type, listener, options) {
+            if (listener &&
+              listenerMap.has(listener) && listenerMap.get(listener).has(type)) {
+              const wrappedListener = listenerMap.get(listener).get(type);
+              listenerMap.get(listener).delete(type);
+              return apply$2(
+                originalRemoveEventListener,
+                this,
+                [type, wrappedListener, options]
+              );
+            }
+
+            return apply$2(originalRemoveEventListener, this, arguments);
+          })
+      });
+    }
+
+    debugLog("info", "Initialized event-override snippet");
+  }
+
   let {
     console: console$3,
-    document: document$1,
-    getComputedStyle: getComputedStyle$5,
+    document: document$2,
+    getComputedStyle: getComputedStyle$6,
     isExtensionContext,
     variables: variables$1,
-    Array: Array$1,
-    MutationObserver: MutationObserver$b,
-    Object: Object$6,
+    Array: Array$3,
+    MutationObserver: MutationObserver$d,
+    Object: Object$a,
     XPathEvaluator,
     XPathExpression,
     XPathResult
   } = $(window);
 
-  const {querySelectorAll} = document$1;
-  const document$$ = querySelectorAll && bind(querySelectorAll, document$1);
+  const {querySelectorAll} = document$2;
+  const document$$ = querySelectorAll && bind(querySelectorAll, document$2);
 
   function $openOrClosedShadowRoot(element, failSilently = false) {
     try {
@@ -1061,8 +1644,8 @@ const callback = (environment, ...filters) => {
 
     return $$recursion(
       selector,
-      document$$.bind(document$1),
-      document$1,
+      document$$.bind(document$2),
+      document$2,
       returnRoots
     );
   }
@@ -1217,7 +1800,7 @@ const callback = (environment, ...filters) => {
     return $(element).childNodes;
   }
 
-  const {assign, setPrototypeOf} = Object$6;
+  const {assign, setPrototypeOf} = Object$a;
 
   class $XPathExpression extends XPathExpression {
     evaluate(...args) {
@@ -1255,7 +1838,7 @@ const callback = (environment, ...filters) => {
       properties.push([key, $style.getPropertyValue(key)]);
     }
 
-    new MutationObserver$b(() => {
+    new MutationObserver$d(() => {
       for (let [key, value] of properties) {
         let propertyValue = $style.getPropertyValue(key);
         let propertyPriority = $style.getPropertyPriority(key);
@@ -1285,7 +1868,7 @@ const callback = (environment, ...filters) => {
       return cb => {
         if (!cb)
           return;
-        let result = expression.evaluate(document$1, flag, null);
+        let result = expression.evaluate(document$2, flag, null);
         let {snapshotLength} = result;
         for (let i = 0; i < snapshotLength; i++)
           cb(result.snapshotItem(i));
@@ -1305,7 +1888,7 @@ const callback = (environment, ...filters) => {
         return elements;
       };
     }
-    return () => Array$1.from($$(selector));
+    return () => Array$3.from($$(selector));
   }
 
   function hideIfMatches(match, selector, searchSelector, onHideCallback) {
@@ -1324,11 +1907,11 @@ const callback = (environment, ...filters) => {
       }
     };
     return assign(
-      new MutationObserver$b(callback),
+      new MutationObserver$d(callback),
       {
         race(win) {
           won = win;
-          this.observe(document$1, {childList: true,
+          this.observe(document$2, {childList: true,
                                   characterData: true,
                                   subtree: true});
           callback();
@@ -1362,12 +1945,12 @@ const callback = (environment, ...filters) => {
     }
 
     return isVisible(
-      parent, getComputedStyle$5(parent), closest, shadowRootParents
+      parent, getComputedStyle$6(parent), closest, shadowRootParents
     );
   }
 
   function getComputedCSSText(element) {
-    let style = getComputedStyle$5(element);
+    let style = getComputedStyle$6(element);
     let {cssText} = style;
 
     if (cssText)
@@ -1386,14 +1969,14 @@ const callback = (environment, ...filters) => {
   let {
     console: console$2,
     variables,
-    DOMParser,
-    Error: Error$7,
-    MutationObserver: MutationObserver$a,
-    Object: Object$5,
+    DOMParser: DOMParser$1,
+    Error: Error$9,
+    MutationObserver: MutationObserver$c,
+    Object: Object$9,
     ReferenceError
   } = $(window);
 
-  let {getOwnPropertyDescriptor} = Object$5;
+  let {getOwnPropertyDescriptor} = Object$9;
 
   function freezeElement(selector, options = "", ...exceptions) {
     let observer;
@@ -1418,7 +2001,7 @@ const callback = (environment, ...filters) => {
       variables.frozen.set(document, true);
       proxyNativeProperties();
     }
-    observer = new MutationObserver$a(searchAndAttach);
+    observer = new MutationObserver$c(searchAndAttach);
     observer.observe(document, {childList: true, subtree: true});
     searchAndAttach();
 
@@ -1439,7 +2022,7 @@ const callback = (environment, ...filters) => {
             shouldAbort = true;
             break;
           default:
-            throw new Error$7("[freeze] Unknown option passed to the snippet." +
+            throw new Error$9("[freeze] Unknown option passed to the snippet." +
                             " [selector]: " + selector +
                             " [option]: " + chunk);
         }
@@ -1612,7 +2195,7 @@ const callback = (environment, ...filters) => {
         if (!variables.frozen.has(node)) {
           variables.frozen.set(node, data);
           if (!isChild && subtree) {
-            new MutationObserver$a(mutationsList => {
+            new MutationObserver$c(mutationsList => {
               for (let mutation of $(mutationsList))
                 markNodes($(mutation, "MutationRecord").addedNodes);
             }).observe(node, {childList: true, subtree: true});
@@ -1695,7 +2278,7 @@ const callback = (environment, ...filters) => {
     }
 
     function checkHTML(htmlText, parent, property, snippetData) {
-      let domparser = new DOMParser();
+      let domparser = new DOMParser$1();
       let {body} = $(domparser.parseFromString(htmlText, "text/html"));
       let nodes = $(body).childNodes;
       let accepted = checkMultiple(nodes, parent, property, snippetData);
@@ -1910,7 +2493,100 @@ const callback = (environment, ...filters) => {
     }
   }
 
-  let {Array, Error: Error$6, Map: Map$7, parseInt: parseInt$2} = $(window);
+  const {CanvasRenderingContext2D: CanvasRenderingContext2D$1,
+         document: document$1,
+         Map: Map$a,
+         MutationObserver: MutationObserver$b,
+         Object: Object$8,
+         Set: Set$1,
+         WeakSet: WeakSet$a} = $(window);
+
+  let canvasRules;
+  let pendingHideCanvasElements = new Set$1();
+  let hideCanvasSeenMap = new WeakSet$a();
+
+  function hideIfCanvasContains(search, selector = "canvas") {
+    const debugLog = getDebugger("hide-if-canvas-contains");
+    const formattedArgsToLog = formatArguments(arguments);
+    const {mark, end} = profile("hide-if-canvas-contains");
+
+    if (!search) {
+      debugLog("error", "The parameter 'search' is required");
+      return;
+    }
+
+    if (!canvasRules) {
+      mark();
+      const CanvasProto = CanvasRenderingContext2D$1.prototype;
+      debugLog("info", "CanvasRenderingContext2D proxied");
+
+      function overrideFunctionInCanvas(functionName){
+        const originalFunction = CanvasProto[functionName];
+
+        Object$8.defineProperty(window.CanvasRenderingContext2D.prototype, functionName, {
+          value: proxy(originalFunction, function(text, ...args) {
+            for (const [searchRegex, rule] of canvasRules) {
+              if (searchRegex.test(text)) {
+                const canvasElement = this.canvas;
+                let elementToHide = $(canvasElement).closest(rule.selector);
+
+                if (elementToHide && !hideCanvasSeenMap.has(elementToHide)) {
+                  hideElement(elementToHide);
+                  hideCanvasSeenMap.add(elementToHide);
+                  debugLog("success", "Matched: ", elementToHide, `\nFILTER: hide-if-canvas-contains ${rule.formattedArguments}`);
+                }
+                else {
+
+                  scheduleElementToHide(canvasElement, rule, functionName, text);
+                }
+              }
+            }
+            return apply$2(originalFunction, this, [text, ...args]);
+          })
+        });
+      }
+
+      overrideFunctionInCanvas("fillText");
+      overrideFunctionInCanvas("strokeText");
+      canvasRules = new Map$a();
+
+      const mo = new MutationObserver$b(mutationsList => {
+        for (let mutation of $(mutationsList)) {
+          if (mutation.type === "childList") {
+
+            checkPendingElements();
+          }
+        }
+      });
+
+      mo.observe(document$1, {childList: true, subtree: true});
+      end();
+    }
+
+    const searchRegex = toRegExp(search);
+
+    canvasRules.set(searchRegex, {selector, formattedArguments: formattedArgsToLog});
+  }
+
+  function scheduleElementToHide(canvasElement, rule, functionName, text) {
+    pendingHideCanvasElements.add({canvasElement, rule, functionName, text});
+  }
+
+  function checkPendingElements() {
+    pendingHideCanvasElements.forEach(
+      ({canvasElement, rule, functionName, text}) => {
+        let elementToHide = $(canvasElement).closest(rule.selector);
+        if (elementToHide && !hideCanvasSeenMap.has(elementToHide)) {
+          hideElement(elementToHide);
+          hideCanvasSeenMap.add(elementToHide);
+          pendingHideCanvasElements.delete(
+            {canvasElement, rule, functionName, text});
+          getDebugger("hide-if-canvas-contains")("success", "Matched: ", elementToHide, `\nFILTER: hide-if-canvas-contains ${rule.formattedArguments}`);
+        }
+      });
+  }
+
+  let {Array: Array$2, Error: Error$8, Map: Map$9, parseInt: parseInt$2} = $(window);
 
   let stack = null;
   let won = null;
@@ -1920,9 +2596,9 @@ const callback = (environment, ...filters) => {
       case "start":
         stack = {
           winners: parseInt$2(winners, 10) || 1,
-          participants: new Map$7()
+          participants: new Map$9()
         };
-        won = new Array();
+        won = new Array$2();
         break;
       case "end":
       case "finish":
@@ -1933,7 +2609,7 @@ const callback = (environment, ...filters) => {
         won = null;
         break;
       default:
-        throw new Error$6(`Invalid action: ${action}`);
+        throw new Error$8(`Invalid action: ${action}`);
     }
   }
 
@@ -1971,16 +2647,18 @@ const callback = (environment, ...filters) => {
     }
   }
 
-  const {Map: Map$6, MutationObserver: MutationObserver$9, Object: Object$4, Set, WeakSet: WeakSet$9} = $(window);
+  const {Map: Map$8, MutationObserver: MutationObserver$a, Object: Object$7, Set, WeakSet: WeakSet$9} = $(window);
 
   let ElementProto = Element.prototype;
   let {attachShadow} = ElementProto;
 
   let hiddenShadowRoots = new WeakSet$9();
-  let searches = new Map$6();
+  let searches = new Map$8();
   let observer = null;
 
   function hideIfShadowContains(search, selector = "*") {
+
+    const formattedArgs = formatArguments(arguments);
 
     let key = `${search}\\${selector}`;
     if (!searches.has(key)) {
@@ -1989,13 +2667,15 @@ const callback = (environment, ...filters) => {
         () => {
           searches.delete(key);
         })
-      ]);
+      ], formattedArgs);
     }
 
-    const debugLog = getDebugger("hide-if-shadow-contain");
+    const debugLog = getDebugger("hide-if-shadow-contains");
+    const {mark, end} = profile("hide-if-shadow-contains");
 
     if (!observer) {
-      observer = new MutationObserver$9(records => {
+      observer = new MutationObserver$a(records => {
+        mark();
         let visited = new Set();
         for (let {target} of $(records)) {
 
@@ -2026,15 +2706,15 @@ const callback = (environment, ...filters) => {
                 debugLog("success",
                          "Hiding: ",
                          closest,
-                         " for params: ",
-                         ...arguments);
+                         `\nFILTER: hide-if-shadow-contains ${formattedArgs}`);
               }
+              end();
             }
           }
         }
       });
 
-      Object$4.defineProperty(ElementProto, "attachShadow", {
+      Object$7.defineProperty(ElementProto, "attachShadow", {
 
         value: proxy(attachShadow, function() {
 
@@ -2053,23 +2733,26 @@ const callback = (environment, ...filters) => {
     }
   }
 
-  const {Error: Error$5, JSON: JSON$2, Map: Map$5, Response: Response$1, Object: Object$3} = $(window);
+  const {Array: Array$1, Error: Error$7, JSON: JSON$2, Map: Map$7, Object: Object$6, Response: Response$2} = $(window);
 
   let paths$1 = null;
 
   function jsonOverride(rawOverridePaths, value,
                                rawNeedlePaths = "", filter = "") {
     if (!rawOverridePaths)
-      throw new Error$5("[json-override snippet]: Missing paths to override.");
+      throw new Error$7("[json-override snippet]: Missing paths to override.");
 
     if (typeof value == "undefined")
-      throw new Error$5("[json-override snippet]: No value to override with.");
+      throw new Error$7("[json-override snippet]: No value to override with.");
 
     if (!paths$1) {
       let debugLog = getDebugger("json-override");
+      const {mark, end} = profile("json-override");
+      mark();
 
       function overrideObject(obj, str) {
-        for (let {prune, needle, filter: flt, value: val} of paths$1.values()) {
+
+        for (let {formattedArgs, prune, needle, filter: flt, value: val} of paths$1.values()) {
           if (flt && !flt.test(str))
             continue;
 
@@ -2077,20 +2760,82 @@ const callback = (environment, ...filters) => {
             return obj;
 
           for (let path of prune) {
-            let details = findOwner(obj, path);
-            if (typeof details != "undefined") {
-              debugLog("success", `Found ${path} replaced it with ${val}`);
-              details[0][details[1]] = overrideValue(val);
-            }
+            if (path.includes("{}") || path.includes("[]"))
+              overridePathWithPlaceholders(obj, path, val, formattedArgs);
+            else
+              overridePathSimple(obj, path, val, formattedArgs);
           }
         }
         return obj;
       }
 
-      let {parse} = JSON$2;
-      paths$1 = new Map$5();
+      function overridePathWithPlaceholders(obj, path, newValue, formattedArgs) {
+        let pathParts = $(path).split(".");
+        let currentObj = obj;
 
-      Object$3.defineProperty(window.JSON, "parse", {
+        for (let i = 0; i < pathParts.length; i++) {
+          let part = pathParts[i];
+
+          if (part === "[]") {
+
+            if (Array$1.isArray(currentObj)) {
+              debugLog("info", `Iterating over array at: ${part}`);
+              $(currentObj).forEach(item => {
+                if (item !== null && typeof item !== "undefined") {
+                  overridePathWithPlaceholders(item,
+                                               pathParts.slice(i + 1).join("."),
+                                               newValue,
+                                               formattedArgs);
+                }
+              });
+            }
+            return;
+          }
+          else if (part === "{}") {
+
+            if (currentObj && typeof currentObj === "object") {
+              debugLog("info", `Iterating over object at: ${part}`);
+              Object$6.keys(currentObj).forEach(key => {
+                let nextItem = currentObj[key];
+                if (nextItem !== null && typeof nextItem !== "undefined") {
+                  overridePathWithPlaceholders(nextItem,
+                                               pathParts.slice(i + 1).join("."),
+                                               newValue,
+                                               formattedArgs);
+                }
+              });
+            }
+            return;
+          }
+          else if (currentObj && typeof currentObj === "object" &&
+            hasOwnProperty(currentObj, part)) {
+
+            if (i === pathParts.length - 1) {
+              debugLog("success", `Found ${path}, replaced it with ${newValue}`, `\nFILTER: json-override ${formattedArgs}`);
+              currentObj[part] = overrideValue(newValue);
+            }
+            else {
+              currentObj = currentObj[part];
+            }
+          }
+          else {
+            return;
+          }
+        }
+      }
+
+      function overridePathSimple(obj, path, newValue, formattedArgs) {
+        let details = findOwner(obj, path);
+        if (typeof details != "undefined") {
+          debugLog("success", `Found ${path}, replaced it with ${newValue}`, `\nFILTER: json-override ${formattedArgs}`);
+          details[0][details[1]] = overrideValue(newValue);
+        }
+      }
+
+      let {parse} = JSON$2;
+      paths$1 = new Map$7();
+
+      Object$6.defineProperty(window.JSON, "parse", {
         value: proxy(parse, function(str) {
           let result = apply$2(parse, this, arguments);
           return overrideObject(result, str);
@@ -2098,17 +2843,21 @@ const callback = (environment, ...filters) => {
       });
       debugLog("info", "Wrapped JSON.parse for override");
 
-      let {json} = Response$1.prototype;
-      Object$3.defineProperty(window.Response.prototype, "json", {
+      let {json} = Response$2.prototype;
+      Object$6.defineProperty(window.Response.prototype, "json", {
         value: proxy(json, function(str) {
           let resultPromise = apply$2(json, this, arguments);
           return resultPromise.then(obj => overrideObject(obj, str));
         })
       });
       debugLog("info", "Wrapped Response.json for override");
+      end();
     }
 
+    const formattedArgsToLog = formatArguments(arguments);
+
     paths$1.set(rawOverridePaths, {
+      formattedArgs: formattedArgsToLog,
       prune: $(rawOverridePaths).split(/ +/),
       needle: rawNeedlePaths.length ? $(rawNeedlePaths).split(/ +/) : [],
       filter: filter ? toRegExp(filter) : null,
@@ -2116,37 +2865,98 @@ const callback = (environment, ...filters) => {
     });
   }
 
-  let {Error: Error$4, JSON: JSON$1, Map: Map$4, Object: Object$2, Response} = $(window);
+  let {Array, Error: Error$6, JSON: JSON$1, Map: Map$6, Object: Object$5, Response: Response$1} = $(window);
 
   let paths = null;
 
-  function jsonPrune(rawPrunePaths, rawNeedlePaths = "") {
+  function jsonPrune(rawPrunePaths,
+                            rawNeedlePaths = "",
+                            rawNeedleStack = "") {
     if (!rawPrunePaths)
-      throw new Error$4("Missing paths to prune");
+      throw new Error$6("Missing paths to prune");
 
     if (!paths) {
       let debugLog = getDebugger("json-prune");
+      const {mark, end} = profile("json-prune");
+      mark();
 
       function pruneObject(obj) {
-        for (let {prune, needle} of paths.values()) {
-          if ($(needle).some(path => !findOwner(obj, path)))
+        for (let {prune, needle, stackNeedle, formattedArgs} of paths.values()) {
+
+          if ($(needle).length > 0 &&
+            $(needle).some(path => !findOwner(obj, path)))
+            return obj;
+
+          if ($(stackNeedle) &&
+              $(stackNeedle).length > 0 &&
+              !matchesStackTrace(stackNeedle, debugLog))
             return obj;
 
           for (let path of prune) {
-            let details = findOwner(obj, path);
-            if (typeof details != "undefined") {
-              debugLog("success", `Found ${path} and deleted`);
-              delete details[0][details[1]];
-            }
+            if (path.includes("{}") || path.includes("[]"))
+              prunePathWithPlaceholders(obj, path, formattedArgs);
+            else
+              prunePathSimple(obj, path, formattedArgs);
           }
         }
         return obj;
       }
 
-      let {parse} = JSON$1;
-      paths = new Map$4();
+      function prunePathWithPlaceholders(obj, path, formattedArgs) {
+        let pathParts = $(path).split(".");
+        let currentObj = obj;
 
-      Object$2.defineProperty(window.JSON, "parse", {
+        for (let i = 0; i < pathParts.length; i++) {
+          let part = pathParts[i];
+
+          if (part === "[]") {
+            if (Array.isArray(currentObj)) {
+              debugLog("info", `Iterating over array at: ${part}`);
+              $(currentObj).forEach(item =>
+                prunePathWithPlaceholders(item,
+                                          pathParts.slice(i + 1).join("."),
+                                          formattedArgs));
+            }
+            return;
+          }
+          else if (part === "{}") {
+            if (typeof currentObj === "object" && currentObj !== null) {
+              debugLog("info", `Iterating over object at: ${part}`);
+              Object$5.keys(currentObj).forEach(key =>
+                prunePathWithPlaceholders(currentObj[key],
+                                          pathParts.slice(i + 1).join("."),
+                                          formattedArgs));
+            }
+            return;
+          }
+          else if (currentObj && typeof currentObj === "object" &&
+            hasOwnProperty(currentObj, part)) {
+            if (i === pathParts.length - 1) {
+              debugLog("success", `Found ${path} and deleted, \nFILTER: json-prune ${formattedArgs}`);
+              delete currentObj[part];
+            }
+            else {
+              currentObj = currentObj[part];
+            }
+          }
+          else {
+            return;
+          }
+        }
+      }
+
+      function prunePathSimple(obj, path, formattedArgs) {
+        let details = findOwner(obj, path);
+        if (typeof details != "undefined") {
+          debugLog("success", `Found ${path} and deleted`, `\nFILTER: json-prune ${formattedArgs}`);
+          delete details[0][details[1]];
+        }
+      }
+
+      let {parse} = JSON$1;
+      paths = new Map$6();
+
+      Object$5.defineProperty(window.JSON, "parse", {
         value: proxy(parse, function() {
           let result = apply$2(parse, this, arguments);
           return pruneObject(result);
@@ -2154,54 +2964,207 @@ const callback = (environment, ...filters) => {
       });
       debugLog("info", "Wrapped JSON.parse for prune");
 
-      let {json} = Response.prototype;
-      Object$2.defineProperty(window.Response.prototype, "json", {
+      let {json} = Response$1.prototype;
+      Object$5.defineProperty(window.Response.prototype, "json", {
         value: proxy(json, function() {
           let resultPromise = apply$2(json, this, arguments);
           return resultPromise.then(obj => pruneObject(obj));
         })
       });
       debugLog("info", "Wrapped Response.json for prune");
+      end();
     }
 
+    const formattedArgs = formatArguments(arguments);
+
     paths.set(rawPrunePaths, {
+      formattedArgs,
       prune: $(rawPrunePaths).split(/ +/),
-      needle: rawNeedlePaths.length ? $(rawNeedlePaths).split(/ +/) : []
+      needle: rawNeedlePaths.length ? $(rawNeedlePaths).split(/ +/) : [],
+      stackNeedle: rawNeedleStack.length ? $(rawNeedleStack).split(/ +/) : []
     });
   }
 
-  let {Error: Error$3} = $(window);
+  const {Error: Error$5, Object: Object$4, Map: Map$5} = $(window);
+
+  let mapValues = null;
+
+  function isMatchingValue(val, needle, pathSegments) {
+
+    if (!pathSegments.length) {
+      if (typeof val === "string" || typeof val === "number") {
+        const valStr = val.toString();
+        return needle.test(valStr);
+      }
+      return false;
+    }
+
+    let current = val;
+    for (const segment of pathSegments) {
+
+      if (!current || !hasOwnProperty(current, segment))
+        return false;
+      current = current[segment];
+    }
+
+    if (typeof current === "string" || typeof current === "number") {
+      const currStr = current.toString();
+      return needle.test(currStr);
+    }
+
+    return false;
+  }
+
+  function mapOverride(method, needle, returnValue = "", path,
+                              stack) {
+    if (!method)
+      throw new Error$5("[map-override snippet]: Missing method to override.");
+
+    if (!needle)
+      throw new Error$5("[map-override snippet]: Missing needle.");
+
+    if (!mapValues)
+      mapValues = new Map$5();
+
+    let debugLog = getDebugger("map-override");
+    const {mark, end} = profile("map-override");
+    const formattedArgsToLog = formatArguments(arguments);
+
+    if (method === "set" && !mapValues.has("set")) {
+      mark();
+      const {set} = Map$5.prototype;
+      mapValues.set("set", $([]));
+
+      Object$4.defineProperty(window.Map.prototype, "set", {
+        value: proxy(set, function(key, val) {
+          const overrideVals = mapValues.get("set");
+          for (const {needleRegex, pathSegments, stackNeedles} of overrideVals) {
+
+            if (isMatchingValue(val, needleRegex, pathSegments) &&
+                matchesStackTrace(stackNeedles, debugLog)) {
+              debugLog("success", `Map.set is ignored for value matching needle: ${needleRegex}\nFILTER: map-override ${formattedArgsToLog}`);
+              return this;
+            }
+          }
+          return apply$2(set, this, arguments);
+        })
+      });
+      debugLog("info", "Wrapped Map.prototype.set");
+      end();
+    }
+
+    else if (method === "get" && !mapValues.has("get")) {
+      mark();
+      const {get} = Map$5.prototype;
+      mapValues.set("get", $([]));
+
+      Object$4.defineProperty(window.Map.prototype, "get", {
+        value: proxy(get, function(key) {
+          const overrideVals = mapValues.get("get");
+          for (const {needleRegex, retVal, stackNeedles} of overrideVals) {
+
+            if (typeof key === "string" || typeof key === "number") {
+              const keyStr = key.toString();
+              if (needleRegex.test(keyStr) &&
+                  matchesStackTrace(stackNeedles, debugLog)) {
+                debugLog("success", `Map.get returned ${retVal} for key: ${keyStr}\nFILTER: map-override ${formattedArgsToLog}`);
+                return retVal;
+              }
+            }
+          }
+          return apply$2(get, this, arguments);
+        })
+      });
+      debugLog("info", "Wrapped Map.prototype.get");
+      end();
+    }
+
+    else if (method === "has" && !mapValues.has("has")) {
+      mark();
+      const {has} = Map$5.prototype;
+      mapValues.set("has", $([]));
+
+      Object$4.defineProperty(window.Map.prototype, "has", {
+        value: proxy(has, function(key) {
+          const overrideVals = mapValues.get("has");
+          for (const {needleRegex, retVal, stackNeedles} of overrideVals) {
+
+            if (typeof key === "string" || typeof key === "number") {
+              const keyStr = key.toString();
+              if (needleRegex.test(keyStr) &&
+                  matchesStackTrace(stackNeedles, debugLog)) {
+                debugLog("success", `Map.has returned ${retVal} for key: ${keyStr}\nFILTER: map-override ${formattedArgsToLog}`);
+                return retVal;
+              }
+            }
+          }
+          return apply$2(has, this, arguments);
+        })
+      });
+      debugLog("info", "Wrapped Map.prototype.has");
+      end();
+    }
+
+    const needleRegex = toRegExp(needle);
+    let pathSegments = [];
+    if (path)
+      pathSegments = path.split(".");
+
+    let stackNeedles = [];
+    if (stack)
+      stackNeedles = stack.split(",").map(s => s.trim());
+
+    const overrideVals = mapValues.get(method);
+
+    let retVal;
+    if (method === "get") {
+
+      retVal = returnValue === "" ? void 0 : returnValue;
+    }
+    else if (method === "has") {
+
+      retVal = returnValue === "true";
+    }
+
+    overrideVals.push({needleRegex, retVal, pathSegments, stackNeedles});
+    mapValues.set(method, overrideVals);
+  }
+
+  let {Error: Error$4} = $(window);
 
   function overridePropertyRead(property, value, setConfigurable) {
     if (!property) {
-      throw new Error$3("[override-property-read snippet]: " +
+      throw new Error$4("[override-property-read snippet]: " +
                        "No property to override.");
     }
     if (typeof value === "undefined") {
-      throw new Error$3("[override-property-read snippet]: " +
+      throw new Error$4("[override-property-read snippet]: " +
                        "No value to override with.");
     }
 
+    const formattedArguments = formatArguments(arguments);
     let debugLog = getDebugger("override-property-read");
+    const {mark, end} = profile("override-property-read");
 
     let cValue = overrideValue(value);
 
     let newGetter = () => {
-      debugLog("success", `${property} override done.`);
+      debugLog("success", `${property} override done.`, "\nFILTER: override-property-read", formattedArguments);
       return cValue;
     };
 
     debugLog("info", `Overriding ${property}.`);
 
     const configurableFlag = !(setConfigurable === "false");
-
+    mark();
     wrapPropertyAccess(window,
                        property,
                        {get: newGetter, set() {}},
                        configurableFlag);
+    end();
   }
 
-  let {Error: Error$2, Map: Map$3, Object: Object$1, console: console$1} = $(window);
+  let {Error: Error$3, Map: Map$4, Object: Object$3, console: console$1} = $(window);
 
   let {toString} = Function.prototype;
   let EventTargetProto = EventTarget.prototype;
@@ -2211,15 +3174,17 @@ const callback = (environment, ...filters) => {
 
   function preventListener(event, eventHandler, selector) {
     if (!event)
-      throw new Error$2("[prevent-listener snippet]: No event type.");
+      throw new Error$3("[prevent-listener snippet]: No event type.");
 
     if (!events) {
-      events = new Map$3();
+      events = new Map$4();
 
       let debugLog = getDebugger("[prevent]");
+      const {mark, end} = profile("prevent-listener");
 
-      Object$1.defineProperty(EventTargetProto, "addEventListener", {
+      Object$3.defineProperty(EventTargetProto, "addEventListener", {
         value: proxy(addEventListener, function(type, listener) {
+          mark();
           for (let {evt, handlers, selectors} of events.values()) {
 
             if (!evt.test(type))
@@ -2273,7 +3238,7 @@ const callback = (environment, ...filters) => {
               }
 
               if (debug()) {
-                console$1.groupCollapsed("DEBUG [prevent] was successful");
+                console$1.groupCollapsed("DEBUG [prevent] was successful", `\nFILTER: prevent-listener ${formattedArgs}`);
                 debugLog("success", `type: ${type} matching ${evt}`);
                 debugLog("success", "handler:", listener);
                 if (handler)
@@ -2286,6 +3251,7 @@ const callback = (environment, ...filters) => {
               return;
             }
           }
+          end();
           return apply$2(addEventListener, this, arguments);
         })
       });
@@ -2293,44 +3259,569 @@ const callback = (environment, ...filters) => {
       debugLog("info", "Wrapped addEventListener");
     }
 
-    if (!events.has(event))
-      events.set(event, {evt: toRegExp(event), handlers: [], selectors: []});
+    const formattedArgsToLog = formatArguments(arguments);
 
-    let {handlers, selectors} = events.get(event);
+    if (!events.has(event)) {
+      events.set(event,
+                 {evt: toRegExp(event),
+                  handlers: [],
+                  selectors: [],
+                  formattedArgs: formattedArgsToLog});
+    }
+
+    let {handlers, selectors, formattedArgs} = events.get(event);
 
     handlers.push(eventHandler ? toRegExp(eventHandler) : null);
     selectors.push(selector);
   }
 
-  let {URL, fetch: fetch$1} = $(window);
+  let {fetch} = $(window);
+
+  let hasFetchBeenProxied = false;
+
+  const preFetchCallbacks = [];
+
+  const postFetchCallbacks = [];
+
+  const proxyFetch = () => {
+
+    if (!hasFetchBeenProxied) {
+      window.fetch = proxy(fetch, (...args) => {
+        let [source] = args;
+        if (preFetchCallbacks.length > 0 && typeof source === "string") {
+          let url;
+          try {
+            url = new URL(source);
+          }
+          catch (e) {
+            if (e instanceof TypeError)
+              url = new URL(source, $(document).location);
+            else
+              throw e;
+          }
+          preFetchCallbacks.forEach(fn => fn(url));
+          args[0] = url.href;
+        }
+
+        const promise = apply$2(fetch, self, args).then(origResponse => {
+          let transformedResponse = origResponse;
+          postFetchCallbacks.forEach(fn => {
+            transformedResponse = fn(transformedResponse);
+          });
+          return transformedResponse;
+        });
+        return promise;
+      });
+      hasFetchBeenProxied = true;
+    }
+  };
+
+  const addPreFetchCallback = callback => {
+    preFetchCallbacks.push(callback);
+    proxyFetch();
+  };
+
+  const addPostFetchCallback = callback => {
+    postFetchCallbacks.push(callback);
+    proxyFetch();
+  };
+
+  let {Map: Map$3, Object: Object$2, RegExp: RegExp$2, Response} = $(window);
+  let fetchRules;
+
+  function replaceFetchResponse(search, replacement = "", needle = null) {
+    const formattedArgsToLog = formatArguments(arguments);
+    const debugLog = getDebugger("replace-fetch-response");
+    const {mark, end} = profile("replace-fetch-response");
+    if (!search) {
+      debugLog("error", "The parameter 'search' is required");
+      return;
+    }
+
+    if (!fetchRules) {
+      const mainLogic = origResponse => {
+        mark();
+        const clonedResponse = $(origResponse).clone();
+        return clonedResponse.text().then(origText => {
+          let replacedText = $(origText);
+
+          for (const [thisSearch, {replacement: thisReplacement, needle: thisNeedle, formattedArgs}] of fetchRules) {
+            if (thisNeedle) {
+              const needleRegex = toRegExp(thisNeedle);
+
+              if (needleRegex.test(replacedText)) {
+                if (debug()) {
+                  console.groupCollapsed(`DEBUG [replace-fetch-response] success: '${thisNeedle}' found in fetch response`);
+                  debugLog("info", `${replacedText}`);
+                  console.groupEnd();
+                }
+              }
+              else {
+                if (debug()) {
+                  console.groupCollapsed(`DEBUG [replace-fetch-response] warn: '${thisNeedle}' not found in fetch response`);
+                  debugLog("warn", `${replacedText}`);
+                  console.groupEnd();
+                }
+                continue;
+              }
+            }
+            replacedText = replacedText.replace(thisSearch, thisReplacement);
+            if (debug() && replacedText.toString() !== origText.toString()) {
+              console.groupCollapsed(`DEBUG [replace-fetch-response] success: '${thisSearch}' replaced with '${thisReplacement}' in fetch response`,
+                `\nFILTER: replace-fetch-response ${formattedArgs}`
+              );
+              debugLog("success", `${replacedText}`);
+              console.groupEnd();
+            }
+          }
+
+          if (replacedText.toString() === origText.toString())
+            return origResponse;
+
+          const replacedResponse = new Response(replacedText.toString(), {
+            status: origResponse.status,
+            statusText: origResponse.statusText,
+            headers: origResponse.headers
+          });
+          Object$2.defineProperties(replacedResponse, {
+            ok: {value: origResponse.ok},
+            redirected: {value: origResponse.redirected},
+            type: {value: origResponse.type},
+            url: {value: origResponse.url}
+          });
+          end();
+          return replacedResponse;
+        });
+      };
+
+      fetchRules = new Map$3();
+      debugLog("info", "Network API proxied");
+      addPostFetchCallback(mainLogic);
+    }
+
+    const regex = toRegExp(search);
+
+    const globalisedRegEx = new RegExp$2(regex, "g");
+    fetchRules.set(globalisedRegEx,
+                   {replacement, needle, formattedArgs: formattedArgsToLog});
+  }
+
+  const {Error: Error$2, Object: Object$1, atob, btoa, RegExp: RegExp$1} = $(window);
+
+  function replaceOutboundValue(methodPath, textToReplace = "",
+                                       replacement = "", decodeMethod = "",
+                                       path = "", stack = "") {
+    if (!methodPath)
+      throw new Error$2("[replace-outbound-value snippet]: Missing method path.");
+
+    let debugLog = getDebugger("replace-outbound-value");
+    const {mark, end} = profile("replace-outbound-value");
+    formatArguments(arguments);
+
+    function getPropertyInChain(base, propertyPath) {
+      let object = base;
+      let chain = $(propertyPath).split(".");
+
+      for (let i = 0; i < chain.length - 1; i++) {
+        let prop = chain[i];
+        if (!object || typeof object !== "object") {
+          return {
+            base: object,
+            prop,
+            remainingPath: chain.slice(i).join("."),
+            success: false
+          };
+        }
+        object = object[prop];
+      }
+
+      let prop = chain[chain.length - 1];
+      return {
+        base: object,
+        prop,
+        success: true
+      };
+    }
+
+    function isValidBase64(str) {
+      try {
+        if (str === "")
+          return false;
+
+        const decodedString = atob(str);
+        const encodedString = btoa(decodedString);
+
+        const stringWithoutPadding = $(str).replace(/=+$/, "").toString();
+        const encodedStringWithoutPadding = $(encodedString).replace(/=+$/, "").toString();
+        return encodedStringWithoutPadding === stringWithoutPadding;
+      }
+      catch (e) {
+        return false;
+      }
+    }
+
+    function decodeAndReplaceContent(content, pattern, textReplacement, decode) {
+      switch (decode) {
+        case "base64":
+          try {
+            const isBase64Encoded = isValidBase64(content);
+
+            if (isBase64Encoded) {
+
+              const decodedContent = atob(content);
+              debugLog("info", `Decoded base64 content: ${decodedContent}`);
+
+              const modifiedContent = pattern ?
+                $(decodedContent).replace(pattern, textReplacement).toString() :
+                decodedContent;
+
+              const message = modifiedContent !== decodedContent ?
+                `Modified decoded content: ${modifiedContent}` :
+                "Decoded content was not modified";
+
+              debugLog("info", message);
+
+              const encodedContent = btoa(modifiedContent);
+              debugLog("info", `Re-encoded to base64: ${encodedContent}`);
+              return encodedContent;
+            }
+
+            debugLog("info", `Content is plain text: ${content}`);
+
+            const modifiedContent = pattern ?
+              $(content).replace(pattern, textReplacement).toString() :
+              content;
+
+            const message = modifiedContent !== content ?
+              `Modified plain text content: ${modifiedContent}` :
+              "Plain text content was not modified";
+
+            debugLog("info", message);
+
+            const encodedContent = btoa(modifiedContent);
+            debugLog("info", `Encoded to base64: ${encodedContent}`);
+            return encodedContent;
+          }
+          catch (e) {
+            debugLog("info", `Error processing base64 content: ${e.message}`);
+            return content;
+          }
+        default:
+          return pattern ?
+            $(content).replace(pattern, textReplacement).toString() :
+            content;
+      }
+    }
+
+    function replaceValueAtPath(obj, pathSegments, pattern, textReplacement,
+                                decode) {
+      if (!pathSegments.length)
+        return obj;
+
+      let current = obj;
+
+      for (let i = 0; i < pathSegments.length - 1; i++) {
+        if (!current || typeof current !== "object") {
+          debugLog("info", `Cannot navigate to path: property '${pathSegments[i]}' not found`);
+          return obj;
+        }
+        current = current[pathSegments[i]];
+      }
+
+      const finalProp = pathSegments[pathSegments.length - 1];
+      if (!current || typeof current !== "object" || !(finalProp in current)) {
+        debugLog("info", `Target property '${finalProp}' not found at path`);
+        return obj;
+      }
+
+      const originalValue = current[finalProp];
+      if (typeof originalValue !== "string") {
+        debugLog("info", `Property at path is not a string: ${typeof originalValue}`);
+        return obj;
+      }
+
+      const modifiedValue = decodeAndReplaceContent(
+        originalValue, pattern, textReplacement, decode);
+
+      if (modifiedValue !== originalValue) {
+
+        const result = JSON.parse(JSON.stringify(obj));
+        let resultCurrent = result;
+
+        for (let i = 0; i < pathSegments.length - 1; i++)
+          resultCurrent = resultCurrent[pathSegments[i]];
+        resultCurrent[finalProp] = modifiedValue;
+
+        debugLog("info", `Replaced value at path '${pathSegments.join(".")}': '${originalValue}' -> '${modifiedValue}'`);
+        return result;
+      }
+
+      return obj;
+    }
+
+    function processReturnValue(returnValue, pathParts, textPattern, replaceWith,
+                                decode, formattedArgs) {
+
+      const patternRegexp = textPattern ? new RegExp$1(toRegExp(textPattern), "g") :
+       null;
+      if (pathParts.length && typeof returnValue === "object" &&
+          returnValue !== null) {
+        const modifiedObject = textPattern ?
+          replaceValueAtPath(
+            returnValue,
+            pathParts,
+            patternRegexp,
+            replaceWith,
+            decode
+          ) :
+          returnValue;
+
+        if (modifiedObject !== returnValue) {
+          debugLog("success",
+                 `Replaced outbound value\nFILTER: replace-outbound-value ${formattedArgs}`);
+        }
+
+        return modifiedObject;
+      }
+
+      else if (typeof returnValue === "string") {
+        if (!textPattern)
+          debugLog("info", `Original text content: ${returnValue}`);
+
+        const modifiedContent = textPattern ?
+          decodeAndReplaceContent(
+            returnValue,
+            patternRegexp,
+            replaceWith,
+            decode
+          ) :
+          returnValue;
+
+        if (modifiedContent !== returnValue) {
+          debugLog("success",
+                 `Replaced outbound value: ${modifiedContent} \nFILTER: replace-outbound-value ${formattedArgs}`);
+        }
+
+        return modifiedContent;
+      }
+
+      debugLog("info", pathParts.length ?
+        "Content is not an object or path not specified" :
+        "Content is not a string");
+      return returnValue;
+    }
+
+    mark();
+
+    const result = getPropertyInChain(window, methodPath);
+
+    if (!result.success) {
+      debugLog("error", `Could not reach the end of the prop chain: ${methodPath}. Remaining path: ${result.remainingPath}`);
+      end();
+      return;
+    }
+
+    const {base, prop} = result;
+    const nativeMethod = base[prop];
+    if (!nativeMethod || typeof nativeMethod !== "function") {
+      debugLog("error", `Could not retrieve the method: ${methodPath}`);
+      end();
+      return;
+    }
+
+    let pathSegments = [];
+    if (path)
+      pathSegments = $(path).split(".");
+
+    let stackNeedles = [];
+    if (stack)
+      stackNeedles = $(stack).split(",").map(s => s.trim());
+
+    let isMatchingSuspended = false;
+
+    Object$1.defineProperty(base, prop, {
+      value: proxy(nativeMethod, function() {
+        if (isMatchingSuspended)
+          return apply$2(nativeMethod, this, arguments);
+
+        isMatchingSuspended = true;
+        const methodResult = apply$2(nativeMethod, this, arguments);
+
+        if (stackNeedles.length && !matchesStackTrace(stackNeedles, debugLog)) {
+          isMatchingSuspended = false;
+          return methodResult;
+        }
+
+        if (methodResult && typeof methodResult.then === "function") {
+          debugLog("info", "Method returned a Promise, modifying resolved value");
+
+          isMatchingSuspended = false;
+          return methodResult.then(resolvedValue => {
+            const valueType = typeof resolvedValue === "object" ?
+              JSON.stringify(resolvedValue) : resolvedValue;
+            debugLog("info", `Promise resolved with value: ${valueType}`);
+
+            return processReturnValue(
+              resolvedValue,
+              pathSegments,
+              textToReplace,
+              replacement,
+              decodeMethod,
+              path);
+          }).catch(error => {
+            debugLog("info", `Promise rejected: ${error.message}`);
+            throw error;
+          });
+        }
+
+        const processedResult = processReturnValue(
+          methodResult,
+          pathSegments,
+          textToReplace,
+          replacement,
+          decodeMethod,
+          path);
+        isMatchingSuspended = false;
+        return processedResult;
+      })
+    });
+
+    debugLog("info", `Wrapped ${methodPath}`);
+    end();
+  }
+
+  let {RegExp, XMLHttpRequest, WeakMap: WeakMap$1} = $(window);
+  let xhrInFlightRequests;
+  let xhrRules;
+
+  function replaceXhrResponse(search, replacement = "", needle = null) {
+    const formattedArgsToLog = formatArguments(arguments);
+    const debugLog = getDebugger("replace-xhr-response");
+    const {mark, end} = profile("replace-xhr-response");
+
+    if (!search) {
+      debugLog("error", "The parameter 'pattern' is required");
+      return;
+    }
+
+    if (!xhrInFlightRequests) {
+      xhrInFlightRequests = new WeakMap$1();
+      xhrRules = new Map();
+      debugLog("info", "XMLHttpRequest proxied");
+
+      window.XMLHttpRequest = class extends XMLHttpRequest {
+        open(method, url, ...args) {
+          const originalXhr = this;
+          const xhrData = {method, url};
+          xhrInFlightRequests.set(originalXhr, xhrData);
+          return super.open(method, url, ...args);
+        }
+
+        send(...args) {
+          return super.send(...args);
+        }
+        get response() {
+          const innerResponse = super.response;
+          const xhrData = xhrInFlightRequests.get(this);
+          if (typeof xhrData === "undefined")
+            return innerResponse;
+          mark();
+
+          const responseLength = typeof innerResponse === "string" ?
+            innerResponse.length : void 0;
+          if (xhrData.lastResponseLength !== responseLength) {
+            xhrData.response = void 0;
+            xhrData.lastResponseLength = responseLength;
+          }
+
+          if (typeof xhrData.response !== "undefined")
+            return xhrData.response;
+
+          if (typeof innerResponse !== "string")
+            return (xhrData.response = innerResponse);
+
+          let replacedText = innerResponse;
+
+          for (const [thisSearch, {replacement: thisReplacement, needle: thisNeedle, formattedArgs}] of xhrRules) {
+            if (thisNeedle) {
+              const needleRegex = toRegExp(thisNeedle);
+
+              if (needleRegex.test(replacedText)) {
+                if (debug()) {
+                  console.groupCollapsed(`DEBUG [replace-xhr-response] success: '${thisNeedle}' found in XHR response`);
+                  debugLog("info", replacedText);
+                  console.groupEnd();
+                }
+              }
+              else {
+                if (debug()) {
+                  console.groupCollapsed(`DEBUG [replace-xhr-response] warn: '${thisNeedle}' not found in XHR response`);
+                  debugLog("warn", replacedText);
+                  console.groupEnd();
+                }
+                continue;
+              }
+            }
+            replacedText =
+              $(replacedText).replace(thisSearch, thisReplacement).toString();
+            if (debug() && innerResponse.toString() !== replacedText.toString()) {
+              console.groupCollapsed(`DEBUG [replace-xhr-response] success: '${thisSearch}' replaced with '${thisReplacement}' in XHR response`,
+                                      `\nFILTER: replace-xhr-response ${formattedArgs}`);
+              debugLog("success", replacedText);
+              console.groupEnd();
+            }
+          }
+          end();
+          return (xhrData.response = replacedText.toString());
+        }
+        get responseText() {
+          const response = this.response;
+          if (typeof response !== "string")
+            return super.responseText;
+
+          return response;
+        }
+      };
+    }
+
+    const regex = toRegExp(search);
+
+    const globalisedRegEx = new RegExp(regex, "g");
+    xhrRules.set(globalisedRegEx,
+                 {replacement, needle, formattedArgs: formattedArgsToLog});
+  }
 
   let {delete: deleteParam, has: hasParam} = caller(URLSearchParams.prototype);
 
   let parameters;
 
   function stripFetchQueryParameter(name, urlPattern = null) {
+    const formattedArgs = formatArguments(arguments);
     const debugLog = getDebugger("strip-fetch-query-parameter");
+    const {mark, end} = profile("strip-fetch-query-parameter");
+
+    const stripFunction = url => {
+      mark();
+      for (let [key, value] of parameters.entries()) {
+        const {reg, args} = value;
+        if (!reg || reg.test(url)) {
+          if (hasParam(url.searchParams, key)) {
+            debugLog("success", `${key} has been stripped from url ${url}`, `\nFILTER: strip-fetch-query-parameter ${args}`);
+            deleteParam(url.searchParams, key);
+          }
+        }
+      }
+      end();
+    };
 
     if (!parameters) {
       parameters = new Map();
-      window.fetch = proxy(fetch$1, (...args) => {
-        let [source] = args;
-        if (typeof source === "string") {
-          let url = new URL(source);
-          for (let [key, reg] of parameters) {
-            if (!reg || reg.test(source)) {
-              if (hasParam(url.searchParams, key)) {
-                debugLog("success", `${key} has been stripped from url ${source}`);
-                deleteParam(url.searchParams, key);
-                args[0] = url.href;
-              }
-            }
-          }
-        }
-        return apply$2(fetch$1, self, args);
-      });
+      addPreFetchCallback(stripFunction);
     }
-    parameters.set(name, urlPattern && toRegExp(urlPattern));
+
+    parameters.set(name,
+                   {reg: urlPattern && toRegExp(urlPattern),
+                    args: formattedArgs});
   }
 
   function trace(...args) {
@@ -2344,27 +3835,39 @@ const callback = (environment, ...filters) => {
     "abort-on-iframe-property-write": abortOnIframePropertyWrite,
     "abort-on-property-read": abortOnPropertyRead,
     "abort-on-property-write": abortOnPropertyWrite,
+    "array-override": arrayOverride,
+    "blob-override": blobOverride,
     "cookie-remover": cookieRemover,
+    "profile": setProfile,
     "debug": setDebug,
+    "event-override": eventOverride,
     "freeze-element": freezeElement,
+    "hide-if-canvas-contains": hideIfCanvasContains,
     "hide-if-shadow-contains": hideIfShadowContains,
     "json-override": jsonOverride,
     "json-prune": jsonPrune,
+    "map-override": mapOverride,
     "override-property-read": overridePropertyRead,
     "prevent-listener": preventListener,
+    "replace-fetch-response": replaceFetchResponse,
+    "replace-outbound-value": replaceOutboundValue,
+    "replace-xhr-response": replaceXhrResponse,
     "strip-fetch-query-parameter": stripFetchQueryParameter,
     "trace": trace
   };
 
   function hideIfContains(search, selector = "*", searchSelector = null) {
+    const formattedArguments = formatArguments(arguments);
     const debugLog = getDebugger("hide-if-contains");
+    const {mark, end} = profile("hide-if-contains");
     const onHideCallback = node => {
+      mark();
       debugLog("success",
                "Matched: ",
                node,
-               " for selector: ",
-               selector,
-               searchSelector);
+               "\nFILTER: hide-if-contains",
+               formattedArguments);
+      end();
     };
     let re = toRegExp(search);
 
@@ -2380,7 +3883,7 @@ const callback = (environment, ...filters) => {
     ));
   }
 
-  let {MutationObserver: MutationObserver$8, WeakSet: WeakSet$8, getComputedStyle: getComputedStyle$4} = $(window);
+  let {MutationObserver: MutationObserver$9, WeakSet: WeakSet$8, getComputedStyle: getComputedStyle$5} = $(window);
 
   function hideIfContainsAndMatchesStyle(search,
                                                 selector = "*",
@@ -2391,7 +3894,9 @@ const callback = (environment, ...filters) => {
                                                 windowWidthMin = null,
                                                 windowWidthMax = null
   ) {
+    const formattedArguments = formatArguments(arguments);
     const debugLog = getDebugger("hide-if-contains-and-matches-style");
+    const {mark, end} = profile("hide-if-contains-and-matches-style");
     const hiddenMap = new WeakSet$8();
     const logMap = debug() && new WeakSet$8();
     if (searchSelector == null)
@@ -2403,6 +3908,7 @@ const callback = (environment, ...filters) => {
     const searchStyleRegExp = searchStyle ? toRegExp(searchStyle) : null;
     const mainLogic = () => {
       const callback = () => {
+        mark();
         if ((windowWidthMin && window.innerWidth < windowWidthMin) ||
            (windowWidthMax && window.innerWidth > windowWidthMax)
         )
@@ -2425,8 +3931,8 @@ const callback = (environment, ...filters) => {
                          closest,
                          "which contains: ",
                          element,
-                         " for params: ",
-                         ...arguments);
+                         "\nFILTER: hide-if-contains-and-matches-style",
+                         formattedArguments);
               }
               else {
                 if (!logMap || logMap.has(closest))
@@ -2435,8 +3941,8 @@ const callback = (environment, ...filters) => {
                          "In this element the searchStyle matched " +
                          "but style didn't:\n",
                          closest,
-                         getComputedStyle$4(closest),
-                         ...arguments);
+                         getComputedStyle$5(closest),
+                         formattedArguments);
                 logMap.add(closest);
               }
             }
@@ -2446,15 +3952,16 @@ const callback = (environment, ...filters) => {
               debugLog("info",
                        "In this element the searchStyle didn't match:\n",
                        element,
-                       getComputedStyle$4(element),
-                       ...arguments);
+                       getComputedStyle$5(element),
+                       formattedArguments);
               logMap.add(element);
             }
           }
         }
+        end();
       };
 
-      const mo = new MutationObserver$8(callback);
+      const mo = new MutationObserver$9(callback);
       const win = raceWinner(
         "hide-if-contains-and-matches-style",
         () => mo.disconnect()
@@ -2466,12 +3973,8 @@ const callback = (environment, ...filters) => {
   }
 
   let {
-    clearTimeout,
-    fetch,
-    getComputedStyle: getComputedStyle$3,
-    setTimeout: setTimeout$2,
-    Map: Map$2,
-    MutationObserver: MutationObserver$7,
+    getComputedStyle: getComputedStyle$4,
+    MutationObserver: MutationObserver$8,
     Uint8Array
   } = $(window);
 
@@ -2481,11 +3984,14 @@ const callback = (environment, ...filters) => {
 
     let searchRegExp = toRegExp(search);
 
+    const formattedArguments = formatArguments(arguments);
     const debugLog = getDebugger("hide-if-contains-image");
+    const {mark, end} = profile("hide-if-contains-image");
 
     let callback = () => {
+      mark();
       for (const {element, rootParents} of $$(searchSelector, true)) {
-        let style = getComputedStyle$3(element);
+        let style = getComputedStyle$4(element);
         let match = $(style["background-image"]).match(/^url\("(.*)"\)$/);
         if (match) {
           fetchContent(match[1]).then(content => {
@@ -2494,15 +4000,20 @@ const callback = (environment, ...filters) => {
               if (closest) {
                 win();
                 hideElement(closest);
-                debugLog("success", "Matched: ", closest, " for:", ...arguments);
+                debugLog("success",
+                         "Matched: ",
+                         closest,
+                         "\nFILTER: hide-if-contains-image",
+                         formattedArguments);
               }
             }
           });
         }
       }
+      end();
     };
 
-    let mo = new MutationObserver$7(callback);
+    let mo = new MutationObserver$8(callback);
     let win = raceWinner(
       "hide-if-contains-image",
       () => mo.disconnect()
@@ -2511,40 +4022,8 @@ const callback = (environment, ...filters) => {
     callback();
   }
 
-  let fetchContentMap = new Map$2();
-
-  function fetchContent(url, {as = "arrayBuffer", cleanup = 60000} = {}) {
-
-    let uid = as + ":" + url;
-    let details = fetchContentMap.get(uid) || {
-      remove: () => fetchContentMap.delete(uid),
-      result: null,
-      timer: 0
-    };
-    clearTimeout(details.timer);
-    details.timer = setTimeout$2(details.remove, cleanup);
-    if (!details.result) {
-      details.result = fetch(url).then(res => res[as]()).catch(details.remove);
-      fetchContentMap.set(uid, details);
-    }
-    return details.result;
-  }
-
-  function toHex(number, length = 2) {
-    let hex = $(number).toString(16);
-
-    if (hex.length < length)
-      hex = $("0").repeat(length - hex.length) + hex;
-
-    return hex;
-  }
-
-  function uint8ArrayToHex(uint8Array) {
-    return uint8Array.reduce((hex, byte) => hex + toHex(byte), "");
-  }
-
-  const {parseFloat: parseFloat$2, Math: Math$1, MutationObserver: MutationObserver$6, WeakSet: WeakSet$7} = $(window);
-  const {min} = Math$1;
+  const {parseFloat: parseFloat$3, Math: Math$3, MutationObserver: MutationObserver$7, WeakSet: WeakSet$7} = $(window);
+  const {min} = Math$3;
 
   const ld = (a, b) => {
     const len1 = a.length + 1;
@@ -2578,19 +4057,22 @@ const callback = (environment, ...filters) => {
     maxSearches = 0
   ) {
     const visitedNodes = new WeakSet$7();
+    const formattedArguments = formatArguments(arguments);
     const debugLog = getDebugger("hide-if-contains-similar-text");
+    const {mark, end} = profile("hide-if-contains-similar-text");
     const $search = $(search);
     const {length} = $search;
-    const chars = length + parseFloat$2(ignoreChars) || 0;
+    const chars = length + parseFloat$3(ignoreChars) || 0;
     const find = $([...$search]).sort();
-    const guard = parseFloat$2(maxSearches) || Infinity;
+    const guard = parseFloat$3(maxSearches) || Infinity;
 
     if (searchSelector == null)
       searchSelector = selector;
 
-    debugLog("Looking for similar text: " + $search);
+    debugLog("info", "Looking for similar text: " + $search);
 
     const callback = () => {
+      mark();
       for (const {element, rootParents} of $$(searchSelector, true)) {
         if (visitedNodes.has(element))
           continue;
@@ -2603,7 +4085,11 @@ const callback = (environment, ...filters) => {
           const distance = ld(find, $([...str]).sort()) - ignoreChars;
           if (distance <= 0) {
             const closest = $closest($(element), selector, rootParents);
-            debugLog("success", "Found similar text: " + $search, closest);
+            debugLog("success",
+                     "Found similar text: " + $search,
+                     closest,
+                     "\nFILTER: hide-if-contains-similar-text",
+                     formattedArguments);
             if (closest) {
               win();
               hideElement(closest);
@@ -2612,9 +4098,10 @@ const callback = (environment, ...filters) => {
           }
         }
       }
+      end();
     };
 
-    let mo = new MutationObserver$6(callback);
+    let mo = new MutationObserver$7(callback);
     let win = raceWinner(
       "hide-if-contains-similar-text",
       () => mo.disconnect()
@@ -2623,18 +4110,22 @@ const callback = (environment, ...filters) => {
     callback();
   }
 
-  let {getComputedStyle: getComputedStyle$2, Map: Map$1, WeakSet: WeakSet$6, parseFloat: parseFloat$1} = $(window);
+  let {getComputedStyle: getComputedStyle$3, Map: Map$2, WeakSet: WeakSet$6, parseFloat: parseFloat$2, DOMMatrix, Math: Math$2} = $(window);
 
   const {ELEMENT_NODE: ELEMENT_NODE$2, TEXT_NODE} = Node;
 
   function hideIfContainsVisibleText(search, selector,
                                             searchSelector = null,
                                             ...attributes) {
+    const {mark, end} = profile("hide-if-contains-visible-text");
+    const formattedArguments = formatArguments(arguments);
     let entries = $([]);
-    const optionalParameters = new Map$1([
+    const optionalParameters = new Map$2([
       ["-snippet-box-margin", "2"],
       ["-disable-bg-color-check", "false"],
-      ["-check-is-contained", "false"]
+      ["-check-is-contained", "false"],
+      ["-pseudo-box-margin", "2"],
+      ["-ignore-padding", "false"]
     ]);
 
     for (let attr of attributes) {
@@ -2661,29 +4152,54 @@ const callback = (environment, ...filters) => {
       ["color", "rgba(0, 0, 0, 0)"]
     ]);
 
-    let attributesMap = new Map$1(defaultEntries.concat(entries));
+    let attributesMap = new Map$2(defaultEntries.concat(entries));
 
-    function isTextVisible(element, style, {bgColorCheck = true} = {}) {
+    function isTextVisible(element,
+                           style,
+                           {bgColorCheck = true, pseudoElemCheck = false} = {}) {
       if (!style)
-        style = getComputedStyle$2(element);
-
+        style = getComputedStyle$3(element);
       style = $(style);
-
       for (const [key, value] of attributesMap) {
         let valueAsRegex = toRegExp(value);
         if (valueAsRegex.test(style.getPropertyValue(key)))
           return false;
       }
-
-      let color = style.getPropertyValue("color");
-      if (bgColorCheck && style.getPropertyValue("background-color") == color)
+      const color = style.getPropertyValue("color");
+      if (bgColorCheck && style.getPropertyValue("background-color") === color)
         return false;
 
+      if (!pseudoElemCheck) {
+        const firstLineStyle = getComputedStyle$3(element, "::first-line");
+        if (firstLineStyle) {
+          return isTextVisible(element,
+                               firstLineStyle,
+                               {bgColorCheck, pseudoElemCheck: true});
+        }
+      }
+
+      const textShadow = style.getPropertyValue("text-shadow");
+      if (color.includes("rgba(0, 0, 0, 0)") &&
+          (textShadow === "none" ||
+          textShadow.includes("rgba(0, 0, 0, 0)"))
+      )
+        return false;
       return true;
     }
 
-    function getPseudoContent(element, pseudo, {bgColorCheck = true} = {}) {
-      let style = getComputedStyle$2(element, pseudo);
+    function getTransformMatrix(element, pseudo = null) {
+      const style = getComputedStyle$3(element, pseudo);
+      let transform = style.transform;
+
+      if (transform === "none")
+        transform = "matrix(1, 0, 0, 1, 0, 0)";
+      return new DOMMatrix(transform);
+    }
+
+    function getPseudoContent(element, pseudo, parentMatrix,
+                              {bgColorCheck = true, translateThresh = 2} = {}) {
+      let style = getComputedStyle$3(element, pseudo);
+
       if (!isVisible(element, style) ||
        !isTextVisible(element, style, {bgColorCheck}))
         return "";
@@ -2691,6 +4207,21 @@ const callback = (environment, ...filters) => {
       let {content} = $(style);
       if (content && content !== "none") {
         let strings = $([]);
+
+        const domMatrix = getTransformMatrix(element, pseudo);
+        const resultMatrix = parentMatrix.multiply(domMatrix);
+
+        const angle = Math$2.atan2(resultMatrix.b, resultMatrix.a);
+        const angleDegrees = angle * (180 / Math$2.PI);
+        const rotated = Math$2.abs(angleDegrees) > 5;
+
+        if (rotated)
+          return "";
+
+        const translated = Math$2.abs(resultMatrix.e) > translateThresh ||
+                           Math$2.abs(resultMatrix.f) > translateThresh;
+        if (translated)
+          return "";
 
         content = $(content).trim().replace(
           /(["'])(?:(?=(\\?))\2.)*?\1/g,
@@ -2709,8 +4240,26 @@ const callback = (environment, ...filters) => {
       return "";
     }
 
-    function isContained(childNode, parentNode, {boxMargin = 2} = {}) {
-      const child = $(childNode).getBoundingClientRect();
+    function isContained(childNode, parentNode, {
+      boxMargin = 2,
+      ignorePadding = false
+    } = {}) {
+      let child = $(childNode).getBoundingClientRect();
+      if (ignorePadding) {
+        const style = getComputedStyle$3(childNode);
+        const paddingTop = parseFloat$2(style.paddingTop) || 0;
+        const paddingRight = parseFloat$2(style.paddingRight) || 0;
+        const paddingBottom = parseFloat$2(style.paddingBottom) || 0;
+        const paddingLeft = parseFloat$2(style.paddingLeft) || 0;
+
+        child = {
+          left: child.left + paddingLeft,
+          right: child.right - paddingRight,
+          top: child.top + paddingTop,
+          bottom: child.bottom - paddingBottom
+        };
+      }
+
       const parent = $(parentNode).getBoundingClientRect();
       const stretchedParent = {
         left: parent.left - boxMargin,
@@ -2718,6 +4267,7 @@ const callback = (environment, ...filters) => {
         top: parent.top - boxMargin,
         bottom: parent.bottom + boxMargin
       };
+
       return (
         (stretchedParent.left <= child.left &&
            child.left <= stretchedParent.right &&
@@ -2736,14 +4286,16 @@ const callback = (environment, ...filters) => {
                                parentOverflowNode,
                                originalElement,
                                shadowRootParents,
+                               domMatrix,
                                {
                                  boxMargin = 2,
                                  bgColorCheck,
-                                 checkIsContained
+                                 checkIsContained,
+                                 translateThresh
                                } = {}) {
       let checkClosest = !style;
       if (checkClosest)
-        style = getComputedStyle$2(element);
+        style = getComputedStyle$3(element);
 
       if (!isVisible(element, style, checkClosest && closest, shadowRootParents))
         return "";
@@ -2756,44 +4308,63 @@ const callback = (environment, ...filters) => {
       )
         parentOverflowNode = element;
 
-      let text = getPseudoContent(element, ":before", {bgColorCheck});
+      if (!domMatrix)
+        domMatrix = getTransformMatrix(element);
+
+      else
+        domMatrix = domMatrix.multiply(getTransformMatrix(element));
+
+      let text = getPseudoContent(element,
+                                  ":before",
+                                  domMatrix,
+                                  {bgColorCheck, translateThresh});
       for (let node of $childNodes($(element))) {
         switch ($(node).nodeType) {
           case ELEMENT_NODE$2:
             text += getVisibleContent(node,
                                       element,
-                                      getComputedStyle$2(node),
+                                      getComputedStyle$3(node),
                                       parentOverflowNode,
                                       originalElement,
                                       shadowRootParents,
+                                      domMatrix,
                                       {
                                         boxMargin,
                                         bgColorCheck,
-                                        checkIsContained
+                                        checkIsContained,
+                                        translateThresh
                                       }
             );
             break;
           case TEXT_NODE:
 
             if (parentOverflowNode) {
-              if (isContained(element, parentOverflowNode, {boxMargin}) &&
-                isTextVisible(element, style, {bgColorCheck}))
+              if (isContained(element, parentOverflowNode, {
+                boxMargin,
+                ignorePadding
+              }) && isTextVisible(element, style, {bgColorCheck}))
                 text += $(node).nodeValue;
             }
             else if (isTextVisible(element, style, {bgColorCheck})) {
-              if (checkIsContained &&
-                 !isContained(element, originalElement, {boxMargin}))
+              if (checkIsContained && !isContained(element, originalElement, {
+                boxMargin,
+                ignorePadding
+              }))
                 continue;
               text += $(node).nodeValue;
             }
             break;
         }
       }
-      return text + getPseudoContent(element, ":after", {bgColorCheck});
+      text += getPseudoContent(element,
+                               ":after",
+                               domMatrix,
+                               {bgColorCheck, translateThresh});
+      return text;
     }
 
     const boxMarginStr = optionalParameters.get("-snippet-box-margin");
-    const boxMargin = parseFloat$1(boxMarginStr) || 0;
+    const boxMargin = parseFloat$2(boxMarginStr) || 0;
 
     const bgColorCheckStr = optionalParameters.get("-disable-bg-color-check");
     const bgColorCheck = !(bgColorCheckStr === "true");
@@ -2801,28 +4372,38 @@ const callback = (environment, ...filters) => {
     const checkIsContainedStr = optionalParameters.get("-check-is-contained");
     const checkIsContained = (checkIsContainedStr === "true");
 
+    const ignorePaddingStr = optionalParameters.get("-ignore-padding");
+    const ignorePadding = (ignorePaddingStr === "true");
+
+    const translateThreshStr = optionalParameters.get("-pseudo-box-margin");
+    const translateThresh = parseFloat$2(translateThreshStr) || 0;
+
     let re = toRegExp(search);
     let seen = new WeakSet$6();
 
     const mo = hideIfMatches(
       (element, closest, rootParents) => {
+        mark();
         if (seen.has(element))
           return false;
 
         seen.add(element);
         let text = getVisibleContent(
-          element, closest, null, null, element, rootParents, {
+          element, closest, null, null, element, rootParents, null, {
             boxMargin,
             bgColorCheck,
-            checkIsContained
+            checkIsContained,
+            translateThresh
           }
         );
         let result = re.test(text);
         if (debug() && text.length) {
-          result ? log("success", result, re, text) :
+          result ?
+
+          log("success", result, re, text, "\nFILTER: hide-if-contains-visible-text", formattedArguments) :
           log("info", result, re, text);
         }
-
+        end();
         return result;
       },
       selector,
@@ -2836,7 +4417,7 @@ const callback = (environment, ...filters) => {
     ));
   }
 
-  let {MutationObserver: MutationObserver$5, WeakSet: WeakSet$5, getComputedStyle: getComputedStyle$1} = $(window);
+  let {MutationObserver: MutationObserver$6, WeakSet: WeakSet$5, getComputedStyle: getComputedStyle$2} = $(window);
 
   function hideIfHasAndMatchesStyle(search,
                                            selector = "*",
@@ -2847,7 +4428,9 @@ const callback = (environment, ...filters) => {
                                            windowWidthMin = null,
                                            windowWidthMax = null
   ) {
+    const formattedArguments = formatArguments(arguments);
     const debugLog = getDebugger("hide-if-has-and-matches-style");
+    const {mark, end} = profile("hide-if-has-and-matches-style");
     const hiddenMap = new WeakSet$5();
     const logMap = debug() && new WeakSet$5();
     if (searchSelector == null)
@@ -2857,6 +4440,7 @@ const callback = (environment, ...filters) => {
     const searchStyleRegExp = searchStyle ? toRegExp(searchStyle) : null;
     const mainLogic = () => {
       const callback = () => {
+        mark();
         if ((windowWidthMin && window.innerWidth < windowWidthMin) ||
            (windowWidthMax && window.innerWidth > windowWidthMax)
         )
@@ -2878,8 +4462,8 @@ const callback = (environment, ...filters) => {
                        closest,
                        "which contains: ",
                        element,
-                       " for params: ",
-                       ...arguments);
+                       "\nFILTER: hide-if-has-and-matches-style",
+                       formattedArguments);
             }
             else {
               if (!logMap || logMap.has(closest))
@@ -2888,7 +4472,7 @@ const callback = (environment, ...filters) => {
                        "In this element the searchStyle matched" +
                        "but style didn't:\n",
                        closest,
-                       getComputedStyle$1(closest),
+                       getComputedStyle$2(closest),
                        ...arguments);
               logMap.add(closest);
             }
@@ -2899,14 +4483,15 @@ const callback = (environment, ...filters) => {
             debugLog("info",
                      "In this element the searchStyle didn't match:\n",
                      element,
-                     getComputedStyle$1(element),
+                     getComputedStyle$2(element),
                      ...arguments);
             logMap.add(element);
           }
         }
+        end();
       };
 
-      const mo = new MutationObserver$5(callback);
+      const mo = new MutationObserver$6(callback);
       const win = raceWinner(
         "hide-if-has-and-matches-style",
         () => mo.disconnect()
@@ -2917,9 +4502,10 @@ const callback = (environment, ...filters) => {
     waitUntilEvent(debugLog, mainLogic, waitUntil);
   }
 
-  let {getComputedStyle, MutationObserver: MutationObserver$4, WeakSet: WeakSet$4} = $(window);
+  let {getComputedStyle: getComputedStyle$1, MutationObserver: MutationObserver$5, WeakSet: WeakSet$4} = $(window);
 
   function hideIfLabelledBy(search, selector, searchSelector = null) {
+    const {mark, end} = profile("hide-if-labelled-by");
     let sameSelector = searchSelector == null;
 
     let searchRegExp = toRegExp(search);
@@ -2927,12 +4513,13 @@ const callback = (environment, ...filters) => {
     let matched = new WeakSet$4();
 
     let callback = () => {
+      mark();
       for (const {element, rootParents} of $$(selector, true)) {
         let closest = sameSelector ?
                       element :
                       $closest($(element), searchSelector, rootParents);
         if (!closest ||
-            !isVisible(element, getComputedStyle(element), closest))
+            !isVisible(element, getComputedStyle$1(element), closest))
           continue;
 
         let attr = $(element).getAttribute("aria-labelledby");
@@ -2968,9 +4555,10 @@ const callback = (environment, ...filters) => {
           fallback();
         }
       }
+      end();
     };
 
-    let mo = new MutationObserver$4(callback);
+    let mo = new MutationObserver$5(callback);
     let win = raceWinner(
       "hide-if-labelled-by",
       () => mo.disconnect()
@@ -2979,89 +4567,106 @@ const callback = (environment, ...filters) => {
     callback();
   }
 
-  $(window);
-
-  const noopProfile = {
-    mark() {},
-    end() {},
-    toString() {
-      return "{mark(){},end(){}}";
-    }
-  };
-
-  function profile(id, rate = 10) {
-    return noopProfile;
-  }
-
-  let {MutationObserver: MutationObserver$3, WeakSet: WeakSet$3} = $(window);
+  let {MutationObserver: MutationObserver$4, WeakSet: WeakSet$3} = $(window);
 
   const {ELEMENT_NODE: ELEMENT_NODE$1} = Node;
 
-  function hideIfMatchesXPath(query, scopeQuery) {
-    const {mark, end} = profile();
+  function hideIfMatchesXPath(query, scopeQuery, waitUntil) {
+    const {mark, end} = profile("hide-if-matches-xpath");
+    const formattedArguments = formatArguments(arguments);
     const debugLog = getDebugger("hide-if-matches-xpath");
 
-    const startHidingMutationObserver = scopeNode => {
-      const queryAndApply = initQueryAndApply(`xpath(${query})`);
-      const seenMap = new WeakSet$3();
-      const callback = () => {
-        mark();
-        queryAndApply(node => {
-          if (seenMap.has(node))
-            return false;
+    const mainLogic = () => {
+      const startHidingMutationObserver = scopeNode => {
+        const queryAndApply = initQueryAndApply(`xpath(${query})`);
+        const seenMap = new WeakSet$3();
+        const hideNode = node => {
           seenMap.add(node);
           win();
+
           if ($(node).nodeType === ELEMENT_NODE$1)
             hideElement(node);
           else
             $(node).textContent = "";
-          debugLog("success", "Matched: ", node, " for selector: ", query);
-        });
-        end();
+          debugLog("success",
+                   "Matched: ",
+                   node,
+                   "\nFILTER: hide-if-matches-xpath",
+                   formattedArguments);
+        };
+
+        const callback = () => {
+          mark();
+          queryAndApply(node => {
+            if (seenMap.has(node))
+              return false;
+
+            if (scopeQuery) {
+              const scopeQueryAndApply = initQueryAndApply(`xpath(${scopeQuery})`);
+              scopeQueryAndApply(matchingScopeNode => {
+                if (matchingScopeNode.contains(node)) {
+
+                  hideNode(node);
+                }
+                else {
+
+                  return false;
+                }
+              });
+            }
+            else {
+              hideNode(node);
+            }
+          });
+          end();
+        };
+        const mo = new MutationObserver$4(callback);
+        const win = raceWinner(
+          "hide-if-matches-xpath",
+          () => mo.disconnect()
+        );
+        mo.observe(
+          scopeNode, {characterData: true, childList: true, subtree: true});
+        callback();
       };
-      const mo = new MutationObserver$3(callback);
-      const win = raceWinner(
-        "hide-if-matches-xpath",
-        () => mo.disconnect()
-      );
-      mo.observe(
-        scopeNode, {characterData: true, childList: true, subtree: true});
-      callback();
+
+      if (scopeQuery) {
+
+        let count = 0;
+        let scopeMutationObserver;
+        const scopeQueryAndApply = initQueryAndApply(`xpath(${scopeQuery})`);
+        const findMutationScopeNodes = () => {
+          scopeQueryAndApply(scopeNode => {
+
+            startHidingMutationObserver(scopeNode);
+            count++;
+          });
+          if (count > 0)
+            scopeMutationObserver.disconnect();
+        };
+        scopeMutationObserver = new MutationObserver$4(findMutationScopeNodes);
+        scopeMutationObserver.observe(
+          document, {characterData: true, childList: true, subtree: true}
+        );
+        findMutationScopeNodes();
+      }
+      else {
+
+        startHidingMutationObserver(document);
+      }
     };
 
-    if (scopeQuery) {
-
-      let count = 0;
-      let scopeMutationObserver;
-      const scopeQueryAndApply = initQueryAndApply(`xpath(${scopeQuery})`);
-      const findMutationScopeNodes = () => {
-        scopeQueryAndApply(scopeNode => {
-
-          startHidingMutationObserver(scopeNode);
-          count++;
-        });
-        if (count > 0)
-          scopeMutationObserver.disconnect();
-      };
-      scopeMutationObserver = new MutationObserver$3(findMutationScopeNodes);
-      scopeMutationObserver.observe(
-        document, {characterData: true, childList: true, subtree: true}
-      );
-      findMutationScopeNodes();
-    }
-    else {
-
-      startHidingMutationObserver(document);
-    }
+    waitUntilEvent(debugLog, mainLogic, waitUntil);
   }
 
-  let {MutationObserver: MutationObserver$2, WeakSet: WeakSet$2} = $(window);
+  let {MutationObserver: MutationObserver$3, WeakSet: WeakSet$2} = $(window);
 
   const {ELEMENT_NODE} = Node;
 
   function hideIfMatchesComputedXPath(query, searchQuery, searchRegex,
                                              waitUntil) {
-    const {mark, end} = profile();
+    const {mark, end} = profile("hide-if-matches-computed-xpath");
+    const formattedArguments = formatArguments(arguments);
     const debugLog = getDebugger("hide-if-matches-computed-xpath");
 
     if (!searchQuery || !query) {
@@ -3089,11 +4694,15 @@ const callback = (environment, ...filters) => {
             hideElement(node);
           else
             $(node).textContent = "";
-          debugLog("success", "Matched: ", node, " for selector: ", query);
+          debugLog("success",
+                   "Matched: ",
+                   node,
+                   "\nFILTER: hide-if-matches-computed-xpath",
+                   formattedArguments);
         });
         end();
       };
-      const mo = new MutationObserver$2(callback);
+      const mo = new MutationObserver$3(callback);
       const win = raceWinner(
         "hide-if-matches-computed-xpath",
         () => mo.disconnect()
@@ -3132,7 +4741,7 @@ const callback = (environment, ...filters) => {
           });
         };
 
-        searchMO = new MutationObserver$2(findMutationSearchNodes);
+        searchMO = new MutationObserver$3(findMutationSearchNodes);
         searchMO.observe(
           document, {characterData: true, childList: true, subtree: true}
         );
@@ -3141,6 +4750,183 @@ const callback = (environment, ...filters) => {
     };
 
     waitUntilEvent(debugLog, mainLogic, waitUntil);
+  }
+
+  let {
+    getComputedStyle,
+    MutationObserver: MutationObserver$2,
+    DOMParser,
+    Math: Math$1,
+    Node: Node$1,
+    Map: Map$1
+  } = $(window);
+
+  function hideIfSvgContains(
+    search,
+    selector,
+    searchSelector,
+    ...attributes
+  ) {
+    if (searchSelector == null)
+      searchSelector = selector;
+
+    const textSearchRegExp = toRegExp(search);
+    let entries = $([]);
+    const formattedArguments = formatArguments(arguments);
+    const debugLog = getDebugger("hide-if-svg-contains");
+    const {mark, end} = profile("hide-if-svg-contains");
+    const defaultOptionalParameters = new Map$1([
+      ["-position-threshold", "500"],
+      ["-disable-contained-check", "false"]
+    ]);
+    for (let attr of attributes) {
+      attr = $(attr);
+      let markerIndex = attr.indexOf(":");
+      if (markerIndex < 0)
+        continue;
+
+      let key = attr.slice(0, markerIndex).trim().toString();
+      let value = attr.slice(markerIndex + 1).trim().toString();
+
+      if (key && value) {
+        if (defaultOptionalParameters.has(key))
+          defaultOptionalParameters.set(key, value);
+        else
+          entries.push([key, value]);
+      }
+    }
+    let defaultCSSEntries = $([
+      ["display", "none"],
+      ["visibility", "hidden"],
+      ["opacity", "0"],
+      ["fill", "none"],
+      ["color", "rgba(0, 0, 0, 0)"],
+      ["font-size", "0"]
+    ]);
+    let attributesMap = new Map$1(defaultCSSEntries.concat(entries));
+
+    let callback = async() => {
+      mark();
+      for (const {element, rootParents} of $$(searchSelector, true)) {
+        let isMatchAndVisible = false;
+
+        try {
+          const backgroundImage = $(getComputedStyle(element).backgroundImage);
+          const urlMatch = backgroundImage.match(/url\("?(.+?)"?\)/);
+          if (!urlMatch)
+            continue;
+          const url = urlMatch[1];
+          const svgContent = await fetchContent(url, {as: "text"});
+          const parser = new DOMParser();
+          const svgDoc = parser.parseFromString(svgContent, "image/svg+xml");
+          if (svgDoc.querySelector("parsererror")) {
+            debugLog(
+              "warn", "Failed to parse SVG content for element:", element
+            );
+            continue;
+          }
+          const textElements = svgDoc.querySelectorAll("text, tspan");
+          for (const textEl of textElements) {
+            if (
+              isElementVisibleAndTextMatchesInSvg(
+                textEl,
+                textSearchRegExp
+              )) {
+              isMatchAndVisible = true;
+              debugLog(
+                "Condition met: Text found visible in SVG of element", element
+              );
+              break;
+            }
+          }
+        }
+        catch (error) {
+          debugLog(
+            "warn", "An error occurred while processing element:", element, error
+          );
+          continue;
+        }
+
+        if (isMatchAndVisible) {
+          const closestToHide = $closest($(element), selector, rootParents);
+          if (closestToHide) {
+            win();
+            hideElement(closestToHide);
+            debugLog("success",
+                     "Matched: ",
+                     closestToHide,
+                     "\nFILTER: hide-if-svg-contains",
+                     formattedArguments);
+          }
+        }
+      }
+      end();
+    };
+
+    let mo = new MutationObserver$2(callback);
+    let win = raceWinner(
+      "hide-if-svg-contains",
+      () => mo.disconnect()
+    );
+    mo.observe(document, {childList: true, subtree: true});
+    callback();
+
+    function isElementVisibleAndTextMatchesInSvg(
+      element,
+      searchRegExp
+    ) {
+      if (!searchRegExp.test(element.textContent))
+        return false;
+
+      const {ELEMENT_NODE} = Node$1;
+      const positionThresh =
+        parseFloat(defaultOptionalParameters.get("-position-threshold")) || 0;
+      const disableContainedCheck =
+        (defaultOptionalParameters.get("-disable-contained-check") === "true");
+
+      let currentElement = element;
+      while (currentElement && currentElement.nodeType === ELEMENT_NODE) {
+        let style = getComputedStyle(currentElement);
+        style = $(style);
+        for (const [key, value] of attributesMap) {
+          if (value !== null) {
+            const valueAsRegex = toRegExp(value);
+            const styleValue = style.getPropertyValue(key) ||
+              currentElement.getAttribute(key);
+            if (valueAsRegex.test(styleValue))
+              return false;
+          }
+        }
+        if (!disableContainedCheck) {
+          const x = parseFloat(currentElement.getAttribute("x")) || 0;
+          const y = parseFloat(currentElement.getAttribute("y")) || 0;
+          const dx = parseFloat(currentElement.getAttribute("dx")) || 0;
+          const dy = parseFloat(currentElement.getAttribute("dy")) || 0;
+          const transformAttr = currentElement.getAttribute("transform");
+          let transformX = 0;
+          let transformY = 0;
+          if (transformAttr) {
+            const transformRegex = /translate\((-?\d*\.?\d+)\s+(-?\d*\.?\d+)\)/;
+            const transformMatches = transformAttr.match(transformRegex);
+
+            if (transformMatches && transformMatches.length === 3) {
+              transformX = parseFloat(transformMatches[1]);
+              transformY = parseFloat(transformMatches[2]);
+            }
+          }
+          const finalX = x + dx + transformX;
+          const finalY = y + dy + transformY;
+
+          if (Math$1.abs(finalX) > positionThresh ||
+          Math$1.abs(finalY) > positionThresh)
+            return false;
+        }
+
+        currentElement = currentElement.parentElement;
+      }
+
+      return true;
+    }
   }
 
   let {
@@ -3160,10 +4946,13 @@ const callback = (environment, ...filters) => {
                        "pointerup", "pointercancel", "pointerleave"];
 
   function simulateMouseEvent(...selectors) {
+    const formattedArguments = formatArguments(arguments);
     const debugLog = getDebugger("simulate-mouse-event");
+    const {mark, end} = profile("simulate-mouse-event");
     const MAX_ARGS = 7;
     if (selectors.length < 1)
       throw new Error$1("[simulate-mouse-event snippet]: No selector provided.");
+
     if (selectors.length > MAX_ARGS) {
 
       selectors = selectors.slice(0, MAX_ARGS);
@@ -3233,6 +5022,13 @@ const callback = (environment, ...filters) => {
       return parsedArgs.every(arg => arg.found);
     }
 
+    function resetAttributes() {
+      parsedArgs.forEach(arg => {
+        arg.found = false;
+        arg.clicked = false;
+      });
+    }
+
     function triggerEvent(node, event, delay) {
 
       if (!node || !event)
@@ -3245,7 +5041,8 @@ const callback = (environment, ...filters) => {
                  node,
                  "\nwith a delay of",
                  delay,
-                 "ms"
+                 "ms",
+                 `n\nFILTER: simulate-mouse-event ${formattedArguments}`
         );
       }
       else {
@@ -3258,7 +5055,8 @@ const callback = (environment, ...filters) => {
                  "event was dispatched with a delay of",
                  delay,
                  "ms on this node:\n",
-                 node
+                 node,
+                 `n\nFILTER: simulate-mouse-event ${formattedArguments}`
         );
       }
     }
@@ -3274,6 +5072,7 @@ const callback = (environment, ...filters) => {
     findNodesAndDispatchEvents();
 
     function findNodesAndDispatchEvents() {
+      mark();
 
       if (!allFound)
         allFound = checkIfAllSelectorsFound();
@@ -3287,7 +5086,10 @@ const callback = (environment, ...filters) => {
                 dispatchedNodes.add(node);
                 if (parsedRule.continue) {
                   setInterval(() => {
-                    triggerEvent(node, parsedRule.event, parsedRule.delay);
+                    resetAttributes();
+                    const allIsStillFound = checkIfAllSelectorsFound();
+                    if (allIsStillFound)
+                      triggerEvent(node, parsedRule.event, parsedRule.delay);
                   }, delayInMiliseconds);
                 }
                 else {
@@ -3300,19 +5102,23 @@ const callback = (environment, ...filters) => {
           }
         }
       }
+      end();
     }
   }
 
-  let {isNaN, MutationObserver, parseInt, parseFloat, setTimeout} = $(window);
+  let {isNaN, MutationObserver, parseInt, parseFloat: parseFloat$1, setTimeout} = $(window);
 
   function skipVideo(playerSelector, xpathCondition, ...attributes) {
+    const formattedArguments = formatArguments(arguments);
     const optionalParameters = new Map([
       ["-max-attempts", "10"],
       ["-retry-ms", "10"],
       ["-run-once", "false"],
       ["-wait-until", ""],
       ["-skip-to", "-0.1"],
-      ["-stop-on-video-end", "false"]
+      ["-stop-on-video-end", "false"],
+      ["-start-from", "0"],
+      ["-mute-video-when-skipping", "true"]
     ]);
 
     for (let attr of attributes) {
@@ -3338,18 +5144,27 @@ const callback = (environment, ...filters) => {
     const runOnceFlag = (runOnceStr === "true");
 
     const skipToStr = optionalParameters.get("-skip-to");
-    const skipToNum = parseFloat(skipToStr || -0.1);
+    const skipToNum = parseFloat$1(skipToStr || -0.1);
+
+    const startFromStr = optionalParameters.get("-start-from");
+    const startFrom = parseInt(startFromStr || 0, 10);
 
     const waitUntil = optionalParameters.get("-wait-until");
 
     const stopOnVideoEndStr = optionalParameters.get("-stop-on-video-end");
     const stopOnVideoEndFlag = (stopOnVideoEndStr === "true");
 
+    const muteVideoStr = optionalParameters.get("-mute-video-when-skipping");
+    const muteVideo = !(muteVideoStr === "false");
+
     const debugLog = getDebugger("skip-video");
+    const {mark, end} = profile("skip-video");
     const queryAndApply = initQueryAndApply(`xpath(${xpathCondition})`);
     let skippedOnce = false;
 
     const mainLogic = () => {
+      mark();
+      const seenMap = new WeakSet();
       const callback = (retryCounter = 0) => {
         if (skippedOnce && runOnceFlag) {
           if (mo)
@@ -3357,10 +5172,48 @@ const callback = (environment, ...filters) => {
           return;
         }
         queryAndApply(node => {
-          debugLog("info", "Matched: ", node, " for selector: ", xpathCondition);
-          debugLog("info", "Running video skipping logic.");
-          const video = $$(playerSelector)[0];
-          while (isNaN(video.duration) && retryCounter < maxAttemptsNum) {
+          let nodeAlreadySeen = seenMap.has(node);
+          let lastSkippedVideoDuration;
+          if (!nodeAlreadySeen) {
+            debugLog("info", "Matched:", node, " for selector: ", xpathCondition);
+            debugLog("info", "Running video skipping logic.");
+          }
+          const videos = $$(playerSelector);
+          let foundValidVideo = false;
+          for (const video of videos) {
+            if (!video || isNaN(video.duration) || isNaN(video.currentTime))
+              continue;
+            foundValidVideo = true;
+            const videoNearEnd = (video.duration - video.currentTime) < 0.5;
+            if ((video.duration > 0) && (video.currentTime < video.duration) &&
+                !(stopOnVideoEndFlag && videoNearEnd)) {
+              if (muteVideo) {
+                video.muted = true;
+                if (!nodeAlreadySeen)
+                  debugLog("success", "Muted video...");
+              }
+              if (startFrom <= video.currentTime * 1000) {
+
+                skipToNum <= 0 ?
+                  video.currentTime = video.duration + skipToNum :
+                  video.currentTime += skipToNum;
+                if (lastSkippedVideoDuration !== video.duration) {
+                  debugLog("success",
+                           "Skipped video, currentTime: ",
+                           video.currentTime,
+                           "s.",
+                           "\nFILTER: skip-video",
+                           formattedArguments);
+                  seenMap.add(node);
+                  lastSkippedVideoDuration = video.duration;
+                }
+                video.paused && video.play();
+                skippedOnce = true;
+                win();
+              }
+            }
+          }
+          if (!foundValidVideo && retryCounter < maxAttemptsNum) {
             setTimeout(() => {
               const attempt = retryCounter + 1;
               debugLog("info",
@@ -3368,20 +5221,6 @@ const callback = (environment, ...filters) => {
                        attempt);
               callback(attempt);
             }, retryMsNum);
-            return;
-          }
-          const videoNearEnd = (video.duration - video.currentTime) < 0.5;
-          if (!isNaN(video.duration) && !(stopOnVideoEndFlag && videoNearEnd)) {
-            video.muted = true;
-            debugLog("success", "Muted video...");
-
-            skipToNum <= 0 ?
-              video.currentTime = video.duration + skipToNum :
-              video.currentTime += skipToNum;
-            debugLog("success", "Skipped duration...");
-            video.paused && video.play();
-            skippedOnce = true;
-            win();
           }
         });
       };
@@ -3393,6 +5232,7 @@ const callback = (environment, ...filters) => {
       mo.observe(
         document, {characterData: true, childList: true, subtree: true});
       callback();
+      end();
     };
 
     waitUntilEvent(debugLog, mainLogic, waitUntil);
@@ -3402,6 +5242,7 @@ const callback = (environment, ...filters) => {
     log,
     race,
     "debug": setDebug,
+    "profile": setProfile,
     "hide-if-matches-xpath": hideIfMatchesXPath,
     "hide-if-matches-computed-xpath": hideIfMatchesComputedXPath,
     "hide-if-contains": hideIfContains,
@@ -3411,6 +5252,7 @@ const callback = (environment, ...filters) => {
     "hide-if-has-and-matches-style": hideIfHasAndMatchesStyle,
     "hide-if-labelled-by": hideIfLabelledBy,
     "hide-if-contains-image": hideIfContainsImage,
+    "hide-if-svg-contains": hideIfSvgContains,
     "simulate-mouse-event": simulateMouseEvent,
     "skip-video": skipVideo
   };
@@ -3428,7 +5270,7 @@ const callback = (environment, ...filters) => {
   }
   context = void 0;
 };
-const graph = new Map([["abort-current-inline-script",null],["abort-on-iframe-property-read",null],["abort-on-iframe-property-write",null],["abort-on-property-read",null],["abort-on-property-write",null],["cookie-remover",null],["debug",null],["freeze-element",null],["hide-if-shadow-contains",null],["json-override",null],["json-prune",null],["override-property-read",null],["prevent-listener",null],["strip-fetch-query-parameter",null],["trace",null],["log",null],["race",null],["hide-if-matches-xpath",null],["hide-if-matches-computed-xpath",null],["hide-if-contains",null],["hide-if-contains-similar-text",null],["hide-if-contains-visible-text",null],["hide-if-contains-and-matches-style",null],["hide-if-has-and-matches-style",null],["hide-if-labelled-by",null],["hide-if-contains-image",null],["simulate-mouse-event",null],["skip-video",null]]);
+const graph = new Map([["abort-current-inline-script",null],["abort-on-iframe-property-read",null],["abort-on-iframe-property-write",null],["abort-on-property-read",null],["abort-on-property-write",null],["array-override",null],["blob-override",null],["cookie-remover",null],["profile",null],["debug",null],["event-override",null],["freeze-element",null],["hide-if-canvas-contains",null],["hide-if-shadow-contains",null],["json-override",null],["json-prune",null],["map-override",null],["override-property-read",null],["prevent-listener",null],["replace-fetch-response",null],["replace-outbound-value",null],["replace-xhr-response",null],["strip-fetch-query-parameter",null],["trace",null],["log",null],["race",null],["hide-if-matches-xpath",null],["hide-if-matches-computed-xpath",null],["hide-if-contains",null],["hide-if-contains-similar-text",null],["hide-if-contains-visible-text",null],["hide-if-contains-and-matches-style",null],["hide-if-has-and-matches-style",null],["hide-if-labelled-by",null],["hide-if-contains-image",null],["hide-if-svg-contains",null],["simulate-mouse-event",null],["skip-video",null]]);
 callback.get = snippet => graph.get(snippet);
 callback.has = snippet => graph.has(snippet);
 export default callback;

@@ -47,6 +47,7 @@ import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.WebContentsObserver;
 import org.chromium.ui.base.Clipboard;
 import org.chromium.ui.base.DeviceFormFactor;
+import org.chromium.ui.base.ViewAndroidDelegate;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.modaldialog.DialogDismissalCause;
 import org.chromium.ui.modaldialog.ModalDialogProperties;
@@ -138,6 +139,7 @@ public class PageInfoController
 
     // The controller for the connection section of the page info.
     private final PageInfoConnectionController mConnectionController;
+    private final PageInfoConnectionSecurityController mConnectionSecurityController;
 
     // The controller for the permissions section of the page info.
     private final PageInfoPermissionsController mPermissionsController;
@@ -290,6 +292,13 @@ public class PageInfoController
                         publisher,
                         mIsInternalPage);
         mSubpageControllers.add(mConnectionController);
+        mConnectionSecurityController =
+                new PageInfoConnectionSecurityController(
+                        this,
+                        mView.getConnectionSecurityView(),
+                        mView.getConnectionRowView(),
+                        mWebContents);
+        mSubpageControllers.add(mConnectionSecurityController);
         mPermissionsController =
                 new PageInfoPermissionsController(
                         this,
@@ -311,11 +320,13 @@ public class PageInfoController
         mPermissionParamsListBuilder = new PermissionParamsListBuilder(mContext, mWindowAndroid);
         mNativePageInfoController = PageInfoControllerJni.get().init(this, mWebContents);
 
+        ViewAndroidDelegate viewAndroidDelegte =
+                assumeNonNull(webContents.getViewAndroidDelegate());
         PageInfoDialog dialog =
                 new PageInfoDialog(
                         mContext,
                         mContainer,
-                        assumeNonNull(webContents.getViewAndroidDelegate()).getContainerView(),
+                        assumeNonNull(viewAndroidDelegte.getContainerView()),
                         isSheet(),
                         delegate.getModalDialogManager(),
                         this,
@@ -373,6 +384,9 @@ public class PageInfoController
         if (mCookiesController != null) {
             mCookiesController.destroy();
         }
+        if (mConnectionSecurityController != null) {
+            mConnectionSecurityController.destroy();
+        }
     }
 
     /**
@@ -412,6 +426,22 @@ public class PageInfoController
         mConnectionController.setSecurityDescription(summary, details);
     }
 
+    /**
+     * Creates a button in the PageInfo UI that displays only a summary line about connection
+     * security; when tapped the button opens a subpage that displays the full connection security
+     * info.
+     */
+    @CalledByNative
+    private void showOpenSecurityPageButton(String summary) {
+        mConnectionSecurityController.showSecurityPageButton(summary);
+    }
+
+    /** Displays the full connection security info in the PageInfo UI. */
+    @CalledByNative
+    private void showConnectionSecurityInfo() {
+        mConnectionSecurityController.showSecurityInfo();
+    }
+
     /** Updates the Topic view if present. */
     @CalledByNative
     private void setAdPersonalizationInfo(boolean hasJoinedUserToInterestGroup, String[] topics) {
@@ -445,8 +475,10 @@ public class PageInfoController
                 });
     }
 
-    /** Dismiss the popup, and then run a task after the animation has completed (if there is one). */
-    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
+    /**
+     * Dismiss the popup, and then run a task after the animation has completed (if there is one).
+     */
+    @VisibleForTesting
     public void runAfterDismiss(Runnable task) {
         assert mPendingRunAfterDismissTask == null;
         mPendingRunAfterDismissTask = task;
@@ -466,7 +498,7 @@ public class PageInfoController
 
         destroy();
 
-        PageInfoControllerJni.get().destroy(mNativePageInfoController, PageInfoController.this);
+        PageInfoControllerJni.get().destroy(mNativePageInfoController);
         mNativePageInfoController = 0;
         if (mPendingRunAfterDismissTask != null) {
             mPendingRunAfterDismissTask.run();
@@ -477,9 +509,7 @@ public class PageInfoController
     public void recordAction(@PageInfoAction int action) {
         assert mNativePageInfoController != 0;
         if (mNativePageInfoController != 0) {
-            PageInfoControllerJni.get()
-                    .recordPageInfoAction(
-                            mNativePageInfoController, PageInfoController.this, action);
+            PageInfoControllerJni.get().recordPageInfoAction(mNativePageInfoController, action);
         }
     }
 
@@ -487,8 +517,7 @@ public class PageInfoController
     public void refreshPermissions() {
         mPermissionParamsListBuilder.clearPermissionEntries();
         if (mNativePageInfoController != 0) {
-            PageInfoControllerJni.get()
-                    .updatePermissions(mNativePageInfoController, PageInfoController.this);
+            PageInfoControllerJni.get().updatePermissions(mNativePageInfoController);
         }
     }
 
@@ -501,17 +530,17 @@ public class PageInfoController
         return !DeviceFormFactor.isNonMultiDisplayContextOnTablet(mContext);
     }
 
-    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
+    @VisibleForTesting
     public View getPageInfoView() {
         return mContainer;
     }
 
-    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
+    @VisibleForTesting
     public @Nullable PageInfoCookiesController getCookiesController() {
         return mCookiesController;
     }
 
-    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
+    @VisibleForTesting
     public boolean isDialogShowing() {
         return mDialog != null;
     }
@@ -571,7 +600,7 @@ public class PageInfoController
         sDismissPopup = onDismissButtonClicked;
     }
 
-    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
+    @VisibleForTesting
     public static @Nullable PageInfoController getLastPageInfoController() {
         return sLastPageInfoControllerForTesting != null
                 ? sLastPageInfoControllerForTesting.get()
@@ -582,12 +611,11 @@ public class PageInfoController
     interface Natives {
         long init(PageInfoController controller, WebContents webContents);
 
-        void destroy(long nativePageInfoControllerAndroid, PageInfoController caller);
+        void destroy(long nativePageInfoControllerAndroid);
 
-        void recordPageInfoAction(
-                long nativePageInfoControllerAndroid, PageInfoController caller, int action);
+        void recordPageInfoAction(long nativePageInfoControllerAndroid, int action);
 
-        void updatePermissions(long nativePageInfoControllerAndroid, PageInfoController caller);
+        void updatePermissions(long nativePageInfoControllerAndroid);
     }
 
     @Override
@@ -595,7 +623,7 @@ public class PageInfoController
         return mDelegate.getBrowserContext();
     }
 
-    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
+    @VisibleForTesting
     public PageInfoControllerDelegate getPageInfoControllerDelegate() {
         return mDelegate;
     }

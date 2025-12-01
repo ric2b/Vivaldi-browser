@@ -221,7 +221,8 @@ static int msmpeg4_encode_picture_header(MPVMainEncContext *const m)
 
     find_best_tables(ms);
 
-    align_put_bits(&s->pb);
+    put_bits_assume_flushed(&s->pb);
+
     put_bits(&s->pb, 2, s->c.pict_type - 1);
 
     put_bits(&s->pb, 5, s->c.qscale);
@@ -242,8 +243,8 @@ static int msmpeg4_encode_picture_header(MPVMainEncContext *const m)
             s->c.inter_intra_pred, s->c.width, s->c.height);
 
     if (s->c.pict_type == AV_PICTURE_TYPE_I) {
-        s->c.slice_height = s->c.mb_height/1;
-        put_bits(&s->pb, 5, 0x16 + s->c.mb_height/s->c.slice_height);
+        s->slice_height = s->c.mb_height/1;
+        put_bits(&s->pb, 5, 0x16 + s->c.mb_height / s->slice_height);
 
         if (s->c.msmpeg4_version == MSMP4_WMV1) {
             ff_msmpeg4_encode_ext_header(s);
@@ -297,9 +298,9 @@ void ff_msmpeg4_encode_ext_header(MPVEncContext *const s)
     put_bits(&s->pb, 11, FFMIN(m->bit_rate / 1024, 2047));
 
     if (s->c.msmpeg4_version >= MSMP4_V3)
-        put_bits(&s->pb, 1, s->c.flipflop_rounding);
+        put_bits(&s->pb, 1, s->flipflop_rounding);
     else
-        av_assert0(!s->c.flipflop_rounding);
+        av_assert0(!s->flipflop_rounding);
 }
 
 void ff_msmpeg4_encode_motion(MSMPEG4EncContext *const ms,
@@ -331,7 +332,7 @@ void ff_msmpeg4_encode_motion(MSMPEG4EncContext *const ms,
 void ff_msmpeg4_handle_slices(MPVEncContext *const s)
 {
     if (s->c.mb_x == 0) {
-        if (s->c.slice_height && (s->c.mb_y % s->c.slice_height) == 0) {
+        if (s->slice_height && (s->c.mb_y % s->slice_height) == 0) {
             if (s->c.msmpeg4_version < MSMP4_WMV1)
                 ff_mpeg4_clean_buffers(&s->c);
             s->c.first_slice_line = 1;
@@ -349,7 +350,7 @@ static void msmpeg4v2_encode_motion(MPVEncContext *const s, int val)
         /* zero vector; corresponds to ff_mvtab[0] */
         put_bits(&s->pb, 1, 0x1);
     } else {
-        bit_size = s->c.f_code - 1;
+        bit_size = s->f_code - 1;
         range = 1 << bit_size;
         if (val <= -64)
             val += 64;

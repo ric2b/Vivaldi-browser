@@ -8,6 +8,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <array>
 #include <cstdint>
 #include <deque>
 #include <list>
@@ -77,7 +78,6 @@
 #include "content/common/features.h"
 #include "content/common/frame.mojom.h"
 #include "content/common/input/input_injector.mojom-forward.h"
-#include "content/common/navigation_client.mojom-forward.h"
 #include "content/common/navigation_client.mojom.h"
 #include "content/public/browser/back_forward_cache.h"
 #include "content/public/browser/browser_thread.h"
@@ -102,7 +102,6 @@
 #include "media/mojo/mojom/media_metrics_provider.mojom-forward.h"
 #include "media/mojo/mojom/media_player.mojom-forward.h"
 #include "media/mojo/mojom/video_encoder_metrics_provider.mojom-forward.h"
-#include "media/mojo/services/media_metrics_provider.h"
 #include "media/mojo/services/mojo_video_encoder_metrics_provider_service.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
@@ -117,7 +116,6 @@
 #include "net/base/network_isolation_key.h"
 #include "net/cookies/cookie_setting_override.h"
 #include "net/net_buildflags.h"
-#include "ppapi/buildflags/buildflags.h"
 #include "services/device/public/mojom/vibration_manager.mojom.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/cpp/cross_origin_embedder_policy.h"
@@ -144,13 +142,13 @@
 #include "third_party/blink/public/mojom/blob/file_backed_blob_factory.mojom-forward.h"
 #include "third_party/blink/public/mojom/broadcastchannel/broadcast_channel.mojom.h"
 #include "third_party/blink/public/mojom/buckets/bucket_manager_host.mojom.h"
+#include "third_party/blink/public/mojom/dom_storage/storage_area.mojom.h"
 #include "third_party/blink/public/mojom/feature_observer/feature_observer.mojom-forward.h"
 #include "third_party/blink/public/mojom/file_system_access/file_system_access_manager.mojom-forward.h"
 #include "third_party/blink/public/mojom/filesystem/file_system.mojom-forward.h"
 #include "third_party/blink/public/mojom/font_access/font_access.mojom-forward.h"
 #include "third_party/blink/public/mojom/frame/back_forward_cache_controller.mojom.h"
 #include "third_party/blink/public/mojom/frame/find_in_page.mojom.h"
-#include "third_party/blink/public/mojom/frame/frame.mojom-forward.h"
 #include "third_party/blink/public/mojom/frame/frame.mojom.h"
 #include "third_party/blink/public/mojom/frame/frame_owner_properties.mojom-forward.h"
 #include "third_party/blink/public/mojom/frame/reporting_observer.mojom-forward.h"
@@ -161,7 +159,6 @@
 #include "third_party/blink/public/mojom/loader/fetch_later.mojom-forward.h"
 #include "third_party/blink/public/mojom/loader/local_resource_loader_config.mojom-forward.h"
 #include "third_party/blink/public/mojom/loader/resource_load_info.mojom-forward.h"
-#include "third_party/blink/public/mojom/navigation/navigation_params.mojom-forward.h"
 #include "third_party/blink/public/mojom/navigation/navigation_params.mojom.h"
 #include "third_party/blink/public/mojom/navigation/renderer_eviction_reason.mojom.h"
 #include "third_party/blink/public/mojom/notifications/notification_service.mojom-forward.h"
@@ -193,7 +190,6 @@
 #include "ui/accessibility/platform/ax_platform_tree_manager.h"
 #include "ui/accessibility/platform/ax_platform_tree_manager_delegate.h"
 #include "ui/accessibility/platform/ax_unique_id.h"
-#include "ui/accessibility/platform/browser_accessibility_manager.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/gfx/geometry/rect.h"
 #include "url/gurl.h"
@@ -201,9 +197,12 @@
 #if BUILDFLAG(IS_ANDROID)
 #include "base/containers/id_map.h"
 #include "content/browser/webauth/webauth_request_security_checker.h"
-#include "services/device/public/mojom/nfc.mojom.h"
 #else
 #include "third_party/blink/public/mojom/hid/hid.mojom-forward.h"
+#endif
+
+#if BUILDFLAG(IS_ANDROID) || (BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_IOS_TVOS))
+#include "services/device/public/mojom/nfc.mojom.h"
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS)
@@ -250,14 +249,15 @@ struct ResourceRequest;
 class ResourceRequestBody;
 }  // namespace network
 
+namespace ui {
+class BrowserAccessibilityManager;
+}
+
 namespace ukm {
 class UkmRecorder;
 }
 
 namespace features {
-
-// Feature to evict when accessibility events occur while in back/forward cache.
-CONTENT_EXPORT BASE_DECLARE_FEATURE(kEvictOnAXEvents);
 
 CONTENT_EXPORT BASE_DECLARE_FEATURE(kDoNotEvictOnAXLocationChange);
 
@@ -288,7 +288,6 @@ class PushMessagingManager;
 class RenderAccessibilityHost;
 class RenderFrameHostDelegate;
 class RenderFrameHostImpl;
-class RenderFrameHostImplPpapiSupport;
 class RenderFrameHostManager;
 class RenderFrameHostOrProxy;
 class RenderFrameHostOwner;
@@ -675,15 +674,12 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // RenderFrameHostDelegate::OnTextCopiedToClipboard.
   void OnTextCopiedToClipboard(const std::u16string& copied_text);
 
-  // This is called when accessibility events arrive from renderer to browser.
-  // This could cause eviction if the page is in back/forward cache. Returns
-  // true if the eviction happens, and otherwise calls
-  // |RenderFrameHost::IsInactiveAndDisallowActivation()| and returns the value
-  // from there. This is only called when the flag to evict on accessibility
-  // events is on. When the flag is off, we do not evict the entry and keep
-  // processing the events, thus do not call this function.
-  bool IsInactiveAndDisallowActivationForAXEvents(
-      const std::vector<ui::AXEvent>& events);
+  // If the clipboard has been modified due to an enterprise data controls
+  // policy, return the original clipboard types. The implementation delegates
+  // to RenderFrameHostDelegate::GetClipboardTypesIfPolicyApplied(). See the
+  // description of the latter method for complete details.
+  std::optional<std::vector<std::u16string>> GetClipboardTypesIfPolicyApplied(
+    const ui::ClipboardSequenceNumberToken& seqno);
 
   void SendAccessibilityEventsToManager(ui::AXUpdatesAndEvents& details);
   void ExerciseAccessibilityForTest();
@@ -719,9 +715,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // RenderFrameHost. Will create one if it does not exist (and update all the
   // renderers with the newly computed value).
   blink::web_pref::WebPreferences GetOrCreateWebPreferences();
-
-  // IPC::Sender
-  bool Send(IPC::Message* msg) override;
 
   // IPC::Listener
   bool OnMessageReceived(const IPC::Message& msg) override;
@@ -1652,7 +1645,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
 
   // Requests that the renderer discard the frame associated with this host,
   // freeing up as many resources as possible.
-  void DiscardFrame();
+  void DiscardFrame(base::OnceClosure on_discarded_cb);
 
   // BEGIN IPC REVIEW BOUNDARY: to enforce security review for IPC, these
   // methods are defined in render_frame_host_impl_interface_bindings.cc.
@@ -2159,7 +2152,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
       const net::NetworkIsolationKey& nik,
       const blink::StorageKey& storage_key);
 
-#if BUILDFLAG(IS_ANDROID)
+#if BUILDFLAG(IS_ANDROID) || (BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_IOS_TVOS))
   void BindNFCReceiver(mojo::PendingReceiver<device::mojom::NFC> receiver);
 #endif
 
@@ -2481,11 +2474,13 @@ class CONTENT_EXPORT RenderFrameHostImpl
   void DispatchLoad() override;
   void GoToEntryAtOffset(int32_t offset,
                          bool has_user_gesture,
+                         base::TimeTicks actual_navigation_start,
                          std::optional<blink::scheduler::TaskAttributionId>
                              soft_navigation_heuristics_task_id) override;
   void NavigateToNavigationApiKey(
       const std::string& key,
       bool has_user_gesture,
+      base::TimeTicks actual_navigation_start,
       std::optional<blink::scheduler::TaskAttributionId> task_id) override;
   void NavigateEventHandlerPresenceChanged(bool present) override;
   void UpdateTitle(const std::optional<::std::u16string>& title,
@@ -2628,6 +2623,16 @@ class CONTENT_EXPORT RenderFrameHostImpl
   void RecordWindowProxyUsageMetrics(
       const blink::FrameToken& target_frame_token,
       blink::mojom::WindowProxyAccessType access_type) override;
+  void InitializeCrashReportStorage(
+      uint64_t length,
+      InitializeCrashReportStorageCallback callback) override;
+  void SetCrashReportStorageKey(
+      const std::string& key,
+      const std::string& value,
+      SetCrashReportStorageKeyCallback callback) override;
+  void RemoveCrashReportStorageKey(
+      const std::string& key,
+      RemoveCrashReportStorageKeyCallback callback) override;
 
   void VisibleTextSelectionChanged(const std::u16string& text) override;
 
@@ -3072,10 +3077,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
     return devtools_frame_token_;
   }
 
-#if BUILDFLAG(ENABLE_PPAPI)
-  RenderFrameHostImplPpapiSupport& GetPpapiSupport();
-#endif
-
   // Returns the sticky bit of the User Activation v2 state of this document.
   bool HasStickyUserActivation() const;
   bool IsActiveUserActivation() const;
@@ -3269,7 +3270,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // See https://explainers-by-googlers.github.io/partitioned-popins/
   bool ShouldPartitionAsPopin() const override;
 
-  bool DoesDocumentHaveStorageAccess() override;
+  bool IsFullCookieAccessAllowed() override;
 
   void SimulateDiscardShutdownKeepAliveTimeoutForTesting();
 
@@ -3361,6 +3362,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
       std::unique_ptr<blink::PendingURLLoaderFactoryBundle>
           subresource_loader_factories,
       const blink::DocumentToken& document_token,
+      const base::UnguessableToken& devtools_navigation_token,
       blink::mojom::PolicyContainerPtr policy_container);
 
   // The Build*Callback functions below are responsible for building the
@@ -4424,6 +4426,11 @@ class CONTENT_EXPORT RenderFrameHostImpl
   media::PictureInPictureEventsInfo::AutoPipReasonCallback
   CreateAutoPipReasonCallback();
 
+  // Notifies discard clients the operation completed successfully. This may be
+  // called either when the renderer acknowledges the operation completed
+  // successfully or the renderer was proactively terminated.
+  void MaybeNotifyDiscardedFrame();
+
   // The RenderViewHost that this RenderFrameHost is associated with.
   //
   // It is kept alive as long as any RenderFrameHosts or RenderFrameProxyHosts
@@ -4746,6 +4753,13 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // This is passed to CommitNavigationParams in NavigationRequest.
   bool was_discarded_ = false;
 
+  // Callback invoked once the discard operation has finished. The operation may
+  // finish with an acknowledgement from the renderer or a process-kill (in
+  // which case the renderer will have terminated before acknowledging
+  // completion).
+  // Defined only if there is a discard operation being processed by this frame.
+  base::OnceClosure on_discarded_cb_;
+
   // Indicates whether this RenderFrameHost is in the process of loading a
   // document or not, and if so, whether it should show loading UI.
   LoadingState loading_state_ = LoadingState::NONE;
@@ -5027,10 +5041,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
 
   mojo::AssociatedReceiver<mojom::DomAutomationControllerHost>
       dom_automation_controller_receiver_{this};
-
-#if BUILDFLAG(ENABLE_PPAPI)
-  std::unique_ptr<RenderFrameHostImplPpapiSupport> ppapi_support_;
-#endif
 
   KeepAliveHandleFactory keep_alive_handle_factory_;
 

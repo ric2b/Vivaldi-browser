@@ -5,7 +5,7 @@
     display: flex;
     flex-shrink: 0;
     justify-content: center;
-    width: 32px;
+    width: var(--cr-searchbox-icon-container-size, 32px);
   }
 
   :host(:not([is-lens-searchbox_])) {
@@ -27,14 +27,6 @@
   :host-context(cr-searchbox-match[has-image]):host(:not([is-weather-answer])) #container {
     background-color: var(--color-searchbox-results-icon-container-background,
         var(--container-bg-color));
-  }
-
-  /* Calculator answer and suggestion answer icons feature a blue background. */
-  :host-context(cr-searchbox-match[is-rich-suggestion]:not([has-image])):host(:not([has-icon-container-background]):not([is-enterprise-search-aggregator-people-type])) #container {
-    background-color: var(--google-blue-600);
-    border-radius: 50%;
-    height: 24px;
-    width: 24px;
   }
 
   /* If icon is for a pedal or AiS, and it is not in the search box, apply background. */
@@ -102,10 +94,6 @@
       /* Set the icon color to hcm (high contrast mode) value. */
       background-color: ButtonText;
     }
-  }
-
-  :host-context(cr-searchbox-match[is-rich-suggestion]):host(:not([is-enterprise-search-aggregator-people-type])) #icon {
-    background-color: white;
   }
 
   :host([in-searchbox][background-image*='//resources/cr_components/omnibox/icons/google_g.svg']) #icon {

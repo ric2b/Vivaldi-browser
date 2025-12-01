@@ -704,7 +704,8 @@ void packetmath() {
     // Prevent very small product results by adjusting range.  Otherwise,
     // we may end up with multiplying e.g. 32 Eigen::halfs with values < 1.
     for (int i = 0; i < PacketSize; ++i) {
-      data1[i] = internal::random<Scalar>(Scalar(0.5), Scalar(1)) * (internal::random<bool>() ? Scalar(-1) : Scalar(1));
+      data1[i] = REF_MUL(internal::random<Scalar>(Scalar(0.5), Scalar(1)),
+                         (internal::random<bool>() ? Scalar(-1) : Scalar(1)));
     }
   }
   ref[0] = Scalar(1);

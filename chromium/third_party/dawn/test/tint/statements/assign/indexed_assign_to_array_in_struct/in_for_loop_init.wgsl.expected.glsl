@@ -13,7 +13,7 @@ struct OuterS {
   InnerS a1[8];
 };
 
-layout(binding = 4, std140)
+layout(binding = 0, std140)
 uniform uniforms_block_1_ubo {
   Uniforms inner;
 } v_1;
@@ -39,7 +39,8 @@ void main() {
         tint_loop_idx.x = tint_low_inc;
         uint tint_carry = uint((tint_low_inc == 4294967295u));
         tint_loop_idx.y = (tint_loop_idx.y - tint_carry);
-        i = (i + 1);
+        uint v_3 = uint(i);
+        i = int((v_3 + uint(1)));
       }
       continue;
     }

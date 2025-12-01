@@ -46,6 +46,7 @@
 #include "browser/vivaldi_browser_finder.h"
 #include "components/capture/capture_page.h"
 #include "components/datasource/vivaldi_image_store.h"
+#include "components/prefs/pref_service.h"
 #include "extensions/tools/vivaldi_tools.h"
 #include "extensions/vivaldi_browser_component_wrapper.h"
 #include "ui/vivaldi_browser_window.h"

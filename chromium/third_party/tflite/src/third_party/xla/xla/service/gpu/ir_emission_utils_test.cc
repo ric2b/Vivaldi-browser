@@ -30,18 +30,17 @@ limitations under the License.
 #include "xla/hlo/ir/hlo_instruction.h"
 #include "xla/hlo/ir/hlo_instructions.h"
 #include "xla/hlo/ir/hlo_module.h"
+#include "xla/hlo/testlib/hlo_hardware_independent_test_base.h"
 #include "xla/hlo/utils/hlo_traversal.h"
 #include "xla/literal.h"
 #include "xla/literal_util.h"
 #include "xla/service/buffer_assignment.h"
 #include "xla/service/gpu/backend_configs.pb.h"
 #include "xla/service/gpu/ir_emission_utils.pb.h"
-#include "xla/service/hlo_runner.h"
-#include "xla/service/platform_util.h"
 #include "xla/shape_util.h"
-#include "xla/tests/hlo_runner_agnostic_test_base.h"
 #include "xla/tsl/platform/status_matchers.h"
 #include "xla/tsl/platform/statusor.h"
+#include "xla/tsl/protobuf/dnn.pb.h"
 #include "xla/types.h"
 
 namespace xla {
@@ -52,12 +51,8 @@ using ::testing::ElementsAreArray;
 using ::testing::SizeIs;
 using ::tsl::testing::IsOkAndHolds;
 
-class IrEmissionUtilsTest : public HloRunnerAgnosticTestBase {
+class IrEmissionUtilsTest : public HloHardwareIndependentTestBase {
  public:
-  IrEmissionUtilsTest()
-      : HloRunnerAgnosticTestBase(
-            std::make_unique<HloRunner>(*PlatformUtil::GetDefaultPlatform())) {}
-
   TransposeSpec GetTransposeSpecFromRoot(absl::string_view hlo_text) {
     auto module = ParseAndReturnVerifiedModule(hlo_text).value();
     auto* root = module->entry_computation()->root_instruction();
@@ -105,65 +100,6 @@ ENTRY entry {
   EXPECT_EQ(result->instr, tr);
   EXPECT_EQ(result->dimensions, InlinedVector({48, 32, 2}));
   EXPECT_EQ(result->permutation, InlinedVector({1, 0, 2}));
-}
-
-TEST_F(IrEmissionUtilsTest, FindTiledLogical210TransposeWithSmallDimension) {
-  const char* hlo = R"(
-HloModule module
-
-ENTRY entry {
-  p = f16[4,256,128]{2,1,0} parameter(0)
-  ROOT t = f16[128,256,4]{2,1,0} transpose(p), dimensions={2,1,0}
-}
-)";
-  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
-                          ParseAndReturnVerifiedModule(hlo));
-  HloInstruction* tr = module->entry_computation()->root_instruction();
-
-  auto result = GetDescriptionForTiledTransposeEmitter(*tr);
-  EXPECT_TRUE(result.has_value());
-  EXPECT_EQ(result->instr, tr);
-  EXPECT_EQ(result->dimensions, InlinedVector({128, 256, 4}));
-  EXPECT_EQ(result->permutation, InlinedVector({2, 1, 0}));
-}
-
-TEST_F(IrEmissionUtilsTest, FindTiledLogicalTransposeDimensionTooSmall) {
-  const char* hlo = R"(
-HloModule module
-
-ENTRY entry {
-  p = f16[1024,3]{1,0} parameter(0)
-  ROOT t = f16[3,1024]{1,0} transpose(p), dimensions={1,0}
-}
-)";
-  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
-                          ParseAndReturnVerifiedModule(hlo));
-  HloInstruction* tr = module->entry_computation()->root_instruction();
-
-  auto result = GetDescriptionForTiledTransposeEmitter(*tr);
-
-  // Transposed dimensions should be at least 4. See
-  // go/xla-transpose-emitter-performance-analysis for more details.
-  EXPECT_FALSE(result.has_value());
-}
-
-TEST_F(IrEmissionUtilsTest, FindTiledLogicalTranspose2103ProductTooSmall) {
-  const char* hlo = R"(
-HloModule module
-
-ENTRY entry {
-  p = s4[8,256,8,2]{3,2,1,0} parameter(0)
-  ROOT t = s4[8,256,8,2]{3,2,1,0} transpose(p), dimensions={2,1,0,3}
-}
-)";
-  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
-                          ParseAndReturnVerifiedModule(hlo));
-  HloInstruction* tr = module->entry_computation()->root_instruction();
-
-  // Transposed dimensions combined should be at least 256 (16 x 16). See
-  // go/xla-transpose-emitter-performance-analysis for more details.
-  auto result = GetDescriptionForTiledTransposeEmitter(*tr);
-  EXPECT_FALSE(result.has_value());
 }
 
 TEST_F(IrEmissionUtilsTest, FindTiledLogical102TransposeTooMuchMemoryRequired) {
@@ -1333,6 +1269,122 @@ TEST_F(IrEmissionUtilsTest, ResolveWhileLoopDependencySideEffect) {
   ASSERT_FALSE(result.has_value());
 }
 
+TEST_F(IrEmissionUtilsTest, InternalTuple) {
+  // Verifies that we can resolve dependencies that involve internal tuples.
+  constexpr absl::string_view kHlo = R"(
+      add12 {
+        p0 = s32[] parameter(0)
+        c1 = s32[] constant(1)
+        c2 = s32[] constant(2)
+        p0p1 = s32[] add(p0, c1)
+        p0p2 = s32[] add(p0, c2)
+        ROOT tuple = (s32[], s32[]) tuple(p0p1, p0p2)
+      }
+
+      call_body {
+        p0 = s32[] parameter(0)
+        ROOT sum = s32[] add(p0, p0)
+      }
+
+      while_body {
+        p0 = (s32[], s32[]) parameter(0)
+        ivar = s32[] get-tuple-element(p0), index=0
+        ivar_copy = s32[] copy(ivar)
+
+        side_effect = s32[] custom-call(), custom_call_target=""
+
+        derived = (s32[], s32[]) fusion(ivar_copy), kind=kLoop, calls=add12
+        val = get-tuple-element(derived), index=1
+
+        c1 = s32[] constant(1)
+        next_ivar = s32[] add(ivar_copy, c1)
+        use = s32[] call(val), to_apply=call_body
+
+        ROOT result = (s32[], s32[]) tuple(next_ivar, use)
+      }
+
+      condition {
+        p0 = (s32[], s32[]) parameter(0)
+        ivar = s32[] get-tuple-element(p0), index=0
+        c5 = s32[] constant(5)
+        ROOT cmp = pred[] compare(ivar, c5), direction=LT
+      }
+
+      ENTRY main {
+        c0 = s32[] constant(0)
+        tuple = (s32[], s32[]) tuple(c0, c0)
+        ROOT while = (s32[], s32[]) while(tuple),
+            condition=condition, body=while_body,
+            backend_config={"known_induction_variable":{"tuple_index":"0"}}
+      }
+  )";
+
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
+                          ParseAndReturnVerifiedModule(kHlo));
+  auto result = ResolveFunctionalDependencyOnInductionVariable(
+      module->GetComputationWithName("call_body")->root_instruction());
+
+  ASSERT_TRUE(result.has_value());
+
+  HloComputation* while_body = module->GetComputationWithName("while_body");
+  const HloComputation* call_body = module->GetComputationWithName("call_body");
+  const HloInstruction* loop = module->entry_computation()->root_instruction();
+
+  EXPECT_EQ(result->loop, loop);
+  EXPECT_EQ(result->induction_var, while_body->GetInstructionWithName("ivar"));
+
+  EXPECT_THAT(result->required_parameters, SizeIs(1));
+  EXPECT_THAT(result->required_parameters[call_body], ElementsAre(true));
+}
+
+TEST_F(IrEmissionUtilsTest, NonInductionVariableLoopCarriedVariable) {
+  // Verifies that we detect when there is a dependency on a non-induction
+  // variable loop-carried variable.
+  constexpr absl::string_view kHlo = R"(
+      while_body {
+        p0 = (s32[], s32[]) parameter(0)
+        ivar = s32[] get-tuple-element(p0), index=0
+        lcv = s32[] get-tuple-element(p0), index=1
+
+        c1 = s32[] constant(1)
+        next_ivar = s32[] add(ivar, c1)
+        next_lcv = s32[] add(ivar, lcv)
+
+        ROOT result = (s32[], s32[]) tuple(next_ivar, next_lcv)
+      }
+
+      condition {
+        p0 = (s32[], s32[]) parameter(0)
+        ivar = s32[] get-tuple-element(p0), index=0
+        c5 = s32[] constant(5)
+        ROOT cmp = pred[] compare(ivar, c5), direction=LT
+      }
+
+      ENTRY main {
+        c0 = s32[] constant(0)
+        tuple = (s32[], s32[]) tuple(c0, c0)
+        ROOT while = (s32[], s32[]) while(tuple),
+            condition=condition, body=while_body,
+            backend_config={"known_induction_variable":{"tuple_index":"0"}}
+      }
+  )";
+
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
+                          ParseAndReturnVerifiedModule(kHlo));
+  HloComputation* while_body = module->GetComputationWithName("while_body");
+
+  // Sanity check to ensure there isn't something wrong with the loop.
+  ASSERT_TRUE(ResolveFunctionalDependencyOnInductionVariable(
+                  while_body->GetInstructionWithName("next_ivar"))
+                  .has_value());
+
+  // This must be false, since it depends on tuple index 1, which is not the
+  // induction variable.
+  ASSERT_FALSE(ResolveFunctionalDependencyOnInductionVariable(
+                   while_body->GetInstructionWithName("next_lcv"))
+                   .has_value());
+}
+
 TEST_F(IrEmissionUtilsTest, Transpose_10) {
   auto spec = GetTransposeSpecFromRoot(R"(ENTRY entry {
     p0 = f32[8, 32] parameter(0)
@@ -1391,6 +1443,114 @@ TEST(DenseDataIntermediateTest, FromProto) {
 
   DenseDataIntermediate constant = DenseDataIntermediate::FromProto(proto);
   EXPECT_THAT(constant.span(), ElementsAreArray(kData));
+}
+
+TEST_F(IrEmissionUtilsTest, OrdinaryMatmul) {
+  const char* hlo_string = R"(
+  HloModule t
+
+  ENTRY entry {
+    p0 = f32[10,20,30,40] parameter(0)
+    p1 = f32[10,20,50,40] parameter(1)
+    ROOT t = f32[10,20,30,50] dot(p0, p1),
+        lhs_batch_dims={0,1}, lhs_contracting_dims={3},
+        rhs_batch_dims={0,1}, rhs_contracting_dims={3}
+  })";
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo_string));
+  auto* root = module->entry_computation()->root_instruction();
+  EXPECT_THAT(IsCublasSupportedMatMul(*root, true), IsOkAndHolds(true));
+  EXPECT_THAT(IsCublasSupportedMatMul(*root, false), IsOkAndHolds(true));
+}
+
+TEST_F(IrEmissionUtilsTest, SingletonNoncontractingDim) {
+  const char* hlo_string = R"(
+  HloModule t
+
+  ENTRY entry {
+    p0 = f32[10,20,1,40] parameter(0)
+    p1 = f32[10,20,50,40] parameter(1)
+    ROOT t = f32[10,20,1,50] dot(p0, p1),
+        lhs_batch_dims={0,1}, lhs_contracting_dims={3},
+        rhs_batch_dims={0,1}, rhs_contracting_dims={3}
+  })";
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo_string));
+  auto* root = module->entry_computation()->root_instruction();
+  EXPECT_THAT(IsCublasSupportedMatMul(*root, true), IsOkAndHolds(true));
+  EXPECT_THAT(IsCublasSupportedMatMul(*root, false), IsOkAndHolds(false));
+}
+
+TEST_F(IrEmissionUtilsTest, BothOperandsHaveSingletonNoncontractingDims) {
+  const char* hlo_string = R"(
+  HloModule t
+
+  ENTRY entry {
+    p0 = f32[10,20,1,40] parameter(0)
+    p1 = f32[10,20,1,40] parameter(1)
+    ROOT t = f32[10,20,1,1] dot(p0, p1),
+        lhs_batch_dims={0,1}, lhs_contracting_dims={3},
+        rhs_batch_dims={0,1}, rhs_contracting_dims={3}
+  })";
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo_string));
+  auto* root = module->entry_computation()->root_instruction();
+  EXPECT_THAT(IsCublasSupportedMatMul(*root, true), IsOkAndHolds(false));
+  EXPECT_THAT(IsCublasSupportedMatMul(*root, false), IsOkAndHolds(false));
+}
+
+TEST_F(IrEmissionUtilsTest, OneSideDoesntHaveNoncontractingDims) {
+  const char* hlo_string = R"(
+  HloModule t
+
+  ENTRY entry {
+    p0 = f32[10,20,40] parameter(0)
+    p1 = f32[10,20,2,40] parameter(1)
+    ROOT t = f32[10,20,2] dot(p0, p1),
+        lhs_batch_dims={0,1}, lhs_contracting_dims={2},
+        rhs_batch_dims={0,1}, rhs_contracting_dims={3}
+  })";
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo_string));
+  auto* root = module->entry_computation()->root_instruction();
+  EXPECT_THAT(IsCublasSupportedMatMul(*root, true), IsOkAndHolds(true));
+  EXPECT_THAT(IsCublasSupportedMatMul(*root, false), IsOkAndHolds(false));
+}
+
+TEST_F(IrEmissionUtilsTest, OneSideMissesNoncontractingDimsOtherIsSingleton) {
+  const char* hlo_string = R"(
+  HloModule t
+
+  ENTRY entry {
+    p0 = f32[10,20,40] parameter(0)
+    p1 = f32[10,20,1,40] parameter(1)
+    ROOT t = f32[10,20,1] dot(p0, p1),
+        lhs_batch_dims={0,1}, lhs_contracting_dims={2},
+        rhs_batch_dims={0,1}, rhs_contracting_dims={3}
+  })";
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo_string));
+  auto* root = module->entry_computation()->root_instruction();
+  EXPECT_THAT(IsCublasSupportedMatMul(*root, true), IsOkAndHolds(false));
+  EXPECT_THAT(IsCublasSupportedMatMul(*root, false), IsOkAndHolds(false));
+}
+
+TEST_F(IrEmissionUtilsTest, NoNonContractingDims) {
+  const char* hlo_string = R"(
+  HloModule t
+
+  ENTRY entry {
+    p0 = f32[10,20,40] parameter(0)
+    p1 = f32[10,20,40] parameter(1)
+    ROOT t = f32[10,20] dot(p0, p1),
+        lhs_batch_dims={0,1}, lhs_contracting_dims={2},
+        rhs_batch_dims={0,1}, rhs_contracting_dims={2}
+  })";
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo_string));
+  auto* root = module->entry_computation()->root_instruction();
+  EXPECT_THAT(IsCublasSupportedMatMul(*root, true), IsOkAndHolds(false));
+  EXPECT_THAT(IsCublasSupportedMatMul(*root, false), IsOkAndHolds(false));
 }
 
 }  // namespace gpu

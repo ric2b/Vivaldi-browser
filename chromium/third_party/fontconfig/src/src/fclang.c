@@ -28,18 +28,6 @@
 
 /* Objects MT-safe for readonly access. */
 
-typedef struct {
-    const FcChar8   lang[16];
-    const FcCharSet charset;
-} FcLangCharSet;
-
-typedef struct {
-    int begin;
-    int end;
-} FcLangCharSetRange;
-
-#include "../fc-lang/fclang.h"
-
 /*
  * Keep Han languages separated by eliminating languages
  * that the codePageRange bits says aren't supported
@@ -56,12 +44,6 @@ static const struct {
 };
 
 #define NUM_CODE_PAGE_RANGE (int)(sizeof FcCodePageRange / sizeof FcCodePageRange[0])
-
-struct _FcLangSet {
-    FcStrSet *extra;
-    FcChar32  map_size;
-    FcChar32  map[NUM_LANG_SET_MAP];
-};
 
 static int
 FcLangSetIndex (const FcChar8 *lang);
@@ -109,8 +91,8 @@ FcLangSetBitReset (FcLangSet   *ls,
 }
 
 FcLangSet *
-FcFreeTypeLangSet (const FcCharSet *charset,
-                   const FcChar8   *exclusiveLang)
+FcLangSetFromCharSet (const FcCharSet *charset,
+                      const FcChar8   *exclusiveLang)
 {
     int              i, j;
     FcChar32         missing;

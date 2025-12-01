@@ -30,7 +30,6 @@ const char kSetUpdateOverCellularPermission[] =
 const char kSetUpdateOverCellularTarget[] = "SetUpdateOverCellularTarget";
 const char kToggleFeature[] = "ToggleFeature";
 const char kIsFeatureEnabled[] = "IsFeatureEnabled";
-const char kApplyDeferredUpdate[] = "ApplyDeferredUpdate";
 const char kApplyDeferredUpdateAdvanced[] = "ApplyDeferredUpdateAdvanced";
 
 // Signals.

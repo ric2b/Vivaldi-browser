@@ -40,21 +40,26 @@
 
 namespace {
 
-void AddTargetDependencies(const Target* target, TargetSet* deps) {
-  for (const auto& pair : target->GetDeps(Target::DEPS_LINKED)) {
+void AddTargetDependencies(const Target* target,
+                           TargetSet* deps,
+                           Target::DepsIterationType iteration_type) {
+  for (const auto& pair : target->GetDeps(iteration_type)) {
     if (deps->add(pair.ptr)) {
-      AddTargetDependencies(pair.ptr, deps);
+      AddTargetDependencies(pair.ptr, deps, iteration_type);
     }
   }
 }
 
+}  // namespace
+
 // Filters targets according to filter string; Will also recursively
 // add dependent targets.
-bool FilterTargets(const BuildSettings* build_settings,
-                   std::vector<const Target*>& all_targets,
-                   std::vector<const Target*>* targets,
-                   const std::string& dir_filter_string,
-                   Err* err) {
+bool JSONProjectWriter::FilterTargets(const BuildSettings* build_settings,
+                                      std::vector<const Target*>& all_targets,
+                                      std::vector<const Target*>* targets,
+                                      const std::string& dir_filter_string,
+                                      bool filter_with_data_deps,
+                                      Err* err) {
   if (dir_filter_string.empty()) {
     *targets = all_targets;
   } else {
@@ -67,8 +72,10 @@ bool FilterTargets(const BuildSettings* build_settings,
     commands::FilterTargetsByPatterns(all_targets, filters, targets);
 
     TargetSet target_set(targets->begin(), targets->end());
+    Target::DepsIterationType iteration_type =
+        filter_with_data_deps ? Target::DEPS_ALL : Target::DEPS_LINKED;
     for (const auto* target : *targets)
-      AddTargetDependencies(target, &target_set);
+      AddTargetDependencies(target, &target_set, iteration_type);
 
     targets->assign(target_set.begin(), target_set.end());
   }
@@ -83,8 +90,6 @@ bool FilterTargets(const BuildSettings* build_settings,
   return true;
 }
 
-}  // namespace
-
 bool JSONProjectWriter::RunAndWriteFiles(
     const BuildSettings* build_settings,
     const Builder& builder,
@@ -92,6 +97,7 @@ bool JSONProjectWriter::RunAndWriteFiles(
     const std::string& exec_script,
     const std::string& exec_script_extra_args,
     const std::string& dir_filter_string,
+    bool filter_with_data_deps,
     bool quiet,
     Err* err) {
   SourceFile output_file = build_settings->build_dir().ResolveRelativeFile(
@@ -104,8 +110,9 @@ bool JSONProjectWriter::RunAndWriteFiles(
 
   std::vector<const Target*> all_targets = builder.GetAllResolvedTargets();
   std::vector<const Target*> targets;
-  if (!FilterTargets(build_settings, all_targets, &targets, dir_filter_string,
-                     err)) {
+  if (!JSONProjectWriter::FilterTargets(build_settings, all_targets, &targets,
+                                        dir_filter_string,
+                                        filter_with_data_deps, err)) {
     return false;
   }
 

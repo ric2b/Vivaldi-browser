@@ -8,7 +8,6 @@ from typing import Sequence
 
 from opentelemetry import trace as trace_api
 from opentelemetry.sdk import trace as trace_sdk
-from opentelemetry.sdk import resources
 from opentelemetry.sdk.trace import export as export_sdk
 
 from . import trace as trace

@@ -7,6 +7,7 @@
 #include "base/no_destructor.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
+#include "components/prefs/pref_service.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"  // nogncheck
 #include "content/browser/web_contents/web_contents_impl.h"

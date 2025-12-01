@@ -148,14 +148,17 @@ struct TypeConverter<PaymentOptionsPtr, blink::PaymentOptions> {
     output->request_payer_phone = input.requestPayerPhone();
     output->request_shipping = input.requestShipping();
 
-    if (input.shippingType() == "delivery") {
-      output->shipping_type = PaymentShippingType::DELIVERY;
-    } else if (input.shippingType() == "pickup") {
-      output->shipping_type = PaymentShippingType::PICKUP;
-    } else {
-      output->shipping_type = PaymentShippingType::SHIPPING;
+    switch (input.shippingType().AsEnum()) {
+      case blink::V8PaymentShippingType::Enum::kDelivery:
+        output->shipping_type = PaymentShippingType::DELIVERY;
+        break;
+      case blink::V8PaymentShippingType::Enum::kPickup:
+        output->shipping_type = PaymentShippingType::PICKUP;
+        break;
+      case blink::V8PaymentShippingType::Enum::kShipping:
+        output->shipping_type = PaymentShippingType::SHIPPING;
+        break;
     }
-
     return output;
   }
 };
@@ -167,7 +170,7 @@ struct TypeConverter<PaymentValidationErrorsPtr,
       const blink::PaymentValidationErrors& input) {
     PaymentValidationErrorsPtr output =
         payments::mojom::blink::PaymentValidationErrors::New();
-    output->error = input.hasError() ? input.error() : g_empty_string;
+    output->error = input.hasError() ? input.error() : blink::g_empty_string;
     auto* payer_errors =
         input.hasPayer() ? input.payer() : blink::PayerErrors::Create();
     output->payer = PayerErrors::From(*payer_errors);
@@ -183,9 +186,9 @@ template <>
 struct TypeConverter<PayerErrorsPtr, blink::PayerErrors> {
   static PayerErrorsPtr Convert(const blink::PayerErrors& input) {
     PayerErrorsPtr output = payments::mojom::blink::PayerErrors::New();
-    output->email = input.hasEmail() ? input.email() : g_empty_string;
-    output->name = input.hasName() ? input.name() : g_empty_string;
-    output->phone = input.hasPhone() ? input.phone() : g_empty_string;
+    output->email = input.hasEmail() ? input.email() : blink::g_empty_string;
+    output->name = input.hasName() ? input.name() : blink::g_empty_string;
+    output->phone = input.hasPhone() ? input.phone() : blink::g_empty_string;
     return output;
   }
 };
@@ -193,6 +196,7 @@ struct TypeConverter<PayerErrorsPtr, blink::PayerErrors> {
 template <>
 struct TypeConverter<AddressErrorsPtr, blink::AddressErrors> {
   static AddressErrorsPtr Convert(const blink::AddressErrors& input) {
+    using blink::g_empty_string;
     AddressErrorsPtr output = payments::mojom::blink::AddressErrors::New();
     output->address_line =
         input.hasAddressLine() ? input.addressLine() : g_empty_string;
@@ -233,20 +237,23 @@ void ValidateShippingOptionOrPaymentItem(const T* item,
   DCHECK(item->amount()->hasCurrency());
 
   if (item->label().length() > PaymentRequest::kMaxStringLength) {
-    exception_state.ThrowTypeError("The label for " + item_name +
-                                   " cannot be longer than 1024 characters");
+    exception_state.ThrowTypeError(
+        StrCat({"The label for ", item_name,
+                " cannot be longer than 1024 characters"}));
     return;
   }
 
   if (item->amount()->currency().length() > PaymentRequest::kMaxStringLength) {
-    exception_state.ThrowTypeError("The currency code for " + item_name +
-                                   " cannot be longer than 1024 characters");
+    exception_state.ThrowTypeError(
+        StrCat({"The currency code for ", item_name,
+                " cannot be longer than 1024 characters"}));
     return;
   }
 
   if (item->amount()->value().length() > PaymentRequest::kMaxStringLength) {
-    exception_state.ThrowTypeError("The amount value for " + item_name +
-                                   " cannot be longer than 1024 characters");
+    exception_state.ThrowTypeError(
+        StrCat({"The amount value for ", item_name,
+                " cannot be longer than 1024 characters"}));
     return;
   }
 
@@ -269,7 +276,7 @@ void ValidateShippingOptionOrPaymentItem(const T* item,
     execution_context.AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
         mojom::ConsoleMessageSource::kJavaScript,
         mojom::ConsoleMessageLevel::kError,
-        "Empty " + item_name + " label may be confusing the user"));
+        StrCat({"Empty ", item_name, " label may be confusing the user"})));
     return;
   }
 }
@@ -296,7 +303,8 @@ void ValidateAndConvertDisplayItems(
     ExecutionContext& execution_context,
     ExceptionState& exception_state) {
   if (input.size() > PaymentRequest::kMaxListSize) {
-    exception_state.ThrowTypeError("At most 1024 " + item_names + " allowed");
+    exception_state.ThrowTypeError(
+        StrCat({"At most 1024 ", item_names, " allowed"}));
     return;
   }
 
@@ -726,17 +734,17 @@ void ValidateAndConvertPaymentMethodData(
             &execution_context)) {
       if (input.size() > 1) {
         exception_state.ThrowRangeError(
-            String(kSecurePaymentConfirmationMethod) +
-            " must be the only payment method identifier specified in the "
-            "PaymentRequest constructor.");
+            StrCat({kSecurePaymentConfirmationMethod,
+                    " must be the only payment method identifier specified in "
+                    "the PaymentRequest constructor."}));
         return;
       } else if (options->requestShipping() || options->requestPayerName() ||
                  options->requestPayerEmail() || options->requestPayerPhone()) {
-        exception_state.ThrowRangeError(
-            String(kSecurePaymentConfirmationMethod) +
-            " payment method identifier cannot be used with "
-            "\"requestShipping\", \"requestPayerName\", \"requestPayerEmail\", "
-            "or \"requestPayerPhone\" options.");
+        exception_state.ThrowRangeError(StrCat(
+            {kSecurePaymentConfirmationMethod,
+             " payment method identifier cannot be used with "
+             "\"requestShipping\", \"requestPayerName\", "
+             "\"requestPayerEmail\", or \"requestPayerPhone\" options."}));
         return;
       }
     }
@@ -746,9 +754,9 @@ void ValidateAndConvertPaymentMethodData(
         !CSPAllowsConnectToSource(url, /*url_before_redirects=*/url,
                                   /*did_follow_redirect=*/false,
                                   execution_context)) {
-      exception_state.ThrowRangeError(
-          payment_method_data->supportedMethod() +
-          " payment method identifier violates Content Security Policy.");
+      exception_state.ThrowRangeError(StrCat(
+          {payment_method_data->supportedMethod(),
+           " payment method identifier violates Content Security Policy."}));
       return;
     }
 
@@ -1376,7 +1384,7 @@ PaymentRequest::PaymentRequest(
   PaymentDetailsPtr validated_details =
       payments::mojom::blink::PaymentDetails::New();
   validated_details->id = id_ =
-      details->hasId() ? details->id() : WTF::CreateCanonicalUUIDString();
+      details->hasId() ? details->id() : CreateCanonicalUUIDString();
 
   VLOG(2) << "Renderer: New PaymentRequest (" << id_.Utf8() << ")";
 
@@ -1405,10 +1413,10 @@ PaymentRequest::PaymentRequest(
       execution_context->AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
           mojom::blink::ConsoleMessageSource::kJavaScript,
           mojom::blink::ConsoleMessageLevel::kError,
-          "Payment method \"" + data->supported_method +
-              "\" cannot be used with \"requestShipping\", "
-              "\"requestPayerName\", "
-              "\"requestPayerEmail\", or \"requestPayerPhone\"."));
+          StrCat({"Payment method \"", data->supported_method,
+                  "\" cannot be used with \"requestShipping\", "
+                  "\"requestPayerName\", \"requestPayerEmail\", or "
+                  "\"requestPayerPhone\"."})));
     }
   }
 

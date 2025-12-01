@@ -18,8 +18,8 @@ CPDF_Bookmark::CPDF_Bookmark() = default;
 
 CPDF_Bookmark::CPDF_Bookmark(const CPDF_Bookmark& that) = default;
 
-CPDF_Bookmark::CPDF_Bookmark(RetainPtr<const CPDF_Dictionary> pDict)
-    : dict_(std::move(pDict)) {}
+CPDF_Bookmark::CPDF_Bookmark(RetainPtr<const CPDF_Dictionary> dict)
+    : dict_(std::move(dict)) {}
 
 CPDF_Bookmark::~CPDF_Bookmark() = default;
 
@@ -41,11 +41,11 @@ WideString CPDF_Bookmark::GetTitle() const {
   return result;
 }
 
-CPDF_Dest CPDF_Bookmark::GetDest(CPDF_Document* pDocument) const {
+CPDF_Dest CPDF_Bookmark::GetDest(CPDF_Document* document) const {
   if (!dict_) {
     return CPDF_Dest(nullptr);
   }
-  return CPDF_Dest::Create(pDocument, dict_->GetDirectObjectFor("Dest"));
+  return CPDF_Dest::Create(document, dict_->GetDirectObjectFor("Dest"));
 }
 
 CPDF_Action CPDF_Bookmark::GetAction() const {

@@ -8,13 +8,15 @@
 // This source code is licensed under the BSD-style license found in the
 // LICENSE file in the root directory of this source tree.
 
-#include <assert.h>
-#include <math.h>
-
 #include <arm_fp16.h>
+#include <assert.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #include "src/xnnpack/common.h"
 #include "src/xnnpack/intrinsics-polyfill.h"
+#include "src/xnnpack/math.h"
+#include "src/xnnpack/microparams.h"
 #include "src/xnnpack/vunary.h"
 
 
@@ -22,7 +24,7 @@ void xnn_f16_vsqrt_ukernel__fp16arith_sqrt_u4(
     size_t batch,
     const xnn_float16* input,
     xnn_float16* output,
-    const struct xnn_f16_default_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
+    const struct xnn_f16_default_params* restrict params) XNN_OOB_READS
 {
   assert(batch != 0);
   assert(batch % sizeof(float16_t) == 0);

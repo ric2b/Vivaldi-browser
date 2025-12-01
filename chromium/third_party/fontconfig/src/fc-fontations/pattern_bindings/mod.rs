@@ -22,17 +22,15 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-extern crate fc_fontations_bindgen;
-
 pub mod fc_wrapper;
 
 use std::ffi::CString;
 use std::fmt::Debug;
 
-use fc_fontations_bindgen::fcint::{
-    FcPattern, FcPatternObjectAddBool, FcPatternObjectAddCharSet, FcPatternObjectAddDouble,
-    FcPatternObjectAddInteger, FcPatternObjectAddLangSet, FcPatternObjectAddRange,
-    FcPatternObjectAddString, FC_FAMILY_OBJECT,
+use fcint_bindings::{
+    FcLangSet, FcPattern, FcPatternObjectAddBool, FcPatternObjectAddCharSet,
+    FcPatternObjectAddDouble, FcPatternObjectAddInteger, FcPatternObjectAddLangSet,
+    FcPatternObjectAddRange, FcPatternObjectAddString, FC_FAMILY_OBJECT, FC_FILE_OBJECT,
 };
 
 use fc_wrapper::{FcCharSetWrapper, FcLangSetWrapper, FcPatternWrapper, FcRangeWrapper};
@@ -79,10 +77,22 @@ impl From<FcRangeWrapper> for PatternValue {
     }
 }
 
+impl From<FcCharSetWrapper> for PatternValue {
+    fn from(value: FcCharSetWrapper) -> Self {
+        PatternValue::CharSet(value)
+    }
+}
+
+impl From<FcLangSetWrapper> for PatternValue {
+    fn from(value: FcLangSetWrapper) -> Self {
+        PatternValue::LangSet(value)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct PatternElement {
-    object_id: i32,
-    value: PatternValue,
+    pub object_id: i32,
+    pub value: PatternValue,
 }
 
 impl PatternElement {
@@ -117,13 +127,17 @@ impl PatternElement {
                 FcPatternObjectAddDouble(pattern, self.object_id, value)
             },
             PatternValue::Range(value) => unsafe {
-                FcPatternObjectAddRange(pattern, self.object_id, value.into_raw())
+                FcPatternObjectAddRange(pattern, self.object_id, value.as_ptr())
             },
             PatternValue::CharSet(value) => unsafe {
-                FcPatternObjectAddCharSet(pattern, self.object_id, value.into_raw())
+                FcPatternObjectAddCharSet(pattern, self.object_id, value.as_ptr())
             },
             PatternValue::LangSet(value) => unsafe {
-                FcPatternObjectAddLangSet(pattern, self.object_id, value.into_raw())
+                FcPatternObjectAddLangSet(
+                    pattern,
+                    self.object_id,
+                    value.as_ptr() as *const FcLangSet,
+                )
             },
         } == 1;
         if pattern_add_success {
@@ -153,27 +167,39 @@ impl FcPatternBuilder {
     pub fn create_fc_pattern(&mut self) -> Option<FcPatternWrapper> {
         let pattern = FcPatternWrapper::new()?;
 
-        let mut family_name_encountered = false;
+        let mut family_name_or_file_name_encountered = false;
 
         const FAMILY_ID: i32 = FC_FAMILY_OBJECT as i32;
+        const FILE_ID: i32 = FC_FILE_OBJECT as i32;
+
         for element in self.elements.drain(0..) {
             if let PatternElement {
-                object_id: FAMILY_ID,
-                value: PatternValue::String(ref fam_name),
+                object_id: FAMILY_ID | FILE_ID,
+                value: PatternValue::String(ref file_fam_name),
             } = element
             {
-                if !fam_name.is_empty() {
-                    family_name_encountered = true;
+                if !file_fam_name.is_empty() {
+                    family_name_or_file_name_encountered = true;
                 }
             }
             element.append_to_fc_pattern(pattern.as_ptr()).ok()?;
         }
 
-        if !family_name_encountered {
+        if !family_name_or_file_name_encountered {
             return None;
         }
 
         Some(pattern)
+    }
+}
+
+/// Mainly needed for finding the style PatternElement in attributes.rs.
+impl<'a> IntoIterator for &'a FcPatternBuilder {
+    type Item = &'a PatternElement;
+    type IntoIter = std::slice::Iter<'a, PatternElement>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.elements.iter()
     }
 }
 
@@ -187,15 +213,16 @@ mod test {
         fc_wrapper::FcCharSetWrapper, FcPatternBuilder, FcRangeWrapper, PatternElement,
         PatternValue,
     };
-    use fc_fontations_bindgen::{
-        fcint::{
-            FcPatternObjectGetBool, FcPatternObjectGetCharSet, FcPatternObjectGetDouble,
-            FcPatternObjectGetInteger, FcPatternObjectGetLangSet, FcPatternObjectGetRange,
-            FcPatternObjectGetString, FcRange, FC_CHARSET_OBJECT, FC_COLOR_OBJECT,
-            FC_FAMILY_OBJECT, FC_LANG_OBJECT, FC_SLANT_OBJECT, FC_WEIGHT_OBJECT, FC_WIDTH_OBJECT,
-        },
+    use fontconfig_bindings::{
         FcCharSet, FcCharSetAddChar, FcCharSetHasChar, FcLangSet, FcLangSetAdd, FcLangSetHasLang,
         _FcLangResult_FcLangEqual,
+    };
+
+    use fcint_bindings::{
+        FcPatternObjectGetBool, FcPatternObjectGetCharSet, FcPatternObjectGetDouble,
+        FcPatternObjectGetInteger, FcPatternObjectGetLangSet, FcPatternObjectGetRange,
+        FcPatternObjectGetString, FcRange, FC_CHARSET_OBJECT, FC_COLOR_OBJECT, FC_FAMILY_OBJECT,
+        FC_LANG_OBJECT, FC_SLANT_OBJECT, FC_WEIGHT_OBJECT, FC_WIDTH_OBJECT,
     };
 
     #[test]

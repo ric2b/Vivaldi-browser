@@ -156,22 +156,8 @@ wgpu::Status AdapterBase::APIGetInfo(AdapterInfo* info) const {
     if (auto* powerPreferenceDesc = unpacked.Get<DawnAdapterPropertiesPowerPreference>()) {
         powerPreferenceDesc->powerPreference = mPowerPreference;
     }
-    if (auto* subgroupsProperties = unpacked.Get<AdapterPropertiesSubgroups>()) {
-        // When the feature is *not* supported, these must be 4 and 128.
-        // Set those defaults now, but a backend may override this.
-        subgroupsProperties->subgroupMinSize = 4;
-        subgroupsProperties->subgroupMaxSize = 128;
-    }
 
     mPhysicalDevice->PopulateBackendProperties(unpacked);
-
-    if (auto* subgroupsProperties = unpacked.Get<AdapterPropertiesSubgroups>()) {
-        if (mPhysicalDevice->GetBackendType() == wgpu::BackendType::D3D12 &&
-            mTogglesState.IsEnabled(Toggle::D3D12RelaxMinSubgroupSizeTo8)) {
-            subgroupsProperties->subgroupMinSize =
-                std::min(subgroupsProperties->subgroupMinSize, 8u);
-        }
-    }
 
     // Allocate space for all strings.
     size_t allocSize = mPhysicalDevice->GetVendorName().length() +
@@ -319,7 +305,23 @@ ResultOrError<Ref<DeviceBase>> AdapterBase::CreateDeviceInternal(
                         allocatorDesc->allocatorHeapBlockSize);
     }
 
-    return mPhysicalDevice->CreateDevice(this, descriptor, deviceToggles, std::move(lostEvent));
+    DAWN_INVALID_IF(mAdapterIsConsumed,
+                    "adapter is \"consumed\": it has already been used to create a device");
+
+    auto result =
+        mPhysicalDevice->CreateDevice(this, descriptor, deviceToggles, std::move(lostEvent));
+
+    // The adapter should be consumed only upon successful device creation if the instance doesn't
+    // allow multiple devices per adapter, or if the descriptor explicitly requests consumption.
+    auto* consumeAdapterDesc = descriptor.Get<DawnConsumeAdapterDescriptor>();
+    const bool consumeOnSuccess =
+        !mInstance->HasFeature(wgpu::InstanceFeatureName::MultipleDevicesPerAdapter) ||
+        (consumeAdapterDesc && consumeAdapterDesc->consumeAdapter);
+    if (result.IsSuccess() && consumeOnSuccess) {
+        mAdapterIsConsumed = true;
+    }
+
+    return result;
 }
 
 std::pair<Ref<DeviceBase::DeviceLostEvent>, ResultOrError<Ref<DeviceBase>>>
@@ -332,15 +334,13 @@ AdapterBase::CreateDevice(const DeviceDescriptor* descriptor) {
     // Catch any errors to directly complete the device lost event with the error message.
     if (result.IsError()) {
         auto error = result.AcquireError();
-        lostEvent->mReason = wgpu::DeviceLostReason::FailedCreation;
-        lostEvent->mMessage = "Failed to create device:\n" + error->GetFormattedMessage();
+        lostEvent->SetLost(mInstance->GetEventManager(), wgpu::DeviceLostReason::FailedCreation,
+                           "Failed to create device:\n" + error->GetFormattedMessage());
 
         // When the device fails to initialize, we need to both promote the device ref to an
         // external ref to clean up resources, and drop it, so we acquire it in this scope.
         APIRef<DeviceBase> device;
         device.Acquire(ReturnToAPI(std::move(lostEvent->mDevice)));
-
-        mInstance->GetEventManager()->SetFutureReady(lostEvent.Get());
         return {lostEvent, std::move(error)};
     }
 

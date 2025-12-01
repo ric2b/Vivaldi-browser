@@ -107,7 +107,8 @@ net::RedirectInfo CreateRedirectInfo(
           ? net::RedirectInfo::FirstPartyURLPolicy::UPDATE_URL_ON_REDIRECT
           : net::RedirectInfo::FirstPartyURLPolicy::NEVER_CHANGE_URL,
       original_request.referrer_policy, original_request.referrer.spec(),
-      response_code, new_url, referrer_policy_header,
+      original_request.request_initiator, response_code, new_url,
+      referrer_policy_header,
       /*insecure_scheme_was_upgraded=*/false, /*copy_fragment=*/false,
       /*is_signed_exchange_fallback_redirect=*/false);
 }
@@ -373,7 +374,18 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
 void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
     OnReceiveRedirect(const net::RedirectInfo& redirect_info,
                       network::mojom::URLResponseHeadPtr head) {
-  if (redirect_url_ != redirect_info.new_url &&
+  // An filter can intercept the headers of a response and issue a redirect
+  // to a different URL. In that case `redirect_url_` was set by the proxying
+  // filter and passed to the Network Service to synthesize a redirect.
+  // `redirect_info.new_url` is part of the synthesized redirect coming from the
+  // Network Service. If the two match, we know the filter initiated the
+  // redirect, so we can trust it.
+  bool redirect_url_comes_from_filter = redirect_url_ == redirect_info.new_url;
+  if (redirect_url_comes_from_filter) {
+    head->bypass_redirect_checks = true;
+  }
+
+  if (!redirect_url_comes_from_filter &&
       !IsRedirectSafe(request_.url, redirect_info.new_url,
                       info_->loader_factory_type ==
                           content::ContentBrowserClient::URLLoaderFactoryType::
@@ -550,11 +562,14 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
       kInternalRedirectStatusCode, redirect_url_.spec().c_str());
 
   // Cross-origin requests need to modify the Origin header to 'null'. Since
-  // CorsURLLoader sets |request_initiator| to the Origin request header in
-  // NetworkService, we need to modify |request_initiator| here to craft the
+  // CorsURLLoader sets `request_initiator` to the Origin request header in
+  // NetworkService, we need to modify `request_initiator` here to craft the
   // Origin header indirectly.
   // Following checks implement the step 10 of "4.4. HTTP-redirect fetch",
   // https://fetch.spec.whatwg.org/#http-redirect-fetch
+  // Note: The original initiator is still recorded in `redirect_info`. This is
+  // intentional as it may be used inside the renderer to check if a redirect to
+  // an extension's Web Accessible Resource is safe.
   if (request_.request_initiator &&
       (!url::IsSameOriginWith(redirect_url_, request_.url) &&
        !request_.request_initiator->IsSameOriginWith(request_.url))) {
@@ -564,6 +579,7 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
   head->headers = base::MakeRefCounted<net::HttpResponseHeaders>(
       net::HttpUtil::AssembleRawHeaders(headers));
   head->encoded_data_length = 0;
+  head->bypass_redirect_checks = true;
 
   current_response_ = std::move(head);
   ContinueToBeforeRedirect(redirect_info, net::OK);
@@ -929,6 +945,10 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
         request_, new_url, override_headers_->response_code(),
         net::RedirectUtil::GetReferrerPolicyHeader(override_headers_.get()));
 
+    // Since this is an filter-generated redirect, we need to tell
+    // the client to bypass redirect checks.
+    current_response_->bypass_redirect_checks = true;
+
     // These will get re-bound if a new request is initiated by
     // |FollowRedirect()|.
     proxied_client_receiver_.reset();
@@ -1287,7 +1307,7 @@ void RequestFilterProxyingURLLoaderFactory::OnLoaderForCorsPreflightCreated(
   // two connections for the actual request and the preflight request before
   // sending request headers is very difficult.
   const uint64_t web_request_id =
-      request_id_generator_->Generate(MSG_ROUTING_NONE, 0);
+      request_id_generator_->Generate(IPC::mojom::kRoutingIdNone, 0);
 
   auto result = requests_.insert(std::make_pair(
       web_request_id, std::make_unique<InProgressRequest>(

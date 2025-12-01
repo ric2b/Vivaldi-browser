@@ -18,12 +18,15 @@
 
 // Informs the receiver of actions on the cell.
 @protocol GridCellDelegate
+
 - (void)closeButtonTappedForCell:(GridCell*)cell;
+
 @end
 
 // A square-ish cell in a grid. Contains an icon, title, snapshot, and close
 // button.
 @interface GridCell : TabCell
+
 // Delegate to inform the grid of actions on the cell.
 @property(nonatomic, weak) id<GridCellDelegate> delegate;
 // The look of the cell.
@@ -57,11 +60,15 @@
 
 // Starts the activity indicator animation.
 - (void)showActivityIndicator;
+
 // Stops the activity indicator animation.
 - (void)hideActivityIndicator;
 
 // Registers the cell as a layout guide.
 - (void)registerAsSelectedCellGuide;
+
+// Returns the snapshot view's frame in window coordinates.
+- (CGRect)snapshotFrame;
 
 // Vivaldi
 // Set the selected and not selected for the cell.
@@ -72,6 +79,7 @@
 @end
 
 @interface GridTransitionCell : GridCell <LegacyGridToTabTransitionView>
+
 // Returns a cell with the same theme, icon, snapshot, title, and frame as
 // `cell` (but no delegate or identifier) for use in animated transitions.
 + (instancetype)transitionCellFromCell:(GridCell*)cell;

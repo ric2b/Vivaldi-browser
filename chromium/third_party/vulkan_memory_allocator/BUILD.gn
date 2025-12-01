@@ -20,6 +20,7 @@ config("vulkan_memory_allocator_config") {
       "-Wno-suggest-override",
       "-Wno-unused-private-field",
       "-Wno-unused-variable",
+      "-Wno-thread-safety",
     ]
   }
   if (is_win && !is_clang) {

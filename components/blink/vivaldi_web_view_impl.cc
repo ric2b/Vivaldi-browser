@@ -23,6 +23,8 @@ void WebViewImpl::UpdateVivaldiRendererPreferences() {
         renderer_preferences_.serve_resources_only_from_cache);
     SetAllowTabCycleIntoUI(
         renderer_preferences_.allow_tab_cycle_from_webpage_into_ui);
+    SetVivaldiShowContextMenuOnDoubleClick(
+        web_preferences_.vivaldi_show_context_menu_on_double_click);
 }
 
 void WebViewImpl::SetImagesEnabled(const bool images_enabled) {
@@ -71,16 +73,8 @@ void WebViewImpl::SetAllowTabCycleIntoUI(
   web_settings_->SetAllowTabCycleIntoUI(allow_tab_cycle_from_webpage_into_ui);
 }
 
-void WebViewImpl::LoadImageAt(const gfx::Point& point) {
-  WebHitTestResult result = HitTestResultForTap(point, gfx::Size(0, 0));
-
-  Node* node = result.GetNode().Unwrap<Node>();
-  DCHECK(node);
-  if (!node || !IsA<HTMLImageElement>(*node))
-    return;
-
-  auto* imageElement = DynamicTo<HTMLImageElement>(blink::To<Element>(*node));
-  imageElement->ForceReload();
+void WebViewImpl::SetVivaldiShowContextMenuOnDoubleClick(const bool value) {
+  web_settings_->SetVivaldiShowContextMenuOnDoubleClick(value);
 }
 
 }  // namespace blink

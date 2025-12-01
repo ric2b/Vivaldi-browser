@@ -1,5 +1,6 @@
 load("@llvm-project//mlir:tblgen.bzl", "gentbl_cc_library")
 load("@local_config_rocm//rocm:build_defs.bzl", "if_rocm_is_configured")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load(
     "//xla/tsl/platform/default:cuda_build_defs.bzl",
     "if_cuda_is_configured",
@@ -36,9 +37,10 @@ cc_library(
         "convert_float_amd.cc",
         "convert_float_nvidia.cc",
         "convert_index_type.cc",
-        "fuse_loops.cc",
+        "lower_xla_shared.cc",
         "optimize_loops.cc",
         "peel_loops.cc",
+        "recover_exp2.cc",
     ],
     hdrs = ["passes.h"],
     copts = if_cuda_is_configured(["-DGOOGLE_CUDA=1"]) + if_rocm_is_configured(["-DTENSORFLOW_USE_ROCM=1"]),
@@ -48,6 +50,7 @@ cc_library(
         "//xla:util",
         "//xla/backends/gpu/codegen/emitters/ir:xla_gpu",
         "//xla/codegen/emitters/ir:xla",
+        "//xla/codegen/emitters/ir:xla_dialect_inc_gen",
         "//xla/codegen/emitters/transforms:atomic_rmw_utils",
         "//xla/hlo/analysis:indexing_analysis",
         "//xla/mlir_hlo",

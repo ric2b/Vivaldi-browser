@@ -18,6 +18,7 @@
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/vivaldi_tab_grid_constants.h"
 #import "ios/ui/context_menu/vivaldi_context_menu_constants.h"
 
 using vivaldi::IsVivaldiRunning;
@@ -72,6 +73,14 @@ const CGFloat kLargeSizeIPad = 52;
     _symbol = CustomSymbolWithPointSize(kPlusCircleFillSymbol, symbolSize);
     } // End Vivaldi
 
+#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
+    if (@available(iOS 26, *)) {
+      self.configuration = [UIButtonConfiguration glassButtonConfiguration];
+      _symbol = DefaultSymbolWithPointSize(kPlusSymbol, symbolSize);
+      self.tintColor = UIColor.blackColor;
+    }
+#endif
+
     _imageContainer = [[UIImageView alloc] initWithImage:_symbol];
     _imageContainer.translatesAutoresizingMaskIntoConstraints = NO;
     [self addSubview:_imageContainer];
@@ -86,6 +95,15 @@ const CGFloat kLargeSizeIPad = 52;
     self.pointerStyleProvider = CreateLiftEffectCirclePointerStyleProvider();
   }
   return self;
+}
+
+- (void)setEnabled:(BOOL)enabled {
+  [super setEnabled:enabled];
+  if (IsVivaldiRunning()) {
+    [self setIconPage:self.page];
+  } else {
+  [self setSymbolPage:self.page];
+  } // End Vivaldi
 }
 
 #pragma mark - Public
@@ -106,20 +124,43 @@ const CGFloat kLargeSizeIPad = 52;
     case TabGridPageIncognitoTabs:
       self.accessibilityLabel =
           l10n_util::GetNSString(IDS_IOS_TAB_GRID_CREATE_NEW_INCOGNITO_TAB);
-      _imageContainer.image = SymbolWithPalette(
-          _symbol, @[ UIColor.blackColor, UIColor.whiteColor ]);
+#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
+      if (@available(iOS 26, *)) {
+        UIButtonConfiguration* config = self.configuration;
+        config.background.backgroundColor = UIColor.grayColor;
+        self.configuration = config;
+      } else {
+#endif
+        _imageContainer.image = SymbolWithPalette(_symbol, @[
+          UIColor.blackColor,
+          self.enabled ? UIColor.whiteColor : UIColor.grayColor
+        ]);
+#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
+      }
+#endif
       break;
     case TabGridPageRegularTabs:
       self.accessibilityLabel =
           l10n_util::GetNSString(IDS_IOS_TAB_GRID_CREATE_NEW_TAB);
-      _imageContainer.image = SymbolWithPalette(
-          _symbol,
-          @[ UIColor.blackColor, [UIColor colorNamed:kStaticBlue400Color] ]);
+#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
+      if (@available(iOS 26, *)) {
+        UIButtonConfiguration* config = self.configuration;
+        config.background.backgroundColor =
+            [UIColor colorNamed:kStaticBlue400Color];
+        self.configuration = config;
+      } else {
+#endif
+        _imageContainer.image = SymbolWithPalette(
+            _symbol,
+            @[ UIColor.blackColor, [UIColor colorNamed:kStaticBlue400Color] ]);
+#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
+      }
+#endif
       break;
-    case TabGridPageRemoteTabs:
     case TabGridPageTabGroups:
 
       // Vivaldi
+    case TabGridPageRemoteTabs:
     case TabGridPageClosedTabs:
       // End Vivaldi
 
@@ -131,9 +172,6 @@ const CGFloat kLargeSizeIPad = 52;
 #pragma mark - Vivaldi
 // Sets page using icon images.
 - (void)setIconPage:(TabGridPage)page {
-  // self.page is inited to 0 (i.e. TabGridPageIncognito) so do not early return
-  // here, otherwise when app is launched in incognito mode the image will be
-  // missing.
   switch (page) {
     case TabGridPageIncognitoTabs:
       self.accessibilityLabel =
@@ -150,9 +188,12 @@ const CGFloat kLargeSizeIPad = 52;
   }
   _page = page;
 
-  [self setImage:
-      [_symbol imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate]
-        forState:UIControlStateNormal];
+  UIImage* symbol =
+      [_symbol imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+  [self setImage:symbol forState:UIControlStateNormal];
+  _imageContainer.image = symbol;
+  _imageContainer.tintColor =
+      [UIColor colorNamed:vTabGridToolbarTextButtonColor];
 }
 
 @end

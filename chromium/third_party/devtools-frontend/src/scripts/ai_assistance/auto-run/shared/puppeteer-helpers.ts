@@ -14,10 +14,10 @@ const DEFAULT_FOLLOW_UP_QUERY = 'Fix the issue using JavaScript code execution.'
 
 /**
  * Waits for an element to have a clientHeight greater than the specified height.
- * @param {ElementHandle<HTMLElement>} elem The Puppeteer element handle.
- * @param {number} height The minimum height.
- * @param {number} tries The number of tries so far.
- * @returns {Promise<boolean>} True if the element reaches the height, false otherwise.
+ * @param elem - The Puppeteer element handle.
+ * @param height - The minimum height.
+ * @param tries - The number of tries so far.
+ * @returns True if the element reaches the height, false otherwise.
  */
 export async function waitForElementToHaveHeight(
     elem: ElementHandle<HTMLElement>, height: number, tries = 5): Promise<boolean> {
@@ -36,13 +36,14 @@ export async function waitForElementToHaveHeight(
 /**
  * Executes a single prompt cycle in the AI Assistant.
  * This includes typing the query, handling auto-accept evaluations, and retrieving results.
- * @param {Page} devtoolsPage The Puppeteer page object for the DevTools frontend.
- * @param {string} query The query to send to the AI Assistant.
- * @param {string} inputSelector The CSS selector for the prompt input field.
- * @param {string} exampleId The ID of the current example, used for tagging results.
- * @param {boolean} isMultimodal Whether the current test target is multimodal (e.g., requires a screenshot).
- * @param {(text: string) => void} commonLog A logging function.
- * @returns {Promise<IndividualPromptRequestResponse[]>} A promise that resolves to an array of prompt responses.
+ * @param devtoolsPage - The Puppeteer page object for the DevTools frontend.
+ * @param query - The query to send to the AI Assistant.
+ * @param inputSelector - The CSS selector for the prompt input field.
+ * @param exampleId - The ID of the current example, used for tagging results.
+ * @param isMultimodal - Whether the current test target is multimodal (e.g., requires a screenshot).
+ * @param randomize - Whether to add a random suffix.
+ * @param commonLog - A logging function.
+ * @returns A promise that resolves to an array of prompt responses.
  */
 export async function executePromptCycle(
     devtoolsPage: Page,
@@ -50,6 +51,7 @@ export async function executePromptCycle(
     inputSelector: string,
     exampleId: string,
     isMultimodal: boolean,
+    randomize: boolean,
     commonLog: (text: string) => void,
     ): Promise<IndividualPromptRequestResponse[]> {
   commonLog(
@@ -62,7 +64,8 @@ export async function executePromptCycle(
 
   await devtoolsPage.locator(inputSelector).click();
   // Add randomness to bust cache
-  await devtoolsPage.locator(inputSelector).fill(`${query} ${`${(Math.random() * 1000)}`.split('.')[0]}`);
+  const suffix = randomize ? `${(Math.random() * 1000)}`.split('.')[0] : '';
+  await devtoolsPage.locator(inputSelector).fill(`${query}${suffix}`);
 
   const abort = new AbortController();
   const autoAcceptEvals = async (signal: AbortSignal) => {
@@ -113,8 +116,8 @@ export async function executePromptCycle(
 /**
  * Retrieves all comment strings from the page and stores comment elements globally.
  * This function evaluates code in the browser context.
- * @param {Page} page The Puppeteer page object.
- * @returns {Promise<string[]>} A promise that resolves to an array of comment strings.
+ * @param page - The Puppeteer page object.
+ * @returns A promise that resolves to an array of comment strings.
  */
 export async function getCommentStringsFromPage(page: Page): Promise<string[]> {
   const commentStringsFromPage = await page.evaluate(() => {
@@ -182,7 +185,7 @@ export async function loadPerformanceTrace(
   if (!canvas) {
     throw new Error('[Loading performance trace] Could not find flame chart canvas.');
   }
-  const canvasVisible = await waitForElementToHaveHeight(canvas as ElementHandle<HTMLElement>, 200);
+  const canvasVisible = await waitForElementToHaveHeight(canvas, 200);
   if (!canvasVisible) {
     throw new Error('[Loading performance trace] Flame chart canvas did not become visible (height > 200px).');
   }

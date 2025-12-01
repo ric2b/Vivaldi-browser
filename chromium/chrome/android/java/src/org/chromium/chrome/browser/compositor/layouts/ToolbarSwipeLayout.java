@@ -4,6 +4,8 @@
 
 package org.chromium.chrome.browser.compositor.layouts;
 
+import static org.chromium.build.NullUtil.assumeNonNull;
+
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.content.Context;
@@ -19,6 +21,8 @@ import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
@@ -55,6 +59,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /** Layout defining the animation and positioning of the tabs during the edge swipe effect. */
+@NullMarked
 public class ToolbarSwipeLayout extends Layout {
     private static final boolean ANONYMIZE_NON_FOCUSED_TAB = true;
 
@@ -70,16 +75,16 @@ public class ToolbarSwipeLayout extends Layout {
     // This is the max contribution from fling in screen size percentage.
     private static final float FLING_MAX_CONTRIBUTION = 0.5f;
 
-    private LayoutTab mLeftTab;
-    private LayoutTab mRightTab;
-    private LayoutTab mFromTab; // Set to either mLeftTab or mRightTab.
-    private LayoutTab mToTab; // Set to mLeftTab or mRightTab or null if it is not determined.
+    private @Nullable LayoutTab mLeftTab;
+    private @Nullable LayoutTab mRightTab;
+    private @Nullable LayoutTab mFromTab; // Set to either mLeftTab or mRightTab.
+    private @Nullable LayoutTab mToTab; // Set to mLeftTab or mRightTab or null if undetermined.
 
-    private TopToolbarOverlayCoordinator mLeftToolbarOverlay;
-    private TopToolbarOverlayCoordinator mRightToolbarOverlay;
+    private @Nullable TopToolbarOverlayCoordinator mLeftToolbarOverlay;
+    private @Nullable TopToolbarOverlayCoordinator mRightToolbarOverlay;
 
-    private final ObservableSupplierImpl<Tab> mLeftTabSupplier;
-    private final ObservableSupplierImpl<Tab> mRightTabSupplier;
+    private final ObservableSupplierImpl<@Nullable Tab> mLeftTabSupplier;
+    private final ObservableSupplierImpl<@Nullable Tab> mRightTabSupplier;
 
     private final ViewGroup mContentContainer;
 
@@ -96,7 +101,7 @@ public class ToolbarSwipeLayout extends Layout {
     private final float mCommitDistanceFromEdge;
 
     private final BlackHoleEventFilter mBlackHoleEventFilter;
-    private ToolbarSwipeSceneLayer mSceneLayer;
+    private @Nullable ToolbarSwipeSceneLayer mSceneLayer;
 
     private final BrowserControlsStateProvider mBrowserControlsStateProvider;
 
@@ -141,6 +146,8 @@ public class ToolbarSwipeLayout extends Layout {
 
         mLeftTabSupplier = new ObservableSupplierImpl<>();
         mRightTabSupplier = new ObservableSupplierImpl<>();
+        // No new captures should be taken mid swipe, so this shouldn't matter.
+        ObservableSupplier<Long> captureResourceIdSupplier = new ObservableSupplierImpl<>();
 
         if (mMoveToolbar) {
             mLeftToolbarOverlay =
@@ -155,7 +162,8 @@ public class ToolbarSwipeLayout extends Layout {
                             bottomControlsOffsetSupplier,
                             new ObservableSupplierImpl<>(false),
                             LayoutType.TOOLBAR_SWIPE,
-                            true);
+                            /* isVisibilityManuallyControlled= */ true,
+                            captureResourceIdSupplier);
             mLeftToolbarOverlay.setManualVisibility(true);
             layoutManager.addSceneOverlay(mLeftToolbarOverlay);
 
@@ -171,7 +179,8 @@ public class ToolbarSwipeLayout extends Layout {
                             bottomControlsOffsetSupplier,
                             new ObservableSupplierImpl<>(false),
                             LayoutType.TOOLBAR_SWIPE,
-                            true);
+                            /* isVisibilityManuallyControlled= */ true,
+                            captureResourceIdSupplier);
             mRightToolbarOverlay.setManualVisibility(true);
             layoutManager.addSceneOverlay(mRightToolbarOverlay);
         }
@@ -206,6 +215,7 @@ public class ToolbarSwipeLayout extends Layout {
         // Native pages already had thumbnails captured in `show()` so repeat work can be bypassed
         // by hiding the tab early. This also fixes a blank NTP from being captured after Feed
         // memory optimizations.
+        assumeNonNull(mTabModelSelector);
         Tab currentTab = mTabModelSelector.getCurrentTab();
         if (currentTab != null && currentTab.isNativePage()) {
             // Use type CHANGED_TABS here as it triggers side-effects in observers that we want to
@@ -225,7 +235,10 @@ public class ToolbarSwipeLayout extends Layout {
         mNextTabId = Tab.INVALID_TAB_ID;
         if (mTabModelSelector == null) return;
         Tab tab = mTabModelSelector.getCurrentTab();
-        if (tab != null && tab.isNativePage()) mTabContentManager.cacheTabThumbnail(tab);
+        if (tab != null && tab.isNativePage()) {
+            assumeNonNull(mTabContentManager);
+            mTabContentManager.cacheTabThumbnail(tab);
+        }
 
         TabModel model = mTabModelSelector.getCurrentModel();
         if (model == null) return;
@@ -242,7 +255,7 @@ public class ToolbarSwipeLayout extends Layout {
             // TODO(crbug.com/40233431): Move this piece logic to use a LayoutStateObserver instead
             // - let the caller of the LayoutManager#switchToTab observe the LayoutState and close
             // the ntp tab in the #doneShowing event.
-            Tab lastTab = mTabModelSelector.getTabById(mFromTabId);
+            Tab lastTab = assumeNonNull(mTabModelSelector.getTabById(mFromTabId));
             if (UrlUtilities.isNtpUrl(lastTab.getUrl())
                     && !lastTab.canGoBack()
                     && !lastTab.canGoForward()) {
@@ -307,15 +320,16 @@ public class ToolbarSwipeLayout extends Layout {
         mLeftTabSupplier.set(null);
         mRightTabSupplier.set(null);
 
+        assumeNonNull(mTabModelSelector);
         TabModel model = mTabModelSelector.getCurrentModel();
         if (0 <= leftIndex && leftIndex < model.getCount()) {
-            leftTabId = model.getTabAt(leftIndex).getId();
+            leftTabId = model.getTabAtChecked(leftIndex).getId();
             mLeftTab = createLayoutTab(leftTabId, model.isIncognito());
             prepareLayoutTabForSwipe(mLeftTab, leftIndex != fromIndex);
             mLeftTabSupplier.set(model.getTabAt(leftIndex));
         }
         if (0 <= rightIndex && rightIndex < model.getCount()) {
-            rightTabId = model.getTabAt(rightIndex).getId();
+            rightTabId = model.getTabAtChecked(rightIndex).getId();
             mRightTab = createLayoutTab(rightTabId, model.isIncognito());
             prepareLayoutTabForSwipe(mRightTab, rightIndex != fromIndex);
             mRightTabSupplier.set(model.getTabAt(rightIndex));
@@ -323,7 +337,7 @@ public class ToolbarSwipeLayout extends Layout {
         // Prioritize toTabId because fromTabId likely has a live layer.
         int fromTabId = dragFromLeftEdge ? rightTabId : leftTabId;
         int toTabId = !dragFromLeftEdge ? rightTabId : leftTabId;
-        List<Integer> visibleTabs = new ArrayList<Integer>();
+        List<Integer> visibleTabs = new ArrayList<>();
         if (toTabId != Tab.INVALID_TAB_ID) visibleTabs.add(toTabId);
         if (fromTabId != Tab.INVALID_TAB_ID) visibleTabs.add(fromTabId);
         updateCacheVisibleIds(visibleTabs);
@@ -571,7 +585,7 @@ public class ToolbarSwipeLayout extends Layout {
     }
 
     @Override
-    protected SceneLayer getSceneLayer() {
+    protected @Nullable SceneLayer getSceneLayer() {
         return mSceneLayer;
     }
 
@@ -615,6 +629,7 @@ public class ToolbarSwipeLayout extends Layout {
      * @param fromTabId The id of the previous tab which will be switched out.
      */
     public void switchToTab(int toTabId, int fromTabId) {
+        assumeNonNull(mTabModelSelector);
         int fromTabIndex =
                 TabModelUtils.getTabIndexById(mTabModelSelector.getCurrentModel(), fromTabId);
         int toTabIndex =

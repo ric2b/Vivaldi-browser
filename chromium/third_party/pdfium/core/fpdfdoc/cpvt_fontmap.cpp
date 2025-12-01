@@ -18,11 +18,11 @@
 #include "core/fxcrt/fx_codepage.h"
 #include "core/fxcrt/notreached.h"
 
-CPVT_FontMap::CPVT_FontMap(CPDF_Document* pDoc,
+CPVT_FontMap::CPVT_FontMap(CPDF_Document* doc,
                            RetainPtr<CPDF_Dictionary> pResDict,
                            RetainPtr<CPDF_Font> pDefFont,
                            const ByteString& sDefFontAlias)
-    : document_(pDoc),
+    : document_(doc),
       res_dict_(std::move(pResDict)),
       def_font_(std::move(pDefFont)),
       def_font_alias_(sDefFontAlias) {}
@@ -41,10 +41,10 @@ void CPVT_FontMap::SetupAnnotSysPDFFont() {
     return;
   }
 
-  RetainPtr<CPDF_Dictionary> pFontList = res_dict_->GetMutableDictFor("Font");
-  if (ValidateFontResourceDict(pFontList.Get()) &&
-      !pFontList->KeyExist(sys_font_alias_.AsStringView())) {
-    pFontList->SetNewFor<CPDF_Reference>(sys_font_alias_, document_,
+  RetainPtr<CPDF_Dictionary> font_list = res_dict_->GetMutableDictFor("Font");
+  if (ValidateFontResourceDict(font_list.Get()) &&
+      !font_list->KeyExist(sys_font_alias_.AsStringView())) {
+    font_list->SetNewFor<CPDF_Reference>(sys_font_alias_, document_,
                                          pPDFFont->GetFontDictObjNum());
   }
   sys_font_ = std::move(pPDFFont);

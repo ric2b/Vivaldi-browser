@@ -133,11 +133,18 @@ struct VdbeCursor {
 #endif
   VdbeTxtBlbCache *pCache; /* Cache of large TEXT or BLOB values */
 
-  /* 2*nField extra array elements allocated for aType[], beyond the one
-  ** static element declared in the structure.  nField total array slots for
-  ** aType[] and nField+1 array slots for aOffset[] */
-  u32 aType[1];           /* Type values record decode.  MUST BE LAST */
+  /* Space is allocated for aType to hold at least 2*nField+1 entries:
+  ** nField slots for aType[] and nField+1 array slots for aOffset[] */
+  u32 aType[FLEXARRAY];    /* Type values record decode.  MUST BE LAST */
 };
+
+/*
+** The size (in bytes) of a VdbeCursor object that has an nField value of N
+** or less.  The value of SZ_VDBECURSOR(n) is guaranteed to be a multiple
+** of 8.
+*/
+#define SZ_VDBECURSOR(N) \
+    (ROUND8(offsetof(VdbeCursor,aType)) + ((N)+1)*sizeof(u64))
 
 /* Return true if P is a null-only cursor
 */
@@ -395,13 +402,16 @@ struct sqlite3_context {
   u8 enc;                 /* Encoding to use for results */
   u8 skipFlag;            /* Skip accumulator loading if true */
   u16 argc;               /* Number of arguments */
-  sqlite3_value *argv[1]; /* Argument set */
+  sqlite3_value *argv[FLEXARRAY]; /* Argument set */
 };
 
-/* A bitfield type for use inside of structures.  Always follow with :N where
-** N is the number of bits.
+/*
+** The size (in bytes) of an sqlite3_context object that holds N
+** argv[] arguments.
 */
-typedef unsigned bft;  /* Bit Field Type */
+#define SZ_CONTEXT(N)  \
+   (offsetof(sqlite3_context,argv)+(N)*sizeof(sqlite3_value*))
+
 
 /* The ScanStatus object holds a single value for the
 ** sqlite3_stmt_scanstatus() interface.
@@ -462,7 +472,7 @@ struct Vdbe {
   i64 nStmtDefCons;       /* Number of def. constraints when stmt started */
   i64 nStmtDefImmCons;    /* Number of def. imm constraints when stmt started */
   Mem *aMem;              /* The memory locations */
-  Mem **apArg;            /* Arguments to currently executing user function */
+  Mem **apArg;            /* Arguments xUpdate and xFilter vtab methods */
   VdbeCursor **apCsr;     /* One element of this array for each open cursor */
   Mem *aVar;              /* Values for the OP_Variable opcode. */
 
@@ -482,6 +492,7 @@ struct Vdbe {
 #ifdef SQLITE_DEBUG
   int rcApp;              /* errcode set by sqlite3_result_error_code() */
   u32 nWrite;             /* Number of write operations that have occurred */
+  int napArg;             /* Size of the apArg[] array */
 #endif
   u16 nResColumn;         /* Number of columns in one row of the result set */
   u16 nResAlloc;          /* Column slots allocated to aColName[] */
@@ -534,7 +545,7 @@ struct PreUpdate {
   VdbeCursor *pCsr;               /* Cursor to read old values from */
   int op;                         /* One of SQLITE_INSERT, UPDATE, DELETE */
   u8 *aRecord;                    /* old.* database record */
-  KeyInfo keyinfo;
+  KeyInfo *pKeyinfo;              /* Key information */
   UnpackedRecord *pUnpacked;      /* Unpacked version of aRecord[] */
   UnpackedRecord *pNewUnpacked;   /* Unpacked version of new.* record */
   int iNewReg;                    /* Register for new.* values */
@@ -546,6 +557,7 @@ struct PreUpdate {
   Table *pTab;                    /* Schema object being updated */
   Index *pPk;                     /* PK index if pTab is WITHOUT ROWID */
   sqlite3_value **apDflt;         /* Array of default values, if required */
+  u8 keyinfoSpace[SZ_KEYINFO(0)]; /* Space to hold pKeyinfo[0] content */
 };
 
 /*

@@ -9,9 +9,8 @@ import time
 import urllib.error
 import urllib.request
 
-from typing import Callable, Dict, Optional, Pattern, Sequence, Tuple
+from typing import Callable, Dict, Optional, Sequence
 from google.protobuf import (
-    json_format,
     message as proto_msg,
     struct_pb2,
 )

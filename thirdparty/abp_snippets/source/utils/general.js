@@ -17,7 +17,7 @@
 
 import $ from "../$.js";
 
-let {Math, RegExp} = $(window);
+let {Array, Math, RegExp} = $(window);
 
 /**
  * Escapes regular expression special characters in a string.
@@ -79,4 +79,51 @@ export function randomId() {
   // chars even if Math.random() returns its minimum value 0.0
   //
   return $(Math.floor(Math.random() * 2116316160 + 60466176)).toString(36);
+}
+
+/**
+ * Formats the given arguments by wrapping each argument in single quotes
+ * and joining them into a single string.
+ * This is done for logging purposes, so that each snippet will print
+ * the list of arguments when it runs successfully.
+ *
+ * @param {IArguments | Array} args - The arguments object or an array of
+ *  arguments to format.
+ * @returns {string} A string with each argument wrapped in single quotes.
+ */
+export function formatArguments(args) {
+  return $(Array.from(args)).map(arg => `'${arg}'`).join(" ");
+}
+
+/**
+ * Converts a number to its hexadecimal representation.
+ *
+ * @param {number} number The number to convert.
+ * @param {number} [length] The <em>minimum</em> length of the hexadecimal
+ *   representation. For example, given the number `1024` and the length `8`,
+ *   the function returns the value `"00000400"`.
+ *
+ * @returns {string} The hexadecimal representation of the given number.
+ * @private
+ */
+export function toHex(number, length = 2) {
+  let hex = $(number).toString(16);
+
+  if (hex.length < length)
+    hex = $("0").repeat(length - hex.length) + hex;
+
+  return hex;
+}
+
+/**
+ * Converts a `Uint8Array` object into its hexadecimal representation.
+ *
+ * @param {Uint8Array} uint8Array The `Uint8Array` object to convert.
+ *
+ * @returns {string} The hexadecimal representation of the given `Uint8Array`
+ *   object.
+ * @private
+ */
+export function uint8ArrayToHex(uint8Array) {
+  return uint8Array.reduce((hex, byte) => hex + toHex(byte), "");
 }

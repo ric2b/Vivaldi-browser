@@ -16,13 +16,13 @@
 class CPDF_Link {
  public:
   CPDF_Link();
-  explicit CPDF_Link(RetainPtr<CPDF_Dictionary> pDict);
+  explicit CPDF_Link(RetainPtr<CPDF_Dictionary> dict);
   CPDF_Link(const CPDF_Link& that);
   ~CPDF_Link();
 
   RetainPtr<CPDF_Dictionary> GetMutableDict() const { return dict_; }
   CFX_FloatRect GetRect();
-  CPDF_Dest GetDest(CPDF_Document* pDoc);
+  CPDF_Dest GetDest(CPDF_Document* doc);
   CPDF_Action GetAction();
 
  private:

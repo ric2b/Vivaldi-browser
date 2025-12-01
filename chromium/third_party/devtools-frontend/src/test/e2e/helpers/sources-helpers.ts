@@ -9,31 +9,16 @@ import type * as puppeteer from 'puppeteer-core';
 
 import {GEN_DIR} from '../../conductor/paths.js';
 import type {DevToolsPage} from '../../e2e_non_hosted/shared/frontend-helper.js';
+import type {InspectedPage} from '../../e2e_non_hosted/shared/target-helper.js';
 import {
-  $,
   $$,
-  assertNotNullOrUndefined,
   click,
-  clickElement,
   clickMoreTabsButton,
-  drainFrontendTaskQueue,
   getBrowserAndPages,
-  getPendingEvents,
-  getTestServerPort,
-  goToResource,
-  pasteText,
   platform,
   pressKey,
-  setCheckBox,
-  step,
-  timeout,
   typeText,
   waitFor,
-  waitForAria,
-  waitForFunction,
-  waitForFunctionWithTries,
-  waitForNone,
-  waitForVisible,
 } from '../../shared/helper.js';
 import {getBrowserAndPagesWrappers} from '../../shared/non_hosted_wrappers.js';
 
@@ -80,19 +65,23 @@ export async function toggleDebuggerSidebar(frontend: puppeteer.Page) {
   await frontend.keyboard.up(modifierKey);
 }
 
-export async function getLineNumberElement(lineNumber: number|string) {
-  const visibleLines = await $$(CODE_LINE_SELECTOR);
-  for (let i = 0; i < visibleLines.length; i++) {
-    const lineValue = await visibleLines[i].evaluate(node => node.textContent);
-    if (lineValue === `${lineNumber}`) {
-      return visibleLines[i];
+export async function getLineNumberElement(
+    lineNumber: number|string, devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  return await devToolsPage.waitForFunction(async () => {
+    const visibleLines = await devToolsPage.$$(CODE_LINE_SELECTOR);
+    for (let i = 0; i < visibleLines.length; i++) {
+      const lineValue = await visibleLines[i].evaluate(node => (node as HTMLElement).innerText);
+      if (lineValue === `${lineNumber}`) {
+        return visibleLines[i];
+      }
     }
-  }
-  return null;
+    return null;
+  });
 }
 
-export async function doubleClickSourceTreeItem(selector: string) {
-  await click(selector, {clickOptions: {clickCount: 2, offset: {x: 40, y: 10}}});
+export async function doubleClickSourceTreeItem(
+    selector: string, devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  await devToolsPage.click(selector, {clickOptions: {clickCount: 2, offset: {x: 40, y: 10}}});
 }
 
 export async function waitForSourcesPanel(devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage):
@@ -104,14 +93,16 @@ export async function waitForSourcesPanel(devToolsPage: DevToolsPage = getBrowse
 export async function openSourcesPanel(devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
   // Locate the button for switching to the sources tab.
   await devToolsPage.click('#tab-sources');
-
   await waitForSourcesPanel(devToolsPage);
+  return await devToolsPage.waitForAria('sources');
 }
 
-export async function openFileInSourcesPanel(testInput: string) {
-  await goToResource(`sources/${testInput}`);
+export async function openFileInSourcesPanel(
+    testInput: string, devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage,
+    inspectedPage: InspectedPage = getBrowserAndPagesWrappers().inspectedPage) {
+  await inspectedPage.goToResource(`sources/${testInput}`);
 
-  await openSourcesPanel();
+  await openSourcesPanel(devToolsPage);
 }
 
 export async function openRecorderSubPane() {
@@ -132,11 +123,11 @@ export async function createNewRecording(recordingName: string) {
   await frontend.keyboard.press('Enter');
 }
 
-export async function openSnippetsSubPane() {
-  const root = await waitFor('.navigator-tabbed-pane');
-  await clickMoreTabsButton(root);
-  await click('[aria-label="Snippets"]');
-  await waitFor('[aria-label="New snippet"]');
+export async function openSnippetsSubPane(devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  const root = await devToolsPage.waitFor('.navigator-tabbed-pane');
+  await clickMoreTabsButton(root, devToolsPage);
+  await devToolsPage.click('[aria-label="Snippets"]');
+  await devToolsPage.waitFor('[aria-label="New snippet"]');
 }
 
 /**
@@ -147,20 +138,19 @@ export async function openSnippetsSubPane() {
  * doesn't mirror the escaping so it won't be able to wait for the snippet
  * entry in the navigation tree to appear.
  */
-export async function createNewSnippet(snippetName: string, content?: string) {
-  const {frontend} = getBrowserAndPages();
+export async function createNewSnippet(
+    snippetName: string, content?: string, devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  await devToolsPage.click('[aria-label="New snippet"]');
+  await devToolsPage.waitFor('[aria-label^="Script snippet"]');
 
-  await click('[aria-label="New snippet"]');
-  await waitFor('[aria-label^="Script snippet"]');
+  await devToolsPage.typeText(snippetName);
 
-  await typeText(snippetName);
-
-  await frontend.keyboard.press('Enter');
-  await waitFor(`[aria-label*="${snippetName}"]`);
+  await devToolsPage.pressKey('Enter');
+  await devToolsPage.waitFor(`[aria-label*="${snippetName}"]`);
 
   if (content) {
-    await pasteText(content);
-    await pressKey('s', {control: true});
+    await devToolsPage.pasteText(content);
+    await devToolsPage.pressKey('s', {control: true});
   }
 }
 
@@ -177,16 +167,19 @@ export async function openOverridesSubPane() {
   await waitFor('[aria-label="Overrides panel"]');
 }
 
-export async function openFileInEditor(sourceFile: string) {
+export async function openFileInEditor(
+    sourceFile: string, devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
   await waitForSourceFiles(
       SourceFileEvents.SOURCE_FILE_LOADED, files => files.some(f => f.endsWith(sourceFile)),
       // Open a particular file in the editor
-      () => doubleClickSourceTreeItem(`[aria-label="${sourceFile}, file"]`));
+      () => doubleClickSourceTreeItem(`[aria-label="${sourceFile}, file"]`, devToolsPage), devToolsPage);
 }
 
-export async function openSourceCodeEditorForFile(sourceFile: string, testInput: string) {
-  await openFileInSourcesPanel(testInput);
-  await openFileInEditor(sourceFile);
+export async function openSourceCodeEditorForFile(
+    sourceFile: string, testInput: string, devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage,
+    inspectedPage: InspectedPage = getBrowserAndPagesWrappers().inspectedPage) {
+  await openFileInSourcesPanel(testInput, devToolsPage, inspectedPage);
+  await openFileInEditor(sourceFile, devToolsPage);
 }
 
 export async function getSelectedSource(): Promise<string> {
@@ -215,13 +208,14 @@ export async function getOpenSources(devToolsPage: DevToolsPage = getBrowserAndP
   return openSources;
 }
 
-export async function waitForHighlightedLine(lineNumber: number) {
-  await waitForFunction(async () => {
-    const selectedLine = await waitFor('.cm-highlightedLine');
+export async function waitForHighlightedLine(
+    lineNumber: number, devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  await devToolsPage.waitForFunction(async () => {
+    const selectedLine = await devToolsPage.waitFor('.cm-highlightedLine');
     const currentlySelectedLineNumber = await selectedLine.evaluate(line => {
       return [...line.parentElement?.childNodes || []].indexOf(line);
     });
-    const lineNumbers = await waitFor('.cm-lineNumbers');
+    const lineNumbers = await devToolsPage.waitFor('.cm-lineNumbers');
     const text = await lineNumbers.evaluate(
         (node, lineNumber) => node.childNodes[lineNumber].textContent, currentlySelectedLineNumber + 1);
     return Number(text) === lineNumber;
@@ -237,117 +231,122 @@ export async function getToolbarText() {
   return await Promise.all(textNodes.map(node => node.evaluate(node => node.textContent, node)));
 }
 
-export async function addBreakpointForLine(index: number|string) {
-  const breakpointLine = await getLineNumberElement(index);
-  assertNotNullOrUndefined(breakpointLine);
+export async function addBreakpointForLine(
+    index: number|string, devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  const breakpointLine = await getLineNumberElement(index, devToolsPage);
+  assert.isOk(breakpointLine);
 
-  await waitForFunction(async () => !(await isBreakpointSet(index)));
-  await clickElement(breakpointLine);
+  await devToolsPage.waitForFunction(async () => !(await isBreakpointSet(index, devToolsPage)));
+  await devToolsPage.clickElement(breakpointLine);
 
-  await waitForFunction(async () => await isBreakpointSet(index));
+  await devToolsPage.waitForFunction(async () => await isBreakpointSet(index, devToolsPage));
 }
 
-export async function removeBreakpointForLine(index: number|string) {
-  const breakpointLine = await getLineNumberElement(index);
-  assertNotNullOrUndefined(breakpointLine);
+export async function removeBreakpointForLine(
+    index: number|string, devToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  const breakpointLine = await getLineNumberElement(index, devToolsPage);
+  assert.isOk(breakpointLine);
 
-  await waitForFunction(async () => await isBreakpointSet(index));
-  await clickElement(breakpointLine);
-  await waitForFunction(async () => !(await isBreakpointSet(index)));
+  await devToolsPage.waitForFunction(async () => await isBreakpointSet(index, devToolsPage));
+  await devToolsPage.clickElement(breakpointLine);
+  await devToolsPage.waitForFunction(async () => !(await isBreakpointSet(index, devToolsPage)));
 }
 
-export async function addLogpointForLine(index: number, condition: string) {
-  const {frontend} = getBrowserAndPages();
-  const breakpointLine = await getLineNumberElement(index);
-  assertNotNullOrUndefined(breakpointLine);
+export async function addLogpointForLine(
+    index: number, condition: string, devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  const breakpointLine = await getLineNumberElement(index, devToolsPage);
+  assert.isOk(breakpointLine);
 
-  await waitForFunction(async () => !(await isBreakpointSet(index)));
-  await clickElement(breakpointLine, {clickOptions: {button: 'right'}});
+  await devToolsPage.waitForFunction(async () => !(await isBreakpointSet(index, devToolsPage)));
+  await devToolsPage.clickElement(breakpointLine, {clickOptions: {button: 'right'}});
 
-  await click('aria/Add logpoint…');
+  await devToolsPage.click('aria/Add logpoint…');
 
-  const editDialog = await waitFor('.sources-edit-breakpoint-dialog');
-  const conditionEditor = await waitForAria('Code editor', editDialog);
+  const editDialog = await devToolsPage.waitFor('.sources-edit-breakpoint-dialog');
+  const conditionEditor = await devToolsPage.waitForAria('Code editor', editDialog);
   await conditionEditor.focus();
 
-  await typeText(condition);
-  await frontend.keyboard.press('Enter');
+  await devToolsPage.typeText(condition);
+  await devToolsPage.pressKey('Enter');
 
-  await waitForFunction(async () => await isBreakpointSet(index));
+  await devToolsPage.waitForFunction(async () => await isBreakpointSet(index, devToolsPage));
 }
 
-export async function isBreakpointSet(lineNumber: number|string) {
-  const lineNumberElement = await getLineNumberElement(lineNumber);
+export async function isBreakpointSet(
+    lineNumber: number|string, devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  const lineNumberElement = await getLineNumberElement(lineNumber, devToolsPage);
   const breakpointLineParentClasses = await lineNumberElement?.evaluate(n => n.className);
   return breakpointLineParentClasses?.includes('cm-breakpoint');
 }
 
 /**
- * @param lineNumber 1-based line number
- * @param index 1-based index of the inline breakpoint in the given line
+ * @param lineNumber - 1-based line number
+ * @param index - 1-based index of the inline breakpoint in the given line
  */
-export async function enableInlineBreakpointForLine(line: number, index: number) {
-  const {frontend} = getBrowserAndPages();
+export async function enableInlineBreakpointForLine(
+    line: number, index: number, devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
   const decorationSelector = `pierce/.cm-content > :nth-child(${line}) > :nth-child(${index} of .cm-inlineBreakpoint)`;
-  await click(decorationSelector);
-  await waitForFunction(
-      () => frontend.$eval(decorationSelector, element => !element.classList.contains('cm-inlineBreakpoint-disabled')));
+  await devToolsPage.click(decorationSelector);
+  await devToolsPage.waitForFunction(
+      () => devToolsPage.page.$eval(
+          decorationSelector, element => !element.classList.contains('cm-inlineBreakpoint-disabled')));
 }
 
 /**
- * @param lineNumber 1-based line number
- * @param index 1-based index of the inline breakpoint in the given line
- * @param expectNoBreakpoint If we should wait for the line to not have any inline breakpoints after
+ * @param lineNumber - 1-based line number
+ * @param index - 1-based index of the inline breakpoint in the given line
+ * @param expectNoBreakpoint - If we should wait for the line to not have any inline breakpoints after
  *                           the click instead of a disabled one.
  */
-export async function disableInlineBreakpointForLine(line: number, index: number, expectNoBreakpoint = false) {
-  const {frontend} = getBrowserAndPages();
+export async function disableInlineBreakpointForLine(
+    line: number, index: number, expectNoBreakpoint = false,
+    devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
   const decorationSelector = `pierce/.cm-content > :nth-child(${line}) > :nth-child(${index} of .cm-inlineBreakpoint)`;
-  await click(decorationSelector);
+  await devToolsPage.click(decorationSelector);
   if (expectNoBreakpoint) {
-    await waitForFunction(
-        () => frontend.$$eval(
+    await devToolsPage.waitForFunction(
+        () => devToolsPage.page.$$eval(
             `pierce/.cm-content > :nth-child(${line}) > .cm-inlineBreakpoint`, elements => elements.length === 0));
   } else {
-    await waitForFunction(
-        () =>
-            frontend.$eval(decorationSelector, element => element.classList.contains('cm-inlineBreakpoint-disabled')));
+    await devToolsPage.waitForFunction(
+        () => devToolsPage.page.$eval(
+            decorationSelector, element => element.classList.contains('cm-inlineBreakpoint-disabled')));
   }
 }
 
-export async function checkBreakpointDidNotActivate() {
-  await step('check that the script did not pause', async () => {
-    // TODO(almuthanna): make sure this check happens at a point where the pause indicator appears if it was active
+export async function checkBreakpointDidNotActivate(
+    devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  // TODO(almuthanna): make sure this check happens at a point where the pause indicator appears if it was active
 
-    // TODO: it should actually wait for rendering to finish.
-    await drainFrontendTaskQueue();
-    await waitForNone(PAUSE_INDICATOR_SELECTOR);
-  });
+  // TODO: it should actually wait for rendering to finish.
+  await devToolsPage.drainTaskQueue();
+  await devToolsPage.waitForNone(PAUSE_INDICATOR_SELECTOR);
 }
 
-export async function getBreakpointDecorators(disabledOnly = false) {
+export async function getBreakpointDecorators(
+    disabledOnly = false, expected = 0, devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
   const selector = `.cm-breakpoint${disabledOnly ? '-disabled' : ''}`;
-  const breakpointDecorators = await $$(selector);
+  const breakpointDecorators = await devToolsPage.waitForMany(selector, expected);
   return await Promise.all(
       breakpointDecorators.map(breakpointDecorator => breakpointDecorator.evaluate(n => Number(n.textContent))));
 }
 
-export async function getNonBreakableLines() {
+export async function getNonBreakableLines(devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
   const selector = '.cm-nonBreakableLine';
-  await waitFor(selector);
-  const unbreakableLines = await $$(selector);
+  await devToolsPage.waitFor(selector);
+  const unbreakableLines = await devToolsPage.$$(selector);
   return await Promise.all(
       unbreakableLines.map(unbreakableLine => unbreakableLine.evaluate(n => Number(n.textContent))));
 }
 
-export async function executionLineHighlighted() {
-  return await waitFor('.cm-executionLine');
+export async function executionLineHighlighted(devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  return await devToolsPage.waitFor('.cm-executionLine');
 }
 
-export async function getCallFrameNames() {
+export async function getCallFrameNames(devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
   const selector = '.call-frame-item:not(.hidden) .call-frame-item-title';
-  await waitFor(selector);
-  const items = await $$(selector);
+  await devToolsPage.waitFor(selector);
+  const items = await devToolsPage.$$(selector);
   const promises = items.map(handle => handle.evaluate(el => el.textContent as string));
   const results = [];
   for (const promise of promises) {
@@ -356,10 +355,10 @@ export async function getCallFrameNames() {
   return results;
 }
 
-export async function getCallFrameLocations() {
+export async function getCallFrameLocations(devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
   const selector = '.call-frame-item:not(.hidden) .call-frame-location';
-  await waitFor(selector);
-  const items = await $$(selector);
+  await devToolsPage.waitFor(selector);
+  const items = await devToolsPage.$$(selector);
   const promises = items.map(handle => handle.evaluate(el => el.textContent as string));
   const results = [];
   for (const promise of promises) {
@@ -368,13 +367,16 @@ export async function getCallFrameLocations() {
   return results;
 }
 
-export async function switchToCallFrame(index: number) {
+export async function switchToCallFrame(
+    index: number, devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
   const selector = `.call-frame-item[aria-posinset="${index}"]`;
-  await click(selector);
-  await waitFor(selector + '[aria-selected="true"]');
+  await devToolsPage.click(selector);
+  await devToolsPage.waitFor(selector + '[aria-selected="true"]');
 }
 
-export async function retrieveTopCallFrameScriptLocation(script: string, target: puppeteer.Page) {
+export async function retrieveTopCallFrameScriptLocation(
+    script: string, target: puppeteer.Page|InspectedPage,
+    devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
   // The script will run into a breakpoint, which means that it will not actually
   // finish the evaluation, until we continue executing.
   // Thus, we have to await it at a later point, while stepping through the code.
@@ -382,10 +384,10 @@ export async function retrieveTopCallFrameScriptLocation(script: string, target:
 
   // Wait for the evaluation to be paused and shown in the UI
   // and retrieve the top level call frame script location name
-  const scriptLocation = await retrieveTopCallFrameWithoutResuming();
+  const scriptLocation = await retrieveTopCallFrameWithoutResuming(devToolsPage);
 
   // Resume the evaluation
-  await click(RESUME_BUTTON);
+  await devToolsPage.click(RESUME_BUTTON);
 
   // Make sure to await the context evaluate before asserting
   // Otherwise the Puppeteer process might crash on a failure assertion,
@@ -395,42 +397,44 @@ export async function retrieveTopCallFrameScriptLocation(script: string, target:
   return scriptLocation;
 }
 
-export async function retrieveTopCallFrameWithoutResuming() {
+export async function retrieveTopCallFrameWithoutResuming(
+    devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
   // Wait for the evaluation to be paused and shown in the UI
-  await waitFor(PAUSE_INDICATOR_SELECTOR);
+  await devToolsPage.waitFor(PAUSE_INDICATOR_SELECTOR);
 
   // Retrieve the top level call frame script location name
-  const locationHandle = await waitFor('.call-frame-location');
+  const locationHandle = await devToolsPage.waitFor('.call-frame-location');
   const scriptLocation = await locationHandle.evaluate(location => location.textContent);
 
   return scriptLocation;
 }
 
-export async function waitForStackTopMatch(matcher: RegExp) {
+export async function waitForStackTopMatch(matcher: RegExp, devToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
   // The call stack is updated asynchronously, so let us wait until we see the correct one
   // (or report the last one we have seen before timeout).
   let stepLocation = '<no call stack>';
-  await waitForFunctionWithTries(async () => {
-    stepLocation = await retrieveTopCallFrameWithoutResuming() ?? '<invalid>';
+  await devToolsPage.waitForFunctionWithTries(async () => {
+    stepLocation = await retrieveTopCallFrameWithoutResuming(devToolsPage) ?? '<invalid>';
     return stepLocation?.match(matcher);
   }, {tries: 10});
   return stepLocation;
 }
 
-export async function setEventListenerBreakpoint(groupName: string, eventName: string) {
-  const {frontend} = getBrowserAndPages();
-  const eventListenerBreakpointsSection = await waitForAria('Event Listener Breakpoints');
+export async function setEventListenerBreakpoint(
+    groupName: string, eventName: string, devToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  const eventListenerBreakpointsSection = await devToolsPage.waitForAria('Event Listener Breakpoints');
   const expanded = await eventListenerBreakpointsSection.evaluate(el => el.getAttribute('aria-expanded'));
   if (expanded !== 'true') {
-    await click('[aria-label="Event Listener Breakpoints"]');
-    await waitFor('[aria-label="Event Listener Breakpoints"][aria-expanded="true"]');
+    await devToolsPage.click('[aria-label="Event Listener Breakpoints"]');
+    await devToolsPage.waitFor('[aria-label="Event Listener Breakpoints"][aria-expanded="true"]');
   }
 
   const eventSelector = `input[type="checkbox"][title="${eventName}"]`;
   const groupSelector = `input[type="checkbox"][title="${groupName}"]`;
-  const groupCheckbox = await waitFor(groupSelector);
-  await waitForVisible(groupSelector);
-  const eventCheckbox = await waitFor(eventSelector);
+  const groupCheckbox = await devToolsPage.waitFor(groupSelector);
+  await devToolsPage.scrollElementIntoView(groupSelector);
+  await devToolsPage.waitForVisible(groupSelector);
+  const eventCheckbox = await devToolsPage.waitFor(eventSelector);
   if (!(await eventCheckbox.evaluate(x => x.checkVisibility()))) {
     // Unfortunately the shadow DOM makes it hard to find the expander element
     // we are attempting to click on, so we click to the left of the checkbox
@@ -440,11 +444,11 @@ export async function setEventListenerBreakpoint(groupName: string, eventName: s
       return {left, top, width, height};
     });
 
-    await frontend.mouse.click(rectData.left - 10, rectData.top + rectData.height * .5);
-    await waitForVisible(eventSelector);
+    await devToolsPage.page.mouse.click(rectData.left - 10, rectData.top + rectData.height * .5);
+    await devToolsPage.waitForVisible(eventSelector);
   }
 
-  await setCheckBox(eventSelector, true);
+  await devToolsPage.setCheckBox(eventSelector, true);
 }
 
 declare global {
@@ -462,13 +466,12 @@ export const enum SourceFileEvents {
 
 let nextEventHandlerId = 0;
 export async function waitForSourceFiles<T>(
-    eventName: SourceFileEvents, waitCondition: (files: string[]) => boolean | Promise<boolean>,
-    action: () => T): Promise<T> {
-  const {frontend} = getBrowserAndPages();
+    eventName: SourceFileEvents, waitCondition: (files: string[]) => boolean | Promise<boolean>, action: () => T,
+    devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage): Promise<T> {
   const eventHandlerId = nextEventHandlerId++;
 
   // Install new listener for the event
-  await frontend.evaluate((eventName, eventHandlerId) => {
+  await devToolsPage.evaluate((eventName, eventHandlerId) => {
     if (!window.__sourceFileEvents) {
       window.__sourceFileEvents = new Map();
     }
@@ -484,17 +487,17 @@ export async function waitForSourceFiles<T>(
 
   const result = await action();
 
-  await waitForFunction(async () => {
-    const files =
-        await frontend.evaluate(eventHandlerId => window.__sourceFileEvents.get(eventHandlerId)?.files, eventHandlerId);
-    assertNotNullOrUndefined(files);
+  await devToolsPage.waitForFunction(async () => {
+    const files = await devToolsPage.evaluate(
+        eventHandlerId => window.__sourceFileEvents.get(eventHandlerId)?.files, eventHandlerId);
+    assert.isOk(files);
     return await waitCondition(files);
   });
 
-  await frontend.evaluate((eventName, eventHandlerId) => {
+  await devToolsPage.evaluate((eventName, eventHandlerId) => {
     const handler = window.__sourceFileEvents.get(eventHandlerId);
     if (!handler) {
-      throw new Error('handler unexpectandly unregistered');
+      throw new Error('handler unexpectedly unregistered');
     }
     window.__sourceFileEvents.delete(eventHandlerId);
     window.removeEventListener(eventName, handler.handler);
@@ -503,18 +506,23 @@ export async function waitForSourceFiles<T>(
   return result;
 }
 
-export async function captureAddedSourceFiles(count: number, action: () => Promise<void>): Promise<string[]> {
+export async function captureAddedSourceFiles(
+    count: number, action: () => Promise<void>,
+    devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage): Promise<string[]> {
   let capturedFileNames!: string[];
   await waitForSourceFiles(SourceFileEvents.ADDED_TO_SOURCE_TREE, files => {
     capturedFileNames = files;
     return files.length >= count;
-  }, action);
+  }, action, devToolsPage);
   return capturedFileNames.map(f => new URL(`http://${f}`).pathname);
 }
 
-export async function reloadPageAndWaitForSourceFile(target: puppeteer.Page, sourceFile: string) {
+export async function reloadPageAndWaitForSourceFile(
+    sourceFile: string, devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage,
+    inspectedPage: InspectedPage = getBrowserAndPagesWrappers().inspectedPage) {
   await waitForSourceFiles(
-      SourceFileEvents.SOURCE_FILE_LOADED, files => files.some(f => f.endsWith(sourceFile)), () => target.reload());
+      SourceFileEvents.SOURCE_FILE_LOADED, files => files.some(f => f.endsWith(sourceFile)),
+      () => inspectedPage.reload(), devToolsPage);
 }
 
 export function isEqualOrAbbreviation(abbreviated: string, full: string): boolean {
@@ -535,9 +543,10 @@ export interface NestedFileSelector {
 }
 
 export function createSelectorsForWorkerFile(
-    workerName: string, folderName: string, fileName: string, workerIndex = 1): NestedFileSelector {
+    workerName: string, folderName: string, fileName: string, workerIndex = 1,
+    inspectedPage: InspectedPage = getBrowserAndPagesWrappers().inspectedPage): NestedFileSelector {
   const rootSelector = new Array(workerIndex).fill(`[aria-label="${workerName}, worker"]`).join(' ~ ');
-  const domainSelector = `${rootSelector} + ol > [aria-label="localhost:${getTestServerPort()}, domain"]`;
+  const domainSelector = `${rootSelector} + ol > [aria-label="localhost:${inspectedPage.serverPort}, domain"]`;
   const folderSelector = `${domainSelector} + ol > [aria-label^="${folderName}, "]`;
   const fileSelector = `${folderSelector} + ol > [aria-label="${fileName}, file"]`;
 
@@ -555,93 +564,96 @@ async function isExpanded(sourceTreeItem: puppeteer.ElementHandle<Element>): Pro
   });
 }
 
-export async function expandSourceTreeItem(selector: string) {
+export async function expandSourceTreeItem(selector: string, devToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
   // FIXME(crbug/1112692): Refactor test to remove the timeout.
-  await timeout(50);
-  const sourceTreeItem = await waitFor(selector);
+  await devToolsPage.timeout(50);
+  const sourceTreeItem = await devToolsPage.waitFor(selector);
   if (!await isExpanded(sourceTreeItem)) {
     // FIXME(crbug/1112692): Refactor test to remove the timeout.
-    await timeout(50);
-    await doubleClickSourceTreeItem(selector);
+    await devToolsPage.timeout(50);
+    await doubleClickSourceTreeItem(selector, devToolsPage);
   }
 }
 
-export async function expandFileTree(selectors: NestedFileSelector) {
-  await expandSourceTreeItem(selectors.rootSelector);
-  await expandSourceTreeItem(selectors.domainSelector);
+export async function expandFileTree(
+    selectors: NestedFileSelector, devToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  await expandSourceTreeItem(selectors.rootSelector, devToolsPage);
+  await expandSourceTreeItem(selectors.domainSelector, devToolsPage);
   if (selectors.folderSelector) {
-    await expandSourceTreeItem(selectors.folderSelector);
+    await expandSourceTreeItem(selectors.folderSelector, devToolsPage);
   }
   // FIXME(crbug/1112692): Refactor test to remove the timeout.
-  await timeout(50);
-  return await waitFor(selectors.fileSelector);
+  await devToolsPage.timeout(50);
+  return await devToolsPage.waitFor(selectors.fileSelector);
 }
 
-export async function readSourcesTreeView(): Promise<string[]> {
-  const items = await $$('.navigator-folder-tree-item,.navigator-file-tree-item');
+export async function readSourcesTreeView(devToolsPage = getBrowserAndPagesWrappers().devToolsPage): Promise<string[]> {
+  const items = await devToolsPage.$$('.navigator-folder-tree-item,.navigator-file-tree-item');
   const promises = items.map(handle => handle.evaluate(el => el.textContent as string));
   const results = await Promise.all(promises);
   return results.map(item => item.replace(/localhost:[0-9]+/, 'localhost:XXXX'));
 }
 
-export async function readIgnoreListedSources(): Promise<string[]> {
-  const items = await $$('.navigator-folder-tree-item.is-ignore-listed,.navigator-file-tree-item.is-ignore-listed');
+export async function readIgnoreListedSources(devToolsPage = getBrowserAndPagesWrappers().devToolsPage):
+    Promise<string[]> {
+  const items =
+      await devToolsPage.$$('.navigator-folder-tree-item.is-ignore-listed,.navigator-file-tree-item.is-ignore-listed');
   const promises = items.map(handle => handle.evaluate(el => el.textContent as string));
   const results = await Promise.all(promises);
   return results.map(item => item.replace(/localhost:[0-9]+/, 'localhost:XXXX'));
 }
 
-async function hasPausedEvents(frontend: puppeteer.Page): Promise<boolean> {
-  const events = await getPendingEvents(frontend, DEBUGGER_PAUSED_EVENT);
+async function hasPausedEvents(devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage):
+    Promise<boolean> {
+  const events = await devToolsPage.getPendingEvents(DEBUGGER_PAUSED_EVENT);
   return Boolean(events?.length);
 }
 
-export async function stepThroughTheCode() {
-  const {frontend} = getBrowserAndPages();
-  await getPendingEvents(frontend, DEBUGGER_PAUSED_EVENT);
-  await frontend.keyboard.press('F9');
-  await waitForFunction(() => hasPausedEvents(frontend));
-  await waitFor(PAUSE_INDICATOR_SELECTOR);
+export async function stepThroughTheCode(devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  await devToolsPage.getPendingEvents(DEBUGGER_PAUSED_EVENT);
+  await devToolsPage.page.keyboard.press('F9');
+  await devToolsPage.waitForFunction(() => hasPausedEvents(devToolsPage));
+  await devToolsPage.waitFor(PAUSE_INDICATOR_SELECTOR);
 }
 
-export async function stepIn() {
-  const {frontend} = getBrowserAndPages();
-  await getPendingEvents(frontend, DEBUGGER_PAUSED_EVENT);
-  await frontend.keyboard.press('F11');
-  await waitForFunction(() => hasPausedEvents(frontend));
-  await waitFor(PAUSE_INDICATOR_SELECTOR);
+export async function stepIn(devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  await devToolsPage.getPendingEvents(DEBUGGER_PAUSED_EVENT);
+  await devToolsPage.page.keyboard.press('F11');
+  await devToolsPage.waitForFunction(() => hasPausedEvents(devToolsPage));
+  await devToolsPage.waitFor(PAUSE_INDICATOR_SELECTOR);
 }
 
-export async function stepOver() {
-  const {frontend} = getBrowserAndPages();
-  await getPendingEvents(frontend, DEBUGGER_PAUSED_EVENT);
-  await frontend.keyboard.press('F10');
-  await waitForFunction(() => hasPausedEvents(frontend));
-  await waitFor(PAUSE_INDICATOR_SELECTOR);
+export async function stepOver(devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  await devToolsPage.getPendingEvents(DEBUGGER_PAUSED_EVENT);
+  await devToolsPage.page.keyboard.press('F10');
+  await devToolsPage.waitForFunction(() => hasPausedEvents(devToolsPage));
+  await devToolsPage.waitFor(PAUSE_INDICATOR_SELECTOR);
 }
 
-export async function stepOut() {
-  const {frontend} = getBrowserAndPages();
-  await getPendingEvents(frontend, DEBUGGER_PAUSED_EVENT);
-  await frontend.keyboard.down('Shift');
-  await frontend.keyboard.press('F11');
-  await frontend.keyboard.up('Shift');
-  await waitForFunction(() => hasPausedEvents(frontend));
+export async function stepOut(devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  await devToolsPage.getPendingEvents(DEBUGGER_PAUSED_EVENT);
+  await devToolsPage.page.keyboard.down('Shift');
+  await devToolsPage.page.keyboard.press('F11');
+  await devToolsPage.page.keyboard.up('Shift');
+  await devToolsPage.waitForFunction(() => hasPausedEvents(devToolsPage));
 
-  await waitFor(PAUSE_INDICATOR_SELECTOR);
+  await devToolsPage.waitFor(PAUSE_INDICATOR_SELECTOR);
 }
 
-export async function openNestedWorkerFile(selectors: NestedFileSelector) {
-  await expandFileTree(selectors);
+export async function openNestedWorkerFile(
+    selectors: NestedFileSelector, devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  await expandFileTree(selectors, devToolsPage);
   // FIXME(crbug/1112692): Refactor test to remove the timeout.
-  await timeout(50);
-  await click(selectors.fileSelector);
+  await devToolsPage.timeout(50);
+  await devToolsPage.click(selectors.fileSelector);
 }
 
-export async function inspectMemory(variableName: string) {
+export async function inspectMemory(
+    variableName: string, devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
   await openSoftContextMenuAndClickOnItem(
       `[data-object-property-name-for-test="${variableName}"]`,
       'Open in Memory inspector panel',
+      devToolsPage,
   );
 }
 
@@ -652,97 +664,82 @@ export async function typeIntoSourcesAndSave(text: string) {
   await pressKey('s', {control: true});
 }
 
-export async function getScopeNames() {
-  const scopeElements = await $$('.scope-chain-sidebar-pane-section-title');
+export async function getScopeNames(devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  const scopeElements = await devToolsPage.$$('.scope-chain-sidebar-pane-section-title');
   const scopeNames = await Promise.all(scopeElements.map(nodes => nodes.evaluate(n => n.textContent)));
   return scopeNames;
 }
 
-export async function getValuesForScope(scope: string, expandCount: number, waitForNoOfValues: number) {
+export async function getValuesForScope(
+    scope: string, expandCount: number, waitForNoOfValues: number,
+    devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
   const scopeSelector = `[aria-label="${scope}"]`;
-  await waitFor(scopeSelector);
+  await devToolsPage.waitFor(scopeSelector);
   for (let i = 0; i < expandCount; i++) {
-    await click(`${scopeSelector} + ol li[aria-expanded=false]`);
+    await devToolsPage.click(`${scopeSelector} + ol li[aria-expanded=false]`);
   }
   const valueSelector = `${scopeSelector} + ol .name-and-value`;
-  const valueSelectorElements = await waitForFunction(async () => {
-    const elements = await $$(valueSelector);
-    if (elements.length >= waitForNoOfValues) {
-      return elements;
+  async function readValues() {
+    const valueSelectorElements = await devToolsPage.waitForMany(valueSelector, waitForNoOfValues);
+    return await Promise.all(valueSelectorElements.map(elem => elem.evaluate(n => n.textContent as string)));
+  }
+  const previousValues = await readValues();
+  return await devToolsPage.waitForFunction(async function() {
+    const values = await readValues();
+    if (values.join('') === previousValues.join('')) {
+      return values;
     }
-    return undefined;
+    return;
   });
-  const values = await Promise.all(valueSelectorElements.map(elem => elem.evaluate(n => n.textContent as string)));
-  return values;
 }
 
-export async function getPausedMessages() {
-  const {frontend} = getBrowserAndPages();
-  const messageElement = await frontend.waitForSelector('.paused-message');
-  if (!messageElement) {
-    assert.fail('getPausedMessages: did not find .paused-message element.');
-  }
-  const statusMain = await waitFor('.status-main', messageElement);
-  const statusSub = await waitFor('.status-sub', messageElement);
+export async function getPausedMessages(devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  const messageElement = await devToolsPage.page.waitForSelector('.paused-message');
+  assert.isOk(messageElement, 'getPausedMessages: did not find .paused-message element.');
+  const statusMain = await devToolsPage.waitFor('.status-main', messageElement);
+  const statusSub = await devToolsPage.waitFor('.status-sub', messageElement);
   return {
     statusMain: await statusMain.evaluate(x => x.textContent),
     statusSub: await statusSub.evaluate(x => x.textContent),
   };
 }
 
-export async function getWatchExpressionsValues() {
-  const {frontend} = getBrowserAndPages();
-  await waitForFunction(async () => {
-    const expandedOption = await $('[aria-label="Watch"].expanded');
+export async function getWatchExpressionsValues(devToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  await devToolsPage.waitForFunction(async () => {
+    const expandedOption = await devToolsPage.$('.watch-expression-title');
     if (expandedOption) {
       return true;
     }
-    await click('[aria-label="Watch"]');
+    await devToolsPage.click('[aria-label="Watch"]');
     // Wait for the click event to settle.
-    await timeout(100);
+    await devToolsPage.timeout(100);
     return expandedOption !== null;
   });
-  await frontend.keyboard.press('ArrowRight');
-  const watchExpressionValue = await $(WATCH_EXPRESSION_VALUE_SELECTOR);
+  await devToolsPage.pressKey('ArrowRight');
+  const watchExpressionValue = await devToolsPage.$(WATCH_EXPRESSION_VALUE_SELECTOR);
   if (!watchExpressionValue) {
     return null;
   }
-  const values = await $$(WATCH_EXPRESSION_VALUE_SELECTOR) as Array<puppeteer.ElementHandle<HTMLElement>>;
+  const values = await devToolsPage.$$(WATCH_EXPRESSION_VALUE_SELECTOR) as Array<puppeteer.ElementHandle<HTMLElement>>;
   return await Promise.all(values.map(value => value.evaluate(element => element.innerText)));
 }
 
-export async function runSnippet() {
-  const {frontend} = getBrowserAndPages();
-  const modifierKey = platform === 'mac' ? 'Meta' : 'Control';
-  await frontend.keyboard.down(modifierKey);
-  await frontend.keyboard.press('Enter');
-  await frontend.keyboard.up(modifierKey);
+export async function runSnippet(devToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  await devToolsPage.pressKey('Enter', {control: true});
 }
 
-export async function evaluateSelectedTextInConsole() {
-  const {frontend} = getBrowserAndPages();
-  const modifierKey = platform === 'mac' ? 'Meta' : 'Control';
-  await frontend.keyboard.down(modifierKey);
-  await frontend.keyboard.down('Shift');
-  await frontend.keyboard.press('E');
-  await frontend.keyboard.up(modifierKey);
-  await frontend.keyboard.up('Shift');
+export async function evaluateSelectedTextInConsole(devToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  await devToolsPage.pressKey('E', {control: true, shift: true});
   // TODO: it should actually wait for rendering to finish. Note: it is
   // drained three times because rendering currently takes 3 dependent
   // tasks to finish.
-  await drainFrontendTaskQueue();
-  await drainFrontendTaskQueue();
-  await drainFrontendTaskQueue();
+  await devToolsPage.drainTaskQueue();
+  await devToolsPage.drainTaskQueue();
+  await devToolsPage.drainTaskQueue();
 }
 
-export async function addSelectedTextToWatches() {
-  const {frontend} = getBrowserAndPages();
-  const modifierKey = platform === 'mac' ? 'Meta' : 'Control';
-  await frontend.keyboard.down(modifierKey);
-  await frontend.keyboard.down('Shift');
-  await frontend.keyboard.press('A');
-  await frontend.keyboard.up(modifierKey);
-  await frontend.keyboard.up('Shift');
+export async function addSelectedTextToWatches(devToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  await devToolsPage.pressKey('A', {control: true, shift: true});
 }
 
 export async function enableLocalOverrides() {
@@ -800,7 +797,7 @@ export class WasmLocationLabels {
       const labelLine = m.originalLine;
       const labelColumn = m.originalColumn;
       const sourceLine = labels.get(`${m.source}:${labelLine}:${labelColumn}`);
-      assertNotNullOrUndefined(sourceLine);
+      assert.isOk(sourceLine);
       entry.push({
         label: m.source,
         moduleOffset: m.generatedColumn,
@@ -818,7 +815,7 @@ export class WasmLocationLabels {
     const pausedLine = this.#mappings.get(label)!.find(
         line => pauseLocation === `${path.basename(this.#wasm)}:0x${line.moduleOffset.toString(16)}` ||
             pauseLocation === `${path.basename(this.#source)}:${line.sourceLine}`);
-    assertNotNullOrUndefined(pausedLine);
+    assert.isOk(pausedLine);
     return pausedLine;
   }
 
@@ -863,18 +860,21 @@ export class WasmLocationLabels {
   }
 }
 
-export async function retrieveCodeMirrorEditorContent(): Promise<string[]> {
-  const editor = await waitFor('[aria-label="Code editor"]');
+export async function retrieveCodeMirrorEditorContent(
+    devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage): Promise<string[]> {
+  const editor = await devToolsPage.waitFor('[aria-label="Code editor"]');
   return await editor.evaluate(
       node => [...node.querySelectorAll('.cm-line')].map(node => node.textContent || '') || []);
 }
 
-export async function waitForLines(lineCount: number): Promise<void> {
-  await waitFor(new Array(lineCount).fill('.cm-line').join(' ~ '));
+export async function waitForLines(
+    lineCount: number, devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage): Promise<void> {
+  await devToolsPage.waitFor(new Array(lineCount).fill('.cm-line').join(' ~ '));
 }
 
-export async function isPrettyPrinted(): Promise<boolean> {
-  const prettyButton = await waitFor('[title="Pretty print"]');
+export async function isPrettyPrinted(devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage):
+    Promise<boolean> {
+  const prettyButton = await devToolsPage.waitFor('[title="Pretty print"]');
   const isPretty = await prettyButton.evaluate(e => e.classList.contains('toggled'));
   return isPretty === true;
 }

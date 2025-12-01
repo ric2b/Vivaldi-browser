@@ -91,11 +91,12 @@ think about before creating any new WebUI:
   feature flags/user actions/external hardware required to trigger important
   page features? This information should be added in a README alongside your
   code when you add your UI.
-- If you are adding a Debug UI, consider: does this debug information warrant
-  its own UI surface to display, or could it instead be incorporated into an
-  existing UI like chrome://system? Chromium already has several dozen debug
-  UIs. Each one adds to binary size and maintenance burden. Strongly consider
-  whether you can reuse an existing page before adding a new one.
+- If you are adding a Debug UI, consider: Could this be a Chrome extension
+  instead? Does this debug information warrant its own UI surface to display, or
+  could it instead be incorporated into an existing UI like chrome://system?
+  Chromium already has several dozen debug UIs. Each one adds to binary size and
+  maintenance burden. Strongly consider whether you can reuse an existing page
+  before adding a new one.
 
 You should be prepared to address these questions in code review when adding
 your WebUI.

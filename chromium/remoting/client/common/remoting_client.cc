@@ -14,6 +14,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/notimplemented.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "components/webrtc/thread_wrapper.h"
@@ -208,6 +209,10 @@ void RemotingClient::AddObserver(ClientStatusObserver* observer) {
 
 void RemotingClient::RemoveObserver(ClientStatusObserver* observer) {
   observers_.RemoveObserver(observer);
+}
+
+base::WeakPtr<RemotingClient> RemotingClient::GetWeakPtr() {
+  return weak_factory_.GetWeakPtr();
 }
 
 void RemotingClient::SetCapabilities(

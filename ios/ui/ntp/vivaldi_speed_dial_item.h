@@ -41,6 +41,7 @@ class BookmarkNode;
 - (NSNumber*)idValue;
 - (NSString*)nickname;
 - (NSString*)urlString;
+- (NSString*)displayURL;
 - (NSString*)host;
 - (BOOL)isInternalPage;
 - (NSString*)thumbnail;

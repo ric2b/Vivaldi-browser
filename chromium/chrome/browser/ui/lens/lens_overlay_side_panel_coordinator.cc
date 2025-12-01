@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/lens/lens_overlay_side_panel_coordinator.h"
 
+#include <vector>
+
 #include "base/metrics/histogram_functions.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/companion/text_finder/text_finder_manager.h"
@@ -11,11 +13,13 @@
 #include "chrome/browser/lens/core/mojom/lens_side_panel.mojom.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+#include "chrome/browser/ui/lens/lens_composebox_controller.h"
 #include "chrome/browser/ui/lens/lens_help_menu_utils.h"
 #include "chrome/browser/ui/lens/lens_overlay_controller.h"
 #include "chrome/browser/ui/lens/lens_overlay_side_panel_web_view.h"
 #include "chrome/browser/ui/lens/lens_overlay_url_builder.h"
 #include "chrome/browser/ui/lens/lens_search_controller.h"
+#include "chrome/browser/ui/lens/lens_search_feature_flag_utils.h"
 #include "chrome/browser/ui/lens/lens_searchbox_controller.h"
 #include "chrome/browser/ui/lens/page_content_type_conversions.h"
 #include "chrome/browser/ui/tabs/public/tab_features.h"
@@ -221,8 +225,8 @@ bool LensOverlaySidePanelCoordinator::MaybeHandleTextDirectives(
     // also adds an additional check to make sure the text query parameters
     // match.
     if (lens::IsValidSearchResultsUrl(nav_url)) {
-      auto page_url_text_query = lens::GetTextQueryParameterValue(page_url);
-      auto nav_url_text_query = lens::GetTextQueryParameterValue(nav_url);
+      auto page_url_text_query = lens::ExtractTextQueryParameterValue(page_url);
+      auto nav_url_text_query = lens::ExtractTextQueryParameterValue(nav_url);
       if (page_url.host() != nav_url.host() ||
           page_url.path() != nav_url.path() ||
           page_url_text_query != nav_url_text_query) {
@@ -278,7 +282,7 @@ void LensOverlaySidePanelCoordinator::NotifyNewQueryLoaded(std::string query,
   // A search URL without a Lens mode parameter indicates a click on a related
   // search or other in-SRP refinement. In this case, we should clear all
   // selection and thumbnail state.
-  const std::string lens_mode = lens::GetLensModeParameterValue(search_url);
+  const std::string lens_mode = lens::ExtractLensModeParameterValue(search_url);
   if (lens_mode.empty()) {
     GetLensOverlayController()->SetAdditionalSearchQueryParams(
         /*additional_search_query_params=*/{});
@@ -421,6 +425,12 @@ void LensOverlaySidePanelCoordinator::GetIsContextualSearchbox(
 void LensOverlaySidePanelCoordinator::RequestSendFeedback() {
   FeedbackRequestedByEvent(lens_search_controller_->GetTabInterface(),
                            ui::EF_NONE);
+}
+
+void LensOverlaySidePanelCoordinator::OnAimMessage(
+    const std::vector<uint8_t>& message) {
+  // Pass the message to the LensComposeboxController to handle.
+  GetLensComposeboxController()->OnAimMessage(message);
 }
 
 void LensOverlaySidePanelCoordinator::OnScrollToMessage(
@@ -633,6 +643,29 @@ void LensOverlaySidePanelCoordinator::SetPageContentUploadProgress(
   }
 }
 
+void LensOverlaySidePanelCoordinator::SendClientMessageToAim(
+    const std::vector<uint8_t>& serialized_message) {
+  if (side_panel_page_) {
+    side_panel_page_->SendClientMessageToAim(serialized_message);
+  }
+}
+
+void LensOverlaySidePanelCoordinator::AimHandshakeReceived() {
+  if (side_panel_page_) {
+    side_panel_page_->AimHandshakeReceived();
+  }
+}
+
+void LensOverlaySidePanelCoordinator::AimResultsChanged(bool on_aim) {
+  // Close the overlay if the user transitions to the AIM UI.
+  if (on_aim && lens::features::ShouldCloseOverlayOnAimTransition()) {
+    lens_search_controller_->HideOverlay();
+  }
+  if (side_panel_page_) {
+    side_panel_page_->AimResultsChanged(on_aim);
+  }
+}
+
 void LensOverlaySidePanelCoordinator::SuppressGhostLoader() {
   if (side_panel_page_) {
     side_panel_page_->SuppressGhostLoader();
@@ -804,6 +837,17 @@ void LensOverlaySidePanelCoordinator::DidStartNavigation(
                                       kChromeSideSearchVersionHeaderValue);
   SetSidePanelIsOffline(net::NetworkChangeNotifier::IsOffline());
   SetSidePanelNewTabUrl(GURL());
+
+  // Notify the side panel that the results have moved to/from the AIM UI.
+  const bool is_aim_query = IsAimQuery(nav_url);
+  AimResultsChanged(is_aim_query);
+
+  // If this is an AIM query, to be opened in the side panel, exit early to
+  // prevent the ghost loader from being shown. AIM supports soft navigations to
+  // handle custom animations, and showing the ghost loader would cover those.
+  if (lens::features::GetSidePanelGhostLoaderDisabledForAim() && is_aim_query) {
+    return;
+  }
   SetSidePanelIsLoadingResults(true);
 }
 
@@ -884,7 +928,8 @@ void LensOverlaySidePanelCoordinator::OnTextFinderLookupComplete(
                              ->GetContents()
                              ->GetLastCommittedURL();
   if (lookup_results.empty()) {
-    if (URLsMatchWithoutTextFragment(page_url, nav_url)) {
+    if (lens::features::IsLensSearchNotFoundOnPageToastEnabled() &&
+        URLsMatchWithoutTextFragment(page_url, nav_url)) {
       lens::RecordHandleTextDirectiveResult(
           lens::LensOverlayTextDirectiveResult::kNotFoundOnPage);
       ShowToast(l10n_util::GetStringUTF8(
@@ -904,7 +949,8 @@ void LensOverlaySidePanelCoordinator::OnTextFinderLookupComplete(
   for (auto pair : lookup_results) {
     // If any of the text fragments are not found, then open in a new tab.
     if (!pair.second) {
-      if (URLsMatchWithoutTextFragment(page_url, nav_url)) {
+      if (lens::features::IsLensSearchNotFoundOnPageToastEnabled() &&
+          URLsMatchWithoutTextFragment(page_url, nav_url)) {
         lens::RecordHandleTextDirectiveResult(
             lens::LensOverlayTextDirectiveResult::kNotFoundOnPage);
         ShowToast(l10n_util::GetStringUTF8(
@@ -966,7 +1012,10 @@ void LensOverlaySidePanelCoordinator::RegisterEntry() {
         base::BindRepeating(
             &LensOverlaySidePanelCoordinator::GetOpenInNewTabUrl,
             base::Unretained(this)),
-        GetMoreInfoCallback(), SidePanelEntry::kSidePanelDefaultContentWidth);
+        GetMoreInfoCallback(),
+        base::BindRepeating(
+            &LensOverlaySidePanelCoordinator::GetPreferredDefaultWidth,
+            base::Unretained(this)));
     entry->SetProperty(kShouldShowTitleInSidePanelHeaderKey, false);
     registry->Register(std::move(entry));
 
@@ -1016,9 +1065,15 @@ GURL LensOverlaySidePanelCoordinator::GetOpenInNewTabUrl() {
   }
 }
 
+int LensOverlaySidePanelCoordinator::GetPreferredDefaultWidth() {
+  return lens::features::IsLensSearchSidePanelDefaultWidthChangeEnabled()
+             ? lens::features::GetLensSearchSidePanelDefaultWidth()
+             : SidePanelEntry::kSidePanelDefaultContentWidth;
+}
+
 base::RepeatingCallback<std::unique_ptr<ui::MenuModel>()>
 LensOverlaySidePanelCoordinator::GetMoreInfoCallback() {
-  if (lens::features::IsLensOverlayContextualSearchboxEnabled()) {
+  if (lens::IsLensOverlayContextualSearchboxEnabled()) {
     return base::BindRepeating(
         &LensOverlaySidePanelCoordinator::GetMoreInfoMenuModel,
         base::Unretained(this));

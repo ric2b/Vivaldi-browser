@@ -8,18 +8,24 @@
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> katkaisi yhteyden yllättäen.</translation>
 <translation id="1161325031994447685">Yhdistä langaton verkko uudelleen</translation>
 <translation id="1175364870820465910">Tulo&amp;sta…</translation>
+<translation id="1204778305310783648">”On väärin muuttaa internet valvontataloudeksi”: Jon von Tetzchner Web Summitissa 2023.</translation>
 <translation id="1285320974508926690">Älä käännä tätä sivustoa</translation>
 <translation id="1375198122581997741">Tietoja versiosta</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> ei lähettänyt tietoa.</translation>
+<translation id="1489123210863708132">Aktivoi jäljitys- ja mainosesto turvataksesi selailusi ja kootaksesi tietoturvatilastojasi.</translation>
+<translation id="1500787357908295021">Tietoturvatilastosi</translation>
 <translation id="1555191101192706055">Hyökkääjät sivustolla, jolle yritit siirtyä, saattavat yrittää huijata asentamaan selaamiseen vaikuttavia haittaohjelmia – esimerkiksi vaihtaa aloitussivusi tai näyttää avaamillasi sivuilla lisää mainoksia.</translation>
 <translation id="1559528461873125649">Tiedostoa tai hakemistoa ei ole olemassa</translation>
+<translation id="16328381871867323">Lainsäätäjät alkavat vihdoin kiinnittää huomiota huoleen siitä, miten digitietojamme jäljitetään, kerätään ja talletetaan. Kuule mitä tämä käänteentekevä säännöstö tarkoittaa ja miten se vaikuttaa meihin.</translation>
 <translation id="1640244768702815859">Yritä <ph name="BEGIN_LINK" />avata sivuston etusivu<ph name="END_LINK" />.</translation>
-<translation id="1645368109819982629">Yhteysprotokollaa ei tueta</translation>
+<translation id="1645368109819982629">Yhteyskäytäntöä ei tueta</translation>
 <translation id="1662550410081243962">Tallenna ja täytä maksutavat</translation>
 <translation id="1710259589646384581">Käyttöjärjestelmä</translation>
 <translation id="1728677426644403582">Tämä on verkkosivun lähdekoodi</translation>
 <translation id="1734878702283171397">Pyri tavoittamaan järjestelmän ylläpito.</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Kokeile auttaako Windowsin Verkko ja Internet -vianselvitys<ph name="END_LINK" />.</translation>
+<translation id="1919345977826869612">Mainokset</translation>
+<translation id="1970180444859658569">”Älä jäljitä” -tietoturva-asetus saa Saksassa tukea laista</translation>
 <translation id="1974060860693918893">Lisäasetukset</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Tarkista välityspalvelin ja palomuuri<ph name="END_LINK" /></translation>
 <translation id="2048261947532620704">Käännetään sivua</translation>
@@ -28,6 +34,7 @@
 <translation id="2178904466768126352">Hyökkääjät sivustolla, jolle yritit siirtyä, saattavat asentaa haittaohjelmia, jotka varastavat tai poistavat esimerkiksi salasanoja, kuvia, viestejä tai luottokorttinumeroita.</translation>
 <translation id="2187317261103489799">Tunnista (oletus)</translation>
 <translation id="2224337661447660594">Ei internetyhteyttä</translation>
+<translation id="2225863440766607138">Jäljitys</translation>
 <translation id="2283340219607151381">Tallenna ja täytä osoitteet</translation>
 <translation id="2292556288342944218">Internet-yhteytesi on estetty</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> vaatii käyttäjätunnuksen ja salasanan.</translation>
@@ -35,7 +42,7 @@
 <translation id="2355395290879513365">Hyökkääjät saattavat nähdä kuvat, joita katselet sivustolla ja huijata sinua muokkaamalla niitä.</translation>
 <translation id="2356070529366658676">Kysy</translation>
 <translation id="2359808026110333948">Jatka</translation>
-<translation id="2388886110302389394">Avaa sivu uudessa yksityisikkunassa (Ctrl–Shift–N)</translation>
+<translation id="2388886110302389394">Avaa sivu uuteen yksityisikkunaan (Ctrl–Vaihto–N)</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Tarkista verkkoyhteyden toiminta<ph name="END_LINK" /></translation>
 <translation id="2491414235131909199">Laajennus on estänyt sivun</translation>
 <translation id="2539524384386349900">Tunnista</translation>
@@ -43,8 +50,11 @@
 <translation id="2634124572758952069">Palvelimen <ph name="HOST_NAME" /> IP-osoitetta ei löytynyt.</translation>
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
 <translation id="2650446666397867134">Tiedoston käyttö estettiin</translation>
+<translation id="2690699652723742414">30 viime päivää</translation>
 <translation id="2705137772291741111">Tämän sivuston välimuistiin tallennettu kopio oli lukukelvoton.</translation>
 <translation id="2730326759066348565"><ph name="BEGIN_LINK" />Tarkista yhteyksien toiminta<ph name="END_LINK" /></translation>
+<translation id="2741210449864955442">https://vivaldi.com/blog/technology/vivaldi-browser-at-the-web-summit/</translation>
+<translation id="2765309692777226484">Jäljitys- ja mainosesto on poistettu käytöstä.</translation>
 <translation id="2784949926578158345">Yhteys katkaistiin.</translation>
 <translation id="2826760142808435982">Yhteyden salaus- ja todennusmenetelmänä on <ph name="CIPHER" /> ja avainvaihtomekanismina <ph name="KX" />.</translation>
 <translation id="290376772003165898">Eikö sivua ole kirjoitettu kielellä <ph name="LANGUAGE" />?</translation>
@@ -57,12 +67,16 @@
 <translation id="3037605927509011580">Harmin paikka!</translation>
 <translation id="3041612393474885105">Varmenteen tiedot</translation>
 <translation id="3109728660330352905">Sinulla ei ole oikeutta tarkastella tätä sivua.</translation>
+<translation id="3119245580849443327">Vivaldin tietoturvaraportti</translation>
 <translation id="31207688938192855"><ph name="BEGIN_LINK" />Kokeile auttaako yhteysongelmien vianselvitys<ph name="END_LINK" />.</translation>
+<translation id="3126903660515914763">https://vivaldi.com/blog/news/alert-no-google-topics-in-vivaldi/</translation>
 <translation id="3154506275960390542">Sivulla on taulukko, jota ei ehkä voi lähettää turvallisesti. Muut voivat nähdä lähettämäsi tiedot siirrettäessä, tai hyökkääjä voi muuttaa niitä ennen kuin ne saapuvat palvelimelle.</translation>
+<translation id="3156779787905856989">Manifest V3, webRequest ja mainosestot</translation>
 <translation id="3176929007561373547">Tarkista välityspalvelinasetukset tai ole yhteydessä verkon ylläpitoon
 varmistaaksesi välityspalvelimen toiminnan. Jos et mielestäsi tarvitse
 välityspalvelinta:
 <ph name="PLATFORM_TEXT" /></translation>
+<translation id="3191389212681074619">https://help.vivaldi.com/android/android-privacy/android-tracker-and-ad-blocker/</translation>
 <translation id="3226128629678568754">Lähetä tiedoston lataukseen tarvittavat tiedot uudelleen painamalla päivityspainiketta.</translation>
 <translation id="3234666976984236645">Tunnista aina tärkeä sisältö tällä sivustolla</translation>
 <translation id="3384522979010096022">Organisaatiosi ei salli sinun avata tätä sivustoa</translation>
@@ -80,14 +94,16 @@ välityspalvelinta:
 kokeile auttaako sen poistaminen ja uudelleenlisääminen.</translation>
 <translation id="3658742229777143148">Päivitetty versio</translation>
 <translation id="3681007416295224113">Varmenteen tiedot</translation>
+<translation id="3694122362646626770">Sivustot</translation>
+<translation id="3716128635228495027">Takaisin Vivaldiin</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />Tarkista välityspalvelin-, palomuuri- ja DNS-nimipalvelinasetukset<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">Jos käytät välityspalvelinta…</translation>
 <translation id="3861977424605124250">Näytä käynnistettäessä</translation>
 <translation id="3950820424414687140">Kirjaudu</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> on estetty</translation>
 <translation id="3987940399970879459">Alle 1 Mt</translation>
-<translation id="4075123085690634698">Avaa sivu uudessa yksityisikkunassa (⇧⌘N)</translation>
-<translation id="4075732493274867456">Asiakassovellus ja palvelin eivät tue samaa SSL-protokollan versiota tai salaustekniikkaa.</translation>
+<translation id="4075123085690634698">Avaa sivu uuteen yksityisikkunaan (⇧⌘N)</translation>
+<translation id="4075732493274867456">Asiakassovellus ja palvelin eivät tue samaa SSL-yhteyskäytäntöversiota tai salaustekniikkaa.</translation>
 <translation id="4116663294526079822">Salli aina tällä sivustolla</translation>
 <translation id="4130226655945681476">Tarkista verkkokaapelit, modeemi ja reititin</translation>
 <translation id="4151403195736952345">Käytä yleistä oletusta (havaitse)</translation>
@@ -99,9 +115,11 @@ kokeile auttaako sen poistaminen ja uudelleenlisääminen.</translation>
 <translation id="4250431568374086873">Sivuston yhteys ei ole täysin suojattu</translation>
 <translation id="4265872034478892965">Ylläpidon sallima</translation>
 <translation id="4305666528087210886">Tiedostoa ei voi käyttää</translation>
+<translation id="430967081421617822">Koko ajan</translation>
 <translation id="4312866146174492540">Estä (oletus)</translation>
 <translation id="4408413947728134509">Evästeet <ph name="NUM_COOKIES" /></translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> ei hyväksynyt kirjautumisvarmennettasi tai varmennetta ei toimitettu.</translation>
+<translation id="4474776280324528449">https://vivaldi.com/blog/do-no-track-gets-legal-backing-in-germany/</translation>
 <translation id="4506599922270137252">Ota yhteyttä järjestelmän ylläpitoon</translation>
 <translation id="4522570452068850558">Tiedot</translation>
 <translation id="4558551763791394412">Kokeile auttaako laajennusten käytöstäpoisto.</translation>
@@ -121,8 +139,11 @@ kokeile auttaako sen poistaminen ja uudelleenlisääminen.</translation>
 <translation id="5068778127327928576">{NUM_COOKIES,plural, =1{(1 käytössä)}other{(# käytössä)}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Tarkista välityspalvelimen osoite<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64-bittinen)</translation>
+<translation id="5216593085343845370">Liity Vivaldin jäljittämättömyysrintamaan ja palauta verkkotietoturvasi omiin käsiisi.
+    Lue alla olevista artikkeleista lisää siitä, miten taistelemme käyttäjien oikeuksien puolesta.</translation>
 <translation id="5355557959165512791"><ph name="SITE" /> ei juuri nyt ole käytettävissä, koska sen varmenne on peruttu. Verkkovirheet ja hyökkäykset ovat yleensä väliaikaisia, joten sivu luultavasti toimii myöhemmin.</translation>
 <translation id="5386426401304769735">Sivuston varmenneketjussa on SHA-1:llä allekirjoitettu varmenne.</translation>
+<translation id="5398772614898833570">Mainokset estetty</translation>
 <translation id="5452270690849572955">Tätä sivuston <ph name="HOST_NAME" /> sivua ei löydy</translation>
 <translation id="5457113250005438886">Virheellinen</translation>
 <translation id="5492298309214877701">Tällä yrityksen, organisaation tai oppilaitoksen intranetissä olevalla sivustolla on sama URL-osoite kuin ulkoisella verkkosivustolla.
@@ -130,9 +151,12 @@ kokeile auttaako sen poistaminen ja uudelleenlisääminen.</translation>
 Pyri tavoittamaan järjestelmäsi ylläpito.</translation>
 <translation id="5510766032865166053">Se on voitu siirtää tai poistaa.</translation>
 <translation id="5556459405103347317">Lataa uudelleen</translation>
+<translation id="5583322400766491358">Henkilökohtainen vaikutelmatieto on talletettu salatusti laitteelle eikä sitä jaeta kolmansille osapuolille.</translation>
 <translation id="5610142619324316209">Tarkista yhteyden toiminta</translation>
 <translation id="5617949217645503996"><ph name="HOST_NAME" /> uudelleenohjasi sinut liian monta kertaa.</translation>
+<translation id="5648166631817621825">7 viime päivää</translation>
 <translation id="5675650730144413517">Sivu ei toimi</translation>
+<translation id="5741670635761443575">Huomio: Vivaldissa ei ole Google Topicsia.</translation>
 <translation id="5785756445106461925">Sivulla on kuitenkin osia, joita ei ole suojattu. Muut voivat tarkastella näitä osia siirrettäessä, ja hyökkääjä voi muuttaa sivun ulkoasua muokkaamalla niitä.</translation>
 <translation id="5799902971440853357">Et voi siirtyä sivustoon <ph name="SITE" /> tällä hetkellä, koska sivusto lähetti salatut tunnistautumistiedot, joita Vivaldi ei osaa käsitellä. Verkkovirheet ja hyökkäykset ovat yleensä väliaikaisia, joten sivu toimii luultavasti myöhemmin.</translation>
 <translation id="5810442152076338065">Yhteytesi sivustoon <ph name="DOMAIN" /> on salattu vanhentuneella salaustekniikalla.</translation>
@@ -144,7 +168,7 @@ Pyri tavoittamaan järjestelmäsi ylläpito.</translation>
 <translation id="6146055958333702838">Tarkista kaikki kaapelit ja käynnistä reitittimet, modeemit ja muut
     käytössä olevat verkkolaitteet uudelleen.</translation>
 <translation id="614940544461990577">Kokeile:</translation>
-<translation id="6165508094623778733">Lisätietoja</translation>
+<translation id="6165508094623778733">Lue lisää</translation>
 <translation id="6177128806592000436">Yhteys sivustoon ei ole suojattu</translation>
 <translation id="6203231073485539293">Tarkista Internet-yhteys</translation>
 <translation id="6225522625585012689">Näet estetyt URL-osoitteet ja muut järejstelmän ylläpidon pakottamat käytännöt osoitteesta &lt;strong&gt;vivaldi://policy&lt;/strong&gt;.</translation>
@@ -162,11 +186,13 @@ Pyri tavoittamaan järjestelmäsi ylläpito.</translation>
 <translation id="6653655836861174026">Vivaldin profiileilla voit jakaa Vivaldin luomalla omat profiilit kavereillesi ja perheellesi, tai vapaalle ja töille.</translation>
 <translation id="6657585470893396449">Salasana</translation>
 <translation id="6711464428925977395">Välityspalvelimessa on jotain vikaa tai osoite on virheellinen.</translation>
+<translation id="6736243959894955139">Osoite</translation>
 <translation id="6757797048963528358">Laitteesi siirtyi nukkumaan.</translation>
 <translation id="6890956352250146925">Eväste- ja sivustotietoasetukset</translation>
 <translation id="6897140037006041989">User agent</translation>
 <translation id="6935179587384421592"><ph name="SIZE" />. Jotkin sivustot saattavat latautua hitaammin kun ne avataan seuraavan kerran.</translation>
 <translation id="6957624206566198865">Avaa sivu uudessa yksityisvälilehdessä</translation>
+<translation id="7013466836883158999">Onko mahdollista koostaa kestäviä tuotteita vakoilematta käyttäjiä? Miltä näyttää selailun tulevaisuus? Näe toimitusjohtajamme Jon von Tetzchnerin vastaavan näihin kysymyksiin Web Summit 2023:ssa.</translation>
 <translation id="7053983685419859001">Estä</translation>
 <translation id="7066262000446496119">Kuka on käyttämässä Vivaldia?</translation>
 <translation id="7096937462164235847">Sivuston identiteettiä ei ole tarkistettu.</translation>
@@ -176,15 +202,19 @@ Pyri tavoittamaan järjestelmäsi ylläpito.</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> ei noudata suojausstandardeja.</translation>
 <translation id="7219179957768738017">Yhteys käyttää salauksen versiota <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Näytä ilmoitukset</translation>
+<translation id="7277237102285741596">https://vivaldi.com/blog/manifest-v3-webrequest-and-ad-blockers/</translation>
 <translation id="7283555985781738399">Vierastla</translation>
 <translation id="7353601530677266744">Komentorivi</translation>
 <translation id="7419106976560586862">Profiilin polku</translation>
+<translation id="7421665776469827022">Tiedot tallennettu</translation>
+<translation id="7454640759045234067">Jäljitys estetty</translation>
 <translation id="7455133967321480974">Käytä yleistä oletusasetusta (estä)</translation>
 <translation id="7518003948725431193">Verkkosivua ei löytynyt osoitteelle: <ph name="URL" /></translation>
 <translation id="7549584377607005141">Tämän sivun näyttäminen oikein edellyttää aiemmin lähetettyjä tietoja. Voit lähettää tiedot uudelleen, mutta tällöin sivulla mahdollisesti suoritettu toiminto toistetaan.</translation>
 <translation id="759889825892636187"><ph name="HOST_NAME" /> ei voi tällä hetkellä käsitellä tätä pyyntöä.</translation>
 <translation id="7662298039739062396">Laajennuksen hallinnoima asetus</translation>
 <translation id="7663736086183791259">Varmenne <ph name="CERTIFICATE_VALIDITY" /></translation>
+<translation id="7698231949697067951">On oma asiasi, mitä verkossa teet! Alta näet, mitä teemme auttaaksemme sinua pysymään turvassa.</translation>
 <translation id="7714464543167945231">Varmenne</translation>
 <translation id="7716147886133743102">Ylläpidon estämä</translation>
 <translation id="7716424297397655342">Tätä sivustoa ei voi ladata välimuistista</translation>
@@ -193,8 +223,11 @@ Pyri tavoittamaan järjestelmäsi ylläpito.</translation>
 <translation id="7800304661137206267">Yhteyden salausmenetelmä on <ph name="CIPHER" />, viestien todennusmenetelmä <ph name="MAC" /> ja avainvaihtomekanismi <ph name="KX" />.</translation>
 <translation id="7834399512844817676"><ph name="SITE" /> suojaa tietosi normaalisti salaamalla ne. Kuitenkin, kun Vivaldi tällä kertaa muodosti yhteyttä sivustoon <ph name="SITE" />, palautti sivusto epätavalliset ja virheelliset tunnistautumistiedot. Näin voi tapahtua, jos hyökkääjä pyrkii esiintymään sivustona <ph name="SITE" /> tai langattoman verkon kirjautumisruutu on keskeyttänyt yhteyden. Tietosi ovat edelleen turvassa, koska Vivaldi katkaisi yhteyden ennen kuin tietoja vaihdettiin.</translation>
 <translation id="7878562273885520351">Salasanasi on voinut vaarantua</translation>
+<translation id="788493840831967104">Ajansäästö</translation>
 <translation id="7951415247503192394">(32-bittinen)</translation>
 <translation id="7953236668995583915">Ota päivitetyt sivustoasetukset käyttöön päivittämällä sivu</translation>
+<translation id="7981965265950405093">Vivaldin mukana tulee oma sisään rakennettu mainos- ja jäljitysesto, tonneittain mukautusvalintoja, sisään rakennettu sähköposti ja kalenteri ja muuta. Seuraako se tiukasti Googlen sitoumusta Manifest V3:een? Vivaldin kehittäjä Julien Picalausa tarkastelee asiaa syvällisemmin.</translation>
+<translation id="8034402064393340023">Sitoumuksemme tietoturvaasi</translation>
 <translation id="8037357227543935929">Kysy (oletus)</translation>
 <translation id="8041940743680923270">Käytä yleistä oletusasetusta (kysy)</translation>
 <translation id="808894953321890993">Vaihda salasana</translation>
@@ -204,6 +237,7 @@ Pyri tavoittamaan järjestelmäsi ylläpito.</translation>
 <translation id="8211406090763984747">Yhteys on turvallinen</translation>
 <translation id="8241707690549784388">Etsimäsi sivu käytti antamiasi tietoja. Sivulle palaaminen voi johtaa jokaisen tekemäsi toiminnon toistamiseen. Haluatko jatkaa?</translation>
 <translation id="8241712895048303527">Estä tällä sivustolla</translation>
+<translation id="8248593573177859437">Tietoturvaraportti</translation>
 <translation id="8286036467436129157">Kirjaudu</translation>
 <translation id="8288807391153049143">Näytä varmenne</translation>
 <translation id="8289355894181816810">Jos et ole varma tämän tarkoituksesta, ole yhteydessä verkkosi ylläpitoon.</translation>
@@ -223,9 +257,11 @@ Pyri tavoittamaan järjestelmäsi ylläpito.</translation>
 <translation id="9062620674789239642">Se on voitu siirtää tai poistaa tai sitä on muutettu.</translation>
 <translation id="9069693763241529744">Laajennuksen estämä</translation>
 <translation id="9073799351042754113">Olet poistanut tietoturvavaroitukset käytöstä tällä sivustolla.</translation>
+<translation id="9118360612142967597">Ihmisten toiminnan vakoilu ja heidän profiloimisensa on väärin. Siksi olemme Vivaldi-selaimessa kahdella eri tapaa varmistaneet, että Google Topics on poissa käytöstä.</translation>
 <translation id="9168814207360376865">Salli sivustojen tarkastaa, oletko tallentanut maksutapoja</translation>
 <translation id="9169664750068251925">Estä aina tällä sivustolla</translation>
-<translation id="9183425211371246419"><ph name="HOST_NAME" /> käyttää protokollaa, jota ei tueta.</translation>
+<translation id="9183425211371246419"><ph name="HOST_NAME" /> käyttää yhteyskäytäntöä, jota ei tueta.</translation>
+<translation id="9188210215803842004">Sivusto- ja jäljitystiedot</translation>
 <translation id="936602727769022409">Saatat menettää pääsyn Google-tiliisi. Chromium suosittelee vaihtamaan salasanan nyt. Sinua pyydetään kirjautumaan sisään.</translation>
 <translation id="969892804517981540">Virallinen koontiversio</translation>
 <translation id="984275831282074731">Maksutavat</translation>

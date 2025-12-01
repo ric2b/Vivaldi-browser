@@ -24,6 +24,7 @@
  * Ut Video encoder
  */
 
+#include "libavutil/avassert.h"
 #include "libavutil/imgutils.h"
 #include "libavutil/intreadwrite.h"
 #include "libavutil/mem.h"
@@ -143,9 +144,7 @@ static av_cold int utvideo_encode_init(AVCodecContext *avctx)
         original_format  = UTVIDEO_444;
         break;
     default:
-        av_log(avctx, AV_LOG_ERROR, "Unknown pixel format: %d\n",
-               avctx->pix_fmt);
-        return AVERROR_INVALIDDATA;
+        av_unreachable("Already checked via CODEC_PIXFMTS");
     }
 
     ff_bswapdsp_init(&c->bdsp);
@@ -153,7 +152,7 @@ static av_cold int utvideo_encode_init(AVCodecContext *avctx)
 
     if (c->frame_pred == PRED_GRADIENT) {
         av_log(avctx, AV_LOG_ERROR, "Gradient prediction is not supported.\n");
-        return AVERROR_OPTION_NOT_FOUND;
+        return AVERROR_PATCHWELCOME;
     }
 
     /*
@@ -646,7 +645,6 @@ static const AVOption options[] = {
 { "pred", "Prediction method", OFFSET(frame_pred), AV_OPT_TYPE_INT, { .i64 = PRED_LEFT }, PRED_NONE, PRED_MEDIAN, VE, .unit = "pred" },
     { "none",     NULL, 0, AV_OPT_TYPE_CONST, { .i64 = PRED_NONE }, INT_MIN, INT_MAX, VE, .unit = "pred" },
     { "left",     NULL, 0, AV_OPT_TYPE_CONST, { .i64 = PRED_LEFT }, INT_MIN, INT_MAX, VE, .unit = "pred" },
-    { "gradient", NULL, 0, AV_OPT_TYPE_CONST, { .i64 = PRED_GRADIENT }, INT_MIN, INT_MAX, VE, .unit = "pred" },
     { "median",   NULL, 0, AV_OPT_TYPE_CONST, { .i64 = PRED_MEDIAN }, INT_MIN, INT_MAX, VE, .unit = "pred" },
 
     { NULL},

@@ -4,11 +4,12 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-fc-fontations-bindgen = { path = "./fc-fontations-bindgen" }
+fontconfig-bindings = { path = "./fc-fontations/fontconfig-bindings" }
+fcint-bindings = { path = "./fc-fontations/fcint-bindings"}
 libc = "0.2.150"
-read-fonts = { version = "0.28", features = [ "experimental_traverse" ]}
-font-types = { version = "0.8", features = ["bytemuck"]}
-skrifa = "0.30"
+read-fonts = { version = "0.29", features = [ "experimental_traverse" ]}
+font-types = { version = "0.9", features = ["bytemuck"]}
+skrifa = "0.31.3"
 bytemuck = { version = "1.19.0" , features = [ 'derive', 'min_const_generics'] }
 bytemuck_derive = "1"
 

@@ -8,7 +8,6 @@
 #include "browser/menus/vivaldi_pwa_menu_controller.h"
 
 #include "base/strings/utf_string_conversions.h"
-#include "browser/vivaldi_runtime_feature.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"

@@ -94,8 +94,8 @@ export const formatAsJSLiteral = (content: string): string => {
  * understands the %m$d notation to select the m-th parameter for this substitution,
  * as well as the optional precision for %s, %f, and %d.
  *
- * @param fmt format string.
- * @param args parameters to the format string.
+ * @param fmt - format string.
+ * @param args - parameters to the format string.
  * @returns the formatted output string.
  */
 export const sprintf = (fmt: string, ...args: unknown[]): string => {
@@ -258,8 +258,8 @@ const EXTENDED_KEBAB_CASE_REGEXP = /^([a-z0-9]+(?:-[a-z0-9]+)*\.)*[a-z0-9]+(?:-[
  * For example, it will yield `true` for `'my.amazing-string.literal'`, but `false`
  * for `'Another.AmazingLiteral'` or '`another_amazing_literal'`.
  *
- * @param inputStr the input string to test.
- * @return `true` if the `inputStr` follows the extended Kebab Case convention.
+ * @param inputStr - the input string to test.
+ * @returns `true` if the `inputStr` follows the extended Kebab Case convention.
  */
 export const isExtendedKebabCase = (inputStr: string): boolean => {
   return EXTENDED_KEBAB_CASE_REGEXP.test(inputStr);
@@ -517,15 +517,9 @@ export const toKebabCase = function(input: string): Lowercase<string> {
       Lowercase<string>;
 };
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-export function toKebabCaseKeys(settingValue: Record<string, any>): Record<string, any> {
-  const result: Record<string, any> = {};
-  for (const [key, value] of Object.entries(settingValue)) {
-    result[toKebabCase(key)] = value;
-  }
-  return result;
+export function toKebabCaseKeys<T>(settingValue: Record<string, T>): Record<string, T> {
+  return Object.fromEntries(Object.entries(settingValue).map(([key, value]) => [toKebabCase(key), value]));
 }
-/* eslint-enable @typescript-eslint/no-explicit-any */
 
 // Replaces the last ocurrence of parameter `search` with parameter `replacement` in `input`
 export const replaceLast = function(input: string, search: string, replacement: string): string {

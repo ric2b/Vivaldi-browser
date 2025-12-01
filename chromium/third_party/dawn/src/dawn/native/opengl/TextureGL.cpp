@@ -125,6 +125,16 @@ bool RequiresCreatingNewTextureView(
         return true;
     }
 
+    // TODO(414312052): Use TextureViewBase::UsesNonDefaultSwizzle() instead of
+    // textureViewDescriptor.
+    if (auto* swizzleDesc = textureViewDescriptor.Get<TextureComponentSwizzleDescriptor>()) {
+        auto swizzle = swizzleDesc->swizzle.WithTrivialFrontendDefaults();
+        if (swizzle.r != wgpu::ComponentSwizzle::R || swizzle.g != wgpu::ComponentSwizzle::G ||
+            swizzle.b != wgpu::ComponentSwizzle::B || swizzle.a != wgpu::ComponentSwizzle::A) {
+            return true;
+        }
+    }
+
     return false;
 }
 
@@ -558,7 +568,7 @@ MaybeError Texture::ClearTexture(const SubresourceRange& range,
             TexelCopyBufferLayout dataLayout;
             dataLayout.offset = 0;
             dataLayout.bytesPerRow = bytesPerRow;
-            dataLayout.rowsPerImage = largestMipSize.height;
+            dataLayout.rowsPerImage = largestMipSize.height / blockInfo.height;
 
             Extent3D mipSize = GetMipLevelSingleSubresourcePhysicalSize(level, Aspect::Color);
 

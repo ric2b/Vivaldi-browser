@@ -140,6 +140,9 @@ class Scheduler {
   // loop.
   bool has_been_shutdown_ = false;
 
+  // Prevent reentrancy.
+  bool is_running_ = false;
+
   // Protected by the lock. See the corresponding Add/Get functions above.
   std::vector<base::FilePath> gen_dependencies_;
   std::vector<SourceFile> written_files_;

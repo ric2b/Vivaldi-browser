@@ -15,12 +15,11 @@
  * along with @eyeo/snippets.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import $ from "../$.js";
-import {apply, caller, proxy} from "proxy-pants/function";
+import {caller} from "proxy-pants/function";
 import {getDebugger} from "../introspection/log.js";
-import {toRegExp} from "../utils/general.js";
-
-let {URL, fetch} = $(window);
+import {profile} from "../introspection/profile.js";
+import {formatArguments, toRegExp} from "../utils/general.js";
+import {addPreFetchCallback} from "../utils/fetchManipulation.js";
 
 // purposely a trap for the native URLSearchParams.prototype
 let {delete: deleteParam, has: hasParam} = caller(URLSearchParams.prototype);
@@ -37,26 +36,32 @@ let parameters;
  * @since Adblock Plus 3.5.1
  */
 export function stripFetchQueryParameter(name, urlPattern = null) {
+  const formattedArgs = formatArguments(arguments);
   const debugLog = getDebugger("strip-fetch-query-parameter");
-  // override the `window.fetch` only once
-  if (!parameters) {
-    parameters = new Map();
-    window.fetch = proxy(fetch, (...args) => {
-      let [source] = args;
-      if (typeof source === "string") {
-        let url = new URL(source);
-        for (let [key, reg] of parameters) {
-          if (!reg || reg.test(source)) {
-            if (hasParam(url.searchParams, key)) {
-              debugLog("success", `${key} has been stripped from url ${source}`);
-              deleteParam(url.searchParams, key);
-              args[0] = url.href;
-            }
-          }
+  const {mark, end} = profile("strip-fetch-query-parameter");
+
+  const stripFunction = url => {
+    mark();
+    for (let [key, value] of parameters.entries()) {
+      const {reg, args} = value;
+      if (!reg || reg.test(url)) {
+        if (hasParam(url.searchParams, key)) {
+          debugLog("success", `${key} has been stripped from url ${url}`, `\nFILTER: strip-fetch-query-parameter ${args}`);
+          deleteParam(url.searchParams, key);
         }
       }
-      return apply(fetch, self, args);
-    });
+    }
+    end();
+  };
+
+  if (!parameters) {
+    parameters = new Map();
+    addPreFetchCallback(stripFunction);
   }
-  parameters.set(name, urlPattern && toRegExp(urlPattern));
+
+  // Store the formatted arguments along with the regexp in the map
+  parameters.set(name,
+                 {reg: urlPattern && toRegExp(urlPattern),
+                  args: formattedArgs});
 }
+

@@ -815,6 +815,7 @@ cc_library(
         ":centipede_lib",
         ":command",
         ":coverage",
+        ":crash_summary",
         ":distill",
         ":environment",
         ":minimize_crash",
@@ -845,8 +846,10 @@ cc_library(
         "@com_google_fuzztest//common:logging",
         "@com_google_fuzztest//common:remote_file",
         "@com_google_fuzztest//common:status_macros",
-        "@com_google_fuzztest//fuzztest:configuration",
-    ],
+        "@com_google_fuzztest//fuzztest/internal:configuration",
+    ] + select({
+        "//conditions:default": [],
+    }),
 )
 
 cc_library(
@@ -878,7 +881,7 @@ cc_library(
         "@com_google_fuzztest//common:logging",
         "@com_google_fuzztest//common:remote_file",
         "@com_google_fuzztest//common:status_macros",
-        "@com_google_fuzztest//fuzztest:configuration",
+        "@com_google_fuzztest//fuzztest/internal:configuration",
     ],
 )
 
@@ -947,7 +950,19 @@ cc_library(
         "@abseil-cpp//absl/types:span",
         "@com_google_fuzztest//common:defs",
         "@com_google_fuzztest//fuzztest:domain_core",
-        "@com_google_fuzztest//fuzztest:table_of_recent_compares",
+        "@com_google_fuzztest//fuzztest/internal:table_of_recent_compares",
+    ],
+)
+
+cc_library(
+    name = "crash_summary",
+    srcs = ["crash_summary.cc"],
+    hdrs = ["crash_summary.h"],
+    deps = [
+        ":util",
+        "@abseil-cpp//absl/strings:str_format",
+        "@abseil-cpp//absl/types:span",
+        "@com_google_fuzztest//common:defs",
     ],
 )
 
@@ -980,6 +995,20 @@ cc_library(
     hdrs = ["runner_flags.h"],
     visibility = PUBLIC_API_VISIBILITY,
     # This has no dependency and only uses string, pair and vector.
+)
+
+cc_library(
+    name = "dispatcher",
+    srcs = ["dispatcher.cc"],
+    hdrs = ["dispatcher.h"],
+    deps = [
+        ":execution_metadata",
+        ":runner_request",
+        ":runner_result",
+        ":shared_memory_blob_sequence",
+        "@abseil-cpp//absl/base:nullability",
+        "@com_google_fuzztest//common:defs",
+    ],
 )
 
 # The runner library is special:
@@ -1252,7 +1281,7 @@ cc_test(
         ":environment",
         "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/time",
-        "@com_google_fuzztest//fuzztest:configuration",
+        "@com_google_fuzztest//fuzztest/internal:configuration",
         "@googletest//:gtest_main",
     ],
 )
@@ -1822,6 +1851,16 @@ cc_test(
     deps = [
         ":int_utils",
         "@abseil-cpp//absl/container:flat_hash_set",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "crash_summary_test",
+    srcs = ["crash_summary_test.cc"],
+    deps = [
+        ":crash_summary",
+        "@abseil-cpp//absl/log:check",
         "@googletest//:gtest_main",
     ],
 )

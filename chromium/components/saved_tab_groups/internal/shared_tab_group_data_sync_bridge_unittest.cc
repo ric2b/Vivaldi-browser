@@ -15,6 +15,7 @@
 #include "base/rand_util.h"
 #include "base/run_loop.h"
 #include "base/scoped_observation.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/test/bind.h"
 #include "base/test/protobuf_matchers.h"
 #include "base/test/task_environment.h"
@@ -666,9 +667,9 @@ TEST_F(SharedTabGroupDataSyncBridgeTest, ShouldAddRemoteGroupsAtInitialSync) {
       mock_model_observer(),
       OnSyncBridgeUpdateTypeChanged(Eq(SyncBridgeUpdateType::kInitialMerge)))
       .InSequence(s);
-  EXPECT_CALL(
-      mock_model_observer(),
-      OnSyncBridgeUpdateTypeChanged(Eq(SyncBridgeUpdateType::kDefaultState)))
+  EXPECT_CALL(mock_model_observer(),
+              OnSyncBridgeUpdateTypeChanged(
+                  Eq(SyncBridgeUpdateType::kCompletedInitialMergeThisSession)))
       .InSequence(s);
   bridge()->MergeFullSyncData(bridge()->CreateMetadataChangeList(),
                               std::move(change_list));
@@ -997,9 +998,9 @@ TEST_F(SharedTabGroupDataSyncBridgeTest, ShouldNotifyObserversOnDisableSync) {
       .InSequence(s);
   EXPECT_CALL(mock_model_observer(), SavedTabGroupRemovedFromSync)
       .InSequence(s);
-  EXPECT_CALL(
-      mock_model_observer(),
-      OnSyncBridgeUpdateTypeChanged(Eq(SyncBridgeUpdateType::kDefaultState)))
+  EXPECT_CALL(mock_model_observer(),
+              OnSyncBridgeUpdateTypeChanged(
+                  Eq(SyncBridgeUpdateType::kCompletedDisableSyncThisSession)))
       .InSequence(s);
   bridge()->ApplyDisableSyncChanges(bridge()->CreateMetadataChangeList());
 }

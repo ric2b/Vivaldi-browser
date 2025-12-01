@@ -45,4 +45,7 @@ static_library("menus") {
     "//components/renderer_context_menu",
     "//components/sync/protocol",
   ]
+  configs += [
+     "//vivaldi/gn/config:release_kind"
+  ]
 }

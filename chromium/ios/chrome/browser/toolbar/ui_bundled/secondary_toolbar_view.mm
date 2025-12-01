@@ -30,6 +30,8 @@ using vivaldi::IsVivaldiRunning;
 namespace {
 const CGFloat kToolsMenuOffset = -7;
 
+const CGFloat kDiamondLocationBarStackViewMargin = 8;
+
 // Button shown when the view is collapsed to exit fullscreen.
 UIButton* SecondaryToolbarCollapsedToolbarButton() {
   UIButton* collapsedToolbarButton = [[UIButton alloc] init];
@@ -78,6 +80,8 @@ UIView* SecondaryToolbarLocationBarContainerView(
 @property(nonatomic, strong, readwrite) ToolbarButton* forwardButton;
 // Button to display the tools menu, redefined as readwrite.
 @property(nonatomic, strong, readwrite) ToolbarButton* toolsMenuButton;
+// Button for diamond prototype, redefined as readwrite.
+@property(nonatomic, strong, readwrite) ToolbarButton* diamondPrototypeButton;
 // Button to display the tab grid, redefined as readwrite.
 @property(nonatomic, strong, readwrite) ToolbarTabGridButton* tabGridButton;
 // Button to create a new tab, redefined as readwrite.
@@ -122,6 +126,13 @@ UIView* SecondaryToolbarLocationBarContainerView(
   UIVisualEffectView* _visualEffectView;
   // Content view to hold the main toolbar content above the visual effect view.
   UIView* _contentView;
+
+  // Stack view for the location bar in Diamond.
+  UIStackView* _diamondLocationBarStackView;
+
+  // TODO(crbug.com/429955447): Remove when diamond prototype is cleaned.
+  NSArray<NSLayoutConstraint*>* _diamondToolbarTopConstraints;
+  NSArray<NSLayoutConstraint*>* _diamondToolbarBottomConstraints;
 }
 
 @synthesize allButtons = _allButtons;
@@ -191,6 +202,17 @@ UIView* SecondaryToolbarLocationBarContainerView(
   if (IsBottomOmniboxAvailable() && newSuperview) {
     _locationBarKeyboardConstraint.active = NO;
 
+#if defined(VIVALDI_BUILD)
+    // Note(prio@vivaldi.com)
+    // Pin location bar bottom to the keyboard top anchor to consistently have
+    // location bar above keyboard. In contrast chromium pins location bar top
+    // to keyboard top which means location bar can be hidden behind keyboard.
+    // For Vivaldi, add `kBottomAdaptiveLocationBarBottomMargin` to have spacing
+    // between keyboard and location bar/address bar.
+    _locationBarKeyboardConstraint = [newSuperview.keyboardLayoutGuide.topAnchor
+        constraintEqualToAnchor:self.locationBarContainer.bottomAnchor
+                       constant:kBottomAdaptiveLocationBarBottomMargin];
+#else
     // UIKeyboardLayoutGuide is updated sooner in superview's
     // keyboardLayoutGuide rendering smoother animation. Constraint is
     // updated
@@ -198,6 +220,7 @@ UIView* SecondaryToolbarLocationBarContainerView(
     _locationBarKeyboardConstraint = [newSuperview.keyboardLayoutGuide.topAnchor
         constraintGreaterThanOrEqualToAnchor:self.locationBarContainer
                                                  .topAnchor];
+#endif // End Vivaldi
   }
 }
 
@@ -234,67 +257,122 @@ UIView* SecondaryToolbarLocationBarContainerView(
       self.buttonFactory.toolbarConfiguration.backgroundColor;
   } // End Vivaldi
 
+  if (IsDiamondPrototypeEnabled()) {
+    _diamondLocationBarStackView = [[UIStackView alloc] init];
+    _diamondLocationBarStackView.translatesAutoresizingMaskIntoConstraints = NO;
+  }
+
   UIView* contentView = _contentView;
 
-  // Toolbar buttons.
-  self.backButton = [self.buttonFactory backButton];
-  self.forwardButton = [self.buttonFactory forwardButton];
-  self.openNewTabButton = [self.buttonFactory openNewTabButton];
-  self.tabGridButton = [self.buttonFactory tabGridButton];
-  self.toolsMenuButton = [self.buttonFactory toolsMenuButton];
+  if (IsDiamondPrototypeEnabled()) {
+    self.toolsMenuButton = [self.buttonFactory toolsMenuButton];
+    [self.toolsMenuButton updateHiddenInCurrentSizeClass];
+    [self addSubview:self.toolsMenuButton];
 
-  // Vivaldi
-  self.panelButton = [self.buttonFactory panelButton];
-  self.searchButton = [self.buttonFactory vivaldiSearchButton];
-  self.homeButton = [self.buttonFactory vivaldiHomeButton];
-  // End Vivaldi
+    self.diamondPrototypeButton = [self.buttonFactory diamondPrototypeButton];
+    [self.diamondPrototypeButton updateHiddenInCurrentSizeClass];
+    [self addSubview:self.self.diamondPrototypeButton];
 
-  // Move the tools menu button such as it looks visually balanced with the
-  // button on the other side of the toolbar.
-  NSInteger textDirection = base::i18n::IsRTL() ? -1 : 1;
+    self.backButton = [self.buttonFactory backButton];
+    [self.backButton
+        setContentHuggingPriority:UILayoutPriorityRequired
+                          forAxis:UILayoutConstraintAxisHorizontal];
+    [self.backButton updateHiddenInCurrentSizeClass];
+    self.forwardButton = [self.buttonFactory forwardButton];
+    [self.forwardButton
+        setContentHuggingPriority:UILayoutPriorityRequired
+                          forAxis:UILayoutConstraintAxisHorizontal];
+    [self.forwardButton updateHiddenInCurrentSizeClass];
 
-  if (IsVivaldiRunning()) {
-    self.allButtons = @[
-      self.panelButton,
-      self.backButton,
-      self.homeButton,
-      self.openNewTabButton,
-      self.forwardButton,
-      self.tabGridButton
-    ];
+    [_diamondLocationBarStackView addArrangedSubview:self.backButton];
+    [_diamondLocationBarStackView addArrangedSubview:self.forwardButton];
+
+    self.allButtons = @[ self.diamondPrototypeButton, self.toolsMenuButton ];
+
   } else {
-  self.toolsMenuButton.transform =
-      CGAffineTransformMakeTranslation(textDirection * kToolsMenuOffset, 0);
+    // Toolbar buttons.
+    self.backButton = [self.buttonFactory backButton];
+    self.forwardButton = [self.buttonFactory forwardButton];
+    self.openNewTabButton = [self.buttonFactory openNewTabButton];
+    self.tabGridButton = [self.buttonFactory tabGridButton];
+    self.toolsMenuButton = [self.buttonFactory toolsMenuButton];
 
-  self.allButtons = @[
-    self.backButton, self.forwardButton, self.openNewTabButton,
-    self.tabGridButton, self.toolsMenuButton
-  ];
-  } // End Vivaldi
+    // Vivaldi
+    self.panelButton = [self.buttonFactory panelButton];
+    self.searchButton = [self.buttonFactory vivaldiSearchButton];
+    self.homeButton = [self.buttonFactory vivaldiHomeButton];
+    // End Vivaldi
 
-  // Separator.
-  self.separator = [[UIView alloc] init];
-  self.separator.backgroundColor = [UIColor colorNamed:kToolbarShadowColor];
-  self.separator.translatesAutoresizingMaskIntoConstraints = NO;
-  [contentView addSubview:self.separator];
+    // Move the tools menu button such as it looks visually balanced with the
+    // button on the other side of the toolbar.
+    NSInteger textDirection = base::i18n::IsRTL() ? -1 : 1;
+
+    if (IsVivaldiRunning()) {
+      self.allButtons = @[
+        self.panelButton,
+        self.backButton,
+        self.homeButton,
+        self.openNewTabButton,
+        self.forwardButton,
+        self.tabGridButton
+      ];
+    } else { // Vivaldi
+    self.toolsMenuButton.transform =
+        CGAffineTransformMakeTranslation(textDirection * kToolsMenuOffset, 0);
+
+    self.allButtons = @[
+      self.backButton, self.forwardButton, self.openNewTabButton,
+      self.tabGridButton, self.toolsMenuButton
+    ];
+    } // End Vivaldi
+  }
+
+    // Separator.
+    self.separator = [[UIView alloc] init];
+    self.separator.backgroundColor = [UIColor colorNamed:kToolbarShadowColor];
+    self.separator.translatesAutoresizingMaskIntoConstraints = NO;
+    [contentView addSubview:self.separator];
 
   // Button StackView.
-  self.buttonStackView =
-      [[UIStackView alloc] initWithArrangedSubviews:self.allButtons];
+  if (IsDiamondPrototypeEnabled()) {
+    self.buttonStackView = [[UIStackView alloc] init];
+  } else {
+    self.buttonStackView =
+        [[UIStackView alloc] initWithArrangedSubviews:self.allButtons];
+  }
   self.buttonStackView.distribution = UIStackViewDistributionEqualSpacing;
   self.buttonStackView.translatesAutoresizingMaskIntoConstraints = NO;
   [contentView addSubview:self.buttonStackView];
 
   UILayoutGuide* safeArea = self.safeAreaLayoutGuide;
 
+  UIView* locationBarContainer = self.locationBarContainer;
+
   if (IsBottomOmniboxAvailable()) {
     self.collapsedToolbarButton = SecondaryToolbarCollapsedToolbarButton();
     self.locationBarContainer =
         SecondaryToolbarLocationBarContainerView(self.buttonFactory);
+    locationBarContainer = self.locationBarContainer;
+
+    if (IsDiamondPrototypeEnabled()) {
+      [locationBarContainer addSubview:_diamondLocationBarStackView];
+      [NSLayoutConstraint activateConstraints:@[
+        [_diamondLocationBarStackView.leadingAnchor
+            constraintEqualToAnchor:locationBarContainer.leadingAnchor
+                           constant:kDiamondLocationBarStackViewMargin],
+        [_diamondLocationBarStackView.topAnchor
+            constraintEqualToAnchor:locationBarContainer.topAnchor],
+        [_diamondLocationBarStackView.bottomAnchor
+            constraintEqualToAnchor:locationBarContainer.bottomAnchor],
+        [locationBarContainer.trailingAnchor
+            constraintEqualToAnchor:_diamondLocationBarStackView.trailingAnchor
+                           constant:kDiamondLocationBarStackViewMargin],
+      ]];
+    }
 
     // Add locationBarContainer below buttons as it might move under the
     // buttons.
-    [contentView insertSubview:self.locationBarContainer
+    [contentView insertSubview:locationBarContainer
                   belowSubview:self.buttonStackView];
 
     // Put `collapsedToolbarButton` on top of everything.
@@ -309,21 +387,26 @@ UIView* SecondaryToolbarLocationBarContainerView(
     [_progressBar.heightAnchor constraintEqualToConstant:kProgressBarHeight]
         .active = YES;
     [contentView addSubview:_progressBar];
-    AddSameConstraintsToSides(
-        self, _progressBar,
-        LayoutSides::kTop | LayoutSides::kLeading | LayoutSides::kTrailing);
+    if (IsDiamondPrototypeEnabled()) {
+      AddSameConstraintsToSides(self, _progressBar,
+                                LayoutSides::kLeading | LayoutSides::kTrailing);
+    } else {
+      AddSameConstraintsToSides(
+          self, _progressBar,
+          LayoutSides::kTop | LayoutSides::kLeading | LayoutSides::kTrailing);
+    }
 
     // LocationBarView constraints.
     if (self.locationBarView) {
-      AddSameConstraints(self.locationBarView, self.locationBarContainer);
+      AddSameConstraints(self.locationBarView, locationBarContainer);
     }
 
     // Height of location bar, constant controlled by view controller.
     self.locationBarContainerHeight =
-        [self.locationBarContainer.heightAnchor constraintEqualToConstant:0];
+        [locationBarContainer.heightAnchor constraintEqualToConstant:0];
     // Top margin of location bar, constant controlled by view controller.
-    self.locationBarTopConstraint = [self.locationBarContainer.topAnchor
-        constraintEqualToAnchor:self.topAnchor];
+    self.locationBarTopConstraint =
+        [locationBarContainer.topAnchor constraintEqualToAnchor:self.topAnchor];
 
     if (IsVivaldiRunning()) {
       self.buttonStackView.backgroundColor = UIColor.clearColor;
@@ -336,9 +419,24 @@ UIView* SecondaryToolbarLocationBarContainerView(
                          constant:vBottomButtonsTopMargin];
     } else {
     _locationBarBottomConstraint = [self.buttonStackView.topAnchor
-        constraintEqualToAnchor:self.locationBarContainer.bottomAnchor
+        constraintEqualToAnchor:locationBarContainer.bottomAnchor
                        constant:kBottomAdaptiveLocationBarBottomMargin];
 
+    if (IsDiamondPrototypeEnabled()) {
+      _diamondToolbarTopConstraints = @[
+        [_progressBar.bottomAnchor constraintEqualToAnchor:self.bottomAnchor],
+        [self.separator.topAnchor constraintEqualToAnchor:self.bottomAnchor],
+        [self.buttonStackView.centerYAnchor
+            constraintEqualToAnchor:self.locationBarContainer.centerYAnchor],
+      ];
+      _diamondToolbarBottomConstraints = @[
+        [_progressBar.topAnchor constraintEqualToAnchor:self.topAnchor],
+        [self.separator.bottomAnchor constraintEqualToAnchor:self.topAnchor],
+        [self.buttonStackView.centerYAnchor
+            constraintEqualToAnchor:self.locationBarContainer.centerYAnchor],
+      ];
+      [self setUsedAsPrimaryToolbar:self.usedAsPrimaryToolbar];
+    }
     _buttonStackViewNoOmniboxConstraint = [self.buttonStackView.topAnchor
         constraintEqualToAnchor:self.topAnchor
                        constant:kBottomButtonsTopMargin];
@@ -356,33 +454,59 @@ UIView* SecondaryToolbarLocationBarContainerView(
     AddSameConstraintsToSides(self, self.bottomSeparator,
                               LayoutSides::kLeading | LayoutSides::kTrailing);
 
-    if (IsVivaldiRunning()) {
+    if (IsDiamondPrototypeEnabled()) {
       [NSLayoutConstraint activateConstraints:@[
-        self.locationBarTopConstraint,
-        self.locationBarContainerHeight,
-        [self.locationBarContainer.leadingAnchor
-            constraintEqualToAnchor:safeArea.leadingAnchor],
-        [self.locationBarContainer.trailingAnchor
-            constraintEqualToAnchor:safeArea.trailingAnchor],
-        [self.buttonStackView.topAnchor
-            constraintGreaterThanOrEqualToAnchor:self.topAnchor
-                                        constant:kBottomButtonsTopMargin],
-        [self.bottomSeparator.heightAnchor
-            constraintEqualToConstant:ui::AlignValueToUpperPixel(
-                                          kToolbarSeparatorHeight)],
-        [self.bottomSeparator.bottomAnchor
-            constraintEqualToAnchor:self.locationBarContainer.bottomAnchor],
+        [self.diamondPrototypeButton.leadingAnchor
+            constraintEqualToAnchor:safeArea.leadingAnchor
+                           constant:kExpandedLocationBarHorizontalMargin],
+        [self.diamondPrototypeButton.centerYAnchor
+            constraintEqualToAnchor:locationBarContainer.centerYAnchor],
+        [self.diamondPrototypeButton.trailingAnchor
+            constraintEqualToAnchor:locationBarContainer.leadingAnchor
+                           constant:-kExpandedLocationBarHorizontalMargin],
+        [self.toolsMenuButton.trailingAnchor
+            constraintEqualToAnchor:safeArea.trailingAnchor
+                           constant:-kExpandedLocationBarHorizontalMargin],
+        [self.toolsMenuButton.centerYAnchor
+            constraintEqualToAnchor:locationBarContainer.centerYAnchor],
+        [locationBarContainer.trailingAnchor
+            constraintEqualToAnchor:self.toolsMenuButton.leadingAnchor
+                           constant:-kExpandedLocationBarHorizontalMargin],
       ]];
+
     } else {
+      if (IsVivaldiRunning()) {
+        [NSLayoutConstraint activateConstraints:@[
+          self.locationBarTopConstraint,
+          self.locationBarContainerHeight,
+          [self.locationBarContainer.leadingAnchor
+              constraintEqualToAnchor:safeArea.leadingAnchor],
+          [self.locationBarContainer.trailingAnchor
+              constraintEqualToAnchor:safeArea.trailingAnchor],
+          [self.buttonStackView.topAnchor
+              constraintGreaterThanOrEqualToAnchor:self.topAnchor
+                                          constant:kBottomButtonsTopMargin],
+          [self.bottomSeparator.heightAnchor
+              constraintEqualToConstant:ui::AlignValueToUpperPixel(
+                                            kToolbarSeparatorHeight)],
+          [self.bottomSeparator.bottomAnchor
+              constraintEqualToAnchor:self.locationBarContainer.bottomAnchor],
+        ]];
+      } else { // Vivaldi
+      [NSLayoutConstraint activateConstraints:@[
+        [locationBarContainer.leadingAnchor
+            constraintEqualToAnchor:safeArea.leadingAnchor
+                           constant:kExpandedLocationBarHorizontalMargin],
+        [locationBarContainer.trailingAnchor
+            constraintEqualToAnchor:safeArea.trailingAnchor
+                           constant:-kExpandedLocationBarHorizontalMargin],
+      ]];
+      } // End Vivaldi
+    }
+    if (!IsVivaldiRunning()) {
     [NSLayoutConstraint activateConstraints:@[
       self.locationBarTopConstraint,
       self.locationBarContainerHeight,
-      [self.locationBarContainer.leadingAnchor
-          constraintEqualToAnchor:safeArea.leadingAnchor
-                         constant:kExpandedLocationBarHorizontalMargin],
-      [self.locationBarContainer.trailingAnchor
-          constraintEqualToAnchor:safeArea.trailingAnchor
-                         constant:-kExpandedLocationBarHorizontalMargin],
       [self.buttonStackView.topAnchor
           constraintGreaterThanOrEqualToAnchor:self.topAnchor
                                       constant:kBottomButtonsTopMargin],
@@ -390,7 +514,7 @@ UIView* SecondaryToolbarLocationBarContainerView(
           constraintEqualToConstant:ui::AlignValueToUpperPixel(
                                         kToolbarSeparatorHeight)],
       [self.bottomSeparator.bottomAnchor
-          constraintEqualToAnchor:self.locationBarContainer.bottomAnchor],
+          constraintEqualToAnchor:locationBarContainer.bottomAnchor],
     ]];
     } // End Vivaldi
 
@@ -426,16 +550,46 @@ UIView* SecondaryToolbarLocationBarContainerView(
     [self.buttonStackView.trailingAnchor
         constraintEqualToAnchor:safeArea.trailingAnchor
                        constant:-kAdaptiveToolbarMargin],
+  ]];
 
+  [NSLayoutConstraint activateConstraints:@[
     [self.separator.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
     [self.separator.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
-    [self.separator.bottomAnchor constraintEqualToAnchor:self.topAnchor],
     [self.separator.heightAnchor
         constraintEqualToConstant:ui::AlignValueToUpperPixel(
                                       kToolbarSeparatorHeight)],
   ]];
+  if (!IsDiamondPrototypeEnabled()) {
+    [NSLayoutConstraint activateConstraints:@[
+      [self.separator.bottomAnchor constraintEqualToAnchor:self.topAnchor],
+    ]];
+  }
   } // End Vivaldi
 
+}
+
+#pragma mark - Setters
+
+// TODO(crbug.com/429955447): Remove when diamond prototype is cleaned.
+- (void)setUsedAsPrimaryToolbar:(BOOL)usedAsPrimaryToolbar {
+  CHECK(IsDiamondPrototypeEnabled());
+  _usedAsPrimaryToolbar = usedAsPrimaryToolbar;
+  CGFloat constraintConstant = self.locationBarTopConstraint.constant;
+  self.locationBarTopConstraint.active = NO;
+  if (usedAsPrimaryToolbar) {
+    self.locationBarTopConstraint = [self.bottomAnchor
+        constraintEqualToAnchor:self.locationBarContainer.bottomAnchor
+                       constant:constraintConstant];
+    [NSLayoutConstraint deactivateConstraints:_diamondToolbarBottomConstraints];
+    [NSLayoutConstraint activateConstraints:_diamondToolbarTopConstraints];
+  } else {
+    self.locationBarTopConstraint = [self.locationBarContainer.topAnchor
+        constraintEqualToAnchor:self.topAnchor
+                       constant:constraintConstant];
+    [NSLayoutConstraint deactivateConstraints:_diamondToolbarTopConstraints];
+    [NSLayoutConstraint activateConstraints:_diamondToolbarBottomConstraints];
+  }
+  self.locationBarTopConstraint.active = YES;
 }
 
 #pragma mark - AdaptiveToolbarView
@@ -471,8 +625,14 @@ UIView* SecondaryToolbarLocationBarContainerView(
     return;
   }
 
-  [self.locationBarContainer addSubview:locationBarView];
-  AddSameConstraints(self.locationBarView, self.locationBarContainer);
+  if (IsDiamondPrototypeEnabled()) {
+    // Insert between the two back/foward buttons.
+    [_diamondLocationBarStackView insertArrangedSubview:locationBarView
+                                                atIndex:1];
+  } else {
+    [self.locationBarContainer addSubview:locationBarView];
+    AddSameConstraints(self.locationBarView, self.locationBarContainer);
+  }
 }
 
 - (void)updateTabGroupState:(ToolbarTabGroupState)tabGroupState {
@@ -491,6 +651,10 @@ UIView* SecondaryToolbarLocationBarContainerView(
   // Reset `buttonStackView` top constraints.
   _locationBarBottomConstraint.active = NO;
   _buttonStackViewNoOmniboxConstraint.active = NO;
+
+  if (IsDiamondPrototypeEnabled()) {
+    return;
+  }
 
   // Set the correct constraint for `buttonStackView.topAnchor`.
   if (self.locationBarView) {

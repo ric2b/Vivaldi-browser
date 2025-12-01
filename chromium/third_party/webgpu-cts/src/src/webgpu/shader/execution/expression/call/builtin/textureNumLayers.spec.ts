@@ -212,10 +212,8 @@ Parameters
   .fn(t => {
     const { stage, format, access_mode, view_type } = t.params;
     skipIfNoStorageTexturesInStage(t, stage);
-    t.skipIfTextureFormatNotUsableAsStorageTexture(format);
-    if (access_mode === 'read_write') {
-      t.skipIfTextureFormatNotUsableAsReadWriteStorageTexture(format);
-    }
+    t.skipIfTextureFormatNotSupported(format);
+    t.skipIfTextureFormatNotUsableWithStorageAccessMode(access_mode, format);
 
     const texture = t.createTextureTracked({
       format,

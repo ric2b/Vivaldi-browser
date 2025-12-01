@@ -59,7 +59,7 @@ PresenceZone::DistanceBoundary::RangeType ConvertProximityStateToRangeType(
       return PresenceZone::DistanceBoundary::RangeType::kFar;
     case ProximityState::Unknown:
     default:
-      NEARBY_LOGS(WARNING) << "Proximity state is unknown";
+      LOG(WARNING) << "Proximity state is unknown";
       return PresenceZone::DistanceBoundary::RangeType::kRangeUnknown;
   }
 }
@@ -89,8 +89,8 @@ absl::Status FppManager::UpdateBleScanResult(uint64_t device_id,
   int status_code = update_ble_scan_result(
       presence_detector_handle_, ble_scan_result, &new_proximity_estimate);
   if (status_code == kNoComputedProximityEstimate) {
-    NEARBY_LOGS(INFO) << "Insufficient number of scan results available to "
-                         "compute proximity state";
+    LOG(INFO) << "Insufficient number of scan results available to "
+                 "compute proximity state";
     return absl::OkStatus();
   }
   if (status_code == kSuccess) {
@@ -99,7 +99,7 @@ absl::Status FppManager::UpdateBleScanResult(uint64_t device_id,
                              new_proximity_estimate);
     return absl::OkStatus();
   }
-  NEARBY_LOGS(WARNING)
+  LOG(WARNING)
       << "Could not successfully update FPP with new scan result: Error code="
       << status_code;
   return absl::InternalError(GetStatusStringFromCode(status_code));
@@ -142,9 +142,8 @@ void FppManager::CheckPresenceZoneChanged(uint64_t device_id,
                                           ProximityEstimate old_estimate,
                                           ProximityEstimate new_estimate) {
   if (old_estimate.proximity_state != new_estimate.proximity_state) {
-    NEARBY_LOGS(WARNING)
-        << "Updating zone transition callbacks with new zone. Zone="
-        << static_cast<int>(new_estimate.proximity_state);
+    LOG(WARNING) << "Updating zone transition callbacks with new zone. Zone="
+                 << static_cast<int>(new_estimate.proximity_state);
     for (auto& pair : zone_transition_callbacks_) {
       pair.second.on_proximity_zone_changed(
           device_id,
@@ -160,7 +159,7 @@ std::string FppManager::GetStatusStringFromCode(int status_code) {
     case kNullOutputParameterError:
       return "NULL_OUTPUT_PARAMETER";
     default:
-      NEARBY_LOGS(WARNING) << "Error code is unknown";
+      LOG(WARNING) << "Error code is unknown";
       return "UNKNOWN_ERROR";
   }
 }

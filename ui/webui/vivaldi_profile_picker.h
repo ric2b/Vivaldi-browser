@@ -11,6 +11,7 @@
 extern const char* kVivaldiUIVivaldiProfilePickerUI;
 
 class VivaldiProfilePickerUI;
+class Profile;
 
 class VivaldiProfilePickerUIConfig
     : public content::DefaultWebUIConfig<VivaldiProfilePickerUI> {
@@ -24,6 +25,9 @@ class VivaldiProfilePickerUIConfig
 class VivaldiProfilePickerUI : public content::WebUIController {
 public:
   explicit VivaldiProfilePickerUI(content::WebUI* web_ui);
+
+private:
+  raw_ptr<Profile> profile_;
 };
 
 #endif // UI_PROFILE_PICKER_VIVALDI_PROFILE_PICKER_H_

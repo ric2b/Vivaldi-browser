@@ -32,21 +32,21 @@ if (is_mac) {
     ]
   }
 
-  update_target("//chrome:chrome_resources") {
-    sources -= [
-      "app/theme/$branding_path_component/mac/document.icns",
-    ]
-    sources += [
-      "//vivaldi/app/resources/theme/$VIVALDI_RELEASE_KIND/mac/document.icns",
-    ]
-  }
-
   update_target("//chrome:chrome_framework_resources") {
     sources -= [
       "app/theme/default_100_percent/$branding_path_component/product_logo_32.png",
     ]
     sources += [
       "//vivaldi/app/resources/theme/default_100_percent/$VIVALDI_RELEASE_KIND/product_logo_32.png",
+    ]
+  }
+
+  update_target("//chrome:chrome_asset_catalog") {
+    sources -= [
+      "app/theme/$branding_path_component/mac/Assets.car",
+    ]
+    sources += [
+      "//vivaldi/app/resources/theme/$VIVALDI_RELEASE_KIND/mac/Assets.car"
     ]
   }
 }

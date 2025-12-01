@@ -48,6 +48,7 @@
 #include "ui/views/bubble/bubble_border.h"
 #include "ui/views/controls/webview/webview.h"
 #include "ui/views/layout/fill_layout.h"
+#include "ui/views/view_class_properties.h"
 #include "ui/views/widget/widget.h"
 
 namespace {
@@ -196,6 +197,9 @@ void RecordDismissReason(
 
 }  // namespace
 
+DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(DiceWebSigninInterceptionBubbleView,
+                                      kDiceWebSigninInterceptionBubble);
+
 DiceWebSigninInterceptionBubbleView::~DiceWebSigninInterceptionBubbleView() {
   // Cancel if the bubble is destroyed without user interaction.
   if (callback_) {
@@ -261,6 +265,24 @@ bool DiceWebSigninInterceptionBubbleView::GetAccepted() const {
   return accepted_;
 }
 
+void DiceWebSigninInterceptionBubbleView::OnPrimaryAccountChanged(
+    const signin::PrimaryAccountChangeEvent& event_details) {
+  // The user is signed in to Chrome, the signin bubble is not needed anymore.
+  if (IsChromeSignin() &&
+      event_details.GetEventTypeFor(signin::ConsentLevel::kSignin) ==
+          signin::PrimaryAccountChangeEvent::Type::kSet) {
+    Dismiss(SigninInterceptionDismissReason::kUserNotEligible);
+  }
+}
+
+void DiceWebSigninInterceptionBubbleView::OnExtendedAccountInfoRemoved(
+    const AccountInfo& info) {
+  // The account has been removed from Chrome, the bubble is not needed anymore.
+  if (info.account_id == bubble_parameters_.intercepted_account.account_id) {
+    Dismiss(SigninInterceptionDismissReason::kUserNotEligible);
+  }
+}
+
 content::WebContents* DiceWebSigninInterceptionBubbleView::AddNewContents(
     content::WebContents* source,
     std::unique_ptr<content::WebContents> new_contents,
@@ -303,6 +325,8 @@ DiceWebSigninInterceptionBubbleView::DiceWebSigninInterceptionBubbleView(
   web_view->SetPreferredSize(
       gfx::Size(GetBubbleFixedWidthForInterceptionType(IsChromeSignin()),
                 kInterceptionBubbleBaseHeight));
+  web_view->SetProperty(views::kElementIdentifierKey,
+                        kDiceWebSigninInterceptionBubble);
   DiceWebSigninInterceptUI* web_ui = web_view->GetWebContents()
                                          ->GetWebUI()
                                          ->GetController()
@@ -323,6 +347,9 @@ DiceWebSigninInterceptionBubbleView::DiceWebSigninInterceptionBubbleView(
   set_margins(gfx::Insets());
   SetButtons(static_cast<int>(ui::mojom::DialogButton::kNone));
   SetLayoutManager(std::make_unique<views::FillLayout>());
+
+  identity_manager_observation_.Observe(
+      IdentityManagerFactory::GetForProfile(profile_));
 }
 
 void DiceWebSigninInterceptionBubbleView::SetHeightAndShowWidget(int height) {
@@ -376,7 +403,12 @@ void DiceWebSigninInterceptionBubbleView::OnInterceptionResult(
     SigninInterceptionResult result) {
   accepted_ = result == SigninInterceptionResult::kAccepted;
 
-  if (IsChromeSignin()) {
+  // `chrome_signin_bubble_shown_time_` is set asynchronously (triggered by the
+  // WebUI side). If the bubble is dismissed before it is fully initialized,
+  // don't record the interception result. This is a rare case, but can happen
+  // due to subtle race conditions, e.g. when the account is removed before
+  // the bubble is fully initialized.
+  if (IsChromeSignin() && !chrome_signin_bubble_shown_time_.is_null()) {
     RecordChromeSigninInterceptResult(chrome_signin_bubble_shown_time_, result);
   }
 
@@ -446,13 +478,14 @@ void DiceWebSigninInterceptionBubbleView::ApplyAvatarButtonEffects() {
 
   AvatarToolbarButton* button = GetAvatarToolbarButton(*browser_);
 
-  std::optional<base::RepeatingClosure> explicit_avatar_button_action;
+  std::optional<base::RepeatingCallback<void(bool)>>
+      explicit_avatar_button_action;
   if (base::FeatureList::IsEnabled(
           switches::kInterceptBubblesDismissibleByAvatarButton)) {
-    explicit_avatar_button_action = base::BindRepeating(
+    explicit_avatar_button_action = base::IgnoreArgs<bool>(base::BindRepeating(
         &DiceWebSigninInterceptionBubbleView::Dismiss,
         weak_factory_.GetWeakPtr(),
-        /*reason=*/SigninInterceptionDismissReason::kIdentityPillPressed);
+        /*reason=*/SigninInterceptionDismissReason::kIdentityPillPressed));
   } else if (IsChromeSignin()) {
     button->SetButtonActionDisabled(true);
   }

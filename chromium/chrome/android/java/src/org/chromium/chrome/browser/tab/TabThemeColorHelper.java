@@ -93,7 +93,7 @@ public class TabThemeColorHelper extends EmptyTabObserver {
 
     /** Vivaldi **/
     @Override
-    public void onFaviconUpdated(Tab tab, Bitmap icon, GURL iconUrl) {
+    public void onFaviconUpdated(Tab tab, @Nullable Bitmap icon, @Nullable GURL iconUrl) {
         updateIfNeeded(tab, false);
     }
 }

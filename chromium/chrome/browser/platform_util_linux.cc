@@ -41,6 +41,9 @@
 #include "dbus/object_proxy.h"
 #include "url/gurl.h"
 
+// Vivaldi: LD_PRELOAD filtering.
+#include "browser/vivaldi_platform_util_linux.h"
+
 using content::BrowserThread;
 
 namespace platform_util {
@@ -317,6 +320,10 @@ void OnLaunchOptionsCreated(const std::string& command,
       disable_gnome_bug_buddy == std::string("SET_BY_GOOGLE_CHROME")) {
     options.environment["GNOME_DISABLE_CRASH_DIALOG"] = std::string();
   }
+
+  // Vivaldi: Filter out the LD_PRELOAD so that client apps don't get ffmpeg
+  // that is incompatible.
+  options.environment["LD_PRELOAD"] = VivaldiFilterLDPreload();
 
   base::Process process = base::LaunchProcess(argv, options);
   if (process.IsValid()) {

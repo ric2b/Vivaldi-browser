@@ -182,7 +182,9 @@ class BDCSVD : public SVDBase<BDCSVD<MatrixType_, Options_> > {
    * \deprecated Will be removed in the next major Eigen version. Options should
    * be specified in the \a Options template parameter.
    */
-  EIGEN_DEPRECATED BDCSVD(const MatrixType& matrix, unsigned int computationOptions) : m_algoswap(16), m_numIters(0) {
+  template <typename Derived>
+  EIGEN_DEPRECATED BDCSVD(const MatrixBase<Derived>& matrix, unsigned int computationOptions)
+      : m_algoswap(16), m_numIters(0) {
     internal::check_svd_options_assertions<MatrixType, Options>(computationOptions, matrix.rows(), matrix.cols());
     compute_impl(matrix, computationOptions);
   }

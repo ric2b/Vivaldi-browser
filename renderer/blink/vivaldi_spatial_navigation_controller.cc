@@ -118,7 +118,7 @@ void VivaldiSpatialNavigationController::FocusedElementChanged(
                                               : GetDocumentFromRenderFrame();
 
   blink::Element* indicator = document->getElementById(
-      WTF::AtomicString(kVivaldiIndicatorId));
+      blink::AtomicString(kVivaldiIndicatorId));
 
   if (!indicator) {
     return;
@@ -162,8 +162,8 @@ void VivaldiSpatialNavigationController::FocusedElementChanged(
 
 void VivaldiSpatialNavigationController::HideIndicator() {
   blink::Document* document = GetDocumentFromRenderFrame();
-  blink::Element* indicator = document->getElementById(
-      WTF::AtomicString(kVivaldiIndicatorId));
+  blink::Element* indicator =
+      document->getElementById(blink::AtomicString(kVivaldiIndicatorId));
   if (!indicator) {
     return;
   }
@@ -265,16 +265,16 @@ void VivaldiSpatialNavigationController::Scroll(
 
   switch (scroll_type) {
     case ScrollType::kUp:
-      scroll_container->scrollBy(0.0, -scroll_amount);
+      scroll_container->scrollBy(nullptr, 0.0, -scroll_amount);
       break;
     case ScrollType::kDown:
-      scroll_container->scrollBy(0.0, scroll_amount);
+      scroll_container->scrollBy(nullptr, 0.0, scroll_amount);
       break;
     case ScrollType::kLeft:
-      scroll_container->scrollBy(-scroll_amount, 0.0);
+      scroll_container->scrollBy(nullptr, -scroll_amount, 0.0);
       break;
     case ScrollType::kRight:
-      scroll_container->scrollBy(scroll_amount, 0.0);
+      scroll_container->scrollBy(nullptr, scroll_amount, 0.0);
       break;
     default:
       break;
@@ -506,7 +506,7 @@ void VivaldiSpatialNavigationController::MoveRect(
   }
 
   blink::Element* indicator = GetDocumentFromRenderFrame()->getElementById(
-      WTF::AtomicString(kVivaldiIndicatorId));
+      blink::AtomicString(kVivaldiIndicatorId));
   if (!indicator) {
     CreateIndicator();
   }
@@ -548,7 +548,7 @@ void VivaldiSpatialNavigationController::CreateIndicator() {
       document->CreateRawElement(blink::html_names::kDivTag);
 
   indicator->setAttribute(blink::html_names::kIdAttr,
-                          WTF::AtomicString(kVivaldiIndicatorId));
+                          blink::AtomicString(kVivaldiIndicatorId));
   GetScrollContainerForCurrentElement()->AppendChild(indicator);
 
   // Set Style directly to avoid injection blocking.

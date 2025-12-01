@@ -1,8 +1,8 @@
 //
 // fragment_main
 //
-RWByteAddressBuffer prevent_dce : register(u0);
 
+RWByteAddressBuffer prevent_dce : register(u0);
 vector<float16_t, 2> subgroupShuffleXor_1e247f() {
   vector<float16_t, 2> arg_0 = (float16_t(1.0h)).xx;
   uint arg_1 = 1u;
@@ -12,13 +12,13 @@ vector<float16_t, 2> subgroupShuffleXor_1e247f() {
 
 void fragment_main() {
   prevent_dce.Store<vector<float16_t, 2> >(0u, subgroupShuffleXor_1e247f());
-  return;
 }
+
 //
 // compute_main
 //
-RWByteAddressBuffer prevent_dce : register(u0);
 
+RWByteAddressBuffer prevent_dce : register(u0);
 vector<float16_t, 2> subgroupShuffleXor_1e247f() {
   vector<float16_t, 2> arg_0 = (float16_t(1.0h)).xx;
   uint arg_1 = 1u;
@@ -29,5 +29,5 @@ vector<float16_t, 2> subgroupShuffleXor_1e247f() {
 [numthreads(1, 1, 1)]
 void compute_main() {
   prevent_dce.Store<vector<float16_t, 2> >(0u, subgroupShuffleXor_1e247f());
-  return;
 }
+

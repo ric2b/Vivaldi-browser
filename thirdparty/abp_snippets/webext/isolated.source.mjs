@@ -98,10 +98,11 @@ const callback = (environment, ...filters) => {
   const worldEnvDefined = "world" in libEnvironment;
   const isIsolatedWorld = worldEnvDefined && libEnvironment.world === "ISOLATED";
   const isMainWorld = worldEnvDefined && libEnvironment.world === "MAIN";
-  const isChrome = typeof chrome === "object" && !!chrome.runtime;
-  const isOtherThanChrome = typeof browser === "object" && !!browser.runtime;
+
+  const chromeObjAvailable = typeof chrome === "object" && !!chrome.runtime;
+  const browserObjAvailable = typeof browser === "object" && !!browser.runtime;
   const isExtensionContext$2 = !isMainWorld &&
-    (isIsolatedWorld || isChrome || isOtherThanChrome);
+    (isIsolatedWorld || chromeObjAvailable || browserObjAvailable);
   const copyIfExtension = value => isExtensionContext$2 ?
     value :
     create(value, getOwnPropertyDescriptors(value));
@@ -117,7 +118,7 @@ const callback = (environment, ...filters) => {
 
   const invokes = bound(globalThis);
   const classes = isExtensionContext$2 ? globalThis : secure(globalThis);
-  const {Map: Map$6, RegExp: RegExp$1, Set, WeakMap: WeakMap$3, WeakSet: WeakSet$a} = classes;
+  const {Map: Map$7, RegExp: RegExp$1, Set: Set$1, WeakMap: WeakMap$4, WeakSet: WeakSet$a} = classes;
 
   const augment = (source, target, method = null) => {
     const known = ownKeys(target);
@@ -153,40 +154,41 @@ const callback = (environment, ...filters) => {
     return Class;
   };
 
-  const variables$1 = freeze({
-    frozen: new WeakMap$3(),
+  const variables$2 = freeze({
+    frozen: new WeakMap$4(),
     hidden: new WeakSet$a(),
     iframePropertiesToAbort: {
-      read: new Set(),
-      write: new Set()
+      read: new Set$1(),
+      write: new Set$1()
     },
-    abortedIframes: new WeakMap$3()
+    abortedIframes: new WeakMap$4()
   });
 
   const startsCapitalized = new RegExp$1("^[A-Z]");
+  const extensionApi = (
+    isExtensionContext$2 && (
+      (chromeObjAvailable && chrome) ||
+      (browserObjAvailable && browser)
+    )
+  ) || void 0;
 
-  var env = new Proxy(new Map$6([
+  var env = new Proxy(new Map$7([
 
-    ["chrome", (
-      isExtensionContext$2 && (
-        (isChrome && chrome) ||
-        (isOtherThanChrome && browser)
-      )
-    ) || void 0],
+    ["chrome", extensionApi],
+    ["browser", extensionApi],
     ["isExtensionContext", isExtensionContext$2],
-    ["variables", variables$1],
+    ["variables", variables$2],
 
     ["console", copyIfExtension(console)],
     ["document", globalThis.document],
-    ["performance", copyIfExtension(performance)],
     ["JSON", copyIfExtension(JSON)],
-    ["Map", Map$6],
+    ["Map", Map$7],
     ["Math", copyIfExtension(Math)],
     ["Number", isExtensionContext$2 ? Number : primitive("Number")],
     ["RegExp", RegExp$1],
-    ["Set", Set],
+    ["Set", Set$1],
     ["String", isExtensionContext$2 ? String : primitive("String")],
-    ["WeakMap", WeakMap$3],
+    ["WeakMap", WeakMap$4],
     ["WeakSet", WeakSet$a],
 
     ["MouseEvent", MouseEvent]
@@ -237,7 +239,7 @@ const callback = (environment, ...filters) => {
     };
   }
 
-  const {Map: Map$5, WeakMap: WeakMap$2, WeakSet: WeakSet$9, setTimeout: setTimeout$3} = env;
+  const {Map: Map$6, WeakMap: WeakMap$3, WeakSet: WeakSet$9, setTimeout: setTimeout$3} = env;
 
   let cleanup = true;
   let cleanUpCallback = map => {
@@ -246,10 +248,10 @@ const callback = (environment, ...filters) => {
   };
 
   var transformer = transformOnce.bind({
-    WeakMap: WeakMap$2,
+    WeakMap: WeakMap$3,
     WeakSet: WeakSet$9,
 
-    WeakValue: class extends Map$5 {
+    WeakValue: class extends Map$6 {
       set(key, value) {
         if (cleanup) {
           cleanup = !cleanup;
@@ -265,11 +267,11 @@ const callback = (environment, ...filters) => {
   const globals = secure(globalThis);
 
   const {
-    Map: Map$4,
-    WeakMap: WeakMap$1
+    Map: Map$5,
+    WeakMap: WeakMap$2
   } = globals;
 
-  const map = new Map$4;
+  const map = new Map$5;
   const descriptors = target => {
     const chain = [];
     let current = target;
@@ -318,16 +320,16 @@ const callback = (environment, ...filters) => {
 
   const {
     isExtensionContext: isExtensionContext$1,
-    Array: Array$2,
+    Array: Array$4,
     Number: Number$1,
     String: String$1,
-    Object: Object$2
+    Object: Object$3
   } = env;
 
-  const {isArray} = Array$2;
-  const {getOwnPropertyDescriptor, setPrototypeOf: setPrototypeOf$1} = Object$2;
+  const {isArray} = Array$4;
+  const {getOwnPropertyDescriptor, setPrototypeOf: setPrototypeOf$1} = Object$3;
 
-  const {toString} = Object$2.prototype;
+  const {toString} = Object$3.prototype;
   const {slice} = String$1.prototype;
   const getBrand = value => call(slice, call(toString, value), 8, -1);
 
@@ -357,7 +359,7 @@ const callback = (environment, ...filters) => {
       return chained[hint](value);
 
     if (isArray(value))
-      return setPrototypeOf$1(value, Array$2.prototype);
+      return setPrototypeOf$1(value, Array$4.prototype);
 
     const brand = getBrand(value);
     if (brand in chained)
@@ -418,12 +420,12 @@ const callback = (environment, ...filters) => {
   let {
     console: console$2,
     document: document$1,
-    getComputedStyle: getComputedStyle$5,
+    getComputedStyle: getComputedStyle$6,
     isExtensionContext,
-    variables,
-    Array: Array$1,
-    MutationObserver: MutationObserver$9,
-    Object: Object$1,
+    variables: variables$1,
+    Array: Array$3,
+    MutationObserver: MutationObserver$a,
+    Object: Object$2,
     XPathEvaluator,
     XPathExpression,
     XPathResult
@@ -608,7 +610,7 @@ const callback = (environment, ...filters) => {
     return $(element).childNodes;
   }
 
-  const {assign, setPrototypeOf} = Object$1;
+  const {assign, setPrototypeOf} = Object$2;
 
   class $XPathExpression extends XPathExpression {
     evaluate(...args) {
@@ -629,12 +631,12 @@ const callback = (environment, ...filters) => {
   }
 
   function hideElement(element) {
-    if (variables.hidden.has(element))
+    if (variables$1.hidden.has(element))
       return false;
 
     notifyElementHidden(element);
 
-    variables.hidden.add(element);
+    variables$1.hidden.add(element);
 
     let {style} = $(element);
     let $style = $(style, "CSSStyleDeclaration");
@@ -646,7 +648,7 @@ const callback = (environment, ...filters) => {
       properties.push([key, $style.getPropertyValue(key)]);
     }
 
-    new MutationObserver$9(() => {
+    new MutationObserver$a(() => {
       for (let [key, value] of properties) {
         let propertyValue = $style.getPropertyValue(key);
         let propertyPriority = $style.getPropertyPriority(key);
@@ -696,7 +698,7 @@ const callback = (environment, ...filters) => {
         return elements;
       };
     }
-    return () => Array$1.from($$(selector));
+    return () => Array$3.from($$(selector));
   }
 
   function hideIfMatches(match, selector, searchSelector, onHideCallback) {
@@ -715,7 +717,7 @@ const callback = (environment, ...filters) => {
       }
     };
     return assign(
-      new MutationObserver$9(callback),
+      new MutationObserver$a(callback),
       {
         race(win) {
           won = win;
@@ -753,12 +755,12 @@ const callback = (environment, ...filters) => {
     }
 
     return isVisible(
-      parent, getComputedStyle$5(parent), closest, shadowRootParents
+      parent, getComputedStyle$6(parent), closest, shadowRootParents
     );
   }
 
   function getComputedCSSText(element) {
-    let style = getComputedStyle$5(element);
+    let style = getComputedStyle$6(element);
     let {cssText} = style;
 
     if (cssText)
@@ -770,7 +772,7 @@ const callback = (environment, ...filters) => {
     return $(cssText).trim();
   }
 
-  let {Math: Math$2, RegExp} = $(window);
+  let {Array: Array$2, Math: Math$5, RegExp} = $(window);
 
   function regexEscape(string) {
     return $(string).replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&");
@@ -794,11 +796,83 @@ const callback = (environment, ...filters) => {
     return new RegExp(regexEscape(pattern));
   }
 
+  function formatArguments(args) {
+    return $(Array$2.from(args)).map(arg => `'${arg}'`).join(" ");
+  }
+
+  function toHex(number, length = 2) {
+    let hex = $(number).toString(16);
+
+    if (hex.length < length)
+      hex = $("0").repeat(length - hex.length) + hex;
+
+    return hex;
+  }
+
+  function uint8ArrayToHex(uint8Array) {
+    return uint8Array.reduce((hex, byte) => hex + toHex(byte), "");
+  }
+
+  let {Math: Math$4, setInterval: setInterval$1, performance} = $(window);
+
+  const noopProfile = {
+    mark() {},
+    end() {},
+    toString() {
+      return "{mark(){},end(){}}";
+    }
+  };
+
+  let inactive = true;
+
+  function setProfile() {
+    inactive = false;
+  }
+
+  function profile(id, rate = 10) {
+    if (inactive)
+      return noopProfile;
+    function processSamples() {
+      let samples = $([]);
+
+      for (let {name, duration} of performance.getEntriesByType("measure"))
+        samples.push({name, duration});
+
+      if (samples.length)
+        performance.clearMeasures();
+    }
+
+    if (!profile[id]) {
+      profile[id] = setInterval$1(processSamples,
+                                Math$4.round(60000 / Math$4.min(60, rate)));
+    }
+
+    return {
+      mark() {
+        performance.mark(id);
+      },
+      end(clear = false) {
+        performance.measure(id, id);
+        const measures = performance.getEntriesByName(id, "measure");
+        const measureObj = measures.length > 0 ?
+                           measures[measures.length - 1] : null;
+        console.log("PROFILER:", measureObj);
+        performance.clearMarks(id);
+        if (clear) {
+          clearInterval(profile[id]);
+          delete profile[id];
+          processSamples();
+        }
+      }
+    };
+  }
+
   const {console: console$1} = $(window);
 
   const noop = () => {};
 
   function log(...args) {
+    let {mark, end} = profile("log");
     if (debug()) {
       const logArgs = ["%c DEBUG", "font-weight: bold;"];
 
@@ -829,14 +903,16 @@ const callback = (environment, ...filters) => {
 
       $(args).unshift(...logArgs);
     }
+    mark();
     console$1.log(...args);
+    end();
   }
 
   function getDebugger(name) {
     return bind(debug() ? log : noop, null, name);
   }
 
-  let {Array, Error: Error$2, Map: Map$3, parseInt: parseInt$2} = $(window);
+  let {Array: Array$1, Error: Error$3, Map: Map$4, parseInt: parseInt$2} = $(window);
 
   let stack = null;
   let won = null;
@@ -846,9 +922,9 @@ const callback = (environment, ...filters) => {
       case "start":
         stack = {
           winners: parseInt$2(winners, 10) || 1,
-          participants: new Map$3()
+          participants: new Map$4()
         };
-        won = new Array();
+        won = new Array$1();
         break;
       case "end":
       case "finish":
@@ -859,7 +935,7 @@ const callback = (environment, ...filters) => {
         won = null;
         break;
       default:
-        throw new Error$2(`Invalid action: ${action}`);
+        throw new Error$3(`Invalid action: ${action}`);
     }
   }
 
@@ -898,14 +974,17 @@ const callback = (environment, ...filters) => {
   }
 
   function hideIfContains(search, selector = "*", searchSelector = null) {
+    const formattedArguments = formatArguments(arguments);
     const debugLog = getDebugger("hide-if-contains");
+    const {mark, end} = profile("hide-if-contains");
     const onHideCallback = node => {
+      mark();
       debugLog("success",
                "Matched: ",
                node,
-               " for selector: ",
-               selector,
-               searchSelector);
+               "\nFILTER: hide-if-contains",
+               formattedArguments);
+      end();
     };
     let re = toRegExp(search);
 
@@ -937,7 +1016,20 @@ const callback = (environment, ...filters) => {
 
   const accessor = target => new $$1(target, handler);
 
-  $(window);
+  let {
+    parseFloat: parseFloat$4,
+    variables,
+    clearTimeout,
+    fetch,
+    setTimeout: setTimeout$2,
+    Array,
+    Error: Error$2,
+    Map: Map$3,
+    Object: Object$1,
+    ReferenceError,
+    Set,
+    WeakMap: WeakMap$1
+  } = $(window);
 
   accessor(window);
 
@@ -1005,7 +1097,26 @@ const callback = (environment, ...filters) => {
     }
   }
 
-  let {MutationObserver: MutationObserver$8, WeakSet: WeakSet$8, getComputedStyle: getComputedStyle$4} = $(window);
+  let fetchContentMap = new Map$3();
+
+  function fetchContent(url, {as = "arrayBuffer", cleanup = 60000} = {}) {
+
+    let uid = as + ":" + url;
+    let details = fetchContentMap.get(uid) || {
+      remove: () => fetchContentMap.delete(uid),
+      result: null,
+      timer: 0
+    };
+    clearTimeout(details.timer);
+    details.timer = setTimeout$2(details.remove, cleanup);
+    if (!details.result) {
+      details.result = fetch(url).then(res => res[as]()).catch(details.remove);
+      fetchContentMap.set(uid, details);
+    }
+    return details.result;
+  }
+
+  let {MutationObserver: MutationObserver$9, WeakSet: WeakSet$8, getComputedStyle: getComputedStyle$5} = $(window);
 
   function hideIfContainsAndMatchesStyle(search,
                                                 selector = "*",
@@ -1016,7 +1127,9 @@ const callback = (environment, ...filters) => {
                                                 windowWidthMin = null,
                                                 windowWidthMax = null
   ) {
+    const formattedArguments = formatArguments(arguments);
     const debugLog = getDebugger("hide-if-contains-and-matches-style");
+    const {mark, end} = profile("hide-if-contains-and-matches-style");
     const hiddenMap = new WeakSet$8();
     const logMap = debug() && new WeakSet$8();
     if (searchSelector == null)
@@ -1028,6 +1141,7 @@ const callback = (environment, ...filters) => {
     const searchStyleRegExp = searchStyle ? toRegExp(searchStyle) : null;
     const mainLogic = () => {
       const callback = () => {
+        mark();
         if ((windowWidthMin && window.innerWidth < windowWidthMin) ||
            (windowWidthMax && window.innerWidth > windowWidthMax)
         )
@@ -1050,8 +1164,8 @@ const callback = (environment, ...filters) => {
                          closest,
                          "which contains: ",
                          element,
-                         " for params: ",
-                         ...arguments);
+                         "\nFILTER: hide-if-contains-and-matches-style",
+                         formattedArguments);
               }
               else {
                 if (!logMap || logMap.has(closest))
@@ -1060,8 +1174,8 @@ const callback = (environment, ...filters) => {
                          "In this element the searchStyle matched " +
                          "but style didn't:\n",
                          closest,
-                         getComputedStyle$4(closest),
-                         ...arguments);
+                         getComputedStyle$5(closest),
+                         formattedArguments);
                 logMap.add(closest);
               }
             }
@@ -1071,15 +1185,16 @@ const callback = (environment, ...filters) => {
               debugLog("info",
                        "In this element the searchStyle didn't match:\n",
                        element,
-                       getComputedStyle$4(element),
-                       ...arguments);
+                       getComputedStyle$5(element),
+                       formattedArguments);
               logMap.add(element);
             }
           }
         }
+        end();
       };
 
-      const mo = new MutationObserver$8(callback);
+      const mo = new MutationObserver$9(callback);
       const win = raceWinner(
         "hide-if-contains-and-matches-style",
         () => mo.disconnect()
@@ -1091,12 +1206,8 @@ const callback = (environment, ...filters) => {
   }
 
   let {
-    clearTimeout,
-    fetch,
-    getComputedStyle: getComputedStyle$3,
-    setTimeout: setTimeout$2,
-    Map: Map$2,
-    MutationObserver: MutationObserver$7,
+    getComputedStyle: getComputedStyle$4,
+    MutationObserver: MutationObserver$8,
     Uint8Array
   } = $(window);
 
@@ -1106,11 +1217,14 @@ const callback = (environment, ...filters) => {
 
     let searchRegExp = toRegExp(search);
 
+    const formattedArguments = formatArguments(arguments);
     const debugLog = getDebugger("hide-if-contains-image");
+    const {mark, end} = profile("hide-if-contains-image");
 
     let callback = () => {
+      mark();
       for (const {element, rootParents} of $$(searchSelector, true)) {
-        let style = getComputedStyle$3(element);
+        let style = getComputedStyle$4(element);
         let match = $(style["background-image"]).match(/^url\("(.*)"\)$/);
         if (match) {
           fetchContent(match[1]).then(content => {
@@ -1119,15 +1233,20 @@ const callback = (environment, ...filters) => {
               if (closest) {
                 win();
                 hideElement(closest);
-                debugLog("success", "Matched: ", closest, " for:", ...arguments);
+                debugLog("success",
+                         "Matched: ",
+                         closest,
+                         "\nFILTER: hide-if-contains-image",
+                         formattedArguments);
               }
             }
           });
         }
       }
+      end();
     };
 
-    let mo = new MutationObserver$7(callback);
+    let mo = new MutationObserver$8(callback);
     let win = raceWinner(
       "hide-if-contains-image",
       () => mo.disconnect()
@@ -1136,40 +1255,8 @@ const callback = (environment, ...filters) => {
     callback();
   }
 
-  let fetchContentMap = new Map$2();
-
-  function fetchContent(url, {as = "arrayBuffer", cleanup = 60000} = {}) {
-
-    let uid = as + ":" + url;
-    let details = fetchContentMap.get(uid) || {
-      remove: () => fetchContentMap.delete(uid),
-      result: null,
-      timer: 0
-    };
-    clearTimeout(details.timer);
-    details.timer = setTimeout$2(details.remove, cleanup);
-    if (!details.result) {
-      details.result = fetch(url).then(res => res[as]()).catch(details.remove);
-      fetchContentMap.set(uid, details);
-    }
-    return details.result;
-  }
-
-  function toHex(number, length = 2) {
-    let hex = $(number).toString(16);
-
-    if (hex.length < length)
-      hex = $("0").repeat(length - hex.length) + hex;
-
-    return hex;
-  }
-
-  function uint8ArrayToHex(uint8Array) {
-    return uint8Array.reduce((hex, byte) => hex + toHex(byte), "");
-  }
-
-  const {parseFloat: parseFloat$2, Math: Math$1, MutationObserver: MutationObserver$6, WeakSet: WeakSet$7} = $(window);
-  const {min} = Math$1;
+  const {parseFloat: parseFloat$3, Math: Math$3, MutationObserver: MutationObserver$7, WeakSet: WeakSet$7} = $(window);
+  const {min} = Math$3;
 
   const ld = (a, b) => {
     const len1 = a.length + 1;
@@ -1203,19 +1290,22 @@ const callback = (environment, ...filters) => {
     maxSearches = 0
   ) {
     const visitedNodes = new WeakSet$7();
+    const formattedArguments = formatArguments(arguments);
     const debugLog = getDebugger("hide-if-contains-similar-text");
+    const {mark, end} = profile("hide-if-contains-similar-text");
     const $search = $(search);
     const {length} = $search;
-    const chars = length + parseFloat$2(ignoreChars) || 0;
+    const chars = length + parseFloat$3(ignoreChars) || 0;
     const find = $([...$search]).sort();
-    const guard = parseFloat$2(maxSearches) || Infinity;
+    const guard = parseFloat$3(maxSearches) || Infinity;
 
     if (searchSelector == null)
       searchSelector = selector;
 
-    debugLog("Looking for similar text: " + $search);
+    debugLog("info", "Looking for similar text: " + $search);
 
     const callback = () => {
+      mark();
       for (const {element, rootParents} of $$(searchSelector, true)) {
         if (visitedNodes.has(element))
           continue;
@@ -1228,7 +1318,11 @@ const callback = (environment, ...filters) => {
           const distance = ld(find, $([...str]).sort()) - ignoreChars;
           if (distance <= 0) {
             const closest = $closest($(element), selector, rootParents);
-            debugLog("success", "Found similar text: " + $search, closest);
+            debugLog("success",
+                     "Found similar text: " + $search,
+                     closest,
+                     "\nFILTER: hide-if-contains-similar-text",
+                     formattedArguments);
             if (closest) {
               win();
               hideElement(closest);
@@ -1237,9 +1331,10 @@ const callback = (environment, ...filters) => {
           }
         }
       }
+      end();
     };
 
-    let mo = new MutationObserver$6(callback);
+    let mo = new MutationObserver$7(callback);
     let win = raceWinner(
       "hide-if-contains-similar-text",
       () => mo.disconnect()
@@ -1248,18 +1343,22 @@ const callback = (environment, ...filters) => {
     callback();
   }
 
-  let {getComputedStyle: getComputedStyle$2, Map: Map$1, WeakSet: WeakSet$6, parseFloat: parseFloat$1} = $(window);
+  let {getComputedStyle: getComputedStyle$3, Map: Map$2, WeakSet: WeakSet$6, parseFloat: parseFloat$2, DOMMatrix, Math: Math$2} = $(window);
 
   const {ELEMENT_NODE: ELEMENT_NODE$2, TEXT_NODE} = Node;
 
   function hideIfContainsVisibleText(search, selector,
                                             searchSelector = null,
                                             ...attributes) {
+    const {mark, end} = profile("hide-if-contains-visible-text");
+    const formattedArguments = formatArguments(arguments);
     let entries = $([]);
-    const optionalParameters = new Map$1([
+    const optionalParameters = new Map$2([
       ["-snippet-box-margin", "2"],
       ["-disable-bg-color-check", "false"],
-      ["-check-is-contained", "false"]
+      ["-check-is-contained", "false"],
+      ["-pseudo-box-margin", "2"],
+      ["-ignore-padding", "false"]
     ]);
 
     for (let attr of attributes) {
@@ -1286,29 +1385,54 @@ const callback = (environment, ...filters) => {
       ["color", "rgba(0, 0, 0, 0)"]
     ]);
 
-    let attributesMap = new Map$1(defaultEntries.concat(entries));
+    let attributesMap = new Map$2(defaultEntries.concat(entries));
 
-    function isTextVisible(element, style, {bgColorCheck = true} = {}) {
+    function isTextVisible(element,
+                           style,
+                           {bgColorCheck = true, pseudoElemCheck = false} = {}) {
       if (!style)
-        style = getComputedStyle$2(element);
-
+        style = getComputedStyle$3(element);
       style = $(style);
-
       for (const [key, value] of attributesMap) {
         let valueAsRegex = toRegExp(value);
         if (valueAsRegex.test(style.getPropertyValue(key)))
           return false;
       }
-
-      let color = style.getPropertyValue("color");
-      if (bgColorCheck && style.getPropertyValue("background-color") == color)
+      const color = style.getPropertyValue("color");
+      if (bgColorCheck && style.getPropertyValue("background-color") === color)
         return false;
 
+      if (!pseudoElemCheck) {
+        const firstLineStyle = getComputedStyle$3(element, "::first-line");
+        if (firstLineStyle) {
+          return isTextVisible(element,
+                               firstLineStyle,
+                               {bgColorCheck, pseudoElemCheck: true});
+        }
+      }
+
+      const textShadow = style.getPropertyValue("text-shadow");
+      if (color.includes("rgba(0, 0, 0, 0)") &&
+          (textShadow === "none" ||
+          textShadow.includes("rgba(0, 0, 0, 0)"))
+      )
+        return false;
       return true;
     }
 
-    function getPseudoContent(element, pseudo, {bgColorCheck = true} = {}) {
-      let style = getComputedStyle$2(element, pseudo);
+    function getTransformMatrix(element, pseudo = null) {
+      const style = getComputedStyle$3(element, pseudo);
+      let transform = style.transform;
+
+      if (transform === "none")
+        transform = "matrix(1, 0, 0, 1, 0, 0)";
+      return new DOMMatrix(transform);
+    }
+
+    function getPseudoContent(element, pseudo, parentMatrix,
+                              {bgColorCheck = true, translateThresh = 2} = {}) {
+      let style = getComputedStyle$3(element, pseudo);
+
       if (!isVisible(element, style) ||
        !isTextVisible(element, style, {bgColorCheck}))
         return "";
@@ -1316,6 +1440,21 @@ const callback = (environment, ...filters) => {
       let {content} = $(style);
       if (content && content !== "none") {
         let strings = $([]);
+
+        const domMatrix = getTransformMatrix(element, pseudo);
+        const resultMatrix = parentMatrix.multiply(domMatrix);
+
+        const angle = Math$2.atan2(resultMatrix.b, resultMatrix.a);
+        const angleDegrees = angle * (180 / Math$2.PI);
+        const rotated = Math$2.abs(angleDegrees) > 5;
+
+        if (rotated)
+          return "";
+
+        const translated = Math$2.abs(resultMatrix.e) > translateThresh ||
+                           Math$2.abs(resultMatrix.f) > translateThresh;
+        if (translated)
+          return "";
 
         content = $(content).trim().replace(
           /(["'])(?:(?=(\\?))\2.)*?\1/g,
@@ -1334,8 +1473,26 @@ const callback = (environment, ...filters) => {
       return "";
     }
 
-    function isContained(childNode, parentNode, {boxMargin = 2} = {}) {
-      const child = $(childNode).getBoundingClientRect();
+    function isContained(childNode, parentNode, {
+      boxMargin = 2,
+      ignorePadding = false
+    } = {}) {
+      let child = $(childNode).getBoundingClientRect();
+      if (ignorePadding) {
+        const style = getComputedStyle$3(childNode);
+        const paddingTop = parseFloat$2(style.paddingTop) || 0;
+        const paddingRight = parseFloat$2(style.paddingRight) || 0;
+        const paddingBottom = parseFloat$2(style.paddingBottom) || 0;
+        const paddingLeft = parseFloat$2(style.paddingLeft) || 0;
+
+        child = {
+          left: child.left + paddingLeft,
+          right: child.right - paddingRight,
+          top: child.top + paddingTop,
+          bottom: child.bottom - paddingBottom
+        };
+      }
+
       const parent = $(parentNode).getBoundingClientRect();
       const stretchedParent = {
         left: parent.left - boxMargin,
@@ -1343,6 +1500,7 @@ const callback = (environment, ...filters) => {
         top: parent.top - boxMargin,
         bottom: parent.bottom + boxMargin
       };
+
       return (
         (stretchedParent.left <= child.left &&
            child.left <= stretchedParent.right &&
@@ -1361,14 +1519,16 @@ const callback = (environment, ...filters) => {
                                parentOverflowNode,
                                originalElement,
                                shadowRootParents,
+                               domMatrix,
                                {
                                  boxMargin = 2,
                                  bgColorCheck,
-                                 checkIsContained
+                                 checkIsContained,
+                                 translateThresh
                                } = {}) {
       let checkClosest = !style;
       if (checkClosest)
-        style = getComputedStyle$2(element);
+        style = getComputedStyle$3(element);
 
       if (!isVisible(element, style, checkClosest && closest, shadowRootParents))
         return "";
@@ -1381,44 +1541,63 @@ const callback = (environment, ...filters) => {
       )
         parentOverflowNode = element;
 
-      let text = getPseudoContent(element, ":before", {bgColorCheck});
+      if (!domMatrix)
+        domMatrix = getTransformMatrix(element);
+
+      else
+        domMatrix = domMatrix.multiply(getTransformMatrix(element));
+
+      let text = getPseudoContent(element,
+                                  ":before",
+                                  domMatrix,
+                                  {bgColorCheck, translateThresh});
       for (let node of $childNodes($(element))) {
         switch ($(node).nodeType) {
           case ELEMENT_NODE$2:
             text += getVisibleContent(node,
                                       element,
-                                      getComputedStyle$2(node),
+                                      getComputedStyle$3(node),
                                       parentOverflowNode,
                                       originalElement,
                                       shadowRootParents,
+                                      domMatrix,
                                       {
                                         boxMargin,
                                         bgColorCheck,
-                                        checkIsContained
+                                        checkIsContained,
+                                        translateThresh
                                       }
             );
             break;
           case TEXT_NODE:
 
             if (parentOverflowNode) {
-              if (isContained(element, parentOverflowNode, {boxMargin}) &&
-                isTextVisible(element, style, {bgColorCheck}))
+              if (isContained(element, parentOverflowNode, {
+                boxMargin,
+                ignorePadding
+              }) && isTextVisible(element, style, {bgColorCheck}))
                 text += $(node).nodeValue;
             }
             else if (isTextVisible(element, style, {bgColorCheck})) {
-              if (checkIsContained &&
-                 !isContained(element, originalElement, {boxMargin}))
+              if (checkIsContained && !isContained(element, originalElement, {
+                boxMargin,
+                ignorePadding
+              }))
                 continue;
               text += $(node).nodeValue;
             }
             break;
         }
       }
-      return text + getPseudoContent(element, ":after", {bgColorCheck});
+      text += getPseudoContent(element,
+                               ":after",
+                               domMatrix,
+                               {bgColorCheck, translateThresh});
+      return text;
     }
 
     const boxMarginStr = optionalParameters.get("-snippet-box-margin");
-    const boxMargin = parseFloat$1(boxMarginStr) || 0;
+    const boxMargin = parseFloat$2(boxMarginStr) || 0;
 
     const bgColorCheckStr = optionalParameters.get("-disable-bg-color-check");
     const bgColorCheck = !(bgColorCheckStr === "true");
@@ -1426,28 +1605,38 @@ const callback = (environment, ...filters) => {
     const checkIsContainedStr = optionalParameters.get("-check-is-contained");
     const checkIsContained = (checkIsContainedStr === "true");
 
+    const ignorePaddingStr = optionalParameters.get("-ignore-padding");
+    const ignorePadding = (ignorePaddingStr === "true");
+
+    const translateThreshStr = optionalParameters.get("-pseudo-box-margin");
+    const translateThresh = parseFloat$2(translateThreshStr) || 0;
+
     let re = toRegExp(search);
     let seen = new WeakSet$6();
 
     const mo = hideIfMatches(
       (element, closest, rootParents) => {
+        mark();
         if (seen.has(element))
           return false;
 
         seen.add(element);
         let text = getVisibleContent(
-          element, closest, null, null, element, rootParents, {
+          element, closest, null, null, element, rootParents, null, {
             boxMargin,
             bgColorCheck,
-            checkIsContained
+            checkIsContained,
+            translateThresh
           }
         );
         let result = re.test(text);
         if (debug() && text.length) {
-          result ? log("success", result, re, text) :
+          result ?
+
+          log("success", result, re, text, "\nFILTER: hide-if-contains-visible-text", formattedArguments) :
           log("info", result, re, text);
         }
-
+        end();
         return result;
       },
       selector,
@@ -1461,7 +1650,7 @@ const callback = (environment, ...filters) => {
     ));
   }
 
-  let {MutationObserver: MutationObserver$5, WeakSet: WeakSet$5, getComputedStyle: getComputedStyle$1} = $(window);
+  let {MutationObserver: MutationObserver$6, WeakSet: WeakSet$5, getComputedStyle: getComputedStyle$2} = $(window);
 
   function hideIfHasAndMatchesStyle(search,
                                            selector = "*",
@@ -1472,7 +1661,9 @@ const callback = (environment, ...filters) => {
                                            windowWidthMin = null,
                                            windowWidthMax = null
   ) {
+    const formattedArguments = formatArguments(arguments);
     const debugLog = getDebugger("hide-if-has-and-matches-style");
+    const {mark, end} = profile("hide-if-has-and-matches-style");
     const hiddenMap = new WeakSet$5();
     const logMap = debug() && new WeakSet$5();
     if (searchSelector == null)
@@ -1482,6 +1673,7 @@ const callback = (environment, ...filters) => {
     const searchStyleRegExp = searchStyle ? toRegExp(searchStyle) : null;
     const mainLogic = () => {
       const callback = () => {
+        mark();
         if ((windowWidthMin && window.innerWidth < windowWidthMin) ||
            (windowWidthMax && window.innerWidth > windowWidthMax)
         )
@@ -1503,8 +1695,8 @@ const callback = (environment, ...filters) => {
                        closest,
                        "which contains: ",
                        element,
-                       " for params: ",
-                       ...arguments);
+                       "\nFILTER: hide-if-has-and-matches-style",
+                       formattedArguments);
             }
             else {
               if (!logMap || logMap.has(closest))
@@ -1513,7 +1705,7 @@ const callback = (environment, ...filters) => {
                        "In this element the searchStyle matched" +
                        "but style didn't:\n",
                        closest,
-                       getComputedStyle$1(closest),
+                       getComputedStyle$2(closest),
                        ...arguments);
               logMap.add(closest);
             }
@@ -1524,14 +1716,15 @@ const callback = (environment, ...filters) => {
             debugLog("info",
                      "In this element the searchStyle didn't match:\n",
                      element,
-                     getComputedStyle$1(element),
+                     getComputedStyle$2(element),
                      ...arguments);
             logMap.add(element);
           }
         }
+        end();
       };
 
-      const mo = new MutationObserver$5(callback);
+      const mo = new MutationObserver$6(callback);
       const win = raceWinner(
         "hide-if-has-and-matches-style",
         () => mo.disconnect()
@@ -1542,9 +1735,10 @@ const callback = (environment, ...filters) => {
     waitUntilEvent(debugLog, mainLogic, waitUntil);
   }
 
-  let {getComputedStyle, MutationObserver: MutationObserver$4, WeakSet: WeakSet$4} = $(window);
+  let {getComputedStyle: getComputedStyle$1, MutationObserver: MutationObserver$5, WeakSet: WeakSet$4} = $(window);
 
   function hideIfLabelledBy(search, selector, searchSelector = null) {
+    const {mark, end} = profile("hide-if-labelled-by");
     let sameSelector = searchSelector == null;
 
     let searchRegExp = toRegExp(search);
@@ -1552,12 +1746,13 @@ const callback = (environment, ...filters) => {
     let matched = new WeakSet$4();
 
     let callback = () => {
+      mark();
       for (const {element, rootParents} of $$(selector, true)) {
         let closest = sameSelector ?
                       element :
                       $closest($(element), searchSelector, rootParents);
         if (!closest ||
-            !isVisible(element, getComputedStyle(element), closest))
+            !isVisible(element, getComputedStyle$1(element), closest))
           continue;
 
         let attr = $(element).getAttribute("aria-labelledby");
@@ -1593,9 +1788,10 @@ const callback = (environment, ...filters) => {
           fallback();
         }
       }
+      end();
     };
 
-    let mo = new MutationObserver$4(callback);
+    let mo = new MutationObserver$5(callback);
     let win = raceWinner(
       "hide-if-labelled-by",
       () => mo.disconnect()
@@ -1604,89 +1800,106 @@ const callback = (environment, ...filters) => {
     callback();
   }
 
-  $(window);
-
-  const noopProfile = {
-    mark() {},
-    end() {},
-    toString() {
-      return "{mark(){},end(){}}";
-    }
-  };
-
-  function profile(id, rate = 10) {
-    return noopProfile;
-  }
-
-  let {MutationObserver: MutationObserver$3, WeakSet: WeakSet$3} = $(window);
+  let {MutationObserver: MutationObserver$4, WeakSet: WeakSet$3} = $(window);
 
   const {ELEMENT_NODE: ELEMENT_NODE$1} = Node;
 
-  function hideIfMatchesXPath(query, scopeQuery) {
-    const {mark, end} = profile();
+  function hideIfMatchesXPath(query, scopeQuery, waitUntil) {
+    const {mark, end} = profile("hide-if-matches-xpath");
+    const formattedArguments = formatArguments(arguments);
     const debugLog = getDebugger("hide-if-matches-xpath");
 
-    const startHidingMutationObserver = scopeNode => {
-      const queryAndApply = initQueryAndApply(`xpath(${query})`);
-      const seenMap = new WeakSet$3();
-      const callback = () => {
-        mark();
-        queryAndApply(node => {
-          if (seenMap.has(node))
-            return false;
+    const mainLogic = () => {
+      const startHidingMutationObserver = scopeNode => {
+        const queryAndApply = initQueryAndApply(`xpath(${query})`);
+        const seenMap = new WeakSet$3();
+        const hideNode = node => {
           seenMap.add(node);
           win();
+
           if ($(node).nodeType === ELEMENT_NODE$1)
             hideElement(node);
           else
             $(node).textContent = "";
-          debugLog("success", "Matched: ", node, " for selector: ", query);
-        });
-        end();
+          debugLog("success",
+                   "Matched: ",
+                   node,
+                   "\nFILTER: hide-if-matches-xpath",
+                   formattedArguments);
+        };
+
+        const callback = () => {
+          mark();
+          queryAndApply(node => {
+            if (seenMap.has(node))
+              return false;
+
+            if (scopeQuery) {
+              const scopeQueryAndApply = initQueryAndApply(`xpath(${scopeQuery})`);
+              scopeQueryAndApply(matchingScopeNode => {
+                if (matchingScopeNode.contains(node)) {
+
+                  hideNode(node);
+                }
+                else {
+
+                  return false;
+                }
+              });
+            }
+            else {
+              hideNode(node);
+            }
+          });
+          end();
+        };
+        const mo = new MutationObserver$4(callback);
+        const win = raceWinner(
+          "hide-if-matches-xpath",
+          () => mo.disconnect()
+        );
+        mo.observe(
+          scopeNode, {characterData: true, childList: true, subtree: true});
+        callback();
       };
-      const mo = new MutationObserver$3(callback);
-      const win = raceWinner(
-        "hide-if-matches-xpath",
-        () => mo.disconnect()
-      );
-      mo.observe(
-        scopeNode, {characterData: true, childList: true, subtree: true});
-      callback();
+
+      if (scopeQuery) {
+
+        let count = 0;
+        let scopeMutationObserver;
+        const scopeQueryAndApply = initQueryAndApply(`xpath(${scopeQuery})`);
+        const findMutationScopeNodes = () => {
+          scopeQueryAndApply(scopeNode => {
+
+            startHidingMutationObserver(scopeNode);
+            count++;
+          });
+          if (count > 0)
+            scopeMutationObserver.disconnect();
+        };
+        scopeMutationObserver = new MutationObserver$4(findMutationScopeNodes);
+        scopeMutationObserver.observe(
+          document, {characterData: true, childList: true, subtree: true}
+        );
+        findMutationScopeNodes();
+      }
+      else {
+
+        startHidingMutationObserver(document);
+      }
     };
 
-    if (scopeQuery) {
-
-      let count = 0;
-      let scopeMutationObserver;
-      const scopeQueryAndApply = initQueryAndApply(`xpath(${scopeQuery})`);
-      const findMutationScopeNodes = () => {
-        scopeQueryAndApply(scopeNode => {
-
-          startHidingMutationObserver(scopeNode);
-          count++;
-        });
-        if (count > 0)
-          scopeMutationObserver.disconnect();
-      };
-      scopeMutationObserver = new MutationObserver$3(findMutationScopeNodes);
-      scopeMutationObserver.observe(
-        document, {characterData: true, childList: true, subtree: true}
-      );
-      findMutationScopeNodes();
-    }
-    else {
-
-      startHidingMutationObserver(document);
-    }
+    waitUntilEvent(debugLog, mainLogic, waitUntil);
   }
 
-  let {MutationObserver: MutationObserver$2, WeakSet: WeakSet$2} = $(window);
+  let {MutationObserver: MutationObserver$3, WeakSet: WeakSet$2} = $(window);
 
   const {ELEMENT_NODE} = Node;
 
   function hideIfMatchesComputedXPath(query, searchQuery, searchRegex,
                                              waitUntil) {
-    const {mark, end} = profile();
+    const {mark, end} = profile("hide-if-matches-computed-xpath");
+    const formattedArguments = formatArguments(arguments);
     const debugLog = getDebugger("hide-if-matches-computed-xpath");
 
     if (!searchQuery || !query) {
@@ -1714,11 +1927,15 @@ const callback = (environment, ...filters) => {
             hideElement(node);
           else
             $(node).textContent = "";
-          debugLog("success", "Matched: ", node, " for selector: ", query);
+          debugLog("success",
+                   "Matched: ",
+                   node,
+                   "\nFILTER: hide-if-matches-computed-xpath",
+                   formattedArguments);
         });
         end();
       };
-      const mo = new MutationObserver$2(callback);
+      const mo = new MutationObserver$3(callback);
       const win = raceWinner(
         "hide-if-matches-computed-xpath",
         () => mo.disconnect()
@@ -1757,7 +1974,7 @@ const callback = (environment, ...filters) => {
           });
         };
 
-        searchMO = new MutationObserver$2(findMutationSearchNodes);
+        searchMO = new MutationObserver$3(findMutationSearchNodes);
         searchMO.observe(
           document, {characterData: true, childList: true, subtree: true}
         );
@@ -1766,6 +1983,183 @@ const callback = (environment, ...filters) => {
     };
 
     waitUntilEvent(debugLog, mainLogic, waitUntil);
+  }
+
+  let {
+    getComputedStyle,
+    MutationObserver: MutationObserver$2,
+    DOMParser,
+    Math: Math$1,
+    Node: Node$1,
+    Map: Map$1
+  } = $(window);
+
+  function hideIfSvgContains(
+    search,
+    selector,
+    searchSelector,
+    ...attributes
+  ) {
+    if (searchSelector == null)
+      searchSelector = selector;
+
+    const textSearchRegExp = toRegExp(search);
+    let entries = $([]);
+    const formattedArguments = formatArguments(arguments);
+    const debugLog = getDebugger("hide-if-svg-contains");
+    const {mark, end} = profile("hide-if-svg-contains");
+    const defaultOptionalParameters = new Map$1([
+      ["-position-threshold", "500"],
+      ["-disable-contained-check", "false"]
+    ]);
+    for (let attr of attributes) {
+      attr = $(attr);
+      let markerIndex = attr.indexOf(":");
+      if (markerIndex < 0)
+        continue;
+
+      let key = attr.slice(0, markerIndex).trim().toString();
+      let value = attr.slice(markerIndex + 1).trim().toString();
+
+      if (key && value) {
+        if (defaultOptionalParameters.has(key))
+          defaultOptionalParameters.set(key, value);
+        else
+          entries.push([key, value]);
+      }
+    }
+    let defaultCSSEntries = $([
+      ["display", "none"],
+      ["visibility", "hidden"],
+      ["opacity", "0"],
+      ["fill", "none"],
+      ["color", "rgba(0, 0, 0, 0)"],
+      ["font-size", "0"]
+    ]);
+    let attributesMap = new Map$1(defaultCSSEntries.concat(entries));
+
+    let callback = async() => {
+      mark();
+      for (const {element, rootParents} of $$(searchSelector, true)) {
+        let isMatchAndVisible = false;
+
+        try {
+          const backgroundImage = $(getComputedStyle(element).backgroundImage);
+          const urlMatch = backgroundImage.match(/url\("?(.+?)"?\)/);
+          if (!urlMatch)
+            continue;
+          const url = urlMatch[1];
+          const svgContent = await fetchContent(url, {as: "text"});
+          const parser = new DOMParser();
+          const svgDoc = parser.parseFromString(svgContent, "image/svg+xml");
+          if (svgDoc.querySelector("parsererror")) {
+            debugLog(
+              "warn", "Failed to parse SVG content for element:", element
+            );
+            continue;
+          }
+          const textElements = svgDoc.querySelectorAll("text, tspan");
+          for (const textEl of textElements) {
+            if (
+              isElementVisibleAndTextMatchesInSvg(
+                textEl,
+                textSearchRegExp
+              )) {
+              isMatchAndVisible = true;
+              debugLog(
+                "Condition met: Text found visible in SVG of element", element
+              );
+              break;
+            }
+          }
+        }
+        catch (error) {
+          debugLog(
+            "warn", "An error occurred while processing element:", element, error
+          );
+          continue;
+        }
+
+        if (isMatchAndVisible) {
+          const closestToHide = $closest($(element), selector, rootParents);
+          if (closestToHide) {
+            win();
+            hideElement(closestToHide);
+            debugLog("success",
+                     "Matched: ",
+                     closestToHide,
+                     "\nFILTER: hide-if-svg-contains",
+                     formattedArguments);
+          }
+        }
+      }
+      end();
+    };
+
+    let mo = new MutationObserver$2(callback);
+    let win = raceWinner(
+      "hide-if-svg-contains",
+      () => mo.disconnect()
+    );
+    mo.observe(document, {childList: true, subtree: true});
+    callback();
+
+    function isElementVisibleAndTextMatchesInSvg(
+      element,
+      searchRegExp
+    ) {
+      if (!searchRegExp.test(element.textContent))
+        return false;
+
+      const {ELEMENT_NODE} = Node$1;
+      const positionThresh =
+        parseFloat(defaultOptionalParameters.get("-position-threshold")) || 0;
+      const disableContainedCheck =
+        (defaultOptionalParameters.get("-disable-contained-check") === "true");
+
+      let currentElement = element;
+      while (currentElement && currentElement.nodeType === ELEMENT_NODE) {
+        let style = getComputedStyle(currentElement);
+        style = $(style);
+        for (const [key, value] of attributesMap) {
+          if (value !== null) {
+            const valueAsRegex = toRegExp(value);
+            const styleValue = style.getPropertyValue(key) ||
+              currentElement.getAttribute(key);
+            if (valueAsRegex.test(styleValue))
+              return false;
+          }
+        }
+        if (!disableContainedCheck) {
+          const x = parseFloat(currentElement.getAttribute("x")) || 0;
+          const y = parseFloat(currentElement.getAttribute("y")) || 0;
+          const dx = parseFloat(currentElement.getAttribute("dx")) || 0;
+          const dy = parseFloat(currentElement.getAttribute("dy")) || 0;
+          const transformAttr = currentElement.getAttribute("transform");
+          let transformX = 0;
+          let transformY = 0;
+          if (transformAttr) {
+            const transformRegex = /translate\((-?\d*\.?\d+)\s+(-?\d*\.?\d+)\)/;
+            const transformMatches = transformAttr.match(transformRegex);
+
+            if (transformMatches && transformMatches.length === 3) {
+              transformX = parseFloat(transformMatches[1]);
+              transformY = parseFloat(transformMatches[2]);
+            }
+          }
+          const finalX = x + dx + transformX;
+          const finalY = y + dy + transformY;
+
+          if (Math$1.abs(finalX) > positionThresh ||
+          Math$1.abs(finalY) > positionThresh)
+            return false;
+        }
+
+        currentElement = currentElement.parentElement;
+      }
+
+      return true;
+    }
   }
 
   let {
@@ -1785,10 +2179,13 @@ const callback = (environment, ...filters) => {
                        "pointerup", "pointercancel", "pointerleave"];
 
   function simulateMouseEvent(...selectors) {
+    const formattedArguments = formatArguments(arguments);
     const debugLog = getDebugger("simulate-mouse-event");
+    const {mark, end} = profile("simulate-mouse-event");
     const MAX_ARGS = 7;
     if (selectors.length < 1)
       throw new Error$1("[simulate-mouse-event snippet]: No selector provided.");
+
     if (selectors.length > MAX_ARGS) {
 
       selectors = selectors.slice(0, MAX_ARGS);
@@ -1858,6 +2255,13 @@ const callback = (environment, ...filters) => {
       return parsedArgs.every(arg => arg.found);
     }
 
+    function resetAttributes() {
+      parsedArgs.forEach(arg => {
+        arg.found = false;
+        arg.clicked = false;
+      });
+    }
+
     function triggerEvent(node, event, delay) {
 
       if (!node || !event)
@@ -1870,7 +2274,8 @@ const callback = (environment, ...filters) => {
                  node,
                  "\nwith a delay of",
                  delay,
-                 "ms"
+                 "ms",
+                 `n\nFILTER: simulate-mouse-event ${formattedArguments}`
         );
       }
       else {
@@ -1883,7 +2288,8 @@ const callback = (environment, ...filters) => {
                  "event was dispatched with a delay of",
                  delay,
                  "ms on this node:\n",
-                 node
+                 node,
+                 `n\nFILTER: simulate-mouse-event ${formattedArguments}`
         );
       }
     }
@@ -1899,6 +2305,7 @@ const callback = (environment, ...filters) => {
     findNodesAndDispatchEvents();
 
     function findNodesAndDispatchEvents() {
+      mark();
 
       if (!allFound)
         allFound = checkIfAllSelectorsFound();
@@ -1912,7 +2319,10 @@ const callback = (environment, ...filters) => {
                 dispatchedNodes.add(node);
                 if (parsedRule.continue) {
                   setInterval(() => {
-                    triggerEvent(node, parsedRule.event, parsedRule.delay);
+                    resetAttributes();
+                    const allIsStillFound = checkIfAllSelectorsFound();
+                    if (allIsStillFound)
+                      triggerEvent(node, parsedRule.event, parsedRule.delay);
                   }, delayInMiliseconds);
                 }
                 else {
@@ -1925,19 +2335,23 @@ const callback = (environment, ...filters) => {
           }
         }
       }
+      end();
     }
   }
 
-  let {isNaN, MutationObserver, parseInt, parseFloat, setTimeout} = $(window);
+  let {isNaN, MutationObserver, parseInt, parseFloat: parseFloat$1, setTimeout} = $(window);
 
   function skipVideo(playerSelector, xpathCondition, ...attributes) {
+    const formattedArguments = formatArguments(arguments);
     const optionalParameters = new Map([
       ["-max-attempts", "10"],
       ["-retry-ms", "10"],
       ["-run-once", "false"],
       ["-wait-until", ""],
       ["-skip-to", "-0.1"],
-      ["-stop-on-video-end", "false"]
+      ["-stop-on-video-end", "false"],
+      ["-start-from", "0"],
+      ["-mute-video-when-skipping", "true"]
     ]);
 
     for (let attr of attributes) {
@@ -1963,18 +2377,27 @@ const callback = (environment, ...filters) => {
     const runOnceFlag = (runOnceStr === "true");
 
     const skipToStr = optionalParameters.get("-skip-to");
-    const skipToNum = parseFloat(skipToStr || -0.1);
+    const skipToNum = parseFloat$1(skipToStr || -0.1);
+
+    const startFromStr = optionalParameters.get("-start-from");
+    const startFrom = parseInt(startFromStr || 0, 10);
 
     const waitUntil = optionalParameters.get("-wait-until");
 
     const stopOnVideoEndStr = optionalParameters.get("-stop-on-video-end");
     const stopOnVideoEndFlag = (stopOnVideoEndStr === "true");
 
+    const muteVideoStr = optionalParameters.get("-mute-video-when-skipping");
+    const muteVideo = !(muteVideoStr === "false");
+
     const debugLog = getDebugger("skip-video");
+    const {mark, end} = profile("skip-video");
     const queryAndApply = initQueryAndApply(`xpath(${xpathCondition})`);
     let skippedOnce = false;
 
     const mainLogic = () => {
+      mark();
+      const seenMap = new WeakSet();
       const callback = (retryCounter = 0) => {
         if (skippedOnce && runOnceFlag) {
           if (mo)
@@ -1982,10 +2405,48 @@ const callback = (environment, ...filters) => {
           return;
         }
         queryAndApply(node => {
-          debugLog("info", "Matched: ", node, " for selector: ", xpathCondition);
-          debugLog("info", "Running video skipping logic.");
-          const video = $$(playerSelector)[0];
-          while (isNaN(video.duration) && retryCounter < maxAttemptsNum) {
+          let nodeAlreadySeen = seenMap.has(node);
+          let lastSkippedVideoDuration;
+          if (!nodeAlreadySeen) {
+            debugLog("info", "Matched:", node, " for selector: ", xpathCondition);
+            debugLog("info", "Running video skipping logic.");
+          }
+          const videos = $$(playerSelector);
+          let foundValidVideo = false;
+          for (const video of videos) {
+            if (!video || isNaN(video.duration) || isNaN(video.currentTime))
+              continue;
+            foundValidVideo = true;
+            const videoNearEnd = (video.duration - video.currentTime) < 0.5;
+            if ((video.duration > 0) && (video.currentTime < video.duration) &&
+                !(stopOnVideoEndFlag && videoNearEnd)) {
+              if (muteVideo) {
+                video.muted = true;
+                if (!nodeAlreadySeen)
+                  debugLog("success", "Muted video...");
+              }
+              if (startFrom <= video.currentTime * 1000) {
+
+                skipToNum <= 0 ?
+                  video.currentTime = video.duration + skipToNum :
+                  video.currentTime += skipToNum;
+                if (lastSkippedVideoDuration !== video.duration) {
+                  debugLog("success",
+                           "Skipped video, currentTime: ",
+                           video.currentTime,
+                           "s.",
+                           "\nFILTER: skip-video",
+                           formattedArguments);
+                  seenMap.add(node);
+                  lastSkippedVideoDuration = video.duration;
+                }
+                video.paused && video.play();
+                skippedOnce = true;
+                win();
+              }
+            }
+          }
+          if (!foundValidVideo && retryCounter < maxAttemptsNum) {
             setTimeout(() => {
               const attempt = retryCounter + 1;
               debugLog("info",
@@ -1993,20 +2454,6 @@ const callback = (environment, ...filters) => {
                        attempt);
               callback(attempt);
             }, retryMsNum);
-            return;
-          }
-          const videoNearEnd = (video.duration - video.currentTime) < 0.5;
-          if (!isNaN(video.duration) && !(stopOnVideoEndFlag && videoNearEnd)) {
-            video.muted = true;
-            debugLog("success", "Muted video...");
-
-            skipToNum <= 0 ?
-              video.currentTime = video.duration + skipToNum :
-              video.currentTime += skipToNum;
-            debugLog("success", "Skipped duration...");
-            video.paused && video.play();
-            skippedOnce = true;
-            win();
           }
         });
       };
@@ -2018,6 +2465,7 @@ const callback = (environment, ...filters) => {
       mo.observe(
         document, {characterData: true, childList: true, subtree: true});
       callback();
+      end();
     };
 
     waitUntilEvent(debugLog, mainLogic, waitUntil);
@@ -2027,6 +2475,7 @@ const callback = (environment, ...filters) => {
     log,
     race,
     "debug": setDebug,
+    "profile": setProfile,
     "hide-if-matches-xpath": hideIfMatchesXPath,
     "hide-if-matches-computed-xpath": hideIfMatchesComputedXPath,
     "hide-if-contains": hideIfContains,
@@ -2036,6 +2485,7 @@ const callback = (environment, ...filters) => {
     "hide-if-has-and-matches-style": hideIfHasAndMatchesStyle,
     "hide-if-labelled-by": hideIfLabelledBy,
     "hide-if-contains-image": hideIfContainsImage,
+    "hide-if-svg-contains": hideIfSvgContains,
     "simulate-mouse-event": simulateMouseEvent,
     "skip-video": skipVideo
   };
@@ -2048,7 +2498,7 @@ const callback = (environment, ...filters) => {
   }
   context = void 0;
 };
-const graph = new Map([["log",null],["race",null],["debug",null],["hide-if-matches-xpath",null],["hide-if-matches-computed-xpath",null],["hide-if-contains",null],["hide-if-contains-similar-text",null],["hide-if-contains-visible-text",null],["hide-if-contains-and-matches-style",null],["hide-if-has-and-matches-style",null],["hide-if-labelled-by",null],["hide-if-contains-image",null],["simulate-mouse-event",null],["skip-video",null]]);
+const graph = new Map([["log",null],["race",null],["debug",null],["profile",null],["hide-if-matches-xpath",null],["hide-if-matches-computed-xpath",null],["hide-if-contains",null],["hide-if-contains-similar-text",null],["hide-if-contains-visible-text",null],["hide-if-contains-and-matches-style",null],["hide-if-has-and-matches-style",null],["hide-if-labelled-by",null],["hide-if-contains-image",null],["hide-if-svg-contains",null],["simulate-mouse-event",null],["skip-video",null]]);
 callback.get = snippet => graph.get(snippet);
 callback.has = snippet => graph.has(snippet);
 export default callback;

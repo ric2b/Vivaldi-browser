@@ -27,7 +27,11 @@
 
 // Sets the search provider name that's used in the placeholder text in the
 // search box.
-- (void)setSearchProviderName:(NSString*)searchProviderName;
+- (void)setPlaceholderText:(NSString*)searchProviderName;
+
+// Sets the default search engine image to use as placeholder when the
+// placeholder is set to kDefaultSearchEngineIcon.
+- (void)setPlaceholderDefaultSearchEngineIcon:(UIImage*)icon;
 @end
 
 #endif  // IOS_CHROME_BROWSER_LOCATION_BAR_UI_BUNDLED_LOCATION_BAR_CONSUMER_H_

@@ -8,11 +8,14 @@
 // This source code is licensed under the BSD-style license found in the
 // LICENSE file in the root directory of this source tree.
 
-#include <assert.h>
-
 #include <arm_neon.h>
+#include <assert.h>
+#include <stddef.h>
+#include <stdint.h>
 
+#include "src/xnnpack/common.h"
 #include "src/xnnpack/intrinsics-polyfill.h"
+#include "src/xnnpack/microparams.h"
 #include "src/xnnpack/vbinary.h"
 
 
@@ -21,7 +24,7 @@ void xnn_qu8_vmul_minmax_fp32_ukernel__neonv8_ld128_u16(
     const uint8_t* input_a,
     const uint8_t* input_b,
     uint8_t* output,
-    const union xnn_qu8_mul_minmax_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
+    const union xnn_qu8_mul_minmax_params* restrict params) XNN_OOB_READS
 {
   assert(batch != 0);
   assert(batch % sizeof(uint8_t) == 0);

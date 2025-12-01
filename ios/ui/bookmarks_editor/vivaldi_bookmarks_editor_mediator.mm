@@ -4,6 +4,7 @@
 
 #import "base/check.h"
 #import "base/strings/sys_string_conversions.h"
+#import "browser/features/vivaldi_features.h"
 #import "components/bookmarks/browser/bookmark_model.h"
 #import "components/bookmarks/browser/bookmark_node.h"
 #import "components/bookmarks/vivaldi_bookmark_kit.h"
@@ -17,7 +18,6 @@
 #import "ios/chrome/browser/favicon/model/favicon_loader.h"
 #import "ios/chrome/browser/favicon/model/ios_chrome_favicon_loader_factory.h"
 #import "ios/chrome/browser/favicon/ui_bundled/favicon_attributes_provider.h"
-#import "ios/chrome/browser/features/vivaldi_features.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_backed_boolean.h"
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/model/utils/observable_boolean.h"
@@ -34,6 +34,8 @@ using vivaldi_bookmark_kit::GetSpeeddial;
 using vivaldi_bookmark_kit::SetNodeDescription;
 using vivaldi_bookmark_kit::SetNodeNickname;
 using vivaldi_bookmark_kit::SetNodeSpeeddial;
+using vivaldi_bookmark_kit::CustomMetaInfo;
+using vivaldi_bookmark_kit::SetNodeDisplayURL;
 
 // Namespace
 namespace {
@@ -164,6 +166,9 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
     _bookmarkModel->SetTitle(_bookmarkNode,
                              titleString,
                              bookmarks::metrics::BookmarkEditSource::kUser);
+
+    // Clear display URL when editing bookmark
+    SetNodeDisplayURL(_bookmarkModel, _bookmarkNode, "");
 
     // Update URL
     _bookmarkModel->SetURL(_bookmarkNode,
@@ -305,7 +310,7 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
 
 #pragma mark - Private
 - (void)prepareTopSitesAndNotifyConsumersIfNeeded {
-  if (IsTopSitesEnabled()) {
+  if (vivaldi_features::IsTopSitesEnabled()) {
     NSMutableArray<VivaldiBookmarksEditorTopSitesItem*>* topSites =
         [[NSMutableArray alloc] init];
     for (ContentSuggestionsMostVisitedItem* tile in

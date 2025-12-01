@@ -10,7 +10,6 @@ import android.view.Window;
 import android.view.WindowInsets;
 import android.view.WindowManager;
 
-import androidx.annotation.NonNull;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
@@ -18,6 +17,8 @@ import androidx.core.view.WindowInsetsControllerCompat;
 import org.chromium.base.BuildInfo;
 import org.chromium.base.Log;
 import org.chromium.base.supplier.ObservableSupplier;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.multiwindow.MultiWindowModeStateDispatcher;
 import org.chromium.components.embedder_support.view.ContentView;
 
@@ -25,6 +26,7 @@ import org.chromium.components.embedder_support.view.ContentView;
 import org.chromium.build.BuildConfig;
 import org.vivaldi.browser.oem_extensions.mahindra.OemMahindraSystemBarManager;
 
+@NullMarked
 public class FullscreenHtmlApiHandlerCompat extends FullscreenHtmlApiHandlerBase
         implements View.OnApplyWindowInsetsListener {
 
@@ -52,9 +54,8 @@ public class FullscreenHtmlApiHandlerCompat extends FullscreenHtmlApiHandlerBase
 
     // View.OnApplyWindowInsetsListener
 
-    @NonNull
     @Override
-    public WindowInsets onApplyWindowInsets(@NonNull View v, @NonNull WindowInsets insets) {
+    public WindowInsets onApplyWindowInsets(View v, WindowInsets insets) {
         if (mTabInFullscreen != null && getPersistentFullscreenMode()) {
             mHandler.sendEmptyMessageDelayed(
                     MSG_ID_SET_VISIBILITY_FOR_SYSTEM_BARS, ANDROID_CONTROLS_SHOW_DURATION_MS);
@@ -65,7 +66,7 @@ public class FullscreenHtmlApiHandlerCompat extends FullscreenHtmlApiHandlerBase
     // FullscreenHtmlApiHandlerBase
 
     @Override
-    protected void setContentView(ContentView contentView) {
+    protected void setContentView(@Nullable ContentView contentView) {
         ContentView oldContentView = getContentView();
         if (contentView == oldContentView) return;
         if (oldContentView != null) {

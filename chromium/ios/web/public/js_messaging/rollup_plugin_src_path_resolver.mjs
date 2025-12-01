@@ -18,6 +18,20 @@ export default function src_path_resolver(rootPath, pathMappingsJson) {
         return null;
       }
 
+      // Vivaldi
+      if (source.startsWith('//vivaldi')) {
+        // Strip leading vivaldi stuff
+        const sourcePath = source.substr(9);
+        // Check if an import exists within a dependency directory.
+        const pathMappings = JSON.parse(pathMappingsJson);
+        if (sourcePath in pathMappings) {
+          return pathMappings[sourcePath]
+        }
+        // Go up one level out of chromium folder.
+        const folder = path.join(rootPath, '..');
+        return path.join(folder, sourcePath);
+      } // End Vivaldi
+
       if (source.startsWith('//')) {
         // Strip leading double slashes
         const sourcePath = source.substr(2);

@@ -18,9 +18,10 @@
 import $ from "../$.js";
 
 import {hideIfMatches} from "../utils/dom.js";
-import {toRegExp} from "../utils/general.js";
+import {formatArguments, toRegExp} from "../utils/general.js";
 import {raceWinner} from "../introspection/race.js";
 import {getDebugger} from "../introspection/log.js";
+import {profile} from "../introspection/profile.js";
 
 /**
  * Hides any HTML element or one of its ancestors matching a CSS selector if
@@ -39,14 +40,17 @@ import {getDebugger} from "../introspection/log.js";
  * @since Adblock Plus 3.3
  */
 export function hideIfContains(search, selector = "*", searchSelector = null) {
+  const formattedArguments = formatArguments(arguments);
   const debugLog = getDebugger("hide-if-contains");
+  const {mark, end} = profile("hide-if-contains");
   const onHideCallback = node => {
+    mark();
     debugLog("success",
              "Matched: ",
              node,
-             " for selector: ",
-             selector,
-             searchSelector);
+             "\nFILTER: hide-if-contains",
+             formattedArguments);
+    end();
   };
   let re = toRegExp(search);
 

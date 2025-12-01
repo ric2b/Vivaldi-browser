@@ -46,27 +46,14 @@
 #include "mathops.h"
 #include "mpegutils.h"
 #include "internal.h"
+#include "put_bits.h"
 
 /**
  * Table of number of bits a motion vector component needs.
  */
 static uint8_t mv_penalty[MAX_FCODE+1][MAX_DMV*2+1];
 
-/**
- * Minimal fcode that a motion vector component would need in umv.
- * All entries in this table are 1.
- */
-static uint8_t umv_fcode_tab[MAX_MV*2+1];
-
-//unified encoding tables for run length encoding of coefficients
-//unified in the sense that the specification specifies the encoding in several steps.
-static uint8_t  uni_h263_intra_aic_rl_len [64*64*2*2];
-static uint8_t  uni_h263_inter_rl_len [64*64*2*2];
-//#define UNI_MPEG4_ENC_INDEX(last,run,level) ((last)*128 + (run)*256 + (level))
-//#define UNI_MPEG4_ENC_INDEX(last,run,level) ((last)*128*64 + (run) + (level)*64)
-#define UNI_MPEG4_ENC_INDEX(last,run,level) ((last)*128*64 + (run)*128 + (level))
-
-static av_cold void init_mv_penalty_and_fcode(void)
+static av_cold void init_mv_penalty(void)
 {
     for (int f_code = 1; f_code <= MAX_FCODE; f_code++) {
         for (int mv = -MAX_DMV; mv <= MAX_DMV; mv++) {
@@ -93,61 +80,68 @@ static av_cold void init_mv_penalty_and_fcode(void)
             mv_penalty[f_code][mv + MAX_DMV] = len;
         }
     }
-
-    memset(umv_fcode_tab, 1, sizeof(umv_fcode_tab));
 }
+
+#if CONFIG_H263_ENCODER
+/**
+ * Minimal fcode that a motion vector component would need in umv.
+ * All entries in this table are 1.
+ */
+static uint8_t umv_fcode_tab[MAX_MV*2+1];
+
+//unified encoding tables for run length encoding of coefficients
+//unified in the sense that the specification specifies the encoding in several steps.
+static uint8_t  uni_h263_intra_aic_rl_len [64*64*2*2];
+static uint8_t  uni_h263_inter_rl_len [64*64*2*2];
+//#define UNI_MPEG4_ENC_INDEX(last,run,level) ((last)*128 + (run)*256 + (level))
+//#define UNI_MPEG4_ENC_INDEX(last,run,level) ((last)*128*64 + (run) + (level)*64)
+#define UNI_MPEG4_ENC_INDEX(last,run,level) ((last)*128*64 + (run)*128 + (level))
 
 static av_cold void init_uni_h263_rl_tab(const RLTable *rl, uint8_t *len_tab)
 {
+    const uint16_t (*table_vlc)[2] = rl->table_vlc;
+    const uint8_t   *table_run = rl->table_run;
+    const uint8_t *table_level = rl->table_level;
+
     av_assert0(MAX_LEVEL >= 64);
     av_assert0(MAX_RUN   >= 63);
 
-    for (int slevel = -64; slevel < 64; slevel++) {
-        if (slevel == 0) continue;
-        for (int run = 0; run < 64; run++) {
-            for (int last = 0; last <= 1; last++) {
-                const int index = UNI_MPEG4_ENC_INDEX(last, run, slevel + 64);
-                int level = slevel < 0 ? -slevel : slevel;
-                int sign  = slevel < 0 ? 1 : 0;
-                int bits, len, code;
+    // Note: The LUT only covers level values for which the escape value
+    //       is eight bits (not 8 + 5 + 6)
+    memset(len_tab, H263_ESCAPE_CODE_LENGTH + 1 + 6 + 8,
+           sizeof(uni_h263_intra_aic_rl_len));
 
-                len_tab[index] = 100;
+    len_tab += 64; // simplifies addressing
+    for (int i = 0; i < H263_RL_NB_ELEMS; ++i) {
+        int run   = table_run[i];
+        int level = table_level[i];
+        int last  = i >= H263_RL_NON_LAST_CODES;
+        int len   = table_vlc[i][1];
 
-                /* ESC0 */
-                code = get_rl_index(rl, last, run, level);
-                bits = rl->table_vlc[code][0];
-                len  = rl->table_vlc[code][1];
-                bits = bits * 2 + sign;
-                len++;
-
-                if (code != rl->n && len < len_tab[index])
-                    len_tab[index] = len;
-
-                /* ESC */
-                bits = rl->table_vlc[rl->n][0];
-                len  = rl->table_vlc[rl->n][1];
-                bits = bits *   2 + last; len++;
-                bits = bits *  64 + run;  len += 6;
-                bits = bits * 256 + (level & 0xff); len += 8;
-
-                if (len < len_tab[index])
-                    len_tab[index] = len;
-            }
-        }
+        len_tab[UNI_MPEG4_ENC_INDEX(last, run,  level)] =
+        len_tab[UNI_MPEG4_ENC_INDEX(last, run, -level)] = len + 1 /* sign */;
+    }
+    for (int run = 0; run < MAX_RUN; ++run) {
+        len_tab[UNI_MPEG4_ENC_INDEX(0, run, 0)] =
+        len_tab[UNI_MPEG4_ENC_INDEX(1, run, 0)] = 0; // is this necessary?
     }
 }
+#endif
 
 static av_cold void h263_encode_init_static(void)
 {
+#if CONFIG_H263_ENCODER
     static uint8_t rl_intra_table[2][2 * MAX_RUN + MAX_LEVEL + 3];
-
     ff_rl_init(&ff_rl_intra_aic, rl_intra_table);
     ff_h263_init_rl_inter();
 
     init_uni_h263_rl_tab(&ff_rl_intra_aic,  uni_h263_intra_aic_rl_len);
     init_uni_h263_rl_tab(&ff_h263_rl_inter, uni_h263_inter_rl_len);
 
-    init_mv_penalty_and_fcode();
+    memset(umv_fcode_tab, 1, sizeof(umv_fcode_tab));
+#endif
+
+    init_mv_penalty();
 }
 
 av_cold const uint8_t (*ff_h263_get_mv_penalty(void))[MAX_DMV*2+1]
@@ -230,7 +224,9 @@ static int h263_encode_picture_header(MPVMainEncContext *const m)
     int best_error= INT_MAX;
     int custom_pcf;
 
-    if(s->c.h263_plus){
+    put_bits_assume_flushed(&s->pb);
+
+    if (s->c.codec_id == AV_CODEC_ID_H263P) {
         for(i=0; i<2; i++){
             int div, error;
             div= (s->c.avctx->time_base.num*1800000LL + 500LL*s->c.avctx->time_base.den) / ((1000LL+i)*s->c.avctx->time_base.den);
@@ -247,10 +243,8 @@ static int h263_encode_picture_header(MPVMainEncContext *const m)
     coded_frame_rate= 1800000;
     coded_frame_rate_base= (1000+best_clock_code)*best_divisor;
 
-    align_put_bits(&s->pb);
-
     put_bits(&s->pb, 22, 0x20); /* PSC */
-    temp_ref= s->c.picture_number * (int64_t)coded_frame_rate * s->c.avctx->time_base.num / //FIXME use timestamp
+    temp_ref = s->picture_number * (int64_t)coded_frame_rate * s->c.avctx->time_base.num / //FIXME use timestamp
                          (coded_frame_rate_base * (int64_t)s->c.avctx->time_base.den);
     put_sbits(&s->pb, 8, temp_ref); /* TemporalReference */
 
@@ -261,7 +255,7 @@ static int h263_encode_picture_header(MPVMainEncContext *const m)
     put_bits(&s->pb, 1, 0);     /* freeze picture release off */
 
     format = ff_match_2uint16(ff_h263_format, FF_ARRAY_ELEMS(ff_h263_format), s->c.width, s->c.height);
-    if (!s->c.h263_plus) {
+    if (s->c.codec_id != AV_CODEC_ID_H263P) {
         /* H.263v1 */
         put_bits(&s->pb, 3, format);
         put_bits(&s->pb, 1, (s->c.pict_type == AV_PICTURE_TYPE_P));
@@ -287,16 +281,16 @@ static int h263_encode_picture_header(MPVMainEncContext *const m)
             put_bits(&s->pb, 3, format);
 
         put_bits(&s->pb,1, custom_pcf);
-        put_bits(&s->pb,1, s->c.umvplus); /* Unrestricted Motion Vector */
+        put_bits(&s->pb,1, s->umvplus); /* Unrestricted Motion Vector */
         put_bits(&s->pb,1,0); /* SAC: off */
         put_bits(&s->pb,1,s->c.obmc); /* Advanced Prediction Mode */
         put_bits(&s->pb,1,s->c.h263_aic); /* Advanced Intra Coding */
-        put_bits(&s->pb,1,s->c.loop_filter); /* Deblocking Filter */
-        put_bits(&s->pb,1,s->c.h263_slice_structured); /* Slice Structured */
+        put_bits(&s->pb,1,s->loop_filter); /* Deblocking Filter */
+        put_bits(&s->pb,1,s->h263_slice_structured); /* Slice Structured */
         put_bits(&s->pb,1,0); /* Reference Picture Selection: off */
         put_bits(&s->pb,1,0); /* Independent Segment Decoding: off */
-        put_bits(&s->pb,1,s->c.alt_inter_vlc); /* Alternative Inter VLC */
-        put_bits(&s->pb,1,s->c.modified_quant); /* Modified Quantization: */
+        put_bits(&s->pb,1,s->alt_inter_vlc); /* Alternative Inter VLC */
+        put_bits(&s->pb,1,s->modified_quant); /* Modified Quantization: */
         put_bits(&s->pb,1,1); /* "1" to prevent start code emulation */
         put_bits(&s->pb,3,0); /* Reserved */
 
@@ -333,11 +327,11 @@ static int h263_encode_picture_header(MPVMainEncContext *const m)
         }
 
         /* Unlimited Unrestricted Motion Vectors Indicator (UUI) */
-        if (s->c.umvplus)
+        if (s->umvplus)
 //            put_bits(&s->pb,1,1); /* Limited according tables of Annex D */
 //FIXME check actual requested range
             put_bits(&s->pb,2,1); /* unlimited */
-        if(s->c.h263_slice_structured)
+        if (s->h263_slice_structured)
             put_bits(&s->pb,2,0); /* no weird submodes */
 
         put_bits(&s->pb, 5, s->c.qscale);
@@ -345,7 +339,7 @@ static int h263_encode_picture_header(MPVMainEncContext *const m)
 
     put_bits(&s->pb, 1, 0);     /* no PEI */
 
-    if(s->c.h263_slice_structured){
+    if (s->h263_slice_structured) {
         put_bits(&s->pb, 1, 1);
 
         av_assert1(s->c.mb_x == 0 && s->c.mb_y == 0);
@@ -357,6 +351,22 @@ static int h263_encode_picture_header(MPVMainEncContext *const m)
     return 0;
 }
 
+void ff_h263_mpeg4_reset_dc(MPVEncContext *s)
+{
+    int16_t *dc = s->c.dc_val;
+
+    // The "- 1" is for the top-left entry
+    const int l_xy = s->c.block_index[2];
+    for (int i = l_xy - 2 * s->c.b8_stride - 1; i < l_xy; i += 2)
+        AV_WN32A(dc + i, 1024 << 16 | 1024);
+
+    const int u_xy = s->c.block_index[4];
+    const int v_xy = s->c.block_index[5];
+    int16_t *dc2 = dc + v_xy - u_xy;
+    for (int i = u_xy - s->c.mb_stride - 1; i < u_xy; ++i)
+        dc[i] = dc2[i] = 1024;
+}
+
 /**
  * Encode a group of blocks header.
  */
@@ -364,7 +374,7 @@ void ff_h263_encode_gob_header(MPVEncContext *const s, int mb_line)
 {
     put_bits(&s->pb, 17, 1); /* GBSC */
 
-    if(s->c.h263_slice_structured){
+    if (s->h263_slice_structured) {
         put_bits(&s->pb, 1, 1);
 
         ff_h263_encode_mba(s);
@@ -375,7 +385,7 @@ void ff_h263_encode_gob_header(MPVEncContext *const s, int mb_line)
         put_bits(&s->pb, 1, 1);
         put_bits(&s->pb, 2, s->c.pict_type == AV_PICTURE_TYPE_I); /* GFID */
     }else{
-        int gob_number= mb_line / s->c.gob_index;
+        int gob_number = mb_line / s->gob_index;
 
         put_bits(&s->pb, 5, gob_number); /* GN */
         put_bits(&s->pb, 2, s->c.pict_type == AV_PICTURE_TYPE_I); /* GFID */
@@ -413,6 +423,28 @@ void ff_clean_h263_qscales(MPVEncContext *const s)
 
 static const int dquant_code[5]= {1,0,9,2,3};
 
+static void flv2_encode_ac_esc(PutBitContext *pb, int slevel, int level,
+                               int run, int last)
+{
+    unsigned code;
+    int bits;
+    if (level < 64) { // 7-bit level
+        bits = 1 + 1 + 6 + 7;
+        code = (0 << (1 + 6 + 7)) |
+               (last <<  (6 + 7)) |
+               (run << 7) |
+               (slevel & 0x7f);
+    } else {
+        /* 11-bit level */
+        bits = 1 + 1 + 6 + 11;
+        code = (1 << (1 + 6 + 11)) |
+               (last <<  (6 + 11)) |
+               (run << 11) |
+               (slevel & 0x7ff);
+    }
+    put_bits(pb, bits, code);
+}
+
 /**
  * Encode an 8x8 block.
  * @param block the 8x8 block
@@ -447,7 +479,7 @@ static void h263_encode_block(MPVEncContext *const s, int16_t block[], int n)
         if (s->c.h263_aic && s->c.mb_intra)
             rl = &ff_rl_intra_aic;
 
-        if(s->c.alt_inter_vlc && !s->c.mb_intra){
+        if (s->alt_inter_vlc && !s->c.mb_intra) {
             int aic_vlc_bits=0;
             int inter_vlc_bits=0;
             int wrong_pos=-1;
@@ -504,22 +536,22 @@ static void h263_encode_block(MPVEncContext *const s, int16_t block[], int n)
             code = get_rl_index(rl, last, run, level);
             put_bits(&s->pb, rl->table_vlc[code][1], rl->table_vlc[code][0]);
             if (code == rl->n) {
-              if(!CONFIG_FLV_ENCODER || s->c.h263_flv <= 1){
-                put_bits(&s->pb, 1, last);
-                put_bits(&s->pb, 6, run);
+                if (!CONFIG_FLV_ENCODER || s->c.codec_id != AV_CODEC_ID_FLV1) {
+                    put_bits(&s->pb, 1, last);
+                    put_bits(&s->pb, 6, run);
 
-                av_assert2(slevel != 0);
+                    av_assert2(slevel != 0);
 
-                if(level < 128)
-                    put_sbits(&s->pb, 8, slevel);
-                else{
-                    put_bits(&s->pb, 8, 128);
-                    put_sbits(&s->pb, 5, slevel);
-                    put_sbits(&s->pb, 6, slevel>>5);
+                    if (level < 128) {
+                        put_sbits(&s->pb, 8, slevel);
+                    } else {
+                        put_bits(&s->pb, 8, 128);
+                        put_sbits(&s->pb, 5, slevel);
+                        put_sbits(&s->pb, 6, slevel>>5);
+                    }
+                } else {
+                    flv2_encode_ac_esc(&s->pb, slevel, level, run, last);
                 }
-              }else{
-                    ff_flv2_encode_ac_esc(&s->pb, slevel, level, run, last);
-              }
             } else {
                 put_bits(&s->pb, 1, sign);
             }
@@ -531,69 +563,37 @@ static void h263_encode_block(MPVEncContext *const s, int16_t block[], int n)
 /* Encode MV differences on H.263+ with Unrestricted MV mode */
 static void h263p_encode_umotion(PutBitContext *pb, int val)
 {
-    short sval = 0;
-    short i = 0;
-    short n_bits = 0;
-    short temp_val;
-    int code = 0;
-    int tcode;
-
     if ( val == 0)
         put_bits(pb, 1, 1);
-    else if (val == 1)
-        put_bits(pb, 3, 0);
-    else if (val == -1)
-        put_bits(pb, 3, 2);
     else {
+        unsigned code = (val < 0) << 1;
+        unsigned aval = val < 0 ? -val : val;
+        unsigned n_bits = 2;
 
-        sval = ((val < 0) ? (short)(-val):(short)val);
-        temp_val = sval;
-
-        while (temp_val != 0) {
-            temp_val = temp_val >> 1;
-            n_bits++;
+        while (aval != 1) { // The leading digit is implicitly coded via length
+            unsigned tmp = (aval & 1) << 1 | 1;
+            aval  >>= 1;
+            code   |= tmp << n_bits;
+            n_bits += 2;
         }
-
-        i = n_bits - 1;
-        while (i > 0) {
-            tcode = (sval & (1 << (i-1))) >> (i-1);
-            tcode = (tcode << 1) | 1;
-            code = (code << 2) | tcode;
-            i--;
-        }
-        code = ((code << 1) | (val < 0)) << 1;
-        put_bits(pb, (2*n_bits)+1, code);
+        put_bits(pb, n_bits + 1, code);
     }
 }
 
 static int h263_pred_dc(MPVEncContext *const s, int n, int16_t **dc_val_ptr)
 {
-    int x, y, wrap, a, c, pred_dc;
-    int16_t *dc_val;
+    const int wrap = s->c.block_wrap[n];
+    const int xy   = s->c.block_index[n];
+    int16_t *const dc_val = s->c.dc_val + xy;
+    int pred_dc;
 
     /* find prediction */
-    if (n < 4) {
-        x = 2 * s->c.mb_x + (n & 1);
-        y = 2 * s->c.mb_y + ((n & 2) >> 1);
-        wrap = s->c.b8_stride;
-        dc_val = s->c.dc_val[0];
-    } else {
-        x = s->c.mb_x;
-        y = s->c.mb_y;
-        wrap = s->c.mb_stride;
-        dc_val = s->c.dc_val[n - 4 + 1];
-    }
     /* B C
      * A X
      */
-    a = dc_val[(x - 1) + (y) * wrap];
-    c = dc_val[(x) + (y - 1) * wrap];
+    int a = dc_val[-1];
+    int c = dc_val[-wrap];
 
-    /* No prediction outside GOB boundary */
-    if (s->c.first_slice_line && n != 3) {
-        if (n != 2) c = 1024;
-        if (n != 1 && s->c.mb_x == s->c.resync_mb_x) a = 1024;
-    }
     /* just DC prediction */
     if (a != 1024 && c != 1024)
         pred_dc = (a + c) >> 1;
@@ -603,7 +603,7 @@ static int h263_pred_dc(MPVEncContext *const s, int n, int16_t **dc_val_ptr)
         pred_dc = c;
 
     /* we assume pred is positive */
-    *dc_val_ptr = &dc_val[x + y * wrap];
+    *dc_val_ptr = dc_val;
     return pred_dc;
 }
 
@@ -614,7 +614,6 @@ static void h263_encode_mb(MPVEncContext *const s,
     int cbpc, cbpy, i, cbp, pred_x, pred_y;
     int16_t pred_dc;
     int16_t rec_intradc[6];
-    int16_t *dc_ptr[6];
     const int interleaved_stats = s->c.avctx->flags & AV_CODEC_FLAG_PASS1;
 
     if (!s->c.mb_intra) {
@@ -635,7 +634,7 @@ static void h263_encode_mb(MPVEncContext *const s,
 
         cbpc = cbp & 3;
         cbpy = cbp >> 2;
-        if(s->c.alt_inter_vlc==0 || cbpc!=3)
+        if (!s->alt_inter_vlc || cbpc!=3)
             cbpy ^= 0xF;
         if(s->dquant) cbpc+= 8;
         if(s->c.mv_type==MV_TYPE_16X16){
@@ -654,7 +653,7 @@ static void h263_encode_mb(MPVEncContext *const s,
             /* motion vectors: 16x16 mode */
             ff_h263_pred_motion(&s->c, 0, 0, &pred_x, &pred_y);
 
-            if (!s->c.umvplus) {
+            if (!s->umvplus) {
                 ff_h263_encode_motion_vector(s, motion_x - pred_x,
                                                 motion_y - pred_y, 1);
             }
@@ -683,7 +682,7 @@ static void h263_encode_mb(MPVEncContext *const s,
 
                 motion_x = s->c.cur_pic.motion_val[0][s->c.block_index[i]][0];
                 motion_y = s->c.cur_pic.motion_val[0][s->c.block_index[i]][1];
-                if (!s->c.umvplus) {
+                if (!s->umvplus) {
                     ff_h263_encode_motion_vector(s, motion_x - pred_x,
                                                     motion_y - pred_y, 1);
                 }
@@ -708,9 +707,10 @@ static void h263_encode_mb(MPVEncContext *const s,
             /* Predict DC */
             for(i=0; i<6; i++) {
                 int16_t level = block[i][0];
+                int16_t *dc_ptr;
                 int scale = i < 4 ? s->c.y_dc_scale : s->c.c_dc_scale;
 
-                pred_dc = h263_pred_dc(s, i, &dc_ptr[i]);
+                pred_dc = h263_pred_dc(s, i, &dc_ptr);
                 level -= pred_dc;
                 /* Quant */
                 if (level >= 0)
@@ -718,7 +718,7 @@ static void h263_encode_mb(MPVEncContext *const s,
                 else
                     level = (level - (scale>>1))/scale;
 
-                if (!s->c.modified_quant) {
+                if (!s->modified_quant) {
                     if (level < -127)
                         level = -127;
                     else if (level > 127)
@@ -739,7 +739,7 @@ static void h263_encode_mb(MPVEncContext *const s,
                     rec_intradc[i] = 2047;
 
                 /* Update AC/DC tables */
-                *dc_ptr[i] = rec_intradc[i];
+                *dc_ptr = rec_intradc[i];
                 /* AIC can change CBP */
                 if (s->c.block_last_index[i] > 0 ||
                     (s->c.block_last_index[i] == 0 && level !=0))
@@ -838,15 +838,18 @@ av_cold void ff_h263_encode_init(MPVMainEncContext *const m)
     }
     s->ac_esc_length= 7+1+6+8;
 
-    if (s->c.modified_quant)
+    if (s->modified_quant)
         s->c.chroma_qscale_table = ff_h263_chroma_qscale_table;
+
+    // Only used for H.263 and H.263+
+    s->gob_index = H263_GOB_HEIGHT(s->c.height);
 
     // use fcodes >1 only for MPEG-4 & H.263 & H.263+ FIXME
     switch(s->c.codec_id){
     case AV_CODEC_ID_H263P:
-        if (s->c.umvplus)
+        if (s->umvplus)
             m->fcode_tab = umv_fcode_tab + MAX_MV;
-        if (s->c.modified_quant) {
+        if (s->modified_quant) {
             s->min_qcoeff= -2047;
             s->max_qcoeff=  2047;
         }else{
@@ -858,13 +861,9 @@ av_cold void ff_h263_encode_init(MPVMainEncContext *const m)
 #if CONFIG_FLV_ENCODER
     case AV_CODEC_ID_FLV1:
         m->encode_picture_header = ff_flv_encode_picture_header;
-        if (s->c.h263_flv > 1) {
-            s->min_qcoeff= -1023;
-            s->max_qcoeff=  1023;
-        } else {
-            s->min_qcoeff= -127;
-            s->max_qcoeff=  127;
-        }
+        /* format = 1; 11-bit codes */
+        s->min_qcoeff = -1023;
+        s->max_qcoeff =  1023;
         break;
 #endif
     default: //nothing needed - default table already set in mpegvideo.c
@@ -923,10 +922,10 @@ const FFCodec ff_h263_encoder = {
 };
 
 static const AVOption h263p_options[] = {
-    { "umv",        "Use unlimited motion vectors.",    OFFSET(umvplus),       AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, VE },
-    { "aiv",        "Use alternative inter VLC.",       OFFSET(alt_inter_vlc), AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, VE },
+    { "umv",        "Use unlimited motion vectors.",   FF_MPV_OFFSET(umvplus), AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, VE },
+    { "aiv",        "Use alternative inter VLC.", FF_MPV_OFFSET(alt_inter_vlc), AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, VE },
     { "obmc",       "use overlapped block motion compensation.", OFFSET(obmc), AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, VE },
-    { "structured_slices", "Write slice start position at every GOB header instead of just GOB number.", OFFSET(h263_slice_structured), AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, VE},
+    { "structured_slices", "Write slice start position at every GOB header instead of just GOB number.", FF_MPV_OFFSET(h263_slice_structured), AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, VE},
     FF_MPV_COMMON_OPTS
     FF_MPV_COMMON_MOTION_EST_OPTS
     { NULL },

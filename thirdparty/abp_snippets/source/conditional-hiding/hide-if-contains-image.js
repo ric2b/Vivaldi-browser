@@ -19,15 +19,14 @@ import $ from "../$.js";
 
 import {$$, $closest, hideElement} from "../utils/dom.js";
 import {raceWinner} from "../introspection/race.js";
-import {toRegExp} from "../utils/general.js";
+import {formatArguments, toRegExp} from "../utils/general.js";
 import {getDebugger} from "../introspection/log.js";
+import {profile} from "../introspection/profile.js";
+import {fetchContent} from "../utils/execution.js";
+import {uint8ArrayToHex} from "../utils/general.js";
 
 let {
-  clearTimeout,
-  fetch,
   getComputedStyle,
-  setTimeout,
-  Map,
   MutationObserver,
   Uint8Array
 } = $(window);
@@ -55,9 +54,12 @@ export function hideIfContainsImage(search, selector, searchSelector) {
 
   let searchRegExp = toRegExp(search);
 
+  const formattedArguments = formatArguments(arguments);
   const debugLog = getDebugger("hide-if-contains-image");
+  const {mark, end} = profile("hide-if-contains-image");
 
   let callback = () => {
+    mark();
     for (const {element, rootParents} of $$(searchSelector, true)) {
       let style = getComputedStyle(element);
       let match = $(style["background-image"]).match(/^url\("(.*)"\)$/);
@@ -68,12 +70,17 @@ export function hideIfContainsImage(search, selector, searchSelector) {
             if (closest) {
               win();
               hideElement(closest);
-              debugLog("success", "Matched: ", closest, " for:", ...arguments);
+              debugLog("success",
+                       "Matched: ",
+                       closest,
+                       "\nFILTER: hide-if-contains-image",
+                       formattedArguments);
             }
           }
         });
       }
     }
+    end();
   };
 
   let mo = new MutationObserver(callback);
@@ -85,93 +92,3 @@ export function hideIfContainsImage(search, selector, searchSelector) {
   callback();
 }
 
-
-/**
- * @typedef {object} FetchContentInfo
- * @property {function} remove
- * @property {Promise} result
- * @property {number} timer
- * @private
- */
-
-/**
- * @type {Map.<string, FetchContentInfo>}
- * @private
- */
-let fetchContentMap = new Map();
-
-
-/**
- * Returns a potentially already resolved fetch auto cleaning, if not requested
- * again, after a certain amount of milliseconds.
- *
- * The resolved fetch is by default `arrayBuffer` but it can be any other kind
- * through the configuration object.
- *
- * @param {string} url The url to fetch
- * @param {object} [options] Optional configuration options.
- *                            By default is {as: "arrayBuffer", cleanup: 60000}
- * @param {string} [options.as] The fetch type: "arrayBuffer", "json", "text"..
- * @param {number} [options.cleanup] The cache auto-cleanup delay in ms: 60000
- *
- * @returns {Promise} The fetched result as Uint8Array|string.
- *
- * @example
- * fetchContent('https://any.url.com').then(arrayBuffer => { ... })
- * @example
- * fetchContent('https://a.com', {as: 'json'}).then(json => { ... })
- * @example
- * fetchContent('https://a.com', {as: 'text'}).then(text => { ... })
- * @private
- */
-function fetchContent(url, {as = "arrayBuffer", cleanup = 60000} = {}) {
-  // make sure the fetch type is unique as the url fetching text or arrayBuffer
-  // will fetch same url twice but it will resolve it as expected instead of
-  // keeping the fetch potentially hanging forever.
-  let uid = as + ":" + url;
-  let details = fetchContentMap.get(uid) || {
-    remove: () => fetchContentMap.delete(uid),
-    result: null,
-    timer: 0
-  };
-  clearTimeout(details.timer);
-  details.timer = setTimeout(details.remove, cleanup);
-  if (!details.result) {
-    details.result = fetch(url).then(res => res[as]()).catch(details.remove);
-    fetchContentMap.set(uid, details);
-  }
-  return details.result;
-}
-
-/**
- * Converts a number to its hexadecimal representation.
- *
- * @param {number} number The number to convert.
- * @param {number} [length] The <em>minimum</em> length of the hexadecimal
- *   representation. For example, given the number `1024` and the length `8`,
- *   the function returns the value `"00000400"`.
- *
- * @returns {string} The hexadecimal representation of the given number.
- * @private
- */
-function toHex(number, length = 2) {
-  let hex = $(number).toString(16);
-
-  if (hex.length < length)
-    hex = $("0").repeat(length - hex.length) + hex;
-
-  return hex;
-}
-
-/**
- * Converts a `Uint8Array` object into its hexadecimal representation.
- *
- * @param {Uint8Array} uint8Array The `Uint8Array` object to convert.
- *
- * @returns {string} The hexadecimal representation of the given `Uint8Array`
- *   object.
- * @private
- */
-function uint8ArrayToHex(uint8Array) {
-  return uint8Array.reduce((hex, byte) => hex + toHex(byte), "");
-}

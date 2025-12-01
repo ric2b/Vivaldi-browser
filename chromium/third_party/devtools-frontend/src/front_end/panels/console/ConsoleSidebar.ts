@@ -59,7 +59,7 @@ export class ConsoleSidebar extends Common.ObjectWrapper.eventMixin<EventTypes, 
   private readonly treeElements: FilterTreeElement[];
 
   constructor() {
-    super(true);
+    super({useShadowDom: true});
     this.setMinimumSize(125, 0);
 
     this.tree = new UI.TreeOutline.TreeOutlineInShadow(UI.TreeOutline.TreeVariant.NAVIGATION_TREE);
@@ -187,7 +187,7 @@ const enum GroupName {
 
 /**
  * Maps the GroupName for a filter to the UIString used to render messages.
- * Stored here so we only construct it once at runtime, rather than everytime we
+ * Stored here so we only construct it once at runtime, rather than every time we
  * construct a filter or get a new message.
  */
 const stringForFilterSidebarItemMap = new Map<GroupName, string>([

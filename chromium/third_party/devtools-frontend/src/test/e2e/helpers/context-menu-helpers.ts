@@ -5,17 +5,18 @@
 import {assert} from 'chai';
 import type * as puppeteer from 'puppeteer-core';
 
-import {$, $$, $textContent, click, waitFor, waitForFunction} from '../../shared/helper.js';
+import type {DevToolsPage} from '../../e2e_non_hosted/shared/frontend-helper.js';
+import {$, $$, waitForFunction} from '../../shared/helper.js';
+import {getBrowserAndPagesWrappers} from '../../shared/non_hosted_wrappers.js';
 
-export async function waitForSoftContextMenu(): Promise<puppeteer.ElementHandle<Element>> {
-  return await waitFor('.soft-context-menu');
+export async function waitForSoftContextMenu(devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage):
+    Promise<puppeteer.ElementHandle<Element>> {
+  return await devToolsPage.waitFor('.soft-context-menu');
 }
 
 export async function assertTopLevelContextMenuItemsText(expectedOptions: string[]): Promise<void> {
   const contextMenu = await $('.soft-context-menu');
-  if (!contextMenu) {
-    assert.fail('Could not find context menu.');
-  }
+  assert.isOk(contextMenu, 'Could not find context menu.');
 
   const allItems = await $$('.soft-context-menu > .soft-context-menu-item');
   const allItemsText = await Promise.all(allItems.map(item => item.evaluate(div => div.textContent)));
@@ -23,11 +24,13 @@ export async function assertTopLevelContextMenuItemsText(expectedOptions: string
   assert.deepEqual(allItemsText, expectedOptions);
 }
 
-export async function findSubMenuEntryItem(text: string): Promise<puppeteer.ElementHandle<Element>> {
-  const matchingElement = await $textContent(text);
+export async function findSubMenuEntryItem(
+    text: string,
+    devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage): Promise<puppeteer.ElementHandle<Element>> {
+  const matchingElement = await devToolsPage.$textContent(text);
 
   if (!matchingElement) {
-    const allItems = await $$('.soft-context-menu > .soft-context-menu-item');
+    const allItems = await devToolsPage.$$('.soft-context-menu > .soft-context-menu-item');
     const allItemsText = await Promise.all(allItems.map(item => item.evaluate(div => div.textContent)));
     assert.fail(`Could not find "${text}" option on context menu. Found items: ${allItemsText.join(' | ')}`);
   }
@@ -52,30 +55,30 @@ export async function assertSubMenuItemsText(subMenuText: string, expectedOption
   // Each submenu is rendered as a separate context menu and is appended to
   // the DOM after the main context menu, hence the array index.
   const subMenuElement = allMenus[1];
-  if (!subMenuElement) {
-    assert.fail(`Could not find sub menu for ${subMenuText}`);
-  }
+  assert.isOk(subMenuElement, `Could not find sub menu for ${subMenuText}`);
   const subMenuItems = await $$('.soft-context-menu-item', subMenuElement);
   const subMenuItemsText = await Promise.all(subMenuItems.map(item => item.evaluate(div => div.textContent)));
   assert.deepEqual(subMenuItemsText, expectedOptions);
 }
 
-export async function openSoftContextMenuAndClickOnItem(selector: string, label: string) {
+export async function openSoftContextMenuAndClickOnItem(
+    selector: string, label: string, devToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
   // Find the selected node, right click.
-  await click(selector, {clickOptions: {button: 'right'}});
+  await devToolsPage.click(selector, {clickOptions: {button: 'right'}});
 
   // Wait for the context menu option, and click it.
-  const root = await waitForSoftContextMenu();
-  await click(`[aria-label="${label}"]`, {root});
+  const root = await waitForSoftContextMenu(devToolsPage);
+  await devToolsPage.click(`[aria-label="${label}"]`, {root});
 }
 
-export async function openSubMenu(selector: string, text: string) {
+export async function openSubMenu(
+    selector: string, text: string, devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
   // Find the selected node, right click.
-  await click(selector, {clickOptions: {button: 'right'}});
+  await devToolsPage.click(selector, {clickOptions: {button: 'right'}});
 
   // Wait for the context menu option, and click it.
-  await waitForSoftContextMenu();
+  await waitForSoftContextMenu(devToolsPage);
 
-  const subMenuEntryItem = await findSubMenuEntryItem(text);
+  const subMenuEntryItem = await findSubMenuEntryItem(text, devToolsPage);
   await subMenuEntryItem.hover();
 }

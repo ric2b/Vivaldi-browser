@@ -18,7 +18,7 @@
 import {setup, teardown} from "./browser.js";
 
 import main from "../webext/main.mjs";
-import isolated from "../webext/ml.mjs";
+import isolated from "../webext/isolated-full.mjs";
 import {assert} from "./utils.js";
 
 const {log} = console;

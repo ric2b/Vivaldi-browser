@@ -102,8 +102,9 @@ class PointerSet : public HashTableBase<PointerSetNode> {
     if (node->is_valid())
       return false;
 
+    bool was_tombstone = node->is_tombstone();
     node->ptr_ = ptr;
-    UpdateAfterInsert();
+    UpdateAfterInsert(was_tombstone);
     return true;
   }
 

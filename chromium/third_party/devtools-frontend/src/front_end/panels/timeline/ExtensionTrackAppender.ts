@@ -17,14 +17,9 @@ import * as Extensions from './extensions/extensions.js';
 
 const UIStrings = {
   /**
-   *@description Text in Timeline Flame Chart Data Provider of the Performance panel
+   * @description The subtitle to show (by the side of the track name).
    */
-  customTrackDescription: 'This is a custom track added by a third party.',
-  /**
-   * @description The name of a track, which is a horizontal division of the timeline, synonym with "swimlane".
-   * @example {A track name} PH1
-   */
-  customTrackName: '{PH1} — Custom track',
+  customTrackSubtitle: '— Custom',
 } as const;
 
 const str_ = i18n.i18n.registerUIStrings('panels/timeline/ExtensionTrackAppender.ts', UIStrings);
@@ -59,13 +54,13 @@ export class ExtensionTrackAppender implements TrackAppender {
    */
   #appendTopLevelHeaderAtLevel(currentLevel: number, expanded?: boolean): void {
     const style = buildGroupStyle({shareHeaderLine: false, collapsible: true});
-    const headerTitle = i18nString(UIStrings.customTrackName, {PH1: this.#extensionTopLevelTrack.name});
+    const headerTitle = this.#extensionTopLevelTrack.name;
     const jsLogContext = this.#extensionTopLevelTrack.name === '🅰️ Angular' ? VisualLoggingTrackName.ANGULAR_TRACK :
                                                                              VisualLoggingTrackName.EXTENSION;
     const group = buildTrackHeader(
         jsLogContext, currentLevel, headerTitle, style,
         /* selectable= */ true, expanded);
-    group.description = i18nString(UIStrings.customTrackDescription);
+    group.subtitle = i18nString(UIStrings.customTrackSubtitle);
     this.#compatibilityBuilder.registerTrackForGroup(group, this);
   }
 

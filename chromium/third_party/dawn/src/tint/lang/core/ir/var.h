@@ -31,7 +31,7 @@
 #include <string>
 
 #include "src/tint/api/common/binding_point.h"
-#include "src/tint/lang/core/builtin_value.h"
+#include "src/tint/lang/core/enums.h"
 #include "src/tint/lang/core/interpolation.h"
 #include "src/tint/lang/core/io_attributes.h"
 #include "src/tint/lang/core/ir/operand_instruction.h"
@@ -118,6 +118,8 @@ class Var : public Castable<Var, OperandInstruction<1, 1>> {
         TINT_ASSERT(!attributes_.builtin.has_value());
         attributes_.builtin = val;
     }
+    /// Returns the builtin information, if available
+    std::optional<core::BuiltinValue> Builtin() const { return attributes_.builtin; }
 
     /// Resets the IO attributes
     void ResetAttributes() { attributes_ = {}; }
@@ -128,6 +130,9 @@ class Var : public Castable<Var, OperandInstruction<1, 1>> {
 
     /// @returns the IO attributes
     const IOAttributes& Attributes() const { return attributes_; }
+
+    /// @returns the IO attributes
+    IOAttributes& Attributes() { return attributes_; }
 
     /// Destroys this instruction along with any assignment instructions, if the var is never read.
     void DestroyIfOnlyAssigned();

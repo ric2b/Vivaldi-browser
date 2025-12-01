@@ -697,7 +697,7 @@ Changes.
 ## Support {#support}
 
 This library is an open source project supported by its community. Please
-please email aomediacodec@jointdevelopment.kavi.com for help.
+email av1-discuss@aomedia.org for help.
 
 ## Bug reports {#bug-reports}
 

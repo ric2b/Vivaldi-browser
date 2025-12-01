@@ -13,17 +13,17 @@
 #include "content/public/browser/render_process_host.h"
 
 #include "app/vivaldi_apptools.h"
+#include "browser/ad_blocker/adblock_rule_service_factory.h"
 #include "browser/translate/vivaldi_translate_frame_binder.h"
+#include "components/ad_blocker/public/content/adblock_rule_service.h"
+#include "components/ad_blocker/public/content/adblock_state_and_logs.h"
+#include "components/ad_blocker/public/content/adblock_tab_state_and_logs.h"
+#include "components/ad_blocker/public/content/mojom/adblock_cosmetic_filter.mojom.h"
 #include "components/adverse_adblocking/adverse_ad_filter_list.h"
 #include "components/adverse_adblocking/adverse_ad_filter_list_factory.h"
 #include "components/adverse_adblocking/vivaldi_subresource_filter_throttle_manager.h"
 #include "components/content_injection/frame_injection_helper.h"
 #include "components/content_injection/mojom/content_injection.mojom.h"
-#include "components/request_filter/adblock_filter/adblock_cosmetic_filter.h"
-#include "components/request_filter/adblock_filter/adblock_rule_service_content.h"
-#include "components/request_filter/adblock_filter/adblock_rule_service_factory.h"
-#include "components/request_filter/adblock_filter/interstitial/document_blocked_throttle.h"
-#include "components/request_filter/adblock_filter/mojom/adblock_cosmetic_filter.mojom.h"
 #include "extraparts/vivaldi_browser_main_extra_parts.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 
@@ -59,11 +59,10 @@ VivaldiContentBrowserClient::CreateBrowserMainParts(bool is_integration_test) {
 }
 
 #if !BUILDFLAG(IS_ANDROID)
-void
-VivaldiContentBrowserClient::CreateThrottlesForNavigation(
+void VivaldiContentBrowserClient::CreateThrottlesForNavigation(
     content::NavigationThrottleRegistry& registry) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  content::NavigationHandle *handle = &registry.GetNavigationHandle();
+  content::NavigationHandle* handle = &registry.GetNavigationHandle();
 
   ChromeContentBrowserClient::CreateThrottlesForNavigation(registry);
 
@@ -82,8 +81,14 @@ VivaldiContentBrowserClient::CreateThrottlesForNavigation(
           handle, registry);
     }
   }
-  registry.AddThrottle(
-      std::make_unique<adblock_filter::DocumentBlockedThrottle>(handle));
+
+  if (vivaldi::IsVivaldiRunning()) {
+    adblock_filter::RuleServiceFactory::GetForBrowserContext(
+        handle->GetWebContents()->GetBrowserContext())
+        ->GetStateAndLogs()
+        ->CreateTabHelper(handle->GetWebContents())
+        ->MaybeAddNavigationThrottle(registry);
+    }
 }
 
 bool VivaldiContentBrowserClient::CanCommitURL(
@@ -108,16 +113,15 @@ void VivaldiContentBrowserClient::AppendExtraCommandLineSwitches(
     std::string process_type = command_line->GetSwitchValueASCII(
         sandbox::policy::switches::kProcessType);
     if (process_type == sandbox::policy::switches::kZygoteProcessType) {
-      bool is_gpu_zygote = command_line->HasSwitch(
-          sandbox::policy::switches::kNoZygoteSandbox);
+      bool is_gpu_zygote =
+          command_line->HasSwitch(sandbox::policy::switches::kNoZygoteSandbox);
       if (!is_gpu_zygote) {
         command_line->AppendSwitch(switches::kVivaldiSnapshotProcess);
       }
     }
   }
   return ChromeContentBrowserClient::AppendExtraCommandLineSwitches(
-      command_line,
-      child_process_id);
+      command_line, child_process_id);
 }
 #endif  // VIVALDI_V8_CONTEXT_SNAPSHOT
 #endif  // IS_LINUX

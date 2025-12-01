@@ -27,6 +27,7 @@ import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
 import org.chromium.components.browser_ui.widget.text.VerticallyFixedEditText;
 import org.chromium.components.omnibox.OmniboxFeatures;
+import org.chromium.ui.accessibility.AccessibilityState;
 import org.chromium.ui.text.EmptyTextWatcher;
 
 import java.util.Optional;
@@ -86,7 +87,7 @@ public class AutocompleteEditText extends VerticallyFixedEditText
                 });
     }
 
-    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
+    @VisibleForTesting
     public String sanitizeTextForPaste(String s) {
         return mNativeInitialized ? OmniboxViewUtil.sanitizeTextForPaste(s) : s;
     }
@@ -271,6 +272,13 @@ public class AutocompleteEditText extends VerticallyFixedEditText
         try { // Vivaldi: Catch potential exceptions here to avoid a crash. Ref. VAB-9232.
         super.sendAccessibilityEventUnchecked(event);
         } catch (Exception ignored) {
+        }
+    }
+
+    @Override
+    public void sendAccessibilityEvent(AccessibilityEvent event) {
+        if (AccessibilityState.isTouchExplorationEnabled()) {
+            sendAccessibilityEventUnchecked(event);
         }
     }
 

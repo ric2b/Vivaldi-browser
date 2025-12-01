@@ -27,7 +27,8 @@ limitations under the License.
 #include "mlir/IR/Value.h"
 #include "xla/codegen/emitters/computation_partitioner.h"
 #include "xla/codegen/kernel_definition.h"
-#include "xla/codegen/kernel_emitter.h"
+#include "xla/codegen/mlir_kernel_definition.h"
+#include "xla/codegen/mlir_kernel_emitter.h"
 #include "xla/hlo/analysis/indexing_map.h"
 #include "xla/hlo/ir/hlo_instructions.h"
 #include "xla/service/buffer_assignment.h"
@@ -36,12 +37,15 @@ namespace xla {
 namespace cpu {
 
 // Generic scatter fusion. Lowers to LLVM via MLIR.
-class CpuScatterFusion final : public KernelEmitter {
+class CpuScatterFusion final : public MlirKernelEmitter {
  public:
   explicit CpuScatterFusion(const BufferAssignment& buffer_assignment,
-                            const HloFusionInstruction* fusion);
+                            const HloFusionInstruction* fusion,
+                            mlir::MLIRContext* context);
 
-  absl::StatusOr<KernelDefinition> EmitKernelDefinition() final;
+  absl::StatusOr<MlirKernelDefinition> EmitKernelDefinition() final;
+
+  std::string name() const final { return "cpu_scatter_fusion"; }
 
  private:
   absl::Status EmitEntryFunction(
@@ -51,8 +55,7 @@ class CpuScatterFusion final : public KernelEmitter {
       const HloFusionInstruction& fusion) const;
 
   std::vector<emitters::EpilogueSpecification> GetEpilogues(
-      const HloFusionInstruction& fusion,
-      mlir::MLIRContext* mlir_context) const;
+      const HloFusionInstruction& fusion, mlir::MLIRContext* context) const;
 
   mlir::Value EmitThreadId(mlir::ImplicitLocOpBuilder& builder, int dim) const;
 
@@ -66,6 +69,7 @@ class CpuScatterFusion final : public KernelEmitter {
 
   const BufferAssignment& buffer_assignment_;
   const HloFusionInstruction* fusion_;
+  mlir::MLIRContext* context_;
 
   int64_t vector_size_;
   int64_t num_threads_;

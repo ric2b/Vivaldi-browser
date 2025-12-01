@@ -37,13 +37,13 @@ import ninjalog_uploader
 import reclient_helper
 import siso
 
-if sys.platform in ["darwin", "linux"]:
-    import resource
 
-_SISO_SUGGESTION = """Please run 'gn clean {output_dir}' when convenient to
-upgrade this output directory to Siso (Chromium’s Ninja replacement). If you
-run into any issues, please file a bug via go/siso-bug and switch back
-temporarily by setting the GN arg 'use_siso = false'"""
+_SISO_SUGGESTION = """You're still using Ninja.
+Please run 'gn clean {output_dir}' when convenient to
+upgrade this output directory to Siso (Chromium’s Ninja replacement).
+If you run into any issues by switching to Siso, please file a bug via
+go/siso-bug and switch back temporarily by setting the GN arg
+'use_siso = false'"""
 
 _SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 _NINJALOG_UPLOADER = os.path.join(_SCRIPT_DIR, "ninjalog_uploader.py")
@@ -57,6 +57,11 @@ _NINJALOG_UPLOADER = os.path.join(_SCRIPT_DIR, "ninjalog_uploader.py")
 # [2] https://web.archive.org/web/20150815000000*/https://www.microsoft.com/resources/documentation/windows/xp/all/proddocs/en-us/set.mspx # noqa
 _UNSAFE_FOR_CMD = set("^<>&|()%")
 _ALL_META_CHARS = _UNSAFE_FOR_CMD.union(set('"'))
+
+_HELP_MESSAGE = """\
+autoninja:
+  -o/--offline  temporary disable remote execution
+"""
 
 
 def _import_from_path(module_name, file_path):
@@ -184,11 +189,6 @@ def _get_use_siso_default(output_dir):
     if not os.path.exists(sisoenv_path):
         return False
 
-    # Use Siso by default on Googlers on corp machine for now.
-    # TODO: crbug.com/409223168 - Enable Siso by default for external devs.
-    if not _is_google_corp_machine():
-        return False
-
     # Check the project wide default in `.gn`.
     dot_gn = os.path.join(root_dir, ".gn")
     if os.path.exists(dot_gn):
@@ -215,7 +215,43 @@ def _get_use_siso_default(output_dir):
     return False
 
 
-def _main_inner(input_args, build_id, should_collect_logs=False):
+# Convert Ninja's -j flag to Siso's -local_jobs, -remote_jobs.
+def _convert_ninja_j_to_siso_flags(j_value, use_remoteexec, args):
+    local_jobs = None
+    remote_jobs = None
+    if use_remoteexec:
+        remote_jobs = j_value
+    else:
+        num_cpus = multiprocessing.cpu_count()
+        if int(j_value) <= num_cpus:
+            local_jobs = j_value
+        else:
+            print(
+                "WARNING: Ignoring -j %s because it is larger than "
+                "num_cpus=%d. Use -local_jobs=%s instead if it's intentional." %
+                (j_value, num_cpus, j_value),
+                file=sys.stderr,
+            )
+    # replace -j with -local_jobs,-remote_jobs.
+    return_args = []
+    j_value_index = None
+    for i in range(len(args)):
+        arg = args[i]
+        if arg.startswith('-j'):
+            if arg == '-j':
+                j_value_index = i + 1
+            if local_jobs:
+                return_args.extend(['-local_jobs=' + local_jobs])
+            if remote_jobs:
+                return_args.extend(['-remote_jobs=' + remote_jobs])
+            continue
+        if i == j_value_index:
+            continue
+        return_args.append(arg)
+    return return_args
+
+
+def _main_inner(input_args, build_id):
     # if user doesn't set PYTHONPYCACHEPREFIX and PYTHONDONTWRITEBYTECODE
     # set PYTHONDONTWRITEBYTECODE=1 not to create many *.pyc in workspace
     # and keep workspace clean.
@@ -230,7 +266,7 @@ def _main_inner(input_args, build_id, should_collect_logs=False):
         os.environ.setdefault("GOOGLE_API_USE_CLIENT_CERTIFICATE", "false")
     # The -t tools are incompatible with -j
     t_specified = False
-    j_specified = False
+    j_value = None
     offline = False
     output_dir = "."
     summarize_build = os.environ.get("NINJA_SUMMARIZE_BUILD") == "1"
@@ -240,7 +276,10 @@ def _main_inner(input_args, build_id, should_collect_logs=False):
     # To leave non supported parameters untouched, we do not use getopt.
     for index, arg in enumerate(input_args[1:]):
         if arg.startswith("-j"):
-            j_specified = True
+            if arg == "-j":
+                j_value = input_args[index + 2]
+            else:
+                j_value = arg[2:]
         if arg.startswith("-t"):
             t_specified = True
         if arg == "-C":
@@ -259,11 +298,7 @@ def _main_inner(input_args, build_id, should_collect_logs=False):
         elif arg.startswith("-project="):
             project = arg[len("-project="):]
         elif arg in ("-h", "--help"):
-            print(
-                "autoninja: Use -o/--offline to temporary disable remote execution.",
-                file=sys.stderr,
-            )
-            print(file=sys.stderr)
+            print(_HELP_MESSAGE, file=sys.stderr)
 
     is_android = False
     use_remoteexec = False
@@ -320,9 +355,8 @@ def _main_inner(input_args, build_id, should_collect_logs=False):
                       file=sys.stderr)
                 use_siso = False
 
-        if use_reclient is None:
-            if use_remoteexec:
-                values = _get_remoteexec_defaults()
+        if use_reclient is None and use_remoteexec:
+            if values := _get_remoteexec_defaults():
                 if use_siso:
                     use_reclient = values["use_reclient_on_siso"]
                 else:
@@ -391,6 +425,10 @@ def _main_inner(input_args, build_id, should_collect_logs=False):
                 file=sys.stderr,
             )
 
+    # use_siso may not be set when running `autoninja -help` without `-C`.
+    if use_siso is None:
+        use_siso = _get_use_siso_default(output_dir)
+
     siso_marker = os.path.join(output_dir, ".siso_deps")
     if use_siso:
         # siso generates a .ninja_log file so the mere existence of a
@@ -406,32 +444,37 @@ def _main_inner(input_args, build_id, should_collect_logs=False):
             )
             return 1
 
+        if j_value:
+            input_args = _convert_ninja_j_to_siso_flags(j_value, use_remoteexec,
+                                                        input_args)
+
         # Build ID consistently used in other tools. e.g. Reclient, ninjalog.
         os.environ.setdefault("SISO_BUILD_ID", build_id)
         with android_build_server_helper.build_server_context(
                 build_id,
                 output_dir,
                 use_android_build_server=use_android_build_server):
+
+            def run_siso(args):
+                if summarize_build:
+                    # Print the command-line to reassure the user that the right
+                    # settings are being used.
+                    _print_cmd(args)
+                return siso.main(args)
             if use_remoteexec:
                 if use_reclient and not t_specified:
-                    return reclient_helper.run_siso(
-                        [
-                            'siso',
-                            'ninja',
-                            # Do not authenticate when using Reproxy.
-                            '-project=',
-                            '-reapi_instance=',
-                        ] + input_args[1:],
-                        should_collect_logs)
-                return siso.main(["siso", "ninja"] + input_args[1:])
-            if not project:
-                project = _siso_rbe_project()
-            if not t_specified and project and not offline:
-                print(
-                    'Missing "use_remoteexec=true". No remote execution',
-                    file=sys.stderr,
-                )
-            return siso.main(["siso", "ninja", "--offline"] + input_args[1:])
+                    # TODO: crbug.com/379584977 - Remove siso/reclient
+                    # integration.
+                    return reclient_helper.run_siso([
+                        'siso',
+                        'ninja',
+                        # Do not authenticate when using Reproxy.
+                        '-project=',
+                        '-reapi_instance=',
+                        '-reapi_address=',
+                    ] + input_args[1:])
+                return run_siso(["siso", "ninja"] + input_args[1:])
+            return run_siso(["siso", "ninja", "--offline"] + input_args[1:])
 
     if os.path.exists(siso_marker):
         print(
@@ -462,6 +505,7 @@ def _main_inner(input_args, build_id, should_collect_logs=False):
     # use `ulimit -n .... &&` as a prefix to increase the limit when running
     # ninja.
     if sys.platform in ["darwin", "linux"]:
+        import resource
         # Increase the number of allowed open file descriptors to the maximum.
         fileno_limit, hard_limit = resource.getrlimit(resource.RLIMIT_NOFILE)
         if fileno_limit < hard_limit:
@@ -475,7 +519,7 @@ def _main_inner(input_args, build_id, should_collect_logs=False):
 
     ninja_args = ['ninja']
     num_cores = multiprocessing.cpu_count()
-    if not j_specified and not t_specified:
+    if not j_value and not t_specified:
         if not offline and use_remoteexec:
             ninja_args.append("-j")
             default_core_multiplier = 80
@@ -526,7 +570,7 @@ def _main_inner(input_args, build_id, should_collect_logs=False):
             build_id, output_dir,
             use_android_build_server=use_android_build_server):
         if use_reclient and not t_specified:
-            return reclient_helper.run_ninja(ninja_args, should_collect_logs)
+            return reclient_helper.run_ninja(ninja_args)
         return ninja.main(ninja_args)
 
 
@@ -563,8 +607,6 @@ def main(args):
         build_id = str(uuid.uuid4())
         os.environ.setdefault("AUTONINJA_BUILD_ID", build_id)
 
-    # Check the log collection opt-in/opt-out status, and display notice if necessary.
-    should_collect_logs = build_telemetry.enabled()
     # On Windows the autoninja.bat script passes along the arguments enclosed in
     # double quotes. This prevents multiple levels of parsing of the special '^'
     # characters needed when compiling a single file but means that this script
@@ -577,10 +619,12 @@ def main(args):
     if sys.platform.startswith("win") and len(args) == 2:
         input_args = args[:1] + args[1].split()
     try:
-        exit_code = _main_inner(input_args, build_id, should_collect_logs)
+        exit_code = _main_inner(input_args, build_id)
     except KeyboardInterrupt:
         exit_code = 1
     finally:
+        # Check the log collection opt-in/opt-out status, and display notice if necessary.
+        should_collect_logs = build_telemetry.enabled()
         if should_collect_logs:
             elapsed = time.time() - start
             _upload_ninjalog(input_args, exit_code, elapsed)

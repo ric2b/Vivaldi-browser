@@ -2005,9 +2005,12 @@ int av1_intrabc_hash_search(const AV1_COMP *cpi, const MACROBLOCKD *xd,
   av1_get_block_hash_value(intrabc_hash_info, src, src_stride, block_width,
                            &hash_value1, &hash_value2, is_cur_buf_hbd(xd));
 
-  const int count = av1_hash_table_count(ref_frame_hash, hash_value1);
+  int count = av1_hash_table_count(ref_frame_hash, hash_value1);
   if (count <= 1) {
     return INT_MAX;
+  }
+  if (cpi->sf.mv_sf.prune_intrabc_candidate_block_hash_search) {
+    count = AOMMIN(64, count);
   }
 
   Iterator iterator = av1_hash_get_first_iterator(ref_frame_hash, hash_value1);

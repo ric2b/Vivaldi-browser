@@ -10,6 +10,7 @@
 #include "chrome/browser/lens/core/mojom/lens_ghost_loader.mojom.h"
 #include "chrome/browser/ui/lens/lens_overlay_controller.h"
 #include "chrome/browser/ui/lens/lens_overlay_side_panel_coordinator.h"
+#include "chrome/browser/ui/lens/lens_overlay_url_builder.h"
 #include "chrome/browser/ui/lens/lens_search_contextualization_controller.h"
 #include "chrome/browser/ui/lens/lens_search_controller.h"
 #include "chrome/browser/ui/lens/lens_session_metrics_logger.h"
@@ -26,9 +27,6 @@
 #include "url/gurl.h"
 
 namespace {
-// The url query param key for the search query.
-inline constexpr char kTextQueryParameterKey[] = "q";
-
 // The size of the thumbnail to send to the searchbox.
 inline constexpr float kMaxThumbnailWidth = 100.0f;
 inline constexpr float kMaxThumbnailHeight = 100.0f;
@@ -51,6 +49,9 @@ std::string ScaleBitmapAndEncodeToDataUri(SkBitmap bitmap) {
 
 namespace lens {
 
+LensSearchboxController::LensSearchboxInitializationData::
+    LensSearchboxInitializationData() = default;
+
 LensSearchboxController::LensSearchboxController(
     LensSearchController* lens_search_controller)
     : lens_search_controller_(lens_search_controller) {}
@@ -60,6 +61,13 @@ void LensSearchboxController::BindOverlayGhostLoader(
     mojo::PendingRemote<lens::mojom::LensGhostLoaderPage> page) {
   overlay_ghost_loader_page_.reset();
   overlay_ghost_loader_page_.Bind(std::move(page));
+
+  // If the page is not context eligible, show the error state once the ghost
+  // loader is bound.
+  if (!lens_search_controller_->lens_search_contextualization_controller()
+           ->GetCurrentPageContextEligibility()) {
+    ShowGhostLoaderErrorState();
+  }
 }
 
 void LensSearchboxController::BindSidePanelGhostLoader(
@@ -68,9 +76,10 @@ void LensSearchboxController::BindSidePanelGhostLoader(
   side_panel_ghost_loader_page_.Bind(std::move(page));
 }
 
-void LensSearchboxController::OnSessionStart() {
+void LensSearchboxController::OnSessionStart(bool suppress_contextualization) {
   // Initialize any data needed for the searchbox.
   init_data_ = std::make_unique<LensSearchboxInitializationData>();
+  init_data_->suppress_contextualization = suppress_contextualization;
 }
 
 void LensSearchboxController::SetSidePanelSearchboxHandler(
@@ -247,11 +256,14 @@ LensSearchboxController::GetPageClassification() const {
   // visual search path.
   const LensOverlayController::State state =
       lens_search_controller_->lens_overlay_controller()->state();
-  if (state == LensOverlayController::State::kLivePageAndResults ||
+  bool state_supports_contextualization =
+      state == LensOverlayController::State::kLivePageAndResults ||
       state == LensOverlayController::State::kOverlay ||
       (state == LensOverlayController::State::kOff &&
        lens_search_controller_->lens_search_contextualization_controller()
-           ->IsActive())) {
+           ->IsActive());
+  if (state_supports_contextualization &&
+      !init_data_->suppress_contextualization) {
     return metrics::OmniboxEventProto::CONTEXTUAL_SEARCHBOX;
   }
   return init_data_->thumbnail_uri.empty()
@@ -283,21 +295,9 @@ void LensSearchboxController::OnSuggestionAccepted(
     AutocompleteMatchType::Type match_type,
     bool is_zero_prefix_suggestion) {
   base::Time query_start_time = base::Time::Now();
-  std::string query_text = "";
-  std::map<std::string, std::string> additional_query_parameters;
-
-  net::QueryIterator query_iterator(destination_url);
-  while (!query_iterator.IsAtEnd()) {
-    std::string_view key = query_iterator.GetKey();
-    std::string_view value = query_iterator.GetUnescapedValue();
-    if (kTextQueryParameterKey == key) {
-      query_text = value;
-    } else {
-      additional_query_parameters.insert(std::make_pair(
-          query_iterator.GetKey(), query_iterator.GetUnescapedValue()));
-    }
-    query_iterator.Advance();
-  }
+  std::string query_text = ExtractTextQueryParameterValue(destination_url);
+  std::map<std::string, std::string> additional_query_parameters =
+      GetParametersMapWithoutQuery(destination_url);
 
   // TODO(crbug.com/413138792): Move the logic to issue a searchbox query to
   // this class.

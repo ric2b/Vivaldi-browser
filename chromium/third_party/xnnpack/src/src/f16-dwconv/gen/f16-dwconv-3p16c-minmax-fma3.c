@@ -9,11 +9,16 @@
 // LICENSE file in the root directory of this source tree.
 
 #include <assert.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #include <immintrin.h>
 
+#include "src/xnnpack/common.h"
 #include "src/xnnpack/dwconv.h"
 #include "src/xnnpack/intrinsics-polyfill.h"
+#include "src/xnnpack/math.h"
+#include "src/xnnpack/microparams.h"
 
 
 void xnn_f16_dwconv_minmax_ukernel_3p16c__fma3(
@@ -27,7 +32,7 @@ void xnn_f16_dwconv_minmax_ukernel_3p16c__fma3(
     size_t input_offset,
     size_t input_pixel_stride,
     const xnn_float16* zero,
-    const struct xnn_f16_minmax_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
+    const struct xnn_f16_minmax_params* restrict params) XNN_OOB_READS
 {
   assert(channels != 0);
   assert(output_width != 0);

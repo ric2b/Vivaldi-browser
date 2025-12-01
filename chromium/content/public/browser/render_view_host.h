@@ -76,7 +76,6 @@ class CONTENT_EXPORT RenderViewHost {
       perfetto::TracedProto<TraceProto> context) const = 0;
 
   // Vivaldi
-  virtual void LoadImageAt(int x, int y) = 0;
   virtual void SetImagesEnabled(bool show) = 0;
   virtual void SetServeResourceFromCacheOnly(const bool only_cache) = 0;
 

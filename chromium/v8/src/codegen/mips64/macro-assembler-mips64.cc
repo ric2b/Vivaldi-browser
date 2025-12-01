@@ -99,6 +99,19 @@ void MacroAssembler::LoadRoot(Register destination, RootIndex index) {
   Ld(destination, MemOperand(s6, RootRegisterOffsetForRootIndex(index)));
 }
 
+void MacroAssembler::LoadInterpreterDataBytecodeArray(
+    Register destination, Register interpreter_data) {
+  Ld(destination, FieldMemOperand(interpreter_data,
+                                  offsetof(InterpreterData, bytecode_array_)));
+}
+
+void MacroAssembler::LoadInterpreterDataInterpreterTrampoline(
+    Register destination, Register interpreter_data) {
+  Ld(destination,
+     FieldMemOperand(interpreter_data,
+                     offsetof(InterpreterData, interpreter_trampoline_)));
+}
+
 void MacroAssembler::LoadRoot(Register destination, RootIndex index,
                               Condition cond, Register src1,
                               const Operand& src2) {
@@ -4973,7 +4986,7 @@ void MacroAssembler::TestCodeIsMarkedForDeoptimizationAndJump(
 }
 
 Operand MacroAssembler::ClearedValue() const {
-  return Operand(static_cast<int32_t>(i::ClearedValue(isolate()).ptr()));
+  return Operand(static_cast<int32_t>(i::kClearedWeakValue.ptr()));
 }
 
 void MacroAssembler::InvokePrologue(Register expected_parameter_count,
@@ -6593,16 +6606,17 @@ void MacroAssembler::GenerateTailCallToReturnedCode(
     SmiTag(kJavaScriptCallArgCountRegister);
     Push(kJavaScriptCallTargetRegister, kJavaScriptCallNewTargetRegister,
          kJavaScriptCallArgCountRegister);
-#ifdef V8_ENABLE_LEAPTIERING
+#ifdef V8_JS_LINKAGE_INCLUDES_DISPATCH_HANDLE
     // No need to SmiTag since dispatch handles always look like Smis.
     static_assert(kJSDispatchHandleShift > 0);
+    AssertSmi(kJavaScriptCallDispatchHandleRegister);
     Push(kJavaScriptCallDispatchHandleRegister);
 #endif
     // Function is also the parameter to the runtime call.
     Push(kJavaScriptCallTargetRegister);
     CallRuntime(function_id, 1);
     // Restore target function, new target and actual argument count.
-#ifdef V8_ENABLE_LEAPTIERING
+#ifdef V8_JS_LINKAGE_INCLUDES_DISPATCH_HANDLE
     Pop(kJavaScriptCallDispatchHandleRegister);
 #endif
     Pop(kJavaScriptCallTargetRegister, kJavaScriptCallNewTargetRegister,

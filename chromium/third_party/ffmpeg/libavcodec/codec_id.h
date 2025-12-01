@@ -425,6 +425,7 @@ enum AVCodecID {
     AV_CODEC_ID_ADPCM_IMA_ACORN,
     AV_CODEC_ID_ADPCM_XMD,
     AV_CODEC_ID_ADPCM_IMA_XBOX,
+    AV_CODEC_ID_ADPCM_SANYO,
 
     /* AMR */
     AV_CODEC_ID_AMR_NB = 0x12000,
@@ -553,6 +554,7 @@ enum AVCodecID {
     AV_CODEC_ID_OSQ,
     AV_CODEC_ID_QOA,
     AV_CODEC_ID_LC3,
+    AV_CODEC_ID_G728,
 
     /* subtitle codecs */
     AV_CODEC_ID_FIRST_SUBTITLE = 0x17000,          ///< A dummy ID pointing at the start of subtitle codecs.

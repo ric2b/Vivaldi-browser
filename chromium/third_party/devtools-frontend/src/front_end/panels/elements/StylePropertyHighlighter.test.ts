@@ -5,6 +5,7 @@
 import * as SDK from '../../core/sdk/sdk.js';
 import {createTarget} from '../../testing/EnvironmentHelpers.js';
 import {describeWithMockConnection} from '../../testing/MockConnection.js';
+import {getMatchedStyles} from '../../testing/StyleHelpers.js';
 import * as UI from '../../ui/legacy/legacy.js';
 import * as PanelUtils from '../utils/utils.js';
 
@@ -19,27 +20,8 @@ describeWithMockConnection('StylePropertyHighlighter', () => {
     UI.Context.Context.instance().setFlavor(SDK.DOMModel.DOMNode, sinon.createStubInstance(SDK.DOMModel.DOMNode));
     const computedStyleModel = new Elements.ComputedStyleModel.ComputedStyleModel();
     const stylesSidebarPane = new Elements.StylesSidebarPane.StylesSidebarPane(computedStyleModel);
-    const matchedStyles = await SDK.CSSMatchedStyles.CSSMatchedStyles.create({
-      cssModel: target.model(SDK.CSSModel.CSSModel)!,
-      node: stylesSidebarPane.node() as SDK.DOMModel.DOMNode,
-      inlinePayload: null,
-      attributesPayload: null,
-      matchedPayload: [],
-      pseudoPayload: [],
-      inheritedPayload: [],
-      inheritedPseudoPayload: [],
-      animationsPayload: [],
-      parentLayoutNodeId: undefined,
-      positionTryRules: [],
-      propertyRules: [],
-      cssPropertyRegistrations: [],
-      fontPaletteValuesRule: undefined,
-      activePositionFallbackIndex: -1,
-      animationStylesPayload: [],
-      transitionsStylePayload: null,
-      inheritedAnimatedPayload: [],
-      functionRules: [],
-    });
+    const matchedStyles = await getMatchedStyles(
+        {node: stylesSidebarPane.node() as SDK.DOMModel.DOMNode, cssModel: target.model(SDK.CSSModel.CSSModel)!});
     return {
       stylesSidebarPane,
       matchedStyles,
@@ -145,5 +127,34 @@ describeWithMockConnection('StylePropertyHighlighter', () => {
     const element = block2.sections[1].propertiesTreeOutline.firstChild()?.listItemElement;
     assert.exists(element);
     sinon.assert.calledOnceWithExactly(highlightSpy, element);
+  });
+
+  it('highlights longhand properties of a shorthand property', async () => {
+    const {stylesSidebarPane, matchedStyles} = await setupStylesPane();
+    const style = sinon.createStubInstance(SDK.CSSStyleDeclaration.CSSStyleDeclaration);
+    const shorthandProperty =
+        new SDK.CSSProperty.CSSProperty(style, 0, 'background', 'red', true, false, true, false, '', undefined);
+    const longhandProperty =
+        new SDK.CSSProperty.CSSProperty(style, 1, 'background-color', 'red', true, false, true, false, '', undefined);
+    sinon.stub(shorthandProperty, 'getLonghandProperties').returns([longhandProperty]);
+
+    style.leadingProperties.returns([shorthandProperty]);
+    style.allProperties.returns([shorthandProperty, longhandProperty]);
+
+    const section = new Elements.StylePropertiesSection.StylePropertiesSection(
+        stylesSidebarPane, matchedStyles, style, 0, null, null);
+    sinon.stub(stylesSidebarPane, 'allSections').returns([section]);
+
+    const highlighter = new Elements.StylePropertyHighlighter.StylePropertyHighlighter(stylesSidebarPane);
+    const highlightSpy = sinon.stub(PanelUtils.PanelUtils, 'highlightElement');
+    await highlighter.highlightProperty(longhandProperty);
+
+    // Assert that the shorthand is expanded and the longhand is highlighted.
+    const shorthandTreeElement =
+        section.propertiesTreeOutline.firstChild() as Elements.StylePropertyTreeElement.StylePropertyTreeElement;
+    const longhandTreeElement =
+        shorthandTreeElement.childAt(0) as Elements.StylePropertyTreeElement.StylePropertyTreeElement;
+    assert.isTrue(shorthandTreeElement.expanded, 'Shorthand property should be expanded');
+    sinon.assert.calledOnceWithExactly(highlightSpy, longhandTreeElement.listItemElement);
   });
 });

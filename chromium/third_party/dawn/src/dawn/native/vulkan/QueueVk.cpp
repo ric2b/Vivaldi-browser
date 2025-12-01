@@ -103,7 +103,7 @@ MaybeError Queue::SubmitImpl(uint32_t commandCount, CommandBufferBase* const* co
     }
     TRACE_EVENT_END0(GetDevice()->GetPlatform(), Recording, "CommandBufferVk::RecordCommands");
 
-    DAWN_TRY(SubmitPendingCommands());
+    DAWN_TRY(SubmitPendingCommandsImpl());
 
     return {};
 }
@@ -124,6 +124,9 @@ VkQueue Queue::GetVkQueue() const {
 }
 
 ResultOrError<ExecutionSerial> Queue::CheckAndUpdateCompletedSerials() {
+    // TODO(crbug.com/40643114): Revisit whether this lock is needed for this backend.
+    auto deviceGuard = GetDevice()->GetGuard();
+
     Device* device = ToBackend(GetDevice());
     return mFencesInFlight.Use([&](auto fencesInFlight) -> ResultOrError<ExecutionSerial> {
         ExecutionSerial fenceSerial(0);
@@ -146,7 +149,6 @@ ResultOrError<ExecutionSerial> Queue::CheckAndUpdateCompletedSerials() {
 
             mUnusedFences->push_back(fence);
 
-            DAWN_ASSERT(fenceSerial > GetCompletedCommandSerial());
             fencesInFlight->pop_front();
         }
         return fenceSerial;
@@ -318,7 +320,7 @@ void Queue::RecycleCompletedCommands(ExecutionSerial completedSerial) {
     mCommandsInFlight.ClearUpTo(completedSerial);
 }
 
-MaybeError Queue::SubmitPendingCommands() {
+MaybeError Queue::SubmitPendingCommandsImpl() {
     if (!mRecordingContext.needsSubmit) {
         return {};
     }
@@ -469,7 +471,7 @@ void Queue::DestroyImpl() {
     QueueBase::DestroyImpl();
 }
 
-ResultOrError<bool> Queue::WaitForQueueSerial(ExecutionSerial serial, Nanoseconds timeout) {
+ResultOrError<bool> Queue::WaitForQueueSerialImpl(ExecutionSerial serial, Nanoseconds timeout) {
     Device* device = ToBackend(GetDevice());
     VkDevice vkDevice = device->GetVkDevice();
     // If the client has passed a finite timeout, the function will eventually return due to
@@ -492,7 +494,6 @@ ResultOrError<bool> Queue::WaitForQueueSerial(ExecutionSerial serial, Nanosecond
             if (waitFence == VK_NULL_HANDLE) {
                 // Fence not found. This serial must have already completed.
                 // Return a VK_SUCCESS status.
-                DAWN_ASSERT(serial <= GetCompletedCommandSerial());
                 return VkResult::WrapUnsafe(VK_SUCCESS);
             }
             // Wait for the fence.

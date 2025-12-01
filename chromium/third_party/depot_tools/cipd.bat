@@ -77,7 +77,7 @@ exit /b %EXPORT_ERRORLEVEL%
 :: in the file's properties dialog.
 echo.>"%~dp0.cipd_impl.ps1:Zone.Identifier"
 powershell -NoProfile -ExecutionPolicy RemoteSigned ^
-    "%~dp0.cipd_impl.ps1" ^
+    -File "%~dp0.cipd_impl.ps1" ^
     -CipdBinary "%CIPD_BINARY%" ^
     -Platform "%CIPD_PLATFORM%" ^
     -BackendURL "%CIPD_BACKEND%" ^

@@ -156,6 +156,9 @@ func OpenArchive(path string) (*Archive, error) {
 }
 
 // ForEach applies f to all requests in the archive.
+// Although `req` and `resp` are pointers, mutating them won't actually change
+// the contents of the archive. If you need to mutate, create a new archive and
+// add to it.
 func (a *Archive) ForEach(f func(req *http.Request, resp *http.Response) error) error {
 	for _, urlmap := range a.Requests {
 		for urlString, requests := range urlmap {
@@ -371,7 +374,7 @@ const (
 	AddModeSkipExisting      AddMode = 2
 )
 
-func (a *Archive) addArchivedRequest(req *http.Request, resp *http.Response, mode AddMode) error {
+func (a *Archive) AddArchivedRequest(req *http.Request, resp *http.Response, mode AddMode) error {
 	// Always use the absolute URL in this mapping.
 	assertCompleteURL(req.URL)
 	archivedRequest, err := serializeRequest(req, resp)
@@ -426,7 +429,7 @@ func (a *Archive) Edit(edit func(req *http.Request, resp *http.Response) (*http.
 			return nil
 		}
 		// TODO: allow changing scheme or protocol?
-		return clone.addArchivedRequest(newReq, newResp, AddModeAppend)
+		return clone.AddArchivedRequest(newReq, newResp, AddModeAppend)
 	})
 	if err != nil {
 		return nil, err
@@ -443,7 +446,7 @@ func (a *Archive) Merge(other *Archive) error {
 		if notFoundErr == ErrNotFound ||
 				req.URL.String() != foundReq.URL.String() ||
 				!reflect.DeepEqual(req.Header, foundReq.Header) {
-			if err := a.addArchivedRequest(req, resp, AddModeAppend); err != nil {
+			if err := a.AddArchivedRequest(req, resp, AddModeAppend); err != nil {
 				return err
 			}
 			numAddedRequests++
@@ -470,7 +473,7 @@ func (a *Archive) Trim(trimMatch func(req *http.Request, resp *http.Response) (b
 		if trimReq {
 			numRemovedRequests++
 		} else {
-			clone.addArchivedRequest(req, resp, AddModeAppend)
+			clone.AddArchivedRequest(req, resp, AddModeAppend)
 		}
 		return nil
 	})
@@ -508,7 +511,7 @@ func (a *Archive) Add(method string, urlString string, mode AddMode) error {
 		return fmt.Errorf("Error fetching url: %v", err)
 	}
 
-	if err = a.addArchivedRequest(req, resp, mode); err != nil {
+	if err = a.AddArchivedRequest(req, resp, mode); err != nil {
 		return err
 	}
 
@@ -547,7 +550,7 @@ func OpenWritableArchive(path string) (*WritableArchive, error) {
 func (a *WritableArchive) RecordRequest(req *http.Request, resp *http.Response) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return a.addArchivedRequest(req, resp, AddModeAppend)
+	return a.AddArchivedRequest(req, resp, AddModeAppend)
 }
 
 // RecordTlsConfig records the cert used and protocol negotiated for a host.

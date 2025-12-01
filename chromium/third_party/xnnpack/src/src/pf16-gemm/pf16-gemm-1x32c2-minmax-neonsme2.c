@@ -10,6 +10,14 @@
 
 #if XNN_ENABLE_KLEIDIAI
 #include "kai/ukernels/matmul/matmul_clamp_f16_f16_f16p/kai_matmul_clamp_f16_f16_f16p2vlx2b_1x16vl_sme2_dot.h"
+
+size_t xnn_pf16_gemm_minmax_ukernel_1x32c2__neonsme2_get_mr() {
+  return 1;
+}
+
+size_t xnn_pf16_gemm_minmax_ukernel_1x32c2__neonsme2_get_nr() {
+  return kai_get_nr_matmul_clamp_f16_f16_f16p2vlx2b_1x16vl_sme2_dot();
+}
 #endif  // XNN_ENABLE_KLEIDIAI
 
 // Wraps the `kai_run_matmul_clamp_f16_f16_f16p2vlx2b_1x16vl_sme2_dot`
@@ -18,8 +26,7 @@ void xnn_pf16_gemm_minmax_ukernel_1x32c2__neonsme2(
     size_t m, size_t n, size_t k, const void* lhs_packed,
     const void* rhs_packed, float* dst, size_t dst_stride_row,
     size_t dst_stride_col,
-    struct xnn_f16_minmax_params
-        minmax_params[XNN_RESTRICT XNN_MIN_ELEMENTS(1)]) {
+    const struct xnn_f16_minmax_params* minmax_params) {
 #if XNN_ENABLE_KLEIDIAI
   kai_run_matmul_clamp_f16_f16_f16p2vlx2b_1x16vl_sme2_dot(
       m, n, k / sizeof(xnn_float16), lhs_packed, /*unused lhs_stride=*/0,

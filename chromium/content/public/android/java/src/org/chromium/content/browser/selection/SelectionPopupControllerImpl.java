@@ -348,8 +348,7 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
         }
         if (initializeNative) {
             mNativeSelectionPopupController =
-                    SelectionPopupControllerImplJni.get()
-                            .init(SelectionPopupControllerImpl.this, mWebContents);
+                    SelectionPopupControllerImplJni.get().init(this, mWebContents);
             ImeAdapterImpl imeAdapter = ImeAdapterImpl.fromWebContents(mWebContents);
             if (imeAdapter != null) imeAdapter.addEventObserver(this);
         }
@@ -386,7 +385,7 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
     // ViewAndroidDelegate.ContainerViewObserver
 
     @Override
-    public void onUpdateContainerView(ViewGroup containerView) {
+    public void onUpdateContainerView(@Nullable ViewGroup containerView) {
         // Cleans up action mode before switching to a new container view.
         if (isActionModeValid()) finishActionMode();
         mUnselectAllOnDismiss = true;
@@ -1426,7 +1425,7 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
      * @return true if the menu item action is allowed. Otherwise, the menu item should be removed
      *     from the menu.
      */
-    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
+    @VisibleForTesting
     public boolean isSelectActionModeAllowed(int actionModeItem) {
         boolean isAllowedByClient = (mAllowedMenuItems & actionModeItem) != 0;
         if (actionModeItem == MENU_ITEM_SHARE) {
@@ -1479,15 +1478,13 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
     private void setTextHandlesHiddenForDropdownMenu(boolean hide) {
         if (mNativeSelectionPopupController == 0) return;
         SelectionPopupControllerImplJni.get()
-                .setTextHandlesHiddenForDropdownMenu(
-                        mNativeSelectionPopupController, SelectionPopupControllerImpl.this, hide);
+                .setTextHandlesHiddenForDropdownMenu(mNativeSelectionPopupController, hide);
     }
 
     private void setTextHandlesTemporarilyHidden(boolean hide) {
         if (mNativeSelectionPopupController == 0) return;
         SelectionPopupControllerImplJni.get()
-                .setTextHandlesTemporarilyHidden(
-                        mNativeSelectionPopupController, SelectionPopupControllerImpl.this, hide);
+                .setTextHandlesTemporarilyHidden(mNativeSelectionPopupController, hide);
     }
 
     @CalledByNative
@@ -1508,8 +1505,8 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
 
     @CalledByNative
     private void renderWidgetHostViewChanged() {
-        if (getMagnifierAnimator() != null) {
-            getMagnifierAnimator().handleDragStopped();
+        if (getMagnifierAnimator(/* createIfNull= */ false) != null) {
+            getMagnifierAnimator(/* createIfNull= */ false).handleDragStopped();
         }
     }
 
@@ -1577,8 +1574,8 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
 
             case SelectionEventType.SELECTION_HANDLE_DRAG_STOPPED:
                 showContextMenuAtTouchHandle(left, bottom);
-                if (getMagnifierAnimator() != null) {
-                    getMagnifierAnimator().handleDragStopped();
+                if (getMagnifierAnimator(/* createIfNull= */ false) != null) {
+                    getMagnifierAnimator(/* createIfNull= */ false).handleDragStopped();
                 }
                 mIsInHandleDragging = false;
 
@@ -1632,8 +1629,8 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
                     showContextMenuAtTouchHandle(mSelectionRect.left, mSelectionRect.bottom);
                 }
                 mWasPastePopupShowingOnInsertionDragStart = false;
-                if (getMagnifierAnimator() != null) {
-                    getMagnifierAnimator().handleDragStopped();
+                if (getMagnifierAnimator(/* createIfNull= */ false) != null) {
+                    getMagnifierAnimator(/* createIfNull= */ false).handleDragStopped();
                 }
                 mIsInHandleDragging = false;
                 break;
@@ -1699,13 +1696,13 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
             return;
         }
 
-        if (getMagnifierAnimator() != null) {
+        if (getMagnifierAnimator(/* createIfNull= */ true) != null) {
             final float deviceScale = getDeviceScaleFactor();
             x *= deviceScale;
             // The selection coordinates are relative to the content viewport, but we need
             // coordinates relative to the containing View, so adding getContentOffsetYPix().
             y = y * deviceScale + mWebContents.getRenderCoordinates().getContentOffsetYPix();
-            getMagnifierAnimator().handleDragStartedOrMoved(x, y);
+            getMagnifierAnimator(/* createIfNull= */ true).handleDragStartedOrMoved(x, y);
         }
     }
 
@@ -1788,8 +1785,9 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
         mMagnifierAnimator = magnifierAnimator;
     }
 
-    private @Nullable MagnifierAnimator getMagnifierAnimator() {
+    private @Nullable MagnifierAnimator getMagnifierAnimator(boolean createIfNull) {
         if (mMagnifierAnimator != null) return mMagnifierAnimator;
+        if (!createIfNull) return null;
         if (sDisableMagnifierForTesting || Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
             return null;
         }
@@ -1987,28 +1985,21 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
     Object @Nullable [] getTouchHandleRects() {
         if (mNativeSelectionPopupController == 0) return null;
         return SelectionPopupControllerImplJni.get()
-                .getTouchHandleRects(
-                        mNativeSelectionPopupController, SelectionPopupControllerImpl.this);
+                .getTouchHandleRects(mNativeSelectionPopupController);
     }
 
     @NativeMethods
     interface Natives {
         boolean isMagnifierWithSurfaceControlSupported();
 
-        long init(SelectionPopupControllerImpl caller, WebContents webContents);
+        long init(SelectionPopupControllerImpl self, WebContents webContents);
 
-        void setTextHandlesTemporarilyHidden(
-                long nativeSelectionPopupController,
-                SelectionPopupControllerImpl caller,
-                boolean hidden);
+        void setTextHandlesTemporarilyHidden(long nativeSelectionPopupController, boolean hidden);
 
         void setTextHandlesHiddenForDropdownMenu(
-                long nativeSelectionPopupController,
-                SelectionPopupControllerImpl caller,
-                boolean hidden);
+                long nativeSelectionPopupController, boolean hidden);
 
-        Object[] getTouchHandleRects(
-                long nativeSelectionPopupController, SelectionPopupControllerImpl caller);
+        Object[] getTouchHandleRects(long nativeSelectionPopupController);
     }
 
     /**

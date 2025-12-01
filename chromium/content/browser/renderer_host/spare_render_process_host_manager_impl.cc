@@ -51,6 +51,8 @@ BASE_FEATURE(kSpareRPHKeepOneAliveOnMemoryPressure,
              "kSpareRPHKeepOneAliveOnMemoryPressure",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+constexpr char kSpareProcessMaybeTakeActionUmaName[] =
+    "BrowserRenderProcessHost.SpareProcessMaybeTakeAction";
 constexpr char kSpareRendererTakenTimeSinceCreation[] =
     "BrowserRenderProcessHost.SpareRendererTaken.TimeSinceCreation";
 constexpr char kSpareRendererTakenIsReady[] =
@@ -131,6 +133,9 @@ std::string GetCategorizedSpareProcessMaybeTakeTimeUMAName(
       break;
     case SpareProcessMaybeTakeAction::kRefusedForV8OptimizationMismatch:
       action_name = "RefusedForV8OptimizationMismatch";
+      break;
+    case SpareProcessMaybeTakeAction::kRefusedNonNavigation:
+      action_name = "RefusedNonNavigation";
       break;
   }
   return base::StrCat(
@@ -266,10 +271,18 @@ void LogNoSparePresentUmas(
   }
 }
 
-void LogSpareProcessTakeActionUMAs(RenderProcessHost* host,
-                                   SpareProcessMaybeTakeAction action) {
-  base::UmaHistogramEnumeration(
-      "BrowserRenderProcessHost.SpareProcessMaybeTakeAction", action);
+void LogSpareProcessTakeActionUMAs(
+    RenderProcessHost* host,
+    SpareProcessMaybeTakeAction action,
+    const ProcessAllocationContext& allocation_context) {
+  base::UmaHistogramEnumeration(kSpareProcessMaybeTakeActionUmaName, action);
+  if (allocation_context.source ==
+      ProcessAllocationSource::kNavigationRequest) {
+    base::UmaHistogramEnumeration(
+        base::StrCat(
+            {kSpareProcessMaybeTakeActionUmaName, ".NavigationRequest"}),
+        action);
+  }
   if (action == SpareProcessMaybeTakeAction::kSpareTaken) {
     CHECK(host);
     base::UmaHistogramBoolean(kSpareRendererTakenIsReady, host->IsReady());
@@ -590,10 +603,20 @@ RenderProcessHost* SpareRenderProcessHostManagerImpl::MaybeTakeSpare(
   } else if (next_spare_rph->AreV8OptimizationsDisabled() !=
              site_instance->GetSiteInfo().are_v8_optimizations_disabled()) {
     action = SpareProcessMaybeTakeAction::kRefusedForV8OptimizationMismatch;
-  } else {
+  }
+#if BUILDFLAG(IS_ANDROID)
+  else if (features::kAndroidSpareRendererOnlyForNavigation.Get() &&
+           !allocation_context.IsForNavigation() &&
+           // Always allow test to allocate a spare renderer so as
+           // not to break existing tests.
+           allocation_context.source != ProcessAllocationSource::kTest) {
+    action = SpareProcessMaybeTakeAction::kRefusedNonNavigation;
+  }
+#endif
+  else {
     action = SpareProcessMaybeTakeAction::kSpareTaken;
   }
-  LogSpareProcessTakeActionUMAs(next_spare_rph, action);
+  LogSpareProcessTakeActionUMAs(next_spare_rph, action, allocation_context);
 
   if (spare_renderer_maybe_take_timer_) {
     auto maybe_take_time = spare_renderer_maybe_take_timer_->Elapsed();

@@ -646,9 +646,6 @@ export class ScopeRemoteObject extends RemoteObjectImpl {
         ownProperties, accessorPropertiesOnly, false /* nonIndexedPropertiesOnly */, true /* generatePreview */);
     if (Array.isArray(allProperties.properties)) {
       this.#savedScopeProperties = allProperties.properties.slice();
-      for (const property of this.#savedScopeProperties) {
-        property.writable = false;
-      }
     }
     return allProperties;
   }
@@ -1180,8 +1177,8 @@ export class LinearMemoryInspectable {
   /**
    * Wrap `object` and `expression` into a reveable structure.
    *
-   * @param object A linear memory inspectable {@link RemoteObject}.
-   * @param expression An optional name of the field or variable holding the `object`.
+   * @param object - A linear memory inspectable {@link RemoteObject}.
+   * @param expression - An optional name of the field or variable holding the `object`.
    */
   constructor(object: RemoteObject, expression?: string) {
     if (!object.isLinearMemoryInspectable()) {

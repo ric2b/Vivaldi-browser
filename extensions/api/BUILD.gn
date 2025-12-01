@@ -132,11 +132,12 @@ static_library("apis") {
     "//ui/shell_dialogs",
     "//ui/views",
     "//vivaldi/browser:default_bookmarks",
+    "//vivaldi/browser:features",
     "//vivaldi/browser:internal_handlers",
     "//vivaldi/calendar",
     "//vivaldi/components/datasource:resource_reader",
     "//vivaldi/components/direct_match:browser",
-    "//vivaldi/components/request_filter/adblock_filter",
+    "//vivaldi/components/ad_blocker/public/content",
     "//vivaldi/components:tabs",
     "//vivaldi/contact",
     "//vivaldi/extensions/helper",
@@ -307,5 +308,6 @@ static_library("apis") {
   }
   configs += [
     ":api_keys",
+    "//vivaldi/gn/config:release_kind"
   ]
 }

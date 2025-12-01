@@ -483,11 +483,8 @@ std::string SegmentURLInternal(std::string* text, url::Parsed* parts) {
     if (semicolon != 0 && semicolon != std::string::npos) {
       (*text)[semicolon] = ':';
       if (GetValidScheme(*text, &parts->scheme, &scheme) &&
-          (url::IsStandard(
-               scheme.c_str(),
-               url::Component(0, static_cast<int>(scheme.length()))) ||
-           scheme == url::kAboutScheme || scheme == kChromeUIScheme ||
-           scheme == url::kFileScheme)) {
+          (url::IsStandard(scheme) || scheme == url::kAboutScheme ||
+           scheme == kChromeUIScheme || scheme == url::kFileScheme)) {
         found_scheme = true;
       } else {
         (*text)[semicolon] = ';';
@@ -503,10 +500,8 @@ std::string SegmentURLInternal(std::string* text, url::Parsed* parts) {
   // Proceed with about, chrome, and devtools schemes,
   // but not file or nonstandard schemes.
   if ((scheme != url::kAboutScheme) && (scheme != kChromeUIScheme) &&
-      (scheme != kDevToolsScheme) &&
       (scheme != kVivaldiUIScheme) &&
-      !url::IsStandard(scheme.c_str(),
-                       url::Component(0, static_cast<int>(scheme.length())))) {
+      (scheme != kDevToolsScheme) && !url::IsStandard(scheme)) {
     return scheme;
   }
 
@@ -639,9 +634,7 @@ GURL FixupURLInternal(const std::string& text,
   bool chrome_url =
       (scheme == url::kAboutScheme) || (scheme == kChromeUIScheme);
   bool devtools_url = (scheme == kDevToolsScheme);
-  if (chrome_url || devtools_url ||  vivaldi_url ||
-      url::IsStandard(scheme.c_str(),
-                      url::Component(0, static_cast<int>(scheme.length())))) {
+  if (chrome_url || devtools_url ||  vivaldi_url || url::IsStandard(scheme)) {
     // Replace the about: scheme with the chrome: scheme.
     std::string url(scheme == url::kAboutScheme ? kChromeUIScheme : scheme);
     url.append(url::kStandardSchemeSeparator);

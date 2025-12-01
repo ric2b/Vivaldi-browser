@@ -16,17 +16,15 @@
 
 #![allow(non_snake_case)]
 #![allow(non_camel_case_types)]
-#![allow(clippy::missing_safety_doc)]
-#![allow(dead_code)]
 
-mod decoder;
+pub mod decoder;
 #[cfg(feature = "encoder")]
-mod encoder;
-mod gainmap;
-mod image;
-mod io;
-mod reformat;
-mod types;
+pub mod encoder;
+pub mod gainmap;
+pub mod image;
+pub mod io;
+pub mod reformat;
+pub mod types;
 
 #[macro_export]
 macro_rules! deref_const {
@@ -34,6 +32,7 @@ macro_rules! deref_const {
         // The extra curly braces here is necessary to make this whole macro into a single
         // expression.
         assert!(!$ptr.is_null());
+        // SAFETY: The pointer is guaranteed to be valid and non-null.
         unsafe { &*($ptr) }
     }};
 }
@@ -44,6 +43,25 @@ macro_rules! deref_mut {
         // The extra curly braces here is necessary to make this whole macro into a single
         // expression.
         assert!(!$ptr.is_null());
+        // SAFETY: The pointer is guaranteed to be valid and non-null.
         unsafe { &mut *($ptr) }
     }};
+}
+
+#[macro_export]
+macro_rules! check_pointer {
+    ($ptr:expr) => {
+        if $ptr.is_null() {
+            return avifResult::InvalidArgument;
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! check_pointer_or_return {
+    ($ptr:expr) => {
+        if $ptr.is_null() {
+            return;
+        }
+    };
 }

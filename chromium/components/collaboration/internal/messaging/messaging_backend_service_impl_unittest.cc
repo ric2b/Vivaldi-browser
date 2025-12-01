@@ -279,6 +279,13 @@ class MessagingBackendServiceImplTest : public testing::Test {
         .has_value();
   }
 
+  size_t GetMessageCountFromDB() {
+    return unowned_messaging_backend_store_
+        ->GetDirtyMessages(
+            /*dirty_type=*/std::nullopt)
+        .size();
+  }
+
   void AddMessage(const collaboration_pb::Message& message) {
     unowned_messaging_backend_store_->AddMessage(message);
   }
@@ -1139,14 +1146,16 @@ TEST_F(MessagingBackendServiceImplTest,
   // It should add a message for this tab to the DB, but not result in
   // persistent message notification.
   EXPECT_CALL(mock_persistent_message_observer_, DisplayPersistentMessage)
-      .Times(0);
+      .Times(2u);
+  EXPECT_EQ(1u, GetMessageCountFromDB());
   tg_notifier_observer_->OnTabUpdated(tab1, tab1,
                                       tab_groups::TriggerSource::REMOTE, false);
+  EXPECT_EQ(1u, GetMessageCountFromDB());
 
   // Verify that a message is created for remote tab addition.
   auto message = GetLastMessageFromDB();
   VerifyGenericMessageData(message, "my group id",
-                           collaboration_pb::TAB_UPDATED, DirtyType::kNone,
+                           collaboration_pb::TAB_UPDATED, DirtyType::kChip,
                            now.ToTimeT());
 
   EXPECT_EQ(gaia2, GaiaId(message.triggering_user_gaia_id()));

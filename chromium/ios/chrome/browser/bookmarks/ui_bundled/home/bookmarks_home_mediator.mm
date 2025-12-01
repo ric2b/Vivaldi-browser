@@ -118,7 +118,7 @@ bool IsABookmarkNodeSectionForIdentifier(
                                      BookmarkModelBridgeObserver,
                                      BookmarkPromoControllerDelegate,
                                      PrefObserverDelegate,
-                                     SigninPresenter,
+                                     SigninPromoViewMediatorDelegate,
                                      SyncObserverModelBridge> {
   // Observer to keep track of the signin and syncing status.
   std::unique_ptr<sync_bookmarks::SyncedBookmarksObserverBridge>
@@ -187,7 +187,7 @@ bool IsABookmarkNodeSectionForIdentifier(
       [[BookmarkPromoController alloc] initWithBrowser:_browser.get()
                                            syncService:_syncService
                                               delegate:self
-                                       signinPresenter:self
+                       signinPromoViewMediatorDelegate:self
                               accountSettingsPresenter:self];
 
   _prefChangeRegistrar = std::make_unique<PrefChangeRegistrar>();
@@ -544,6 +544,12 @@ bool IsABookmarkNodeSectionForIdentifier(
          _bookmarkModel->IsLocalOnlyNode(*bookmarkNode);
 }
 
+- (void)signinDidCompleteWithResult:(SigninCoordinatorResult)result {
+  [self.bookmarkPromoController.signinPromoViewMediator
+      signinDidCompleteWithResult:result];
+  [self.bookmarkPromoController updateShouldShowSigninPromo];
+}
+
 #pragma mark - BookmarkModelBridgeObserver
 
 - (void)bookmarkModelWillRemoveAllNodes {
@@ -619,7 +625,8 @@ bool IsABookmarkNodeSectionForIdentifier(
 - (void)willDeleteNode:(const BookmarkNode*)node
             fromFolder:(const BookmarkNode*)folder {
   DCHECK(node);
-  if (self.displayedNode->HasAncestor(node)) {
+  if (self.displayedNode && self.displayedNode->HasAncestor(node)) {
+    self.displayedNode = nullptr;
     [self.consumer closeThisFolder];
   }
 }
@@ -697,10 +704,12 @@ bool IsABookmarkNodeSectionForIdentifier(
   return _syncedBookmarksObserver->IsPerformingInitialSync();
 }
 
-#pragma mark - SigninPresenter
+#pragma mark - SigninPromoViewMediatorDelegate
 
-- (void)showSignin:(ShowSigninCommand*)command {
+- (void)showSignin:(SigninPromoViewMediator*)mediator
+           command:(ShowSigninCommand*)command {
   // Proxy this call along to the consumer.
+  CHECK_EQ(mediator, self.bookmarkPromoController.signinPromoViewMediator);
   [self.consumer showSignin:command];
 }
 

@@ -1,0 +1,20 @@
+# Copyright (c) 2019 Vivaldi Technologies AS. All rights reserved
+
+source_set("ad_blocker") {
+  sources = [
+    "adblock_rule_service_factory.mm",
+    "adblock_rule_service_factory.h",
+  ]
+
+  public_deps= [
+    "//vivaldi/components/ad_blocker/public/ios",
+  ]
+
+  deps = [
+    "//base",
+    "//components/language/core/browser/",
+    "//components/prefs",
+    "//ios/chrome/browser/shared/model/profile",
+    "//vivaldi/components/ad_blocker/ios",
+  ]
+}

@@ -43,11 +43,7 @@ import * as Root from '../../core/root/root.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as Protocol from '../../generated/protocol.js';
 import * as Bindings from '../../models/bindings/bindings.js';
-import type * as Formatter from '../../models/formatter/formatter.js';
 import * as TextUtils from '../../models/text_utils/text_utils.js';
-import type * as Workspace from '../../models/workspace/workspace.js';
-import * as WorkspaceDiff from '../../models/workspace_diff/workspace_diff.js';
-import {PanelUtils} from '../../panels/utils/utils.js';
 import * as IconButton from '../../ui/components/icon_button/icon_button.js';
 import * as InlineEditor from '../../ui/legacy/components/inline_editor/inline_editor.js';
 import * as Components from '../../ui/legacy/components/utils/utils.js';
@@ -82,7 +78,7 @@ const UIStrings = {
    */
   noMatchingSelectorOrStyle: 'No matching selector or style',
   /**
-  /**
+   * /**
    *@description Text to announce the result of the filter input in the Styles Sidebar Pane of the Elements panel
    */
   visibleSelectors: '{n, plural, =1 {# visible selector listed below} other {# visible selectors listed below}}',
@@ -96,7 +92,7 @@ const UIStrings = {
    */
   inheritedFroms: 'Inherited from ',
   /**
-   *@description Text of an inherited psuedo element in Styles Sidebar Pane of the Elements panel
+   *@description Text of an inherited pseudo element in Styles Sidebar Pane of the Elements panel
    *@example {highlight} PH1
    */
   inheritedFromSPseudoOf: 'Inherited from ::{PH1} pseudo of ',
@@ -174,7 +170,7 @@ export class StylesSidebarPane extends Common.ObjectWrapper.eventMixin<EventType
   private lastFilterChange: number|null = null;
   private visibleSections: number|null = null;
   private noMatchesElement: HTMLElement;
-  private sectionsContainer: HTMLElement;
+  private sectionsContainer: UI.Widget.Widget;
   sectionByElement = new WeakMap<Node, StylePropertiesSection>();
   private readonly swatchPopoverHelperInternal = new InlineEditor.SwatchPopoverHelper.SwatchPopoverHelper();
   readonly linkifier = new Components.Linkifier.Linkifier(MAX_LINK_LENGTH, /* useLinkDecorator */ true);
@@ -202,7 +198,6 @@ export class StylesSidebarPane extends Common.ObjectWrapper.eventMixin<EventType
   #webCustomData?: WebCustomData;
 
   activeCSSAngle: InlineEditor.CSSAngle.CSSAngle|null = null;
-  #urlToChangeTracker = new Map<Platform.DevToolsPath.UrlString, ChangeTracker>();
   #updateAbortController?: AbortController;
   #updateComputedStylesAbortController?: AbortController;
 
@@ -214,11 +209,14 @@ export class StylesSidebarPane extends Common.ObjectWrapper.eventMixin<EventType
     this.toolbarPaneElement = this.createStylesSidebarToolbar();
     this.noMatchesElement = this.contentElement.createChild('div', 'gray-info-message hidden');
     this.noMatchesElement.textContent = i18nString(UIStrings.noMatchingSelectorOrStyle);
-    this.sectionsContainer = this.contentElement.createChild('div');
-    UI.ARIAUtils.markAsList(this.sectionsContainer);
-    this.sectionsContainer.addEventListener('keydown', this.sectionsContainerKeyDown.bind(this), false);
-    this.sectionsContainer.addEventListener('focusin', this.sectionsContainerFocusChanged.bind(this), false);
-    this.sectionsContainer.addEventListener('focusout', this.sectionsContainerFocusChanged.bind(this), false);
+    this.sectionsContainer = new UI.Widget.VBox();
+    this.sectionsContainer.show(this.contentElement);
+    UI.ARIAUtils.markAsList(this.sectionsContainer.contentElement);
+    this.sectionsContainer.contentElement.addEventListener('keydown', this.sectionsContainerKeyDown.bind(this), false);
+    this.sectionsContainer.contentElement.addEventListener(
+        'focusin', this.sectionsContainerFocusChanged.bind(this), false);
+    this.sectionsContainer.contentElement.addEventListener(
+        'focusout', this.sectionsContainerFocusChanged.bind(this), false);
 
     this.swatchPopoverHelperInternal.addEventListener(
         InlineEditor.SwatchPopoverHelper.Events.WILL_SHOW_POPOVER, this.hideAllPopovers, this);
@@ -327,7 +325,7 @@ export class StylesSidebarPane extends Common.ObjectWrapper.eventMixin<EventType
   }
 
   revealProperty(cssProperty: SDK.CSSProperty.CSSProperty): void {
-    this.decorator.highlightProperty(cssProperty);
+    void this.decorator.highlightProperty(cssProperty);
     this.lastRevealedProperty = cssProperty;
     this.update();
   }
@@ -365,7 +363,7 @@ export class StylesSidebarPane extends Common.ObjectWrapper.eventMixin<EventType
   }
 
   private sectionsContainerKeyDown(event: Event): void {
-    const activeElement = Platform.DOMUtilities.deepActiveElement(this.sectionsContainer.ownerDocument);
+    const activeElement = Platform.DOMUtilities.deepActiveElement(this.sectionsContainer.contentElement.ownerDocument);
     if (!activeElement) {
       return;
     }
@@ -485,7 +483,7 @@ export class StylesSidebarPane extends Common.ObjectWrapper.eventMixin<EventType
       if (this.lastFilterChange) {
         const stillTyping = Date.now() - this.lastFilterChange < FILTER_IDLE_PERIOD;
         if (!stillTyping) {
-          UI.ARIAUtils.alert(
+          UI.ARIAUtils.LiveAnnouncer.alert(
               this.visibleSections ? i18nString(UIStrings.visibleSelectors, {n: this.visibleSections}) :
                                      i18nString(UIStrings.noMatchingSelectorOrStyle));
         }
@@ -552,7 +550,7 @@ export class StylesSidebarPane extends Common.ObjectWrapper.eventMixin<EventType
         }
         if (!this.initialUpdateCompleted) {
           // the spinner will get automatically removed when innerRebuildUpdate is called
-          this.sectionsContainer.createChild('span', 'spinner');
+          this.sectionsContainer.contentElement.createChild('span', 'spinner');
         }
       }, 200 /* only spin for loading time > 200ms to avoid unpleasant render flashes */);
     }
@@ -924,7 +922,8 @@ export class StylesSidebarPane extends Common.ObjectWrapper.eventMixin<EventType
     const node = this.node();
     this.hasMatchedStyles = matchedStyles !== null && node !== null;
     if (!this.hasMatchedStyles) {
-      this.sectionsContainer.removeChildren();
+      this.sectionsContainer.contentElement.removeChildren();
+      this.sectionsContainer.detachChildWidgets();
       this.noMatchesElement.classList.remove('hidden');
       return;
     }
@@ -953,7 +952,8 @@ export class StylesSidebarPane extends Common.ObjectWrapper.eventMixin<EventType
       }
     }
 
-    this.sectionsContainer.removeChildren();
+    this.sectionsContainer.contentElement.removeChildren();
+    this.sectionsContainer.detachChildWidgets();
     const fragment = document.createDocumentFragment();
 
     let index = 0;
@@ -972,7 +972,7 @@ export class StylesSidebarPane extends Common.ObjectWrapper.eventMixin<EventType
       }
     }
 
-    this.sectionsContainer.appendChild(fragment);
+    this.sectionsContainer.contentElement.appendChild(fragment);
 
     if (elementToFocus) {
       elementToFocus.focus();
@@ -990,7 +990,7 @@ export class StylesSidebarPane extends Common.ObjectWrapper.eventMixin<EventType
       this.noMatchesElement.classList.toggle('hidden', this.sectionBlocks.length > 0);
     }
     if (this.lastRevealedProperty) {
-      this.decorator.highlightProperty(this.lastRevealedProperty);
+      void this.decorator.highlightProperty(this.lastRevealedProperty);
       this.lastRevealedProperty = null;
     }
 
@@ -1236,24 +1236,24 @@ export class StylesSidebarPane extends Common.ObjectWrapper.eventMixin<EventType
       return;
     }
 
-    const text = (await styleSheetHeader.requestContent()).content || '';
-    const lines = text.split('\n');
+    const contentDataOrError = await styleSheetHeader.requestContentData();
+    const lines = TextUtils.ContentData.ContentData.textOr(contentDataOrError, '').split('\n');
     const range = TextUtils.TextRange.TextRange.createFromLocation(lines.length - 1, lines[lines.length - 1].length);
 
     if (this.sectionBlocks && this.sectionBlocks.length > 0) {
-      this.addBlankSection(this.sectionBlocks[0].sections[0], styleSheetHeader.id, range);
+      this.addBlankSection(this.sectionBlocks[0].sections[0], styleSheetHeader, range);
     }
   }
 
   addBlankSection(
-      insertAfterSection: StylePropertiesSection, styleSheetId: Protocol.CSS.StyleSheetId,
+      insertAfterSection: StylePropertiesSection, styleSheetHeader: SDK.CSSStyleSheetHeader.CSSStyleSheetHeader,
       ruleLocation: TextUtils.TextRange.TextRange): void {
     const node = this.node();
     const blankSection = new BlankStylePropertiesSection(
-        this, insertAfterSection.matchedStyles, node ? node.simpleSelector() : '', styleSheetId, ruleLocation,
+        this, insertAfterSection.matchedStyles, node ? node.simpleSelector() : '', styleSheetHeader, ruleLocation,
         insertAfterSection.style(), 0);
 
-    this.sectionsContainer.insertBefore(blankSection.element, insertAfterSection.element.nextSibling);
+    this.sectionsContainer.contentElement.insertBefore(blankSection.element, insertAfterSection.element.nextSibling);
 
     for (const block of this.sectionBlocks) {
       const index = block.sections.indexOf(insertAfterSection);
@@ -1329,23 +1329,6 @@ export class StylesSidebarPane extends Common.ObjectWrapper.eventMixin<EventType
       sections = sections.concat(block.sections);
     }
     return sections;
-  }
-
-  async getFormattedChanges(): Promise<string> {
-    let allChanges = '';
-    for (const [url, {uiSourceCode}] of this.#urlToChangeTracker) {
-      const diffResponse = await WorkspaceDiff.WorkspaceDiff.workspaceDiff().requestDiff(uiSourceCode);
-      // Diff array with real diff will contain at least 2 lines.
-      if (!diffResponse || diffResponse?.diff.length < 2) {
-        continue;
-      }
-      const changes = await PanelUtils.formatCSSChangesFromDiff(diffResponse.diff);
-      if (changes.length > 0) {
-        allChanges += `/* ${escapeUrlAsCssComment(url)} */\n\n${changes}\n\n`;
-      }
-    }
-
-    return allChanges;
   }
 
   private clipboardCopy(_event: Event): void {
@@ -1504,13 +1487,6 @@ interface CompletionResult extends UI.SuggestBox.Suggestion {
 export interface EventTypes {
   [Events.INITIAL_UPDATE_COMPLETED]: void;
   [Events.STYLES_UPDATE_COMPLETED]: StylesUpdateCompletedEvent;
-}
-
-interface ChangeTracker {
-  uiSourceCode: Workspace.UISourceCode.UISourceCode;
-  changedLines: Set<number>;
-  diffChangeCallback: () => Promise<void>;
-  formattedCurrentMapping?: Formatter.ScriptFormatter.FormatterSourceMapping;
 }
 
 const MAX_LINK_LENGTH = 23;

@@ -19,8 +19,8 @@
 #include <memory>
 #include <utility>
 
+#import "internal/platform/implementation/apple/Log/GNCLogger.h"
 #import "internal/platform/implementation/apple/Mediums/BLEv2/GNCBLEL2CAPServer.h"
-#import "GoogleToolboxForMac/GTMLogger.h"
 
 namespace nearby {
 namespace apple {
@@ -55,6 +55,11 @@ bool BleL2capServerSocket::AddPendingSocket(std::unique_ptr<BleL2capSocket> sock
   pending_sockets_.insert(std::move(socket));
   cond_.SignalAll();
   return !closed_;
+}
+
+void BleL2capServerSocket::SetCloseNotifier(absl::AnyInvocable<void()> notifier) {
+  absl::MutexLock lock(&mutex_);
+  close_notifier_ = std::move(notifier);
 }
 
 Exception BleL2capServerSocket::Close() {

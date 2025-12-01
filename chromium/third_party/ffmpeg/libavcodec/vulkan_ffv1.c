@@ -26,6 +26,8 @@
 #include "libavutil/vulkan_spirv.h"
 #include "libavutil/mem.h"
 
+#define RGB_LINECACHE 2
+
 extern const char *ff_source_common_comp;
 extern const char *ff_source_rangecoder_comp;
 extern const char *ff_source_ffv1_vlc_comp;
@@ -219,7 +221,7 @@ static int vk_ffv1_start_frame(AVCodecContext          *avctx,
                                   &fp->slice_status_buf,
                                   VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
                                   VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-                                  NULL, f->slice_count*sizeof(uint32_t),
+                                  NULL, 2*f->slice_count*sizeof(uint32_t),
                                   VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT |
                                   VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
     if (err < 0)
@@ -406,7 +408,7 @@ static int vk_ffv1_end_frame(AVCodecContext *avctx)
     ff_vk_shader_update_desc_buffer(&ctx->s, exec, &fv->setup,
                                     1, 2, 0,
                                     slice_status,
-                                    0, f->slice_count*sizeof(uint32_t),
+                                    0, 2*f->slice_count*sizeof(uint32_t),
                                     VK_FORMAT_UNDEFINED);
 
     ff_vk_exec_bind_shader(&ctx->s, exec, &fv->setup);
@@ -536,10 +538,15 @@ static int vk_ffv1_end_frame(AVCodecContext *avctx)
                                   1, 1,
                                   VK_IMAGE_LAYOUT_GENERAL,
                                   VK_NULL_HANDLE);
+    ff_vk_shader_update_desc_buffer(&ctx->s, exec, decode_shader,
+                                    1, 2, 0,
+                                    slice_status,
+                                    0, 2*f->slice_count*sizeof(uint32_t),
+                                    VK_FORMAT_UNDEFINED);
     if (is_rgb)
         ff_vk_shader_update_img_array(&ctx->s, exec, decode_shader,
                                       f->picture.f, vp->view.out,
-                                      1, 2,
+                                      1, 3,
                                       VK_IMAGE_LAYOUT_GENERAL,
                                       VK_NULL_HANDLE);
 
@@ -610,6 +617,7 @@ static void define_shared_code(FFVulkanShader *shd, int use32bit)
 
     GLSLC(0, #define DECODE                                              );
 
+    av_bprintf(&shd->src, "#define RGB_LINECACHE %i\n"                   ,RGB_LINECACHE);
     av_bprintf(&shd->src, "#define CONTEXT_SIZE %i\n"                    ,CONTEXT_SIZE);
     av_bprintf(&shd->src, "#define MAX_QUANT_TABLE_MASK 0x%x\n"          ,MAX_QUANT_TABLE_MASK);
 
@@ -697,8 +705,8 @@ static int init_setup_shader(FFV1Context *f, FFVulkanContext *s,
             .type        = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
             .stages      = VK_SHADER_STAGE_COMPUTE_BIT,
             .mem_quali   = "writeonly",
-            .buf_content = "uint32_t slice_crc_mismatch",
-            .buf_elems   = f->max_slice_count,
+            .buf_content = "uint32_t slice_status",
+            .buf_elems   = 2*f->max_slice_count,
         },
     };
     RET(ff_vk_shader_add_descriptor_set(s, shd, desc_set, 3, 0, 0));
@@ -893,6 +901,14 @@ static int init_decode_shader(FFV1Context *f, FFVulkanContext *s,
             .stages     = VK_SHADER_STAGE_COMPUTE_BIT,
         },
         {
+            .name        = "slice_status_buf",
+            .type        = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            .stages      = VK_SHADER_STAGE_COMPUTE_BIT,
+            .mem_quali   = "writeonly",
+            .buf_content = "uint32_t slice_status",
+            .buf_elems   = 2*f->max_slice_count,
+        },
+        {
             .name       = "dst",
             .type       = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
             .dimensions = 2,
@@ -903,7 +919,7 @@ static int init_decode_shader(FFV1Context *f, FFVulkanContext *s,
             .stages     = VK_SHADER_STAGE_COMPUTE_BIT,
         },
     };
-    RET(ff_vk_shader_add_descriptor_set(s, shd, desc_set, 2 + rgb, 0, 0));
+    RET(ff_vk_shader_add_descriptor_set(s, shd, desc_set, 3 + rgb, 0, 0));
 
     GLSLD(ff_source_ffv1_dec_comp);
 
@@ -936,7 +952,7 @@ static int init_indirect(AVCodecContext *avctx, FFVulkanContext *s,
     frames_ctx->format    = AV_PIX_FMT_VULKAN;
     frames_ctx->sw_format = sw_format;
     frames_ctx->width     = s->frames->width;
-    frames_ctx->height    = f->num_v_slices*2;
+    frames_ctx->height    = f->num_v_slices*RGB_LINECACHE;
 
     vk_frames = frames_ctx->hwctx;
     vk_frames->tiling    = VK_IMAGE_TILING_OPTIMAL;
@@ -979,6 +995,8 @@ static void vk_decode_ffv1_uninit(FFVulkanDecodeShared *ctx)
     av_buffer_pool_uninit(&fv->slice_state_pool);
     av_buffer_pool_uninit(&fv->slice_offset_pool);
     av_buffer_pool_uninit(&fv->slice_status_pool);
+
+    av_freep(&fv);
 }
 
 static int vk_decode_ffv1_init(AVCodecContext *avctx)
@@ -1015,23 +1033,17 @@ static int vk_decode_ffv1_init(AVCodecContext *avctx)
 
     /* Intermediate frame pool for RCT */
     for (int i = 0; i < 2; i++) { /* 16/32 bit */
-        err = init_indirect(avctx, &ctx->s, &fv->intermediate_frames_ref[i],
-                            i ? AV_PIX_FMT_GBRAP32 : AV_PIX_FMT_GBRAP16);
-        if (err < 0)
-            return err;
+        RET(init_indirect(avctx, &ctx->s, &fv->intermediate_frames_ref[i],
+                          i ? AV_PIX_FMT_GBRAP32 : AV_PIX_FMT_GBRAP16));
     }
 
     /* Setup shader */
-    err = init_setup_shader(f, &ctx->s, &ctx->exec_pool, spv, &fv->setup);
-    if (err < 0)
-        return err;
+    RET(init_setup_shader(f, &ctx->s, &ctx->exec_pool, spv, &fv->setup));
 
     /* Reset shaders */
     for (int i = 0; i < 2; i++) { /* AC/Golomb */
-        err = init_reset_shader(f, &ctx->s, &ctx->exec_pool,
-                                spv, &fv->reset[i], !i ? AC_RANGE_CUSTOM_TAB : 0);
-        if (err < 0)
-            return err;
+        RET(init_reset_shader(f, &ctx->s, &ctx->exec_pool,
+                              spv, &fv->reset[i], !i ? AC_RANGE_CUSTOM_TAB : 0));
     }
 
     /* Decode shaders */
@@ -1041,39 +1053,31 @@ static int vk_decode_ffv1_init(AVCodecContext *avctx)
                 AVHWFramesContext *dec_frames_ctx;
                 dec_frames_ctx = k ? (AVHWFramesContext *)fv->intermediate_frames_ref[i]->data :
                                      (AVHWFramesContext *)avctx->hw_frames_ctx->data;
-                err = init_decode_shader(f, &ctx->s, &ctx->exec_pool,
-                                         spv, &fv->decode[i][j][k],
-                                         dec_frames_ctx,
-                                         (AVHWFramesContext *)avctx->hw_frames_ctx->data,
-                                         i,
-                                         !j ? AC_RANGE_CUSTOM_TAB : AC_GOLOMB_RICE,
-                                         k);
-                if (err < 0)
-                    return err;
+                RET(init_decode_shader(f, &ctx->s, &ctx->exec_pool,
+                                       spv, &fv->decode[i][j][k],
+                                       dec_frames_ctx,
+                                       (AVHWFramesContext *)avctx->hw_frames_ctx->data,
+                                       i,
+                                       !j ? AC_RANGE_CUSTOM_TAB : AC_GOLOMB_RICE,
+                                       k));
             }
         }
     }
 
     /* Range coder data */
-    err = ff_ffv1_vk_init_state_transition_data(&ctx->s,
-                                                &fv->rangecoder_static_buf,
-                                                f);
-    if (err < 0)
-        return err;
+    RET(ff_ffv1_vk_init_state_transition_data(&ctx->s,
+                                              &fv->rangecoder_static_buf,
+                                              f));
 
     /* Quantization table data */
-    err = ff_ffv1_vk_init_quant_table_data(&ctx->s,
-                                           &fv->quant_buf,
-                                           f);
-    if (err < 0)
-        return err;
+    RET(ff_ffv1_vk_init_quant_table_data(&ctx->s,
+                                         &fv->quant_buf,
+                                         f));
 
     /* CRC table buffer */
-    err = ff_ffv1_vk_init_crc_table_data(&ctx->s,
-                                         &fv->crc_tab_buf,
-                                         f);
-    if (err < 0)
-        return err;
+    RET(ff_ffv1_vk_init_crc_table_data(&ctx->s,
+                                       &fv->crc_tab_buf,
+                                       f));
 
     /* Update setup global descriptors */
     RET(ff_vk_shader_update_desc_buffer(&ctx->s, &ctx->exec_pool.contexts[0],
@@ -1106,27 +1110,42 @@ static int vk_decode_ffv1_init(AVCodecContext *avctx)
     }
 
 fail:
+    spv->uninit(&spv);
+
     return err;
 }
 
 static void vk_ffv1_free_frame_priv(AVRefStructOpaque _hwctx, void *data)
 {
-    AVHWDeviceContext *hwctx = _hwctx.nc;
+    AVHWDeviceContext *dev_ctx = _hwctx.nc;
+    AVVulkanDeviceContext *hwctx = dev_ctx->hwctx;
 
     FFv1VulkanDecodePicture *fp = data;
     FFVulkanDecodePicture *vp = &fp->vp;
+    FFVkBuffer *slice_status = (FFVkBuffer *)fp->slice_status_buf->data;
 
-    ff_vk_decode_free_frame(hwctx, vp);
+    ff_vk_decode_free_frame(dev_ctx, vp);
 
-    if (fp->crc_checked) {
-        FFVkBuffer *slice_status = (FFVkBuffer *)fp->slice_status_buf->data;
-        for (int i = 0; i < fp->slice_num; i++) {
-            uint32_t crc_res;
-            crc_res = AV_RN32(slice_status->mapped_mem + i*sizeof(uint32_t));
-            if (crc_res != 0)
-                av_log(hwctx, AV_LOG_ERROR, "CRC mismatch in slice %i, res: 0x%x\n",
-                       i, crc_res);
-        }
+    /* Invalidate slice/output data if needed */
+    if (!(slice_status->flags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) {
+        VkMappedMemoryRange invalidate_data = {
+            .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+            .memory = slice_status->mem,
+            .offset = 0,
+            .size = 2*fp->slice_num*sizeof(uint32_t),
+        };
+        vp->invalidate_memory_ranges(hwctx->act_dev,
+                                     1, &invalidate_data);
+    }
+
+    for (int i = 0; i < fp->slice_num; i++) {
+        uint32_t crc_res = 0;
+        if (fp->crc_checked)
+            crc_res = AV_RN32(slice_status->mapped_mem + 2*i*sizeof(uint32_t) + 0);
+        uint32_t status = AV_RN32(slice_status->mapped_mem + 2*i*sizeof(uint32_t) + 4);
+        if (status || crc_res)
+            av_log(dev_ctx, AV_LOG_ERROR, "Slice %i status: 0x%x, CRC 0x%x\n",
+                   i, status, crc_res);
     }
 
     av_buffer_unref(&vp->slices_buf);

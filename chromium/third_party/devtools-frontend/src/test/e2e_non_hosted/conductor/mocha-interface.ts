@@ -11,9 +11,8 @@ import * as Path from 'path';
 import {platform, type Platform} from '../../conductor/platform.js';
 import {TestConfig} from '../../conductor/test_config.js';
 
-import {makeInstrumentedTestFunction} from './mocha-interface-helpers.js';
+import {InstrumentedTestFunction} from './mocha-interface-helpers.js';
 import {StateProvider} from './state-provider.js';
-
 type SuiteFunction = ((this: Mocha.Suite) => void)|undefined;
 
 function devtoolsTestInterface(rootSuite: Mocha.Suite) {
@@ -28,14 +27,6 @@ function devtoolsTestInterface(rootSuite: Mocha.Suite) {
         // Different module outputs between tsc and esbuild.
         const defaultFactory = ('default' in commonInterface ? commonInterface.default : commonInterface);
         defaultImplementation = defaultFactory([rootSuite], context, mocha) as CommonFunctions;
-        // @ts-expect-error Custom interface.
-        context.before = instumentWith(defaultImplementation.before);
-        // @ts-expect-error Custom interface.
-        context.after = instumentWith(defaultImplementation.after);
-        // @ts-expect-error Custom interface.
-        context.beforeEach = instumentWith(defaultImplementation.beforeEach);
-        // @ts-expect-error Custom interface.
-        context.afterEach = instumentWith(defaultImplementation.afterEach);
 
         if (mocha.options.delay) {
           context.run = defaultImplementation.runWithSuite(rootSuite);
@@ -44,20 +35,54 @@ function devtoolsTestInterface(rootSuite: Mocha.Suite) {
         context.describe = customDescribe(defaultImplementation.suite, file);
       },
   );
-  rootSuite.on(Mocha.Suite.constants.EVENT_SUITE_ADD_SUITE, (suite: Mocha.Suite) => {
-    // @ts-expect-error Custom interface.
-    mochaGlobals.setup = function(suiteSettings: SuiteSettings) {
-      StateProvider.instance.registerSettingsCallback(suite, suiteSettings);
-    };
-    const it = customIt(defaultImplementation.test, suite, suite.file || '', mochaRoot);
-    // @ts-expect-error Custom interface.
-    mochaGlobals.it = it;
-  });
-}
 
-function instumentWith(withDefaultFn: (fn: Mocha.AsyncFunc) => void) {
-  const name = withDefaultFn.name;
-  return (fn: Mocha.AsyncFunc) => withDefaultFn(makeInstrumentedTestFunction(fn, name));
+  function customDescribe(suiteImplementation: SuiteFunctions, file: string) {
+    function withAugmentedTitle(suiteFn: (opts: CreateOptions) => Mocha.Suite) {
+      return function(title: string, describeBodyFn: SuiteFunction) {
+        const suite = suiteFn({
+          title: describeTitle(file, title),
+          file,
+          fn: function(this: Mocha.Suite) {
+            const thisSuite = this;
+            const parentDefinitions = {describe: mochaGlobals.describe, setup: mochaGlobals.setup, it: mochaGlobals.it};
+            // @ts-expect-error Custom interface.
+            mochaGlobals.describe = customDescribe(defaultImplementation.suite, '', thisSuite);
+            // @ts-expect-error Custom interface.
+            mochaGlobals.setup = function(suiteSettings: SuiteSettings) {
+              StateProvider.instance.registerSuiteSettings(thisSuite, suiteSettings);
+            };
+            // @ts-expect-error Custom interface.
+            mochaGlobals.it = customIt(defaultImplementation.test, thisSuite, thisSuite.file || '', mochaRoot);
+            if (describeBodyFn) {
+              describeBodyFn.call(thisSuite);
+            }
+            // Restore definitions so when we come back from a nested describe
+            // we have the same definitions available as for the current block,
+            // therefore correctly handling the next describe block that is at
+            // the same level with this one.
+            mochaGlobals.describe = parentDefinitions.describe;
+            mochaGlobals.setup = parentDefinitions.setup;
+            mochaGlobals.it = parentDefinitions.it;
+          },
+        });
+
+        if (!suite.isPending()) {
+          suite.beforeEach(async function(this: Mocha.Context) {
+            this.timeout(0);
+            await StateProvider.instance.resolveBrowser(suite);
+          });
+        }
+        return suite;
+      };
+    }
+
+    const describe = withAugmentedTitle(suiteImplementation.create.bind(suiteImplementation));
+    // @ts-expect-error Custom interface.
+    describe.only = withAugmentedTitle(suiteImplementation.only.bind(suiteImplementation));
+    // @ts-expect-error Custom interface.
+    describe.skip = withAugmentedTitle(suiteImplementation.skip.bind(suiteImplementation));
+    return describe;
+  }
 }
 
 function describeTitle(file: string, title: string) {
@@ -74,36 +99,6 @@ function describeTitle(file: string, title: string) {
   return `${prefix}: ${title}`;
 }
 
-function customDescribe(suiteImplementation: SuiteFunctions, file: string) {
-  function withAugmentedTitle(suiteFn: (opts: CreateOptions) => Mocha.Suite) {
-    return (title: string, fn: SuiteFunction) => {
-      const suite = suiteFn({
-        title: describeTitle(file, title),
-        file,
-        fn,
-      });
-
-      if (!suite.isPending()) {
-        suite.beforeAll(async function(this: Mocha.Context) {
-          this.timeout(0);
-          await StateProvider.instance.resolveBrowser(suite);
-        });
-      }
-      return suite;
-    };
-  }
-
-  const describe = withAugmentedTitle(suiteImplementation.create);
-  // @ts-expect-error Custom interface.
-  describe.only = withAugmentedTitle(suiteImplementation.only);
-  // @ts-expect-error Custom interface.
-  describe.skip = withAugmentedTitle(function(opts: CreateOptions) {
-    opts.pending = true;
-    return suiteImplementation.create(opts);
-  });
-  return describe;
-}
-
 function iterationSuffix(iteration: number): string {
   if (iteration === 0) {
     return '';
@@ -111,18 +106,26 @@ function iterationSuffix(iteration: number): string {
   return ` (#${iteration})`;
 }
 function customIt(testImplementation: TestFunctions, suite: Mocha.Suite, file: string, mocha: Mocha) {
-  function instrumentWithState(fn: E2E.TestAsyncCallbackWithState) {
-    const fnWithState = async function(this: Mocha.Context) {
-      return await StateProvider.instance.callWithState(this, suite, fn);
-    };
-    return makeInstrumentedTestFunction(fnWithState, 'test');
-  }
-
-  function createTest(title: string, fn?: Mocha.AsyncFunc) {
-    const test = new Mocha.Test(title, suite.isPending() || !fn ? undefined : instrumentWithState(fn));
+  function createTest(title: string, itBodyFn?: Mocha.AsyncFunc) {
+    const test = new Mocha.Test(
+        title,
+        suite.isPending() || !itBodyFn ? undefined : InstrumentedTestFunction.instrument(itBodyFn, 'test', suite),
+    );
     test.file = file;
-    suite.addTest(test);
-    return test;
+
+    // Creates a proxy that changes the duration to return
+    // our own timing.
+    const proxyTest = new Proxy(test, {
+      get(target, property, receiver) {
+        if (property === 'duration' && target.realDuration) {
+          return Reflect.get(target, 'realDuration', receiver) ?? Reflect.get(target, property, receiver);
+        }
+        return Reflect.get(target, property, receiver);
+      },
+    });
+
+    suite.addTest(proxyTest);
+    return proxyTest;
   }
 
   // Regular mocha it returns the test instance.

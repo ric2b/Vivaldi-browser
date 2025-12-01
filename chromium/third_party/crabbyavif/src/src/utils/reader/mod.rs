@@ -15,6 +15,8 @@
 // Not all sub-modules are used by all targets. Ignore dead code warnings.
 #![allow(dead_code)]
 
+#[cfg(feature = "gif")]
+pub mod gif;
 #[cfg(feature = "jpeg")]
 pub mod jpeg;
 #[cfg(feature = "png")]
@@ -34,6 +36,6 @@ pub struct Config {
 }
 
 pub trait Reader {
-    fn read_frame(&mut self, config: &Config) -> AvifResult<Image>;
+    fn read_frame(&mut self, config: &Config) -> AvifResult<(Image, u64)>;
     fn has_more_frames(&mut self) -> bool;
 }

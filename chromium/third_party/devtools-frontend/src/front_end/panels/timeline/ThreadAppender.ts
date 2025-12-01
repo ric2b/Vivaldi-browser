@@ -206,9 +206,9 @@ export class ThreadAppender implements TrackAppender {
   /**
    * Appends into the flame chart data the data corresponding to the
    * this thread.
-   * @param trackStartLevel the horizontal level of the flame chart events where
+   * @param trackStartLevel - the horizontal level of the flame chart events where
    * the track's events will start being appended.
-   * @param expanded wether the track should be rendered expanded.
+   * @param expanded - wether the track should be rendered expanded.
    * @returns the first available level to append more data after having
    * appended the track's events.
    */
@@ -256,7 +256,7 @@ export class ThreadAppender implements TrackAppender {
    * chart data. A group has a predefined style and a reference to the
    * definition of the legacy track (which should be removed in the
    * future).
-   * @param currentLevel the flame chart level at which the header is
+   * @param currentLevel - the flame chart level at which the header is
    * appended.
    */
   #appendTrackHeaderAtLevel(currentLevel: number): void {
@@ -440,7 +440,7 @@ export class ThreadAppender implements TrackAppender {
   /**
    * Adds into the flame chart data the entries of this thread, which
    * includes trace events and JS calls.
-   * @param currentLevel the flame chart level from which entries will
+   * @param currentLevel - the flame chart level from which entries will
    * be appended.
    * @returns the next level after the last occupied by the appended
    * entries (the first available level to append more data).
@@ -486,9 +486,9 @@ export class ThreadAppender implements TrackAppender {
       //    URLs).
       // This means that all of the ignore listed calls are ignored (not
       // appended), except if it is the bottom call of an ignored stack.
-      // This is becaue to represent ignore listed stack frames, we add
+      // This is because to represent ignore listed stack frames, we add
       // a flame chart entry with the length and position of the bottom
-      // frame, which is distictively marked to denote an ignored listed
+      // frame, which is distinctively marked to denote an ignored listed
       // stack.
       const skipEventDueToIgnoreListing = entryIsIgnoreListed && parentIsIgnoredListed;
       if (entryIsVisible && !skipEventDueToIgnoreListing) {

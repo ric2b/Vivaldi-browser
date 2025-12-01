@@ -14,6 +14,8 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_list.h"
+#include "components/prefs/pref_service.h"
+#include "components/prefs/scoped_user_pref_update.h"
 #include "components/zoom/zoom_controller.h"
 #include "extensions/api/bookmarks/bookmarks_private_api.h"
 #include "extensions/browser/event_router.h"

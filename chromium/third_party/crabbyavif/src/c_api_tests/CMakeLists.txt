@@ -49,6 +49,8 @@ endmacro()
 
 add_avif_gtest(decoder_tests)
 add_avif_gtest(encoder_tests)
+add_avif_gtest(gainmap_tests)
+add_avif_gtest(image_tests)
 add_avif_gtest(incremental_tests)
 add_avif_gtest(reformat_tests)
 

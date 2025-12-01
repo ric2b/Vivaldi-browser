@@ -43,7 +43,7 @@ export function getInsight<InsightName extends keyof InsightModels>(
 
 export function getLCP(insights: TraceInsightSets|null, key: string|null):
     {value: Types.Timing.Micro, event: Types.Events.LargestContentfulPaintCandidate}|null {
-  const insight = getInsight(InsightKeys.LCP_PHASES, insights, key);
+  const insight = getInsight(InsightKeys.LCP_BREAKDOWN, insights, key);
   if (!insight || !insight.lcpMs || !insight.lcpEvent) {
     return null;
   }
@@ -54,7 +54,7 @@ export function getLCP(insights: TraceInsightSets|null, key: string|null):
 
 export function getINP(insights: TraceInsightSets|null, key: string|null):
     {value: Types.Timing.Micro, event: Types.Events.SyntheticInteractionPair}|null {
-  const insight = getInsight(InsightKeys.INTERACTION_TO_NEXT_PAINT, insights, key);
+  const insight = getInsight(InsightKeys.INP_BREAKDOWN, insights, key);
   if (!insight?.longestInteractionEvent?.dur) {
     return null;
   }
@@ -109,7 +109,7 @@ export interface CrUXFieldMetricResults {
   lcp: CrUXFieldMetricTimingResult|null;
   inp: CrUXFieldMetricTimingResult|null;
   cls: CrUXFieldMetricNumberResult|null;
-  lcpPhases: {
+  lcpBreakdown: {
     ttfb: CrUXFieldMetricTimingResult|null,
     loadDelay: CrUXFieldMetricTimingResult|null,
     loadDuration: CrUXFieldMetricTimingResult|null,
@@ -182,7 +182,7 @@ export function getFieldMetricsForInsightSet(
     lcp: getMetricTimingResult(pageResult, 'largest_contentful_paint', scope),
     inp: getMetricTimingResult(pageResult, 'interaction_to_next_paint', scope),
     cls: getMetricResult(pageResult, 'cumulative_layout_shift', scope),
-    lcpPhases: {
+    lcpBreakdown: {
       ttfb: getMetricTimingResult(pageResult, 'largest_contentful_paint_image_time_to_first_byte', scope),
       loadDelay: getMetricTimingResult(pageResult, 'largest_contentful_paint_image_resource_load_delay', scope),
       loadDuration: getMetricTimingResult(pageResult, 'largest_contentful_paint_image_resource_load_duration', scope),
@@ -315,6 +315,30 @@ export function isRequestCompressed(request: Types.Events.SyntheticNetworkReques
       header => patterns.some(p => header.name.match(p)) && compressionTypes.includes(header.value));
 }
 
+export function isRequestServedFromBrowserCache(request: Types.Events.SyntheticNetworkRequest): boolean {
+  if (!request.args.data.responseHeaders || request.args.data.failed) {
+    return false;
+  }
+
+  // Not Modified?
+  if (request.args.data.statusCode === 304) {
+    return true;
+  }
+
+  // TODO: for some reason ResourceReceiveResponse events never show a 304 status
+  // code, so the above is never gonna work. For now, fall back to a dirty check of
+  // looking at the ratio of transfer size and resource size. If it's really small,
+  // we certainly did not use the network to fetch it.
+
+  const {transferSize, resourceSize} = getRequestSizes(request);
+  const ratio = resourceSize ? transferSize / resourceSize : 0;
+  if (ratio < 0.01) {
+    return true;
+  }
+
+  return false;
+}
+
 function getRequestSizes(request: Types.Events.SyntheticNetworkRequest): {resourceSize: number, transferSize: number} {
   const resourceSize = request.args.data.decodedBodyLength;
   const transferSize = request.args.data.encodedDataLength;
@@ -326,12 +350,12 @@ function getRequestSizes(request: Types.Events.SyntheticNetworkRequest): {resour
  * uncompressed size (totalBytes). Uses the actual transfer size from the network record if applicable,
  * minus the size of the response headers.
  *
- * @param totalBytes Uncompressed size of the resource
+ * @param totalBytes - Uncompressed size of the resource
  */
 export function estimateCompressedContentSize(
     request: Types.Events.SyntheticNetworkRequest|undefined, totalBytes: number,
     resourceType: Protocol.Network.ResourceType): number {
-  if (!request) {
+  if (!request || isRequestServedFromBrowserCache(request)) {
     // We don't know how many bytes this asset used on the network, but we can guess it was
     // roughly the size of the content gzipped.
     // See https://developers.google.com/web/fundamentals/performance/optimizing-content-efficiency/optimize-encoding-and-transfer for specific CSS/Script examples

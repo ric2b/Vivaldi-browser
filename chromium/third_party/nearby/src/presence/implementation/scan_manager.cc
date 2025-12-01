@@ -105,7 +105,7 @@ void ScanManager::StopScan(ScanSessionId id) {
         if (it->second.scanning_session) {
           absl::Status status = it->second.scanning_session->stop_scanning();
           if (!status.ok()) {
-            NEARBY_LOGS(WARNING) << "StopScan error: " << status;
+            LOG(WARNING) << "StopScan error: " << status;
           }
         }
         scan_sessions_.erase(it);
@@ -131,8 +131,7 @@ void ScanManager::NotifyFoundBle(ScanSessionId id, BleAdvertisementData data,
   std::string remote_address = absl::StrCat(absl::Hex(peripheral_id));
   if (it->second.advertisement_filter.MatchesScanFilter(*advert)) {
     internal::DeviceIdentityMetaData device_identity_metadata;
-    device_identity_metadata.set_bluetooth_mac_address(
-        remote_address);
+    device_identity_metadata.set_bluetooth_mac_address(remote_address);
 
     if (!device_unique_id_to_endpoint_id_map_.contains(peripheral_id)) {
       PresenceDevice device(DeviceMotion(), device_identity_metadata,
@@ -150,12 +149,12 @@ void ScanManager::NotifyFoundBle(ScanSessionId id, BleAdvertisementData data,
       }
 
       device_unique_id_to_endpoint_id_map_.emplace(peripheral_id,
-                                                 device.GetEndpointId());
+                                                   device.GetEndpointId());
 
       it->second.callback.on_discovered_cb(std::move(device));
     } else {
       PresenceDevice device(
-        device_unique_id_to_endpoint_id_map_.at(peripheral_id));
+          device_unique_id_to_endpoint_id_map_.at(peripheral_id));
       device.SetDeviceIdentityMetaData(device_identity_metadata);
       // Ok if the advertisement is for trusted/private identity.
       if (advert->public_credential.ok()) {
@@ -187,7 +186,7 @@ void ScanManager::NotifyLostBle(ScanSessionId id,
     device_identity_metadata.set_bluetooth_mac_address(
         std::string(remote_address));
     PresenceDevice device(
-      device_unique_id_to_endpoint_id_map_.at(peripheral_id));
+        device_unique_id_to_endpoint_id_map_.at(peripheral_id));
     device.SetDeviceIdentityMetaData(device_identity_metadata);
 
     device_unique_id_to_endpoint_id_map_.erase(peripheral_id);
@@ -222,9 +221,8 @@ void ScanManager::FetchCredentials(ScanSessionId id,
     // Not fetching for PUBLIC.
     if (selector.identity_type == internal::IDENTITY_TYPE_UNSPECIFIED ||
         selector.identity_type == internal::IDENTITY_TYPE_PUBLIC) {
-      NEARBY_LOGS(INFO) << __func__
-                        << ": skip feteching creds for identity type: "
-                        << selector.identity_type;
+      LOG(INFO) << __func__ << ": skip feteching creds for identity type: "
+                << selector.identity_type;
       continue;
     }
     credential_manager_->GetPublicCredentials(
@@ -235,7 +233,7 @@ void ScanManager::FetchCredentials(ScanSessionId id,
                      std::vector<::nearby::internal::SharedCredential>>
                      credentials) {
                if (!credentials.ok()) {
-                 NEARBY_LOGS(WARNING)
+                 LOG(WARNING)
                      << "Failed to fetch credentials: " << credentials.status();
                  return;
                }

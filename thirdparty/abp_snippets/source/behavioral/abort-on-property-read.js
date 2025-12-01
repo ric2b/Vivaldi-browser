@@ -16,6 +16,8 @@
  */
 
 import {abortOnRead} from "../utils/execution.js";
+import {formatArguments} from "../utils/general.js";
+import {profile} from "../introspection/profile.js";
 
 /**
  * Patches a property on the window object to abort execution when the
@@ -36,5 +38,13 @@ import {abortOnRead} from "../utils/execution.js";
  */
 export function abortOnPropertyRead(property, setConfigurable) {
   const configurableFlag = !(setConfigurable === "false");
-  abortOnRead("abort-on-property-read", window, property, configurableFlag);
+  const formattedArguments = formatArguments(arguments);
+  const {mark, end} = profile("abort-on-property-read");
+  mark();
+  abortOnRead("abort-on-property-read",
+              window,
+              property,
+              formattedArguments,
+              configurableFlag);
+  end();
 }

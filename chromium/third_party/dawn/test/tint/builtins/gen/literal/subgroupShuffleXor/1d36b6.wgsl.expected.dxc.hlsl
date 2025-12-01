@@ -1,8 +1,8 @@
 //
 // fragment_main
 //
-RWByteAddressBuffer prevent_dce : register(u0);
 
+RWByteAddressBuffer prevent_dce : register(u0);
 float subgroupShuffleXor_1d36b6() {
   float res = WaveReadLaneAt(1.0f, (WaveGetLaneIndex() ^ 1u));
   return res;
@@ -10,13 +10,13 @@ float subgroupShuffleXor_1d36b6() {
 
 void fragment_main() {
   prevent_dce.Store(0u, asuint(subgroupShuffleXor_1d36b6()));
-  return;
 }
+
 //
 // compute_main
 //
-RWByteAddressBuffer prevent_dce : register(u0);
 
+RWByteAddressBuffer prevent_dce : register(u0);
 float subgroupShuffleXor_1d36b6() {
   float res = WaveReadLaneAt(1.0f, (WaveGetLaneIndex() ^ 1u));
   return res;
@@ -25,5 +25,5 @@ float subgroupShuffleXor_1d36b6() {
 [numthreads(1, 1, 1)]
 void compute_main() {
   prevent_dce.Store(0u, asuint(subgroupShuffleXor_1d36b6()));
-  return;
 }
+

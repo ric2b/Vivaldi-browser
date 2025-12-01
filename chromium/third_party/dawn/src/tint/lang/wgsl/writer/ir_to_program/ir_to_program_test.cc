@@ -27,13 +27,12 @@
 
 // GEN_BUILD:CONDITION(tint_build_wgsl_writer)
 
+#include <limits>
 #include <sstream>
 #include <string>
 
-#include "src/tint/lang/core/access.h"
-#include "src/tint/lang/core/address_space.h"
-#include "src/tint/lang/core/ir/disassembler.h"
-#include "src/tint/lang/core/texel_format.h"
+#include "src/tint/lang/core/enums.h"
+#include "src/tint/lang/core/type/sampled_texture.h"
 #include "src/tint/lang/core/type/storage_texture.h"
 #include "src/tint/lang/core/type/texture_dimension.h"
 #include "src/tint/lang/wgsl/ir/builtin_call.h"
@@ -50,7 +49,7 @@ using namespace tint::core::fluent_types;     // NOLINT
 IRToProgramTest::Result IRToProgramTest::Run() {
     Result result;
 
-    result.ir = tint::core::ir::Disassembler(mod).Plain();
+    result.ir = str();
 
     ProgramOptions options;
     options.allowed_features = AllowedFeatures::Everything();
@@ -94,6 +93,18 @@ fn f() {
 )");
 }
 
+TEST_F(IRToProgramTest, SingleFunction_Unreachable) {
+    auto* fn = b.Function("f", ty.u32());
+
+    fn->Block()->Append(b.Unreachable());
+
+    EXPECT_WGSL(R"(
+fn f() -> u32 {
+  return u32();
+}
+)");
+}
+
 TEST_F(IRToProgramTest, SingleFunction_Return_i32) {
     auto* fn = b.Function("f", ty.i32());
 
@@ -102,6 +113,18 @@ TEST_F(IRToProgramTest, SingleFunction_Return_i32) {
     EXPECT_WGSL(R"(
 fn f() -> i32 {
   return 42i;
+}
+)");
+}
+
+TEST_F(IRToProgramTest, SingleFunction_Return_min_i32) {
+    auto* fn = b.Function("f", ty.i32());
+
+    fn->Block()->Append(b.Return(fn, i32(std::numeric_limits<int32_t>::min())));
+
+    EXPECT_WGSL(R"(
+fn f() -> i32 {
+  return i32(-2147483648);
 }
 )");
 }
@@ -907,6 +930,81 @@ fn f() {
   var v_143 : bool = true;
   var v_144 : bool = true;
   var v_145 : bool = true;
+}
+)");
+}
+
+TEST_F(IRToProgramTest, InvalidCharacters) {
+    auto* fn = b.Function("f", ty.void_(), core::ir::Function::PipelineStage::kFragment);
+
+    b.Append(fn->Block(), [&] {
+        // Invalid
+        Var("_", true);
+        Var("__", true);
+        Var(" ", true);
+        Var("1", true);
+        Var("struct-a", true);
+        Var("struct a", true);
+
+        // Valid
+        Var("a", true);
+        Var("A", true);
+        Var("a_", true);
+        Var("a1", true);
+        Var("struct_a", true);
+        b.Return(fn);
+    });
+
+    EXPECT_WGSL(R"(
+@fragment
+fn f() {
+  var v : bool = true;
+  var v_1 : bool = true;
+  var v_2 : bool = true;
+  var v_3 : bool = true;
+  var v_4 : bool = true;
+  var v_5 : bool = true;
+  var a : bool = true;
+  var A : bool = true;
+  var a_ : bool = true;
+  var a1 : bool = true;
+  var struct_a : bool = true;
+}
+)");
+}
+
+TEST_F(IRToProgramTest, RenameStructAndStructMembers) {
+    auto* s0 = ty.Struct(mod.symbols.New("MyStruct"), {
+                                                          {mod.symbols.New("safe"), ty.i32()},
+                                                          {mod.symbols.New("2"), ty.u32()},
+                                                          {mod.symbols.New("__member"), ty.u32()},
+                                                      });
+    auto* s1 = ty.Struct(mod.symbols.New("__BadStructName"), {
+                                                                 {mod.symbols.New("a"), ty.i32()},
+                                                             });
+
+    auto* fn = b.Function("f", ty.void_(), core::ir::Function::PipelineStage::kFragment);
+    b.Append(fn->Block(), [&] {
+        b.Var("s0", ty.ref<function>(s0));
+        b.Var("s1", ty.ref<function>(s1));
+        b.Return(fn);
+    });
+
+    EXPECT_WGSL(R"(
+struct MyStruct {
+  safe : i32,
+  m : u32,
+  m_1 : u32,
+}
+
+struct S {
+  a : i32,
+}
+
+@fragment
+fn f() {
+  var s0 : MyStruct;
+  var s1 : S;
 }
 )");
 }
@@ -1952,6 +2050,46 @@ fn f(i : i32) -> i32 {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// Load
+////////////////////////////////////////////////////////////////////////////////
+TEST_F(IRToProgramTest, Load_Reused) {
+    auto im = b.Var(
+        "im",
+        ty.ref(handle, ty.sampled_texture(core::type::TextureDimension::k2d, ty.f32()), read));
+    im->SetBindingPoint(0, 0);
+    auto sampler = b.Var("sampler", ty.ref(handle, ty.sampler(), read));
+    sampler->SetBindingPoint(0, 1);
+
+    b.ir.root_block->Append(im);
+    b.ir.root_block->Append(sampler);
+
+    auto* fn = b.Function("f", ty.void_());
+    b.Append(fn->Block(), [&] {  //
+        auto* tl = b.Load(im);
+        auto* sl = b.Load(sampler);
+
+        b.Phony(b.Call<wgsl::ir::BuiltinCall>(ty.vec4<f32>(), wgsl::BuiltinFn::kTextureSample, tl,
+                                              sl, b.Splat(ty.vec2<f32>(), 0_f)));
+        b.Phony(b.Call<wgsl::ir::BuiltinCall>(ty.vec4<f32>(), wgsl::BuiltinFn::kTextureSample, tl,
+                                              sl, b.Splat(ty.vec2<f32>(), 0_f)));
+        b.Return(fn);
+    });
+
+    EXPECT_WGSL(R"(
+diagnostic(off, derivative_uniformity);
+
+@group(0u) @binding(0u) var im : texture_2d<f32>;
+
+@group(0u) @binding(1u) var v : sampler;
+
+fn f() {
+  _ = textureSample(im, v, vec2<f32>());
+  _ = textureSample(im, v, vec2<f32>());
+}
+)");
+}
+
+////////////////////////////////////////////////////////////////////////////////
 // Function-scope var
 ////////////////////////////////////////////////////////////////////////////////
 TEST_F(IRToProgramTest, FunctionScopeVar_i32) {
@@ -2146,6 +2284,7 @@ fn f() -> f32 {
   } else {
     return 2.0f;
   }
+  return f32();
 }
 )");
 }
@@ -3334,6 +3473,29 @@ fn f() -> i32 {
 )");
 }
 
+TEST_F(IRToProgramTest, Override_UnaryInitializer) {
+    core::ir::Override* o;
+    b.Append(b.ir.root_block, [&] {
+        auto* lhs = b.Override("cond", true);
+        lhs->SetOverrideId(OverrideId{10});
+
+        o = b.Override("o", b.Not<bool>(lhs));
+    });
+
+    auto* fn = b.Function("f", ty.bool_());
+    b.Append(fn->Block(), [&] { b.Return(fn, o); });
+
+    EXPECT_WGSL(R"(
+@id(10) override cond : bool = true;
+
+override o : bool = !(cond);
+
+fn f() -> bool {
+  return o;
+}
+)");
+}
+
 TEST_F(IRToProgramTest, Override_BinaryInitializer) {
     core::ir::Override* o;
     b.Append(b.ir.root_block, [&] {
@@ -3358,6 +3520,84 @@ override o : u32 = (lhs + rhs);
 
 fn f() -> u32 {
   return o;
+}
+)");
+}
+
+TEST_F(IRToProgramTest, Override_BitcastInitializer) {
+    core::ir::Override* o;
+    b.Append(b.ir.root_block, [&] {
+        auto* from = b.Override("from", 42_u);
+        from->SetOverrideId(OverrideId{10});
+
+        o = b.Override("o", b.Bitcast(ty.i32(), from));
+    });
+
+    auto* fn = b.Function("f", ty.i32());
+    b.Append(fn->Block(), [&] { b.Return(fn, o); });
+
+    EXPECT_WGSL(R"(
+@id(10) override v : u32 = 42u;
+
+override o : i32 = bitcast<i32>(v);
+
+fn f() -> i32 {
+  return o;
+}
+)");
+}
+
+TEST_F(IRToProgramTest, StructMemberOffset) {
+    auto* S = ty.Struct(mod.symbols.New("S"),
+                        Vector{
+                            ty.Get<core::type::StructMember>(mod.symbols.New("a"), ty.i32(), 0u, 0u,
+                                                             4u, 4u, core::IOAttributes{}),
+                            ty.Get<core::type::StructMember>(mod.symbols.New("b"), ty.u32(), 1u,
+                                                             64u, 4u, 4u, core::IOAttributes{}),
+                            ty.Get<core::type::StructMember>(mod.symbols.New("c"), ty.f32(), 2u,
+                                                             76u, 4u, 4u, core::IOAttributes{}),
+                        });
+
+    auto* fn = b.Function("f", ty.void_());
+    auto* x = b.FunctionParam("x", S);
+    fn->SetParams({x});
+    b.Append(fn->Block(), [&] { b.Return(fn); });
+
+    EXPECT_WGSL(R"(
+struct S {
+  @size(64u)
+  a : i32,
+  @size(12u)
+  b : u32,
+  c : f32,
+}
+
+fn f(x : S) {
+}
+)");
+}
+
+TEST_F(IRToProgramTest, StructMemberOffset_FirstMember) {
+    auto* S = ty.Struct(mod.symbols.New("S"),
+                        Vector{
+                            ty.Get<core::type::StructMember>(mod.symbols.New("a"), ty.i32(), 0u,
+                                                             12u, 4u, 4u, core::IOAttributes{}),
+                        });
+
+    auto* fn = b.Function("f", ty.void_());
+    auto* x = b.FunctionParam("x", S);
+    fn->SetParams({x});
+    b.Append(fn->Block(), [&] { b.Return(fn); });
+
+    EXPECT_WGSL(R"(
+struct S {
+  tint_pad_0 : u32,
+  tint_pad_4 : u32,
+  tint_pad_8 : u32,
+  a : i32,
+}
+
+fn f(x : S) {
 }
 )");
 }

@@ -8,26 +8,26 @@
 namespace permissions {
 
 bool PermissionRequestManager::VivaldiHandlePermissionRequest() {
+  bool handled_request = false;
 #if !BUILDFLAG(IS_ANDROID)
   // look into requests
   if (requests_.size() < 1)
     return false;
-
-  auto &request = requests_[0];
-  auto isource = request_sources_map_.find(request.get());
-  if (isource != request_sources_map_.end() &&
-      vivaldi::permissions::HandlePermissionRequest(
-          isource->second.requesting_frame_id, request.get())) {
-    // Stops RestorePrompt from reaching our HandlePermissionRequest call (would lead to crash).
-    current_request_prompt_disposition_.reset();
-    // We set this to stop the logic in OnVisibilityChanged to try recreate the
-    // view (would lead to crash).
-    current_request_ui_to_use_.reset();
-
-    return true;
+  for (auto& request : requests_) {
+    auto isource = request_sources_map_.find(request.get());
+    if (isource != request_sources_map_.end() &&
+        vivaldi::permissions::HandlePermissionRequest(
+            isource->second.requesting_frame_id, request.get())) {
+      // Stops RestorePrompt from reaching our HandlePermissionRequest call (would lead to crash).
+      current_request_prompt_disposition_.reset();
+      // We set this to stop the logic in OnVisibilityChanged to try recreate the
+      // view (would lead to crash).
+      current_request_ui_to_use_.reset();
+      handled_request = true;
+    }
   }
 #endif
-  return false;
+  return handled_request;
 }
 
 }  // namespace permissions

@@ -13,8 +13,8 @@
           {
             "builder_id": {
               "bucket": "ci",
-              "builder": "android-oreo-x86-rel",
-              "project": "chromium-m138"
+              "builder": "android-10-x86-rel",
+              "project": "chromium-m140"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-android-archive",
@@ -48,8 +48,8 @@
       "builder_ids": [
         {
           "bucket": "ci",
-          "builder": "android-oreo-x86-rel",
-          "project": "chromium-m138"
+          "builder": "android-10-x86-rel",
+          "project": "chromium-m140"
         }
       ],
       "targets_spec_directory": "src/infra/config/generated/builders/try/android-x86-rel/targets"

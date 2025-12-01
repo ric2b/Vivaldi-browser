@@ -1,8 +1,8 @@
 //
 // fragment_main
 //
-RWByteAddressBuffer prevent_dce : register(u0);
 
+RWByteAddressBuffer prevent_dce : register(u0);
 uint subgroupMax_b58cbf() {
   uint arg_0 = 1u;
   uint res = WaveActiveMax(arg_0);
@@ -10,14 +10,14 @@ uint subgroupMax_b58cbf() {
 }
 
 void fragment_main() {
-  prevent_dce.Store(0u, asuint(subgroupMax_b58cbf()));
-  return;
+  prevent_dce.Store(0u, subgroupMax_b58cbf());
 }
+
 //
 // compute_main
 //
-RWByteAddressBuffer prevent_dce : register(u0);
 
+RWByteAddressBuffer prevent_dce : register(u0);
 uint subgroupMax_b58cbf() {
   uint arg_0 = 1u;
   uint res = WaveActiveMax(arg_0);
@@ -26,6 +26,6 @@ uint subgroupMax_b58cbf() {
 
 [numthreads(1, 1, 1)]
 void compute_main() {
-  prevent_dce.Store(0u, asuint(subgroupMax_b58cbf()));
-  return;
+  prevent_dce.Store(0u, subgroupMax_b58cbf());
 }
+

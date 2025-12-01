@@ -202,6 +202,7 @@ if (current_cpu == "arm64" || current_cpu == "arm64e" || current_cpu == "x64" ||
     "libavutil/slicethread.c",
     "libavutil/spherical.c",
     "libavutil/stereo3d.c",
+    "libavutil/tdrdi.c",
     "libavutil/tea.c",
     "libavutil/threadmessage.c",
     "libavutil/time.c",
@@ -313,6 +314,30 @@ if ((current_cpu == "x64" && ffmpeg_branding == "Chrome") ||
   ]
 }
 
+if (use_linux_config && current_cpu == "riscv64" &&
+    ffmpeg_branding == "Chrome") {
+  ffmpeg_c_sources += [
+    "libavcodec/riscv/autorename_libavcodec_riscv_aacpsdsp_init.c",
+    "libavcodec/riscv/autorename_libavcodec_riscv_h264dsp_init.c",
+    "libavcodec/riscv/autorename_libavcodec_riscv_sbrdsp_init.c",
+    "libavcodec/riscv/autorename_libavcodec_riscv_videodsp_init.c",
+    "libavcodec/riscv/h264_chroma_init_riscv.c",
+    "libavcodec/riscv/h264qpel_init.c",
+  ]
+  ffmpeg_gas_sources += [
+    "libavcodec/riscv/aacpsdsp_rvv.S",
+    "libavcodec/riscv/autorename_libavcodec_riscv_videodsp.S",
+    "libavcodec/riscv/h264_mc_chroma.S",
+    "libavcodec/riscv/h264addpx_rvv.S",
+    "libavcodec/riscv/h264dsp_rvv.S",
+    "libavcodec/riscv/h264idct_rvv.S",
+    "libavcodec/riscv/h264qpel_rvv.S",
+    "libavcodec/riscv/sbrdsp_rvv.S",
+    "libavcodec/riscv/startcode_rvb.S",
+    "libavcodec/riscv/startcode_rvv.S",
+  ]
+}
+
 if ((current_cpu == "arm64" || current_cpu == "arm64e") &&
     ffmpeg_branding == "Chrome") {
   ffmpeg_c_sources += [
@@ -353,6 +378,25 @@ if (current_cpu == "x64" || (is_win && current_cpu == "x86") ||
     "libavutil/x86/imgutils.asm",
     "libavutil/x86/lls.asm",
     "libavutil/x86/tx_float.asm",
+  ]
+}
+
+if (use_linux_config && current_cpu == "riscv64") {
+  ffmpeg_c_sources += [
+    "libavcodec/riscv/autorename_libavcodec_riscv_flacdsp_init.c",
+    "libavcodec/riscv/autorename_libavcodec_riscv_vorbisdsp_init.c",
+    "libavutil/riscv/autorename_libavutil_riscv_cpu.c",
+    "libavutil/riscv/autorename_libavutil_riscv_fixed_dsp_init.c",
+    "libavutil/riscv/autorename_libavutil_riscv_float_dsp_init.c",
+    "libavutil/riscv/autorename_libavutil_riscv_lls_init.c",
+    "libavutil/riscv/cpu_common.c",
+  ]
+  ffmpeg_gas_sources += [
+    "libavcodec/riscv/flacdsp_rvv.S",
+    "libavcodec/riscv/vorbisdsp_rvv.S",
+    "libavutil/riscv/fixed_dsp_rvv.S",
+    "libavutil/riscv/float_dsp_rvv.S",
+    "libavutil/riscv/lls_rvv.S",
   ]
 }
 

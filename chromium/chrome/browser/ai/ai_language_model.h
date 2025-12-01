@@ -8,6 +8,7 @@
 #include <deque>
 #include <optional>
 
+#include "base/containers/flat_set.h"
 #include "base/containers/queue.h"
 #include "base/functional/callback_forward.h"
 #include "base/memory/weak_ptr.h"
@@ -94,6 +95,7 @@ class AILanguageModel : public AIContextBoundObject,
     // The number of tokens remaining after the initial prompts.
     uint32_t max_tokens() const { return max_tokens_; }
     uint32_t current_tokens() const { return current_tokens_; }
+    uint32_t available_tokens() const { return max_tokens_ - current_tokens_; }
 
    private:
     uint32_t max_tokens_;
@@ -114,6 +116,9 @@ class AILanguageModel : public AIContextBoundObject,
   // Returns the the metadata parsed to the `PromptApiMetadata` from `any`.
   static PromptApiMetadata ParseMetadata(
       const optimization_guide::proto::Any& any);
+
+  // Returns a set of BCP 47 base language codes that are supported and enabled.
+  static base::flat_set<std::string_view> GetSupportedLanguageBaseCodes();
 
   // Format the initial prompts, gets the token count, updates the session,
   // and reports to `create_client`.
@@ -188,6 +193,7 @@ class AILanguageModel : public AIContextBoundObject,
   void GetSizeInTokens(
       on_device_model::mojom::InputPtr input,
       base::OnceCallback<void(std::optional<uint32_t>)> callback);
+  void EnsureSessionConnected();
 
   // These methods are used for implementing queueing.
   using QueueCallback = base::OnceCallback<void(base::OnceClosure)>;
@@ -200,6 +206,7 @@ class AILanguageModel : public AIContextBoundObject,
   // also be assumed to be valid, as any disconnects should apply to both
   // remotes (e.g. a service crash).
   mojo::Remote<on_device_model::mojom::Session> initial_session_;
+  on_device_model::mojom::InputPtr initial_input_;
 
   // Contains the current committed session state. This will be replaced after a
   // successful prompt with the latest session state.

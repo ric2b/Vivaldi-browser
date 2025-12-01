@@ -1190,7 +1190,7 @@ static int sessionTableInfo(
 /*
 ** This function is called to initialize the SessionTable.nCol, azCol[]
 ** abPK[] and azDflt[] members of SessionTable object pTab. If these
-** fields are already initilialized, this function is a no-op.
+** fields are already initialized, this function is a no-op.
 **
 ** If an error occurs, an error code is stored in sqlite3_session.rc and
 ** non-zero returned. Or, if no error occurs but the table has no primary
@@ -1209,6 +1209,8 @@ static int sessionInitTable(
   if( pTab->nCol==0 ){
     u8 *abPK;
     assert( pTab->azCol==0 || pTab->abPK==0 );
+    sqlite3_free(pTab->azCol);
+    pTab->abPK = 0;
     rc = sessionTableInfo(pSession, db, zDb, 
         pTab->zName, &pTab->nCol, &pTab->nTotalCol, 0, &pTab->azCol, 
         &pTab->azDflt, &pTab->aiIdx, &abPK,
@@ -2216,7 +2218,9 @@ int sqlite3session_diff(
     SessionTable *pTo;            /* Table zTbl */
 
     /* Locate and if necessary initialize the target table object */
+    pSession->bAutoAttach++;
     rc = sessionFindTable(pSession, zTbl, &pTo);
+    pSession->bAutoAttach--;
     if( pTo==0 ) goto diff_out;
     if( sessionInitTable(pSession, pTo, pSession->db, pSession->zDb) ){
       rc = pSession->rc;
@@ -2227,17 +2231,43 @@ int sqlite3session_diff(
     if( rc==SQLITE_OK ){
       int bHasPk = 0;
       int bMismatch = 0;
-      int nCol;                   /* Columns in zFrom.zTbl */
+      int nCol = 0;               /* Columns in zFrom.zTbl */
       int bRowid = 0;
-      u8 *abPK;
+      u8 *abPK = 0;
       const char **azCol = 0;
-      rc = sessionTableInfo(0, db, zFrom, zTbl, 
-          &nCol, 0, 0, &azCol, 0, 0, &abPK, 
-          pSession->bImplicitPK ? &bRowid : 0
-      );
+      char *zDbExists = 0;
+
+      /* Check that database zFrom is attached.  */
+      zDbExists = sqlite3_mprintf("SELECT * FROM %Q.sqlite_schema", zFrom);
+      if( zDbExists==0 ){
+        rc = SQLITE_NOMEM;
+      }else{
+        sqlite3_stmt *pDbExists = 0;
+        rc = sqlite3_prepare_v2(db, zDbExists, -1, &pDbExists, 0);
+        if( rc==SQLITE_ERROR ){
+          rc = SQLITE_OK;
+          nCol = -1;
+        }
+        sqlite3_finalize(pDbExists);
+        sqlite3_free(zDbExists);
+      }
+
+      if( rc==SQLITE_OK && nCol==0 ){
+        rc = sessionTableInfo(0, db, zFrom, zTbl, 
+            &nCol, 0, 0, &azCol, 0, 0, &abPK, 
+            pSession->bImplicitPK ? &bRowid : 0
+        );
+      }
       if( rc==SQLITE_OK ){
         if( pTo->nCol!=nCol ){
-          bMismatch = 1;
+          if( nCol<=0 ){
+            rc = SQLITE_SCHEMA;
+            if( pzErrMsg ){
+              *pzErrMsg = sqlite3_mprintf("no such table: %s.%s", zFrom, zTbl);
+            }
+          }else{
+            bMismatch = 1;
+          }
         }else{
           int i;
           for(i=0; i<nCol; i++){
@@ -3013,7 +3043,7 @@ static int sessionGenerateChangeset(
 ){
   sqlite3 *db = pSession->db;     /* Source database handle */
   SessionTable *pTab;             /* Used to iterate through attached tables */
-  SessionBuffer buf = {0,0,0};    /* Buffer in which to accumlate changeset */
+  SessionBuffer buf = {0,0,0};    /* Buffer in which to accumulate changeset */
   int rc;                         /* Return code */
 
   assert( xOutput==0 || (pnChangeset==0 && ppChangeset==0) );
@@ -3366,14 +3396,15 @@ int sqlite3changeset_start_v2_strm(
 ** object and the buffer is full, discard some data to free up space.
 */
 static void sessionDiscardData(SessionInput *pIn){
-  if( pIn->xInput && pIn->iNext>=sessions_strm_chunk_size ){
-    int nMove = pIn->buf.nBuf - pIn->iNext;
+  if( pIn->xInput && pIn->iCurrent>=sessions_strm_chunk_size ){
+    int nMove = pIn->buf.nBuf - pIn->iCurrent;
     assert( nMove>=0 );
     if( nMove>0 ){
-      memmove(pIn->buf.aBuf, &pIn->buf.aBuf[pIn->iNext], nMove);
+      memmove(pIn->buf.aBuf, &pIn->buf.aBuf[pIn->iCurrent], nMove);
     }
-    pIn->buf.nBuf -= pIn->iNext;
-    pIn->iNext = 0;
+    pIn->buf.nBuf -= pIn->iCurrent;
+    pIn->iNext -= pIn->iCurrent;
+    pIn->iCurrent = 0;
     pIn->nData = pIn->buf.nBuf;
   }
 }
@@ -3727,8 +3758,8 @@ static int sessionChangesetNextOne(
   p->rc = sessionInputBuffer(&p->in, 2);
   if( p->rc!=SQLITE_OK ) return p->rc;
 
-  sessionDiscardData(&p->in);
   p->in.iCurrent = p->in.iNext;
+  sessionDiscardData(&p->in);
 
   /* If the iterator is already at the end of the changeset, return DONE. */
   if( p->in.iNext>=p->in.nData ){
@@ -6087,14 +6118,19 @@ int sqlite3changegroup_add_change(
   sqlite3_changegroup *pGrp,
   sqlite3_changeset_iter *pIter
 ){
+  int rc = SQLITE_OK;
+
   if( pIter->in.iCurrent==pIter->in.iNext 
    || pIter->rc!=SQLITE_OK 
    || pIter->bInvert
   ){
     /* Iterator does not point to any valid entry or is an INVERT iterator. */
-    return SQLITE_ERROR;
+    rc = SQLITE_ERROR;
+  }else{
+    pIter->in.bNoDiscard = 1;
+    rc = sessionOneChangeToHash(pGrp, pIter, 0);
   }
-  return sessionOneChangeToHash(pGrp, pIter, 0);
+  return rc;
 }
 
 /*

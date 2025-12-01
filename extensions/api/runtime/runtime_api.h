@@ -56,25 +56,12 @@ class RuntimePrivateRestartFunction : public ExtensionFunction {
 class RuntimePrivateGetAllFeatureFlagsFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("runtimePrivate.getAllFeatureFlags",
-                             RUNTIME_SETFEATUREENABLED)
+                             RUNTIME_GETALLFEATUREFLAGS)
 
   RuntimePrivateGetAllFeatureFlagsFunction() = default;
 
  private:
   ~RuntimePrivateGetAllFeatureFlagsFunction() override = default;
-
-  ResponseAction Run() override;
-};
-
-class RuntimePrivateSetFeatureEnabledFunction : public ExtensionFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("runtimePrivate.setFeatureEnabled",
-                             RUNTIME_GETALLFEATUREFLAGS)
-
-  RuntimePrivateSetFeatureEnabledFunction() = default;
-
- private:
-  ~RuntimePrivateSetFeatureEnabledFunction() override = default;
 
   ResponseAction Run() override;
 };

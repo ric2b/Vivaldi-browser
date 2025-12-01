@@ -10,6 +10,11 @@ import type {DevToolsPage} from '../shared/frontend-helper.js';
 import type {InspectedPage} from '../shared/target-helper.js';
 
 describe('AI Assistance', function() {
+  if (this.timeout() > 0) {
+    // Takes longer on Macs.
+    this.timeout(20000);
+  }
+
   let preloadScriptId: string;
 
   async function setupMocks(
@@ -131,6 +136,8 @@ describe('AI Assistance', function() {
   }
 
   async function typeQuery(devtoolsPage: DevToolsPage, query: string): Promise<void> {
+    await devtoolsPage.waitFor('textarea.chat-input');
+    await devtoolsPage.scrollElementIntoView('textarea.chat-input');
     await devtoolsPage.click('aria/Ask a question about the selected element');
     await devtoolsPage.typeText(query);
   }
@@ -627,9 +634,7 @@ STOP`,
   });
 
   for (const code of ['const data = {}', 'throw new Error("test")', 'const data = {;']) {
-    // Flaky on Mac.
-    it.skipOnPlatforms(
-        ['mac'], `[crbug.com/416405022]: should not trigger a side-effect for "${code}"`,
+    it(`should not trigger a side-effect for "${code}"`,
         async ({devToolsPage, inspectedPage}) => {
           await runAiAssistance(devToolsPage, inspectedPage, {
             query: 'Change the fontSize for this element to blue',

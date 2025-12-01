@@ -22,11 +22,17 @@
 .overlay-type-ENTRY_LABEL {
   /* keep these above the selected entry overline, else they can become hard to read */
   z-index: 2;
+  transition: opacity 0.2s;
 
   /* if an overlay is being edited, keep it above the rest so the user is not obstructed */
   /* also bump the z-index if the label is being hovered, to ensure it appears above any other labels that might obstruct it */
   &:has([data-user-editing-label]),
   &:hover {
+    z-index: 4;
+  }
+
+  /* Added to the selected entry label to bring it forward. Hovered entry's label will still be on top */
+  &.bring-forward {
     z-index: 3;
   }
 }
@@ -183,4 +189,25 @@
 
 .overlay-popover span.overlay-popover-time {
   color: var(--sys-color-green);
+}
+
+.timeline-flamechart-resizer {
+  flex: 8px 0 0;
+  background-color: var(--sys-color-surface2);
+  border: 1px var(--sys-color-divider);
+  border-style: solid none;
+  display: flex;
+  flex-direction: row;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.timeline-network-resizer-disabled > .timeline-flamechart-resizer {
+  display: none;
+}
+
+.timeline-flamechart-resizer::after {
+  content: "...";
+  font-size: 14px;
+  margin-bottom: -1px;
 }

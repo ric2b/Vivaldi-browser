@@ -19,7 +19,6 @@ Multiple snippets can be executed per single filter by using a semicolon `;` in 
 evilsite.com#$#log 1 2; log 3 4 5
 ```
 
-
 #### The two kind of snippets
 
 Snippets can run either as [content script](https://developer.chrome.com/docs/extensions/mv3/content_scripts/#isolated_world), which is a separate environment that replicates the *DOM* but never interferes with the *JS* that is running on the user page (and vice-versa), or as [injected script](https://developer.chrome.com/docs/extensions/mv3/content_scripts/#programmatic) that runs on the page among 3rd party and regular site's *JS* code.
@@ -36,15 +35,9 @@ This module currently provides the following exports:
   * `@eyeo/snippets` which includes both `isolated` and `main`, aliased also as `injected`, export names
   * `@eyeo/snippets/isolated` which includes only the `isolated` export
   * `@eyeo/snippets/main`, aliased as `@eyeo/snippets/injected` too, which includes only the `main` export
-  * `@eyeo/all` which exports all snippets, except for the Machine Learning one, as single callback for those environments where the *isolated* world is *not supported*, but standard *ESM* is used
+  * `@eyeo/all` which exports all snippets, as single callback for those environments where the *isolated* world is *not supported*, but standard *ESM* is used
 
 Accordingly to the project needs, this module can be used in various ways.
-
-
-## Machine Learning
-
-The machine learning snippet and files related to it are taken from the @eyeo/mlaf dependency. The machine learning snippet `hide-if-classifies` is included in [webext/ml.mjs](./webext/ml.mjs) (can be imported with `@eyeo/snippets/isolated`) for web extensions and in [isolated-first-all.jst](./dist/isolated-all.jst) for Chromium-based products. Please note that the ML snippet requires a service worker backend to function properly. This is already supported by [eyeo's Web Extension Ad Blocking Toolkit](https://gitlab.com/eyeo/adblockplus/abc/webext-sdk) and [Browser Ad-Filtering Solution](https://gitlab.com/eyeo/adblockplus/chromium-sdk). For web extensions the service worker component of `hide-if-classifies` is exported via the snippets module as well. It can be reached from [./dist/service/mlaf.mjs](./dist/service/mlaf.mjs) or imported with `@eyeo/snippets/mlaf`. For Chromium-based products, the service worker backend component needs to imported directly from the [mlaf repository](https://gitlab.com/eyeo/mlaf) right now.
-
 
 ## How to reach our files directly after releases
 
@@ -94,8 +87,6 @@ These functions have been augmented like a read-only *Map* via a `.has(snippetNa
   * `.has(...)` returns *true* if the snippets is known for that specific world (either *MAIN* or *ISOLATED*)
   * `.get(...)` returns either *null* or a *callback* that is used as *dependency* for that very specific script
 
-*hide-if-graph-matches* is an example of a snippet that returns its whole dependencies wrapped as callback that will be injected in the *ISOLATED* world *before* its related snippet gets excuted in the very same world.
-
 This approach gives us the ability to execute the minimum amount of code whenever such snippet is not needed for that specific page, as dependencies can indeed be quite big (in this case a stripped version of the TensorFlow Library + a binary model).
 
 These callbacks are usually not used, nor needed, by other 3rd party snippets' consumers.
@@ -131,6 +122,7 @@ We try to follow official guidance from [GitLab](https://docs.gitlab.com/ee/user
   * be sure the internal source code and repository points at the release code we'd like to ship as module
   * create a new branch named after the [semver](https://semver.org/) release version, i.e. `git checkout -b vX.X.X`
   * perform `npm run build.assets ~/gitlab/abp-snippets/source` to import source code files into this repository
+  * when introducing a new snippet, register it manually by adding it in `bundle/main.js` (if it needs to be injected to main context) or `bundle/isolated.js` (if it needs to be injected into the isolated context)
   * perform `npm run build` to create all artifacts after a cleanup
   * add all updates that are planned to land as release `vX.X.X`, using **@eyeo/snippets vX.X.X** as commit message
   * ignore `dist`, `webext`, and the `source` folder while reviewing changes, as these will always be differnt in a way or another

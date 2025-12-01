@@ -38,6 +38,7 @@ import org.chromium.chrome.browser.ui.favicon.FaviconUtils;
 import org.chromium.components.favicon.LargeIconBridge;
 import org.chromium.components.favicon.LargeIconBridge.GoogleFaviconServerCallback;
 import org.chromium.components.favicon.LargeIconBridge.LargeIconCallback;
+import org.chromium.components.omnibox.OmniboxFeatures;
 import org.chromium.components.regional_capabilities.RegionalCapabilitiesService;
 import org.chromium.components.search_engines.ChoiceMadeLocation;
 import org.chromium.components.search_engines.TemplateUrl;
@@ -191,6 +192,9 @@ public class SearchEngineAdapter extends BaseAdapter
             mHasLoadObserver = false;
         }
 
+        // Vivaldi Note: Don't query the profile when the native pointer is already destroyed.
+        // Ref:VAB-11592
+        if (mProfile.getNativeBrowserContextPointer() > 0) // Vivaldi End
         TemplateUrlServiceFactory.getForProfile(mProfile).removeObserver(this);
     }
 
@@ -214,6 +218,9 @@ public class SearchEngineAdapter extends BaseAdapter
 
     /** Initialize the search engine list. */
     private void refreshData() {
+        // Vivaldi Note: Don't query the profile when the native pointer is already destroyed.
+        // Ref:VAB-11612
+        if (mProfile.getNativeBrowserContextPointer() == 0) return;// Vivaldi End
         TemplateUrlService templateUrlService = TemplateUrlServiceFactory.getForProfile(mProfile);
         if (!templateUrlService.isLoaded()) {
             mHasLoadObserver = true;
@@ -263,9 +270,12 @@ public class SearchEngineAdapter extends BaseAdapter
         for (int i = 0; i < templateUrls.size(); i++) {
             // Vivaldi NOTE(jarle@vivaldi.com): Vivaldi for desktop does not have the concept of
             // recent search engines, so don't populate the mRecentSearchEngines list.
-            if (BuildConfig.IS_VIVALDI)
-                mPrepopulatedSearchEngines.add(templateUrls.get(i));
-            else {
+            if (BuildConfig.IS_VIVALDI) {
+                // Note (nagamani@vivaldi.com): We hide the starter pack search engines from normal
+                // search engine list. Ref: VAB-11558
+                if (templateUrls.get(i).getStarterPackId() == 0)
+                    mPrepopulatedSearchEngines.add(templateUrls.get(i));
+            } else { // Vivaldi End
             TemplateUrl templateUrl = templateUrls.get(i);
             if (getSearchEngineSourceType(templateUrl, defaultSearchEngineTemplateUrl)
                     == TemplateUrlSourceType.RECENT) {
@@ -521,7 +531,8 @@ public class SearchEngineAdapter extends BaseAdapter
                 new GURL(
                         templateUrlService.getSearchEngineUrlFromTemplateUrl(
                                 templateUrl.getKeyword()));
-        updateLogo(logoView, faviconUrl);
+
+        updateLogo(logoView, templateUrl, faviconUrl);
 
         // To improve the explore-by-touch experience, the radio button is hidden from accessibility
         // and instead, "checked" or "not checked" is read along with the search engine's name, e.g.
@@ -565,10 +576,19 @@ public class SearchEngineAdapter extends BaseAdapter
         return view;
     }
 
-    private void updateLogo(ImageView logoView, GURL faviconUrl) {
+    private void updateLogo(ImageView logoView, TemplateUrl templateUrl, GURL faviconUrl) {
         if (mIconCache.containsKey(faviconUrl)) {
             logoView.setImageBitmap(mIconCache.get(faviconUrl));
             return;
+        }
+
+        if (OmniboxFeatures.sOmniboxParityRetrieveBuiltInEngineIcon.getValue()) {
+            @Nullable Bitmap bitmap = templateUrl.getBuiltInSearchEngineIcon();
+            if (bitmap != null) {
+                mIconCache.put(faviconUrl, bitmap);
+                logoView.setImageBitmap(bitmap);
+                return;
+            }
         }
 
         // Use a placeholder image while trying to fetch the logo.

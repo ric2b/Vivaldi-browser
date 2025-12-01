@@ -115,9 +115,9 @@ bool CPDF_MeshStream::Load() {
   stream_->LoadAllDataFiltered();
   bit_stream_ = std::make_unique<CFX_BitStream>(stream_->GetSpan());
 
-  RetainPtr<const CPDF_Dictionary> pDict = shading_stream_->GetDict();
-  coord_bits_ = pDict->GetIntegerFor("BitsPerCoordinate");
-  component_bits_ = pDict->GetIntegerFor("BitsPerComponent");
+  RetainPtr<const CPDF_Dictionary> dict = shading_stream_->GetDict();
+  coord_bits_ = dict->GetIntegerFor("BitsPerCoordinate");
+  component_bits_ = dict->GetIntegerFor("BitsPerComponent");
   if (ShouldCheckBPC(type_)) {
     if (!IsValidBitsPerCoordinate(coord_bits_)) {
       return false;
@@ -127,7 +127,7 @@ bool CPDF_MeshStream::Load() {
     }
   }
 
-  flag_bits_ = pDict->GetIntegerFor("BitsPerFlag");
+  flag_bits_ = dict->GetIntegerFor("BitsPerFlag");
   if (ShouldCheckBitsPerFlag(type_) && !IsValidBitsPerFlag(flag_bits_)) {
     return false;
   }
@@ -138,7 +138,7 @@ bool CPDF_MeshStream::Load() {
   }
 
   components_ = funcs_.empty() ? nComponents : 1;
-  RetainPtr<const CPDF_Array> pDecode = pDict->GetArrayFor("Decode");
+  RetainPtr<const CPDF_Array> pDecode = dict->GetArrayFor("Decode");
   if (!pDecode || pDecode->size() != 4 + components_ * 2) {
     return false;
   }
@@ -217,18 +217,7 @@ FX_RGB_STRUCT<float> CPDF_MeshStream::ReadColor() const {
   if (funcs_.empty()) {
     return cs_->GetRGBOrZerosOnError(color_value);
   }
-  float result[kMaxComponents] = {};
-  pdfium::span<float> result_span = pdfium::span(result);
-  for (const auto& func : funcs_) {
-    if (func && func->OutputCount() <= kMaxComponents) {
-      std::optional<uint32_t> nresults =
-          func->Call(pdfium::span(color_value).first<1u>(), result_span);
-      if (nresults.has_value()) {
-        result_span = result_span.subspan(nresults.value());
-      }
-    }
-  }
-  return cs_->GetRGBOrZerosOnError(result);
+  return {color_value[0], 0.0f, 0.0f};
 }
 
 bool CPDF_MeshStream::ReadVertex(const CFX_Matrix& pObject2Bitmap,

@@ -11,8 +11,6 @@ update_target("//chrome/browser:browser") {
     "//vivaldi/browser/vivaldi_profile_impl.cc",
     "//vivaldi/browser/vivaldi_profile_impl.h",
     "//vivaldi/browser/sessions/vivaldi_chrome_tab_service_client.cc",
-    "//vivaldi/browser/vivaldi_runtime_feature.cc",
-    "//vivaldi/browser/vivaldi_runtime_feature.h",
   ]
   if (is_win) {
     sources += [
@@ -69,8 +67,6 @@ update_target("//chrome/browser:browser") {
     sources += [
       "//vivaldi/browser/android/first_run_android.cc",
       "//vivaldi/browser/android/vivaldi_tab_android.cc",
-      "//vivaldi/browser/android/adblock/adblock_manager.h",
-      "//vivaldi/browser/android/adblock/adblock_manager.cc",
       "//vivaldi/browser/android/capture/capture_handler.cpp",
       "//vivaldi/browser/android/capture/capture_handler.h",
       "//vivaldi/browser/android/capture/capture_thumbnail_handler.cpp",
@@ -184,18 +180,40 @@ if (!is_android) {
       if (is_win) {
         sources -= [ "../browser/upgrade_detector/registry_monitor_unittest.cc" ]
       }
-      sources -= [ "../browser/ui/toolbar/app_menu_icon_controller_unittest.cc" ]
+    }
+    update_target("//chrome/browser/ui/toolbar:unit_tests") {
+      sources -= [ "app_menu_icon_controller_unittest.cc" ]
     }
   }
 
   update_template_instance("//chrome/browser/resources/settings:build") {
     web_component_files -= [
+      "privacy_page/privacy_guide/privacy_guide_ad_topics_fragment.ts",
+      "privacy_page/privacy_guide/privacy_guide_completion_fragment.ts",
+      "privacy_page/privacy_guide/privacy_guide_cookies_fragment.ts",
+      "privacy_page/privacy_guide/privacy_guide_dialog.ts",
+      "privacy_page/privacy_guide/privacy_guide_history_sync_fragment.ts",
+      "privacy_page/privacy_guide/privacy_guide_msbb_fragment.ts",
+      "privacy_page/privacy_guide/privacy_guide_page.ts",
+      "privacy_page/privacy_guide/privacy_guide_promo.ts",
+      "privacy_page/privacy_guide/privacy_guide_safe_browsing_fragment.ts",
+      "privacy_page/privacy_guide/privacy_guide_welcome_fragment.ts",
+      "privacy_page/privacy_guide/step_indicator.ts",
       "privacy_sandbox/privacy_sandbox_ad_measurement_subpage.ts",
       "privacy_sandbox/privacy_sandbox_fledge_subpage.ts",
       "privacy_sandbox/privacy_sandbox_interest_item.ts",
       "privacy_sandbox/privacy_sandbox_page.ts",
       "privacy_sandbox/privacy_sandbox_manage_topics_subpage.ts",
       "privacy_sandbox/privacy_sandbox_topics_subpage.ts",
+      "search_page/search_engines_page.ts",
+      "search_page/search_page_index.ts",
+      "search_page/search_page.ts",
+    ]
+
+    ts_files -= [
+      "privacy_page/privacy_guide/constants.ts",
+      #"privacy_page/privacy_guide/privacy_guide_availability_mixin.ts",
+      "privacy_page/privacy_guide/privacy_guide_browser_proxy.ts",
     ]
   }
 

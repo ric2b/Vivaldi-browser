@@ -69,9 +69,8 @@ std::optional<GURL> BuildInstallerDownloadUrl(bool is_metrics_enabled) {
                                          /*start_offset=*/0, "STATS",
                                          is_metrics_enabled ? "1" : "0");
 
-  std::string app_locale =
-      g_browser_process->GetFeatures()->application_locale_storage()->Get();
-  std::string language_code = l10n_util::GetLanguage(app_locale);
+  std::string_view language_code = l10n_util::GetLanguage(
+      g_browser_process->GetFeatures()->application_locale_storage()->Get());
   CHECK(!language_code.empty());
 
   base::ReplaceFirstSubstringAfterOffset(
@@ -151,10 +150,26 @@ void InstallerDownloaderController::OnRemovedBrowserWindow(
   bwi_and_active_tab_tracker_map_.erase(bwi);
 }
 
+bool InstallerDownloaderController::ShouldShowInfobarForCurrentProfile() {
+  // The infobar should not be shown on guest profiles.
+  BrowserWindowInterface* last_active_window =
+      window_tracker_.get_last_active_window();
+  if (!last_active_window ||
+      last_active_window->GetProfile()->IsGuestSession()) {
+    return false;
+  }
+
+  return true;
+}
+
 void InstallerDownloaderController::MaybeShowInfoBar() {
   // The max show count of the infobar have been reached. Eligibility check is
   // no longer needed.
   if (!model_->CanShowInfobar()) {
+    return;
+  }
+
+  if (!ShouldShowInfobarForCurrentProfile()) {
     return;
   }
 

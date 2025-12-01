@@ -482,6 +482,7 @@ def WriteGNNinja(path, platform, host, options, args_list):
 
     if options.use_asan:
       cflags.append('-fsanitize=address')
+      cflags.append('-DASAN_ENABLED')
       ldflags.append('-fsanitize=address')
 
     if options.use_ubsan:

@@ -507,8 +507,7 @@ export namespace ProtocolMapping {
      */
     'Page.windowOpen': [Protocol.Page.WindowOpenEvent];
     /**
-     * Issued for every compilation cache generated. Is only available
-     * if Page.setGenerateCompilationCache is enabled.
+     * Issued for every compilation cache generated.
      */
     'Page.compilationCacheProduced': [Protocol.Page.CompilationCacheProducedEvent];
     /**
@@ -585,6 +584,7 @@ export namespace ProtocolMapping {
     'Storage.attributionReportingSourceRegistered': [Protocol.Storage.AttributionReportingSourceRegisteredEvent];
     'Storage.attributionReportingTriggerRegistered': [Protocol.Storage.AttributionReportingTriggerRegisteredEvent];
     'Storage.attributionReportingReportSent': [Protocol.Storage.AttributionReportingReportSentEvent];
+    'Storage.attributionReportingVerboseDebugReportSent': [Protocol.Storage.AttributionReportingVerboseDebugReportSentEvent];
     /**
      * Issued when attached to target because of auto-attach or `attachToTarget` command.
      */
@@ -1263,6 +1263,13 @@ export namespace ProtocolMapping {
       returnType: void;
     };
     /**
+     * Set size of the browser contents resizing browser window as necessary.
+     */
+    'Browser.setContentsSize': {
+      paramsType: [Protocol.Browser.SetContentsSizeRequest];
+      returnType: void;
+    };
+    /**
      * Set dock tile details, platform-specific.
      */
     'Browser.setDockTile': {
@@ -1398,6 +1405,13 @@ export namespace ProtocolMapping {
     'CSS.getMatchedStylesForNode': {
       paramsType: [Protocol.CSS.GetMatchedStylesForNodeRequest];
       returnType: Protocol.CSS.GetMatchedStylesForNodeResponse;
+    };
+    /**
+     * Returns the values of the default UA-defined environment variables used in env()
+     */
+    'CSS.getEnvironmentVariables': {
+      paramsType: [];
+      returnType: Protocol.CSS.GetEnvironmentVariablesResponse;
     };
     /**
      * Returns all media queries parsed by the rendering engine.
@@ -2020,9 +2034,9 @@ export namespace ProtocolMapping {
     /**
      * Returns the query container of the given node based on container query
      * conditions: containerName, physical and logical axes, and whether it queries
-     * scroll-state. If no axes are provided and queriesScrollState is false, the
-     * style container is returned, which is the direct parent or the closest
-     * element with a matching container-name.
+     * scroll-state or anchored elements. If no axes are provided and
+     * queriesScrollState is false, the style container is returned, which is the
+     * direct parent or the closest element with a matching container-name.
      */
     'DOM.getContainerForNode': {
       paramsType: [Protocol.DOM.GetContainerForNodeRequest];
@@ -2043,6 +2057,14 @@ export namespace ProtocolMapping {
     'DOM.getAnchorElement': {
       paramsType: [Protocol.DOM.GetAnchorElementRequest];
       returnType: Protocol.DOM.GetAnchorElementResponse;
+    };
+    /**
+     * When enabling, this API force-opens the popover identified by nodeId
+     * and keeps it open until disabled.
+     */
+    'DOM.forceShowPopover': {
+      paramsType: [Protocol.DOM.ForceShowPopoverRequest];
+      returnType: Protocol.DOM.ForceShowPopoverResponse;
     };
     /**
      * Returns event listeners of the given object.
@@ -2350,6 +2372,13 @@ export namespace ProtocolMapping {
       returnType: void;
     };
     /**
+     * Emulates the given OS text scale.
+     */
+    'Emulation.setEmulatedOSTextScale': {
+      paramsType: [Protocol.Emulation.SetEmulatedOSTextScaleRequest?];
+      returnType: void;
+    };
+    /**
      * Overrides the Geolocation Position or Error. Omitting latitude, longitude or
      * accuracy emulates position unavailable.
      */
@@ -2484,6 +2513,13 @@ export namespace ProtocolMapping {
     };
     'Emulation.setDisabledImageTypes': {
       paramsType: [Protocol.Emulation.SetDisabledImageTypesRequest];
+      returnType: void;
+    };
+    /**
+     * Override the value of navigator.connection.saveData
+     */
+    'Emulation.setDataSaverOverride': {
+      paramsType: [Protocol.Emulation.SetDataSaverOverrideRequest?];
       returnType: void;
     };
     'Emulation.setHardwareConcurrencyOverride': {
@@ -3484,9 +3520,9 @@ export namespace ProtocolMapping {
       paramsType: [];
       returnType: Protocol.Page.GetAppIdResponse;
     };
-    'Page.getAdScriptAncestryIds': {
-      paramsType: [Protocol.Page.GetAdScriptAncestryIdsRequest];
-      returnType: Protocol.Page.GetAdScriptAncestryIdsResponse;
+    'Page.getAdScriptAncestry': {
+      paramsType: [Protocol.Page.GetAdScriptAncestryRequest];
+      returnType: Protocol.Page.GetAdScriptAncestryResponse;
     };
     /**
      * Returns present frame tree structure.
@@ -3902,10 +3938,6 @@ export namespace ProtocolMapping {
     };
     'ServiceWorker.enable': {
       paramsType: [];
-      returnType: void;
-    };
-    'ServiceWorker.inspectWorker': {
-      paramsType: [Protocol.ServiceWorker.InspectWorkerRequest];
       returnType: void;
     };
     'ServiceWorker.setForceUpdateOnPageLoad': {
@@ -4364,6 +4396,13 @@ export namespace ProtocolMapping {
       returnType: void;
     };
     /**
+     * Opens a DevTools window for the target.
+     */
+    'Target.openDevTools': {
+      paramsType: [Protocol.Target.OpenDevToolsRequest];
+      returnType: Protocol.Target.OpenDevToolsResponse;
+    };
+    /**
      * Request browser port binding.
      */
     'Tethering.bind': {
@@ -4703,15 +4742,30 @@ export namespace ProtocolMapping {
       returnType: Protocol.PWA.GetOsAppStateResponse;
     };
     /**
-     * Installs the given manifest identity, optionally using the given install_url
-     * or IWA bundle location.
+     * Installs the given manifest identity, optionally using the given installUrlOrBundleUrl
      *
-     * TODO(crbug.com/337872319) Support IWA to meet the following specific
-     * requirement.
-     * IWA-specific install description: If the manifest_id is isolated-app://,
-     * install_url_or_bundle_url is required, and can be either an http(s) URL or
-     * file:// URL pointing to a signed web bundle (.swbn). The .swbn file's
-     * signing key must correspond to manifest_id. If Chrome is not in IWA dev
+     * IWA-specific install description:
+     * manifestId corresponds to isolated-app:// + web_package::SignedWebBundleId
+     *
+     * File installation mode:
+     * The installUrlOrBundleUrl can be either file:// or http(s):// pointing
+     * to a signed web bundle (.swbn). In this case SignedWebBundleId must correspond to
+     * The .swbn file's signing key.
+     *
+     * Dev proxy installation mode:
+     * installUrlOrBundleUrl must be http(s):// that serves dev mode IWA.
+     * web_package::SignedWebBundleId must be of type dev proxy.
+     *
+     * The advantage of dev proxy mode is that all changes to IWA
+     * automatically will be reflected in the running app without
+     * reinstallation.
+     *
+     * To generate bundle id for proxy mode:
+     * 1. Generate 32 random bytes.
+     * 2. Add a specific suffix 0x00 at the end.
+     * 3. Encode the entire sequence using Base32 without padding.
+     *
+     * If Chrome is not in IWA dev
      * mode, the installation will fail, regardless of the state of the allowlist.
      */
     'PWA.install': {

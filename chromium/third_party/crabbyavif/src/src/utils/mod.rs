@@ -75,7 +75,7 @@ impl TryFrom<UFraction> for IFraction {
 
 impl IFraction {
     // This function is not used in all configurations.
-    #[allow(unused)]
+    #[allow(dead_code)]
     pub(crate) fn is_valid(&self) -> AvifResult<()> {
         match self.1 {
             0 => Err(AvifError::InvalidArgument),

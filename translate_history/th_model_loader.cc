@@ -10,6 +10,7 @@
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
 #include "base/json/json_file_value_serializer.h"
+#include "base/logging.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "translate_history/th_codec.h"

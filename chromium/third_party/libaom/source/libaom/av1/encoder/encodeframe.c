@@ -48,6 +48,7 @@
 #include "av1/encoder/aq_complexity.h"
 #include "av1/encoder/aq_cyclicrefresh.h"
 #include "av1/encoder/aq_variance.h"
+#include "av1/encoder/av1_quantize.h"
 #include "av1/encoder/global_motion_facade.h"
 #include "av1/encoder/encodeframe.h"
 #include "av1/encoder/encodeframe_utils.h"
@@ -225,20 +226,70 @@ void av1_setup_src_planes(MACROBLOCK *x, const YV12_BUFFER_CONFIG *src,
 }
 
 #if !CONFIG_REALTIME_ONLY
-/*!\brief Assigns different quantization parameters to each super
- * block based on its TPL weight.
+/*!\brief Assigns different quantization parameters to each superblock
+ * based on statistics relevant to the selected delta-q mode (variance).
+ * This is the non-rd version.
+ *
+ * \param[in]     cpi         Top level encoder instance structure
+ * \param[in,out] td          Thread data structure
+ * \param[in,out] x           Superblock level data for this block.
+ * \param[in]     tile_info   Tile information / identification
+ * \param[in]     mi_row      Block row (in "MI_SIZE" units) index
+ * \param[in]     mi_col      Block column (in "MI_SIZE" units) index
+ * \param[out]    num_planes  Number of image planes (e.g. Y,U,V)
+ *
+ * \remark No return value but updates superblock and thread data
+ * related to the q / q delta to be used.
+ */
+static inline void setup_delta_q_nonrd(AV1_COMP *const cpi, ThreadData *td,
+                                       MACROBLOCK *const x,
+                                       const TileInfo *const tile_info,
+                                       int mi_row, int mi_col, int num_planes) {
+  AV1_COMMON *const cm = &cpi->common;
+  const DeltaQInfo *const delta_q_info = &cm->delta_q_info;
+  assert(delta_q_info->delta_q_present_flag);
+
+  const BLOCK_SIZE sb_size = cm->seq_params->sb_size;
+  av1_setup_src_planes(x, cpi->source, mi_row, mi_col, num_planes, sb_size);
+
+  const int delta_q_res = delta_q_info->delta_q_res;
+  int current_qindex = cm->quant_params.base_qindex;
+
+  if (cpi->oxcf.q_cfg.deltaq_mode == DELTA_Q_VARIANCE_BOOST) {
+    current_qindex = av1_get_sbq_variance_boost(cpi, x);
+  }
+
+  x->rdmult_cur_qindex = current_qindex;
+  MACROBLOCKD *const xd = &x->e_mbd;
+  current_qindex = av1_adjust_q_from_delta_q_res(
+      delta_q_res, xd->current_base_qindex, current_qindex);
+
+  x->delta_qindex = current_qindex - cm->quant_params.base_qindex;
+  x->rdmult_delta_qindex = x->delta_qindex;
+
+  av1_set_offsets(cpi, tile_info, x, mi_row, mi_col, sb_size);
+  xd->mi[0]->current_qindex = current_qindex;
+  av1_init_plane_quantizers(cpi, x, xd->mi[0]->segment_id, 0);
+
+  // keep track of any non-zero delta-q used
+  td->deltaq_used |= (x->delta_qindex != 0);
+}
+
+/*!\brief Assigns different quantization parameters to each superblock
+ * based on statistics relevant to the selected delta-q mode (TPL weight,
+ * variance, HDR, etc).
  *
  * \ingroup tpl_modelling
  *
  * \param[in]     cpi         Top level encoder instance structure
  * \param[in,out] td          Thread data structure
- * \param[in,out] x           Macro block level data for this block.
- * \param[in]     tile_info   Tile infromation / identification
+ * \param[in,out] x           Superblock level data for this block.
+ * \param[in]     tile_info   Tile information / identification
  * \param[in]     mi_row      Block row (in "MI_SIZE" units) index
  * \param[in]     mi_col      Block column (in "MI_SIZE" units) index
  * \param[out]    num_planes  Number of image planes (e.g. Y,U,V)
  *
- * \remark No return value but updates macroblock and thread data
+ * \remark No return value but updates superblock and thread data
  * related to the q / q delta to be used.
  */
 static inline void setup_delta_q(AV1_COMP *const cpi, ThreadData *td,
@@ -251,7 +302,6 @@ static inline void setup_delta_q(AV1_COMP *const cpi, ThreadData *td,
   assert(delta_q_info->delta_q_present_flag);
 
   const BLOCK_SIZE sb_size = cm->seq_params->sb_size;
-  // Delta-q modulation based on variance
   av1_setup_src_planes(x, cpi->source, mi_row, mi_col, num_planes, sb_size);
 
   const int delta_q_res = delta_q_info->delta_q_res;
@@ -529,6 +579,13 @@ static inline void encode_nonrd_sb(AV1_COMP *cpi, ThreadData *td,
   const BLOCK_SIZE sb_size = cm->seq_params->sb_size;
   PC_TREE *const pc_root = td->pc_root;
 
+#if !CONFIG_REALTIME_ONLY
+  if (cm->delta_q_info.delta_q_present_flag) {
+    const int num_planes = av1_num_planes(cm);
+
+    setup_delta_q_nonrd(cpi, td, x, tile_info, mi_row, mi_col, num_planes);
+  }
+#endif
 #if CONFIG_RT_ML_PARTITIONING
   if (sf->part_sf.partition_search_type == ML_BASED_PARTITION) {
     RD_STATS dummy_rdc;
@@ -1754,16 +1811,9 @@ static void populate_thresh_to_force_zeromv_skip(AV1_COMP *cpi) {
   }
 }
 
-static void free_block_hash_buffers(uint32_t *block_hash_values[2][2],
-                                    int8_t *is_block_same[2][3]) {
-  for (int k = 0; k < 2; ++k) {
-    for (int j = 0; j < 2; ++j) {
-      aom_free(block_hash_values[k][j]);
-    }
-
-    for (int j = 0; j < 3; ++j) {
-      aom_free(is_block_same[k][j]);
-    }
+static void free_block_hash_buffers(uint32_t *block_hash_values[2]) {
+  for (int j = 0; j < 2; ++j) {
+    aom_free(block_hash_values[j]);
   }
 }
 
@@ -2055,61 +2105,51 @@ static inline void encode_frame_internal(AV1_COMP *cpi) {
     // add to hash table
     const int pic_width = cpi->source->y_crop_width;
     const int pic_height = cpi->source->y_crop_height;
-    uint32_t *block_hash_values[2][2] = { { NULL } };
-    int8_t *is_block_same[2][3] = { { NULL } };
-    int k, j;
+    uint32_t *block_hash_values[2] = { NULL };  // [two buffers used ping-pong]
     bool error = false;
 
-    for (k = 0; k < 2 && !error; ++k) {
-      for (j = 0; j < 2; ++j) {
-        block_hash_values[k][j] = (uint32_t *)aom_malloc(
-            sizeof(*block_hash_values[0][0]) * pic_width * pic_height);
-        if (!block_hash_values[k][j]) {
-          error = true;
-          break;
-        }
-      }
-
-      for (j = 0; j < 3 && !error; ++j) {
-        is_block_same[k][j] = (int8_t *)aom_malloc(
-            sizeof(*is_block_same[0][0]) * pic_width * pic_height);
-        if (!is_block_same[k][j]) error = true;
+    for (int j = 0; j < 2; ++j) {
+      block_hash_values[j] = (uint32_t *)aom_malloc(
+          sizeof(*block_hash_values[j]) * pic_width * pic_height);
+      if (!block_hash_values[j]) {
+        error = true;
+        break;
       }
     }
 
     av1_hash_table_init(intrabc_hash_info);
     if (error ||
         !av1_hash_table_create(&intrabc_hash_info->intrabc_hash_table)) {
-      free_block_hash_buffers(block_hash_values, is_block_same);
+      free_block_hash_buffers(block_hash_values);
       aom_internal_error(cm->error, AOM_CODEC_MEM_ERROR,
                          "Error allocating intrabc_hash_table and buffers");
     }
     hash_table_created = 1;
-    av1_generate_block_2x2_hash_value(intrabc_hash_info, cpi->source,
-                                      block_hash_values[0], is_block_same[0]);
+    av1_generate_block_2x2_hash_value(cpi->source, block_hash_values[0]);
     // Hash data generated for screen contents is used for intraBC ME
     const int min_alloc_size = block_size_wide[mi_params->mi_alloc_bsize];
-    const int max_sb_size =
-        (1 << (cm->seq_params->mib_size_log2 + MI_SIZE_LOG2));
+    int max_sb_size = (1 << (cm->seq_params->mib_size_log2 + MI_SIZE_LOG2));
+
+    if (cpi->sf.mv_sf.hash_max_8x8_intrabc_blocks) {
+      max_sb_size = AOMMIN(8, max_sb_size);
+    }
+
     int src_idx = 0;
     for (int size = 4; size <= max_sb_size; size *= 2, src_idx = !src_idx) {
       const int dst_idx = !src_idx;
-      av1_generate_block_hash_value(
-          intrabc_hash_info, cpi->source, size, block_hash_values[src_idx],
-          block_hash_values[dst_idx], is_block_same[src_idx],
-          is_block_same[dst_idx]);
-      if (size >= min_alloc_size) {
-        if (!av1_add_to_hash_map_by_row_with_precal_data(
-                &intrabc_hash_info->intrabc_hash_table,
-                block_hash_values[dst_idx], is_block_same[dst_idx][2],
-                pic_width, pic_height, size)) {
-          error = true;
-          break;
-        }
+      av1_generate_block_hash_value(intrabc_hash_info, cpi->source, size,
+                                    block_hash_values[src_idx],
+                                    block_hash_values[dst_idx]);
+      if (size >= min_alloc_size &&
+          !av1_add_to_hash_map_by_row_with_precal_data(
+              &intrabc_hash_info->intrabc_hash_table,
+              block_hash_values[dst_idx], pic_width, pic_height, size)) {
+        error = true;
+        break;
       }
     }
 
-    free_block_hash_buffers(block_hash_values, is_block_same);
+    free_block_hash_buffers(block_hash_values);
 
     if (error) {
       aom_internal_error(cm->error, AOM_CODEC_MEM_ERROR,
@@ -2142,7 +2182,8 @@ static inline void encode_frame_internal(AV1_COMP *cpi) {
   cm->delta_q_info.delta_q_res = 0;
   if (cpi->use_ducky_encode) {
     cm->delta_q_info.delta_q_res = DEFAULT_DELTA_Q_RES_DUCKY_ENCODE;
-  } else if (cpi->oxcf.q_cfg.aq_mode != CYCLIC_REFRESH_AQ) {
+  } else if (cpi->oxcf.q_cfg.aq_mode != CYCLIC_REFRESH_AQ &&
+             !cpi->roi.enabled) {
     if (deltaq_mode == DELTA_Q_OBJECTIVE)
       cm->delta_q_info.delta_q_res = DEFAULT_DELTA_Q_RES_OBJECTIVE;
     else if (deltaq_mode == DELTA_Q_PERCEPTUAL)

@@ -320,7 +320,7 @@ static void GetSharedFunctionInfoBytecodeOrBaseline(
   __ Branch(&done, eq, scratch1, Operand(BYTECODE_ARRAY_TYPE));
 
   __ Branch(is_unavailable, ne, scratch1, Operand(INTERPRETER_DATA_TYPE));
-  __ Ld(data, FieldMemOperand(data, InterpreterData::kBytecodeArrayOffset));
+  __ LoadInterpreterDataBytecodeArray(bytecode, data);
   __ bind(&done);
 }
 
@@ -1065,15 +1065,16 @@ void Builtins::Generate_BaselineOutOfLinePrologue(MacroAssembler* masm) {
     FrameScope frame_scope(masm, StackFrame::INTERNAL);
     // Save incoming new target or generator
     __ Push(kJavaScriptCallNewTargetRegister);
-#ifdef V8_ENABLE_LEAPTIERING
+#ifdef V8_JS_LINKAGE_INCLUDES_DISPATCH_HANDLE
     // No need to SmiTag as dispatch handles always look like Smis.
     static_assert(kJSDispatchHandleShift > 0);
+    __ AssertSmi(kJavaScriptCallDispatchHandleRegister);
     __ Push(kJavaScriptCallDispatchHandleRegister);
 #endif
     __ SmiTag(frame_size);
     __ Push(frame_size);
     __ CallRuntime(Runtime::kStackGuardWithGap);
-#ifdef V8_ENABLE_LEAPTIERING
+#ifdef V8_JS_LINKAGE_INCLUDES_DISPATCH_HANDLE
     __ Pop(kJavaScriptCallDispatchHandleRegister);
 #endif
     __ Pop(kJavaScriptCallNewTargetRegister);
@@ -1716,7 +1717,7 @@ static void Generate_InterpreterEnterBytecode(MacroAssembler* masm) {
   __ Branch(&builtin_trampoline, ne, kInterpreterDispatchTableRegister,
             Operand(INTERPRETER_DATA_TYPE));
 
-  __ Ld(t0, FieldMemOperand(t0, InterpreterData::kInterpreterTrampolineOffset));
+  __ LoadInterpreterDataInterpreterTrampoline(t0, t0);
   __ LoadCodeInstructionStart(t0, t0, kJSEntrypointTag);
   __ Branch(&trampoline_loaded);
 
@@ -3956,6 +3957,12 @@ void Builtins::Generate_DeoptimizationEntry_LazyAfterFastCall(
   __ MultiPopFPU(kCalleeSaveFPRegisters);
   __ LeaveFrame(StackFrame::INTERNAL);
   __ bind(&no_exception);
+  // Deoptimization expects that the return value of the API call is in the
+  // return register. As we only allow deoptimization if the return type is
+  // void, the return value is always `undefined`.
+  // TODO(crbug.com/418936518): Handle the return value in an actual
+  // deoptimization continuation.
+  __ LoadRoot(kReturnRegister0, RootIndex::kUndefinedValue);
   __ TailCallBuiltin(Builtin::kDeoptimizationEntry_Lazy);
 }
 

@@ -603,10 +603,9 @@ class VectorwiseOp {
   /** Returns the expression where each subvector is the product of the vector \a other
    * by the corresponding subvector of \c *this */
   template <typename OtherDerived>
-  EIGEN_STRONG_INLINE EIGEN_DEVICE_FUNC
-      CwiseBinaryOp<internal::scalar_product_op<Scalar>, const ExpressionTypeNestedCleaned,
-                    const typename ExtendedType<OtherDerived>::Type> EIGEN_DEVICE_FUNC
-      operator*(const DenseBase<OtherDerived>& other) const {
+  EIGEN_DEVICE_FUNC CwiseBinaryOp<internal::scalar_product_op<Scalar, typename OtherDerived::Scalar>,
+                                  const ExpressionTypeNestedCleaned, const typename ExtendedType<OtherDerived>::Type>
+  operator*(const DenseBase<OtherDerived>& other) const {
     EIGEN_STATIC_ASSERT_VECTOR_ONLY(OtherDerived)
     EIGEN_STATIC_ASSERT_ARRAYXPR(ExpressionType)
     EIGEN_STATIC_ASSERT_SAME_XPR_KIND(ExpressionType, OtherDerived)
@@ -616,8 +615,8 @@ class VectorwiseOp {
   /** Returns the expression where each subvector is the quotient of the corresponding
    * subvector of \c *this by the vector \a other */
   template <typename OtherDerived>
-  EIGEN_DEVICE_FUNC CwiseBinaryOp<internal::scalar_quotient_op<Scalar>, const ExpressionTypeNestedCleaned,
-                                  const typename ExtendedType<OtherDerived>::Type>
+  EIGEN_DEVICE_FUNC CwiseBinaryOp<internal::scalar_quotient_op<Scalar, typename OtherDerived::Scalar>,
+                                  const ExpressionTypeNestedCleaned, const typename ExtendedType<OtherDerived>::Type>
   operator/(const DenseBase<OtherDerived>& other) const {
     EIGEN_STATIC_ASSERT_VECTOR_ONLY(OtherDerived)
     EIGEN_STATIC_ASSERT_ARRAYXPR(ExpressionType)

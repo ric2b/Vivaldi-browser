@@ -31,6 +31,9 @@ update_target("//extensions/renderer:renderer") {
     "//components/lookalikes/core:proto",
     "//vivaldi/extensions:resources",
   ]
+  configs += [
+     "//vivaldi/gn/config:release_kind"
+  ]
 }
 
 update_template_instance("//chrome/common/extensions/api:api_features") {
@@ -68,6 +71,7 @@ update_target("//extensions/browser:browser_sources") {
     "//components/sharing_message/proto",
     "//components/translate/content/browser",
     "//third_party/blink/public:blink_headers",
+    "//vivaldi/browser:features",
     #"//vivaldi/extensions/api:apis", # !!!DO NOT!!! re-enable, causes link errors for linux debug builds
     "//vivaldi/extensions/schema",
     "//vivaldi/extensions/tools",

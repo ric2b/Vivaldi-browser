@@ -74,73 +74,16 @@ class SubgroupsAdapterInfoTestBase : public DawnTestWithParams<Params> {
 
     // Checks valid values for min and max subgroup sizes, per spec.
     void CheckValidSizes(uint32_t subgroupMinSize, uint32_t subgroupMaxSize) {
-        EXPECT_GE(subgroupMinSize, 4u) << subgroupMinSize;
+        EXPECT_GE(subgroupMinSize, kDefaultSubgroupMinSize) << subgroupMinSize;
         EXPECT_TRUE(IsPowerOfTwo(subgroupMinSize)) << subgroupMinSize;
 
-        EXPECT_LE(subgroupMaxSize, 128u) << subgroupMaxSize;
+        EXPECT_LE(subgroupMaxSize, kDefaultSubgroupMaxSize) << subgroupMaxSize;
         EXPECT_TRUE(IsPowerOfTwo(subgroupMaxSize));
 
         EXPECT_LE(subgroupMinSize, subgroupMaxSize)
             << subgroupMinSize << " should be less equal than " << subgroupMaxSize;
     }
 };
-
-using SubgroupsPropertiesTests = SubgroupsAdapterInfoTestBase<SubgroupsAdapterInfoParams>;
-
-// Test that subgroupMinSize and subgroupMaxSize in wgpu::AdapterPropertiesSubgroups are valid.
-TEST_P(SubgroupsPropertiesTests, FromAdapter) {
-    wgpu::AdapterPropertiesSubgroups subgroup_properties;
-
-    // Write invalid values to start with, to make sure they are overwritten.
-    subgroup_properties.subgroupMinSize = 3;
-    subgroup_properties.subgroupMaxSize = 443;
-
-    wgpu::AdapterInfo info;
-    info.nextInChain = &subgroup_properties;
-
-    adapter.GetInfo(&info);
-
-    // Check the integrity of the struct.
-    EXPECT_EQ(subgroup_properties.sType, wgpu::SType::AdapterPropertiesSubgroups);
-    EXPECT_EQ(subgroup_properties.nextInChain, nullptr);
-
-    CheckValidSizes(subgroup_properties.subgroupMinSize, subgroup_properties.subgroupMaxSize);
-}
-
-// Test that subgroupMinSize and subgroupMaxSize in wgpu::AdapterPropertiesSubgroups are valid.
-TEST_P(SubgroupsPropertiesTests, FromDevice) {
-    wgpu::AdapterPropertiesSubgroups subgroup_properties;
-    wgpu::AdapterInfo info;
-    info.nextInChain = &subgroup_properties;
-
-    device.GetAdapterInfo(&info);
-
-    CheckValidSizes(subgroup_properties.subgroupMinSize, subgroup_properties.subgroupMaxSize);
-}
-
-// Test that subgroupMinSize and subgroupMaxSize in wgpu::AdapterPropertiesSubgroups are the same
-// between adapter and device.
-TEST_P(SubgroupsPropertiesTests, DeviceAndAdapterAgree) {
-    wgpu::AdapterPropertiesSubgroups adapter_subgroup_properties;
-    wgpu::AdapterInfo adapter_info;
-    adapter_info.nextInChain = &adapter_subgroup_properties;
-    adapter.GetInfo(&adapter_info);
-
-    wgpu::AdapterPropertiesSubgroups device_subgroup_properties;
-    wgpu::AdapterInfo device_info;
-    device_info.nextInChain = &device_subgroup_properties;
-    device.GetAdapterInfo(&device_info);
-
-    EXPECT_EQ(device_subgroup_properties.subgroupMinSize,
-              adapter_subgroup_properties.subgroupMinSize);
-    EXPECT_EQ(device_subgroup_properties.subgroupMaxSize,
-              adapter_subgroup_properties.subgroupMaxSize);
-}
-
-DAWN_INSTANTIATE_TEST_P(SubgroupsPropertiesTests,
-                        {D3D12Backend(), D3D12Backend({}, {"use_dxc"}), MetalBackend(),
-                         VulkanBackend()},
-                        {RequestSubgroups::WhenAvailable, RequestSubgroups::Never});
 
 using SubgroupsAdapterInfoTests = SubgroupsAdapterInfoTestBase<SubgroupsAdapterInfoParams>;
 
@@ -294,7 +237,7 @@ fn main(
                     // subgroup_size should be at least 1
                     (1 <= outputSubgroupSizeAt0) &&
                     // subgroup_size should be no larger than 128
-                    (outputSubgroupSizeAt0 <= 128) &&
+                    (outputSubgroupSizeAt0 <= kDefaultSubgroupMaxSize) &&
                     // subgroup_size should be a power of 2
                     ((outputSubgroupSizeAt0 & (outputSubgroupSizeAt0 - 1)) == 0))) {
                 testing::AssertionResult result = testing::AssertionFailure()
@@ -426,7 +369,7 @@ class SubgroupsShaderTestsFragment : public SubgroupsTestsBase<AdapterTestParam>
                     // subgroup_size should be at least 1
                     (1 <= outputSubgroupSizeAt0) &&
                     // subgroup_size should be no larger than 128
-                    (outputSubgroupSizeAt0 <= 128) &&
+                    (outputSubgroupSizeAt0 <= kDefaultSubgroupMaxSize) &&
                     // subgroup_size should be a power of 2
                     (IsPowerOfTwo(outputSubgroupSizeAt0)))) {
                 testing::AssertionResult result = testing::AssertionFailure()

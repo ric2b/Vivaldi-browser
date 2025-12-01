@@ -175,6 +175,9 @@ enum DataType {
   // Account-local metadata for shared tab groups.
   SHARED_TAB_GROUP_ACCOUNT_DATA,
 
+  // Comments for shared contexts.
+  SHARED_COMMENT,
+
   // Notes items
   NOTES,
 
@@ -278,6 +281,7 @@ enum class DataTypeForHistograms {
   kPlusAddressSettings = 68,
   kAutofillValuable = 69,
   kSharedTabGroupAccountData = 70,
+  kSharedComment = 71,
 
   // Vivaldi
   kNotes = 300,
@@ -404,7 +408,7 @@ constexpr DataTypeSet SharedTypes() {
 // any pending account data or abort, depending on the platform.
 constexpr DataTypeSet TypesRequiringUnsyncedDataCheckOnSignout() {
   static_assert(
-      55 + 1 /* Notes */ == GetNumDataTypes(),
+      56 + 1 /* Notes */ == GetNumDataTypes(),
       "Add new types to `TypesRequiringUnsyncedDataCheckOnSignout()` if there "
       "should be a warning when the user signs out and the types have unsynced "
       "data. The warning offers the user to either proceed with sign-out "

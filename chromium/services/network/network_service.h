@@ -68,10 +68,6 @@
 #include "services/network/public/mojom/ct_log_info.mojom.h"
 #endif  // BUILDFLAG(IS_CT_SUPPORTED)
 
-namespace mojo_base {
-class ProtoWrapper;
-}
-
 namespace net {
 class FileNetLogObserver;
 class HostResolverManager;
@@ -228,10 +224,6 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkService
                          base::Time update_time) override;
 
   void UpdateMaskedDomainList(
-      mojo_base::ProtoWrapper masked_domain_list,
-      const std::vector<std::string>& exclusion_list) override;
-
-  void UpdateMaskedDomainListFlatbuffer(
       base::File default_file,
       uint64_t default_file_size,
       base::File regular_browsing_file,
@@ -270,6 +262,12 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkService
       mojo::PendingReceiver<network::mojom::URLLoader> dest_url_loader,
       mojo::PendingRemote<network::mojom::URLLoaderClient>
           dest_url_loader_client) override;
+
+  void DecodeContentEncoding(
+      const std::vector<net::SourceStreamType>& content_encoding_types,
+      mojo::ScopedDataPipeConsumerHandle source_body,
+      mojo::ScopedDataPipeProducerHandle dest_body,
+      DecodeContentEncodingCallback callback) override;
 
   void SetTLS13EarlyDataEnabled(bool enabled) override;
 

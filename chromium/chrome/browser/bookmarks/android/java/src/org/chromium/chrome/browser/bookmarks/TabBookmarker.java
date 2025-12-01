@@ -94,7 +94,7 @@ public class TabBookmarker {
      *
      * @param currentTab The tab being currently shown.
      */
-    public void startOrModifyPriceTracking(Tab currentTab) {
+    public void startOrModifyPriceTracking(@Nullable Tab currentTab) {
         BookmarkId bookmarkId = mBookmarkModelSupplier.get().getUserBookmarkIdForTab(currentTab);
         if (bookmarkId == null) {
             addOrEditBookmark(currentTab, BookmarkType.NORMAL, /* fromExplicitTrackUi= */ true);
@@ -116,7 +116,9 @@ public class TabBookmarker {
     }
 
     private void addOrEditBookmark(
-            final Tab tabToBookmark, @BookmarkType int bookmarkType, boolean fromExplicitTrackUi) {
+            final @Nullable Tab tabToBookmark,
+            @BookmarkType int bookmarkType,
+            boolean fromExplicitTrackUi) {
         if (tabToBookmark == null) {
             return;
         }

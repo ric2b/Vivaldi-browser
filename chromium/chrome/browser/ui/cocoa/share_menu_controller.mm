@@ -20,6 +20,7 @@
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_features.h"
 #import "chrome/browser/ui/cocoa/accelerators_cocoa.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/grit/generated_resources.h"
@@ -35,6 +36,8 @@
 #include "ui/views/view.h"
 
 #include "app/vivaldi_apptools.h"
+#include "app/vivaldi_constants.h"
+#include "content/public/common/url_constants.h"
 #include "extensions/common/constants.h"
 #include "ui/vivaldi_browser_window.h"
 
@@ -56,7 +59,8 @@ bool CanShare() {
     // Exclude vivaldi, chrome, chrome-extension URLs from sharing
     const std::optional<GURL> last_commited_url =
         last_active_browser &&
-                last_active_browser->location_bar_model()->ShouldDisplayURL() &&
+                last_active_browser->GetFeatures()
+                    .location_bar_model()->ShouldDisplayURL() &&
                 last_active_browser->tab_strip_model()->GetActiveWebContents()
             ? last_active_browser->tab_strip_model()
                   ->GetActiveWebContents()
@@ -68,7 +72,9 @@ bool CanShare() {
            !last_commited_url->SchemeIs(extensions::kExtensionScheme);
   }
   return last_active_browser &&
-         last_active_browser->location_bar_model()->ShouldDisplayURL() &&
+         last_active_browser->GetFeatures()
+             .location_bar_model()
+             ->ShouldDisplayURL() &&
          last_active_browser->tab_strip_model()->GetActiveWebContents() &&
          last_active_browser->tab_strip_model()
              ->GetActiveWebContents()

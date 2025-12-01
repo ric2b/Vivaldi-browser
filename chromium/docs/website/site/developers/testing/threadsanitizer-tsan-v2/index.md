@@ -26,8 +26,6 @@ name of your choice). Enter these variables in the resulting editor:
 
 > is_tsan = true
 
-> enable_nacl = false
-
 > is_debug = false
 
 Then build like normal with ninja -C out/tsan base_unittests

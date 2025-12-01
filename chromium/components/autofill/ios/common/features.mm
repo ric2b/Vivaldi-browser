@@ -8,7 +8,7 @@
 
 BASE_FEATURE(kAddAddressManually,
              "AddAddressManually",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 bool IsAddAddressManuallyEnabled() {
   return base::FeatureList::IsEnabled(kAddAddressManually) &&
@@ -19,7 +19,7 @@ bool IsAddAddressManuallyEnabled() {
 // LINT.IfChange(autofill_allow_default_prevented_submission)
 BASE_FEATURE(kAutofillAllowDefaultPreventedSubmission,
              "AutofillAllowDefaultPreventedSubmission",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 // LINT.ThenChange(/components/autofill/ios/form_util/resources/autofill_form_features.ts:autofill_allow_default_prevented_submission)
 
 // LINT.IfChange(autofill_correct_user_edited_bit_in_parsed_field)
@@ -27,6 +27,12 @@ BASE_FEATURE(kAutofillCorrectUserEditedBitInParsedField,
              "AutofillCorrectUserEditedBitInParsedField",
              base::FEATURE_ENABLED_BY_DEFAULT);
 // LINT.ThenChange(/components/autofill/ios/form_util/resources/autofill_form_features.ts:autofill_correct_user_edited_bit_in_parsed_field)
+
+// LINT.IfChange(autofill_count_form_submission_in_renderer)
+BASE_FEATURE(kAutofillCountFormSubmissionInRenderer,
+             "AutofillCountFormSubmissionInRenderer",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+// LINT.ThenChange(//components/autofill/ios/form_util/resources/autofill_form_features.ts:autofill_count_form_submission_in_renderer)
 
 // LINT.IfChange(autofill_dedupe_form_submission)
 BASE_FEATURE(kAutofillDedupeFormSubmission,
@@ -40,7 +46,7 @@ BASE_FEATURE(kAutofillDynamicallyLoadsFieldsForAddressInput,
 
 BASE_FEATURE(kAutofillFixXhrForXframe,
              "AutofillFixXhrForXframe",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kAutofillFormSubmissionEventsInCaptureMode,
              "AutofillFormSubmissionEventsInCaptureMode",

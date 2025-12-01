@@ -15,36 +15,18 @@ group("e2e") {
 
 node_ts_library("tests") {
   deps = [
-    "animations",
     "application",
-    "changes",
     "console",
-    "coverage",
     "cross_tool_integration",
-    "css_overview",
     "elements",
     "emulation",
     "extensions",
     "host",
-    "inline_editor",
     "issues",
     "lighthouse",
-    "media",
-    "memory",
     "network",
-    "panels",
     "performance",
-    "puppeteer",
-    "quick_open",
-    "recorder",
-    "rendering",
-    "search",
-    "security",
-    "sensors",
-    "settings",
-    "snippets",
     "sources",
-    "throttling",
   ]
   sources = [ "mocharc.ts" ]
 }

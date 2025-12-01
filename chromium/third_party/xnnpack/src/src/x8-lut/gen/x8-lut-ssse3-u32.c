@@ -9,10 +9,13 @@
 // LICENSE file in the root directory of this source tree.
 
 #include <assert.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #include <tmmintrin.h>
 
 #include "src/xnnpack/common.h"
+#include "src/xnnpack/intrinsics-polyfill.h"
 #include "src/xnnpack/lut.h"
 #include "src/xnnpack/unaligned.h"
 
@@ -21,7 +24,7 @@ void xnn_x8_lut_ukernel__ssse3_u32(
     size_t batch,
     const uint8_t* input,
     uint8_t* output,
-    const uint8_t table[restrict XNN_MIN_ELEMENTS(256)])
+    const uint8_t* restrict table)
 {
   assert(batch != 0);
   assert(batch % sizeof(uint8_t) == 0);

@@ -18,7 +18,7 @@ void UpdateVersionUIIOSDataSource(web::WebUIIOSDataSource* html_source) {
                                IDR_PRODUCT_LOGO);
 
   html_source->AddString(version_ui::kVersion,
-                         vivaldi::GetVivaldiVersionString());
+                         std::string(vivaldi::GetVivaldiVersionString()));
 #if defined(OFFICIAL_BUILD) && \
     (BUILD_VERSION(VIVALDI_RELEASE) == VIVALDI_BUILD_PUBLIC_RELEASE)
   html_source->AddString("official",

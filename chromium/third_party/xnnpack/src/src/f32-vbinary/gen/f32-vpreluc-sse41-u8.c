@@ -9,11 +9,13 @@
 // LICENSE file in the root directory of this source tree.
 
 #include <assert.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #include <smmintrin.h>
 
 #include "src/xnnpack/common.h"
-#include "src/xnnpack/intrinsics-polyfill.h"
+#include "src/xnnpack/microparams.h"
 #include "src/xnnpack/vbinary.h"
 
 
@@ -22,7 +24,7 @@ void xnn_f32_vpreluc_ukernel__sse41_u8(
     const float* input_a,
     const float* input_b,
     float* output,
-    const struct xnn_f32_default_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
+    const struct xnn_f32_default_params* restrict params) XNN_OOB_READS
 {
   assert(batch != 0);
   assert(batch % sizeof(float) == 0);

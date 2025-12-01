@@ -35,6 +35,7 @@ import * as i18n from '../../core/i18n/i18n.js';
 import * as Platform from '../../core/platform/platform.js';
 import * as TextUtils from '../text_utils/text_utils.js';
 
+import {IgnoreListManager} from './IgnoreListManager.js';
 import {Events as WorkspaceImplEvents, type Project} from './WorkspaceImpl.js';
 
 const UIStrings = {
@@ -89,7 +90,12 @@ export class UISourceCode extends Common.ObjectWrapper.ObjectWrapper<EventTypes>
         this.#name = parsedURL.lastPathComponent + '?' + parsedURL.queryParams;
       } else {
         // file name looks best decoded
-        this.#name = decodeURIComponent(parsedURL.lastPathComponent);
+        try {
+          this.#name = decodeURIComponent(parsedURL.lastPathComponent);
+        } catch {
+          // Decoding might fail.
+          this.#name = parsedURL.lastPathComponent;
+        }
       }
     } else {
       this.#origin = Platform.DevToolsPath.EmptyUrlString;
@@ -214,10 +220,6 @@ export class UISourceCode extends Common.ObjectWrapper.ObjectWrapper<EventTypes>
 
     this.#requestContentPromise = this.#requestContent();
     return this.#requestContentPromise;
-  }
-
-  async requestContent(options: {cachedWasmOnly?: boolean} = {}): Promise<TextUtils.ContentProvider.DeferredContent> {
-    return TextUtils.ContentData.ContentData.asDeferredContent(await this.requestContentData(options));
   }
 
   async #requestContent(): Promise<TextUtils.ContentData.ContentDataOrError> {
@@ -531,6 +533,10 @@ export class UISourceCode extends Common.ObjectWrapper.ObjectWrapper<EventTypes>
   editDisabled(): boolean {
     return this.#disableEdit;
   }
+
+  isIgnoreListed(): boolean {
+    return IgnoreListManager.instance().isUserOrSourceMapIgnoreListedUISourceCode(this);
+  }
 }
 
 export enum Events {
@@ -631,6 +637,10 @@ export class UILocation {
       return 1;
     }
     return this.columnNumber - other.columnNumber;
+  }
+
+  isIgnoreListed(): boolean {
+    return this.uiSourceCode.isIgnoreListed();
   }
 }
 

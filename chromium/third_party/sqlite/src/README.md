@@ -57,18 +57,18 @@ If you do not want to use Fossil, you can download tarballs or ZIP
 archives or [SQLite archives](https://sqlite.org/cli.html#sqlar) as follows:
 
   *  Latest trunk check-in as
-     [Tarball](https://www.sqlite.org/src/tarball/sqlite.tar.gz),
-     [ZIP-archive](https://www.sqlite.org/src/zip/sqlite.zip), or
-     [SQLite-archive](https://www.sqlite.org/src/sqlar/sqlite.sqlar).
+     [Tarball](https://sqlite.org/src/tarball/sqlite.tar.gz),
+     [ZIP-archive](https://sqlite.org/src/zip/sqlite.zip), or
+     [SQLite-archive](https://sqlite.org/src/sqlar/sqlite.sqlar).
 
   *  Latest release as
-     [Tarball](https://www.sqlite.org/src/tarball/sqlite.tar.gz?r=release),
-     [ZIP-archive](https://www.sqlite.org/src/zip/sqlite.zip?r=release), or
-     [SQLite-archive](https://www.sqlite.org/src/sqlar/sqlite.sqlar?r=release).
+     [Tarball](https://sqlite.org/src/tarball/sqlite.tar.gz?r=release),
+     [ZIP-archive](https://sqlite.org/src/zip/sqlite.zip?r=release), or
+     [SQLite-archive](https://sqlite.org/src/sqlar/sqlite.sqlar?r=release).
 
   *  For other check-ins, substitute an appropriate branch name or
      tag or hash prefix in place of "release" in the URLs of the previous
-     bullet.  Or browse the [timeline](https://www.sqlite.org/src/timeline)
+     bullet.  Or browse the [timeline](https://sqlite.org/src/timeline)
      to locate the check-in desired, click on its information page link,
      then click on the "Tarball" or "ZIP Archive" links on the information
      page.
@@ -134,7 +134,7 @@ later.  The "tclextension-install" target and the test targets that follow
 all require TCL development libraries too.  ("apt install tcl-dev").  It is
 helpful, but is not required, to install the SQLite TCL extension (the
 "tclextension-install" target) prior to running tests.  The "releasetest"
-target has additional requiremenst, such as "valgrind".
+target has additional requirements, such as "valgrind".
 
 On "make" command-lines, one can add "OPTIONS=..." to specify additional
 compile-time options over and above those set by ./configure.  For example,
@@ -308,14 +308,14 @@ individual source file exceeds 32K lines in length.
 ## How It All Fits Together
 
 SQLite is modular in design.
-See the [architectural description](https://www.sqlite.org/arch.html)
+See the [architectural description](https://sqlite.org/arch.html)
 for details. Other documents that are useful in
 helping to understand how SQLite works include the
-[file format](https://www.sqlite.org/fileformat2.html) description,
-the [virtual machine](https://www.sqlite.org/opcode.html) that runs
+[file format](https://sqlite.org/fileformat2.html) description,
+the [virtual machine](https://sqlite.org/opcode.html) that runs
 prepared statements, the description of
-[how transactions work](https://www.sqlite.org/atomiccommit.html), and
-the [overview of the query planner](https://www.sqlite.org/optoverview.html).
+[how transactions work](https://sqlite.org/atomiccommit.html), and
+the [overview of the query planner](https://sqlite.org/optoverview.html).
 
 Decades of effort have gone into optimizing SQLite, both
 for small size and high performance.  And optimizations tend to result in

@@ -9,10 +9,14 @@
 // LICENSE file in the root directory of this source tree.
 
 #include <assert.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #include <immintrin.h>
 #include <smmintrin.h>
 
+#include "src/xnnpack/common.h"
+#include "src/xnnpack/microparams.h"
 #include "src/xnnpack/gemm.h"
 
 
@@ -26,7 +30,7 @@ void xnn_f32_qc8w_gemm_minmax_ukernel_6x16s4__avx2_broadcast(
     float* restrict c,
     size_t cm_stride,
     size_t cn_stride,
-    const struct xnn_f32_minmax_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
+    const struct xnn_f32_minmax_params* restrict params) XNN_OOB_READS
 {
   assert(mr != 0);
   assert(mr <= 6);

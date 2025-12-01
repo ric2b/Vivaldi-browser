@@ -19,7 +19,6 @@ BASE_DECLARE_FEATURE(kWebViewAutoSAA);
 BASE_DECLARE_FEATURE(kWebViewBackForwardCache);
 BASE_DECLARE_FEATURE(kWebViewDigitalAssetLinksLoadIncludes);
 BASE_DECLARE_FEATURE(kWebViewDisableCHIPS);
-BASE_DECLARE_FEATURE(kWebViewDisableSharpeningAndMSAA);
 BASE_DECLARE_FEATURE(kWebViewDrainPrefetchQueueDuringInit);
 BASE_DECLARE_FEATURE(kWebViewFileSystemAccess);
 BASE_DECLARE_FEATURE(kWebViewInvokeZoomPickerOnGSU);
@@ -30,14 +29,17 @@ BASE_DECLARE_FEATURE(kWebViewLazyFetchHandWritingIcon);
 BASE_DECLARE_FEATURE(kWebViewMediaIntegrityApiBlinkExtension);
 BASE_DECLARE_FEATURE(kWebViewMixedContentAutoupgrades);
 BASE_DECLARE_FEATURE(kWebViewMuteAudio);
-BASE_DECLARE_FEATURE(kWebViewRecordAppDataDirectorySize);
 BASE_DECLARE_FEATURE(kWebViewRenderDocument);
+BASE_DECLARE_FEATURE(kWebViewReportImeInsets);
 BASE_DECLARE_FEATURE(kWebViewTestFeature);
 BASE_DECLARE_FEATURE(kWebViewUseMetricsUploadService);
 BASE_DECLARE_FEATURE(kWebViewUseMetricsUploadServiceOnlySdkRuntime);
 BASE_DECLARE_FEATURE(kWebViewPropagateNetworkChangeSignals);
+BASE_DECLARE_FEATURE(kWebViewStartupTasksYieldToNative);
 BASE_DECLARE_FEATURE(kWebViewUnreducedProductVersion);
+BASE_DECLARE_FEATURE(kWebViewUseRenderingHeuristic);
 BASE_DECLARE_FEATURE(kWebViewUseStartupTasksLogic);
+BASE_DECLARE_FEATURE(kWebViewUseStartupTasksLogicP2);
 BASE_DECLARE_FEATURE(kWebViewXRequestedWithHeaderControl);
 extern const base::FeatureParam<int> kWebViewXRequestedWithHeaderMode;
 BASE_DECLARE_FEATURE(kWebViewUseInitialNetworkStateAtStartup);
@@ -64,6 +66,8 @@ extern const base::FeatureParam<double> kWebViewCacheSizeLimitMultiplier;
 extern const base::FeatureParam<int> kWebViewCacheSizeLimitMinimum;
 extern const base::FeatureParam<int> kWebViewCacheSizeLimitMaximum;
 extern const base::FeatureParam<double> kWebViewCodeCacheSizeLimitMultiplier;
+BASE_DECLARE_FEATURE(kWebViewConnectToComponentProviderInBackground);
+BASE_DECLARE_FEATURE(kAndroidMetricsAsyncMetricLogging);
 }  // namespace android_webview::features
 
 #endif  // ANDROID_WEBVIEW_COMMON_AW_FEATURES_H_

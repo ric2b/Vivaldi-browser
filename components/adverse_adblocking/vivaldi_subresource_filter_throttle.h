@@ -37,7 +37,8 @@ enum class ActivationPosition {
 class VivaldiSubresourceFilterAdblockingThrottle
     : public content::NavigationThrottle {
  public:
-  VivaldiSubresourceFilterAdblockingThrottle(content::NavigationHandle* handle);
+  VivaldiSubresourceFilterAdblockingThrottle(
+      content::NavigationThrottleRegistry& registry);
   ~VivaldiSubresourceFilterAdblockingThrottle() override;
   VivaldiSubresourceFilterAdblockingThrottle(
       const VivaldiSubresourceFilterAdblockingThrottle&) = delete;

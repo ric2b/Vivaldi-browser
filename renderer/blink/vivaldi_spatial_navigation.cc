@@ -182,7 +182,7 @@ void DispatchMouseMoveAt(blink::Element* element, gfx::PointF event_position) {
       event_position_screen, blink::WebPointerProperties::Button::kNoButton,
       click_count, blink::WebInputEvent::kRelativeMotionEvent,
       base::TimeTicks::Now());
-  Vector<blink::WebMouseEvent> coalesced_events, predicted_events;
+  blink::Vector<blink::WebMouseEvent> coalesced_events, predicted_events;
 
   DCHECK(local_main_frame);
   local_main_frame->GetEventHandler().HandleMouseMoveEvent(

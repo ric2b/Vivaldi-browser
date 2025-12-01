@@ -12,6 +12,7 @@
 #import "base/metrics/histogram_macros.h"
 #import "base/notreached.h"
 #import "base/strings/sys_string_conversions.h"
+#import "components/application_locale_storage/application_locale_storage.h"
 #import "components/language/core/browser/language_model_manager.h"
 #import "components/language/core/browser/pref_names.h"
 #import "components/language/core/common/language_util.h"
@@ -31,10 +32,19 @@
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
+#import "ios/chrome/browser/shared/model/prefs/pref_backed_boolean.h"
+#import "ios/translate/vivaldi_ios_translate_client.h"
 #import "ios/translate/vivaldi_ios_translate_service.h"
+#import "prefs/vivaldi_pref_names.h"
 // End Vivaldi
 
+#if defined(VIVALDI_BUILD)
+@interface LanguageSettingsMediator () <PrefObserverDelegate,
+                                        BooleanObserver> {
+#else
 @interface LanguageSettingsMediator () <PrefObserverDelegate> {
+#endif // End Vivaldi
+
   // Registrar for pref change notifications.
   std::unique_ptr<PrefChangeRegistrar> _prefChangeRegistrar;
 
@@ -49,6 +59,11 @@
 
   // Translate wrapper for the PrefService.
   std::unique_ptr<translate::TranslatePrefs> _translatePrefs;
+
+  // Vivaldi
+  // Observer for translate infobar banner enabled/disabled state
+  PrefBackedBoolean* _translateInfobarBannerDisabled;
+  // End Vivaldi
 }
 
 // The LanguageModelManager passed to this instance.
@@ -86,8 +101,20 @@
     _blockedLanguagesPrefObserverBridge->ObserveChangesForPreference(
         translate::prefs::kBlockedLanguages, _prefChangeRegistrar.get());
 
+    if (vivaldi::IsVivaldiRunning()) {
+      _translatePrefs =
+          VivaldiIOSTranslateClient::CreateTranslatePrefs(self.prefService);
+      _translateInfobarBannerDisabled = [[PrefBackedBoolean alloc]
+          initWithPrefService:_prefService
+                     prefName:vivaldiprefs::
+                                  kVivaldiTranslateInfobarBannerDisabled];
+      [_translateInfobarBannerDisabled setObserver:self];
+      [self booleanDidChange:_translateInfobarBannerDisabled];
+    } else {
     _translatePrefs =
         ChromeIOSTranslateClient::CreateTranslatePrefs(self.prefService);
+    } // End Vivaldi
+
   }
   return self;
 }
@@ -123,7 +150,7 @@
   // Create a map of supported language codes to supported languages.
   std::vector<translate::TranslateLanguageInfo> supportedLanguages;
   translate::TranslatePrefs::GetLanguageInfoList(
-      GetApplicationContext()->GetApplicationLocale(),
+      GetApplicationContext()->GetApplicationLocaleStorage()->Get(),
       _translatePrefs->IsTranslateAllowedByPolicy(), &supportedLanguages);
   std::map<std::string, translate::TranslateLanguageInfo> supportedLanguagesMap;
   for (const auto& supportedLanguage : supportedLanguages) {
@@ -200,7 +227,7 @@
   // Get the supported languages.
   std::vector<translate::TranslateLanguageInfo> languages;
   translate::TranslatePrefs::GetLanguageInfoList(
-      GetApplicationContext()->GetApplicationLocale(),
+      GetApplicationContext()->GetApplicationLocaleStorage()->Get(),
       _translatePrefs->IsTranslateAllowedByPolicy(), &languages);
 
   NSMutableArray<LanguageItem*>* supportedLanguages =
@@ -232,6 +259,14 @@
   _blockedLanguagesPrefObserverBridge.reset();
   _prefChangeRegistrar.reset();
   _translatePrefs.reset();
+
+  if (vivaldi::IsVivaldiRunning()) {
+    if (_translateInfobarBannerDisabled) {
+      [_translateInfobarBannerDisabled stop];
+      [_translateInfobarBannerDisabled setObserver:nil];
+      _translateInfobarBannerDisabled = nil;
+    }
+  }
 }
 
 #pragma mark - LanguageSettingsCommands
@@ -303,5 +338,25 @@
   languageItem.supportsTranslate = language.supports_translate;
   return languageItem;
 }
+
+#pragma mark - Vivaldi
+- (void)setTranslateInfobarDisabled:(BOOL)disabled {
+  self.prefService->SetBoolean(
+      vivaldiprefs::kVivaldiTranslateInfobarBannerDisabled, disabled);
+}
+
+- (BOOL)translateInfobarDisabled {
+  return self.prefService->GetBoolean(
+      vivaldiprefs::kVivaldiTranslateInfobarBannerDisabled);
+}
+
+#pragma mark - Boolean Observer
+- (void)booleanDidChange:(id<ObservableBoolean>)observableBoolean {
+  if (observableBoolean == _translateInfobarBannerDisabled) {
+    [self.consumer
+        translateDisableInfobarDisabled:[self translateInfobarDisabled]];
+  }
+}
+// End Vivaldi
 
 @end

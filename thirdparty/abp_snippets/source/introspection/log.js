@@ -17,7 +17,7 @@
 
 import $ from "../$.js";
 import {bind} from "proxy-pants/function";
-
+import {profile} from "./profile.js";
 import {debug} from "./debug.js";
 
 const {console} = $(window);
@@ -36,6 +36,7 @@ export const noop = () => {};
  * @since Adblock Plus 3.3
  */
 export function log(...args) {
+  let {mark, end} = profile("log");
   if (debug()) {
     const logArgs = ["%c DEBUG", "font-weight: bold;"];
 
@@ -66,7 +67,9 @@ export function log(...args) {
 
     $(args).unshift(...logArgs);
   }
+  mark();
   console.log(...args);
+  end();
 }
 
 /**

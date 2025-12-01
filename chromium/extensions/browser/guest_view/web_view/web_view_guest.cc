@@ -17,6 +17,7 @@
 #include "base/lazy_instance.h"
 #include "base/metrics/user_metrics.h"
 #include "base/notimplemented.h"
+#include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
@@ -74,7 +75,6 @@
 #include "extensions/common/extension_features.h"
 #include "extensions/common/manifest_constants.h"
 #include "extensions/strings/grit/extensions_strings.h"
-#include "ipc/ipc_message_macros.h"
 #include "net/base/net_errors.h"
 #include "net/cookies/canonical_cookie.h"
 #include "services/network/public/mojom/clear_data_filter.mojom.h"
@@ -189,9 +189,6 @@ uint32_t GetStoragePartitionRemovalMask(uint32_t web_view_removal_mask) {
   if (web_view_removal_mask &
       webview::WEB_VIEW_REMOVE_DATA_MASK_LOCAL_STORAGE) {
     mask |= StoragePartition::REMOVE_DATA_MASK_LOCAL_STORAGE;
-  }
-  if (web_view_removal_mask & webview::WEB_VIEW_REMOVE_DATA_MASK_WEBSQL) {
-    mask |= StoragePartition::REMOVE_DATA_MASK_WEBSQL;
   }
 
   return mask;
@@ -808,13 +805,20 @@ void WebViewGuest::EmbedderFullscreenToggled(bool entered_fullscreen) {
 }
 
 bool WebViewGuest::ZoomPropagatesFromEmbedderToGuest() const {
-  // If Vivaldi and the webcontents is in a tabstrip we should not sync
-  // zoom-level between the embedder and the WebViewGuest.
-  if (IsVivaldiRunning() &&
-      VivaldiBrowserComponentWrapper::GetInstance()->FindBrowserWithTab(
-          web_contents())) {
-    return false;
+  if (IsVivaldiRunning()) {
+    // If Vivaldi and the webcontents is in a tabstrip we should not sync
+    // zoom-level between the embedder and the WebViewGuest.
+    if (VivaldiBrowserComponentWrapper::GetInstance()->FindBrowserWithTab(
+            web_contents())) {
+      return false;
+    }
+
+    // Devtools are treated as separate from our UI.
+    if (web_contents()->GetURL().SchemeIs(content::kChromeDevToolsScheme)) {
+      return false;
+    }
   }
+
   // We use the embedder's zoom iff we haven't set a zoom ourselves using
   // e.g. webview.setZoom().
   return !did_set_explicit_zoom_;
@@ -1341,7 +1345,7 @@ WebViewGuest::WebViewGuest(content::RenderFrameHost* owner_rfh)
               switches::kEnableSpatialNavigation)) {
   if (IsOwnedByControlledFrameEmbedder()) {
     page_load_metrics::MetricsWebContentsObserver::RecordFeatureUsage(
-        owner_rfh, blink::mojom::WebFeature::kControlledFrameElement);
+        owner_rfh, blink::mojom::WebFeature::kHTMLControlledFrameElement);
   }
 }
 
@@ -1764,11 +1768,18 @@ bool WebViewGuest::IsPermissionRequestable(ContentSettingsType type) const {
     case blink::PermissionType::GEOLOCATION:
     case blink::PermissionType::AUDIO_CAPTURE:
     case blink::PermissionType::VIDEO_CAPTURE:
-    case blink::PermissionType::CLIPBOARD_READ_WRITE:
-    case blink::PermissionType::CLIPBOARD_SANITIZED_WRITE:
       // Any permission that could be granted by the webview permissionrequest
       // API should be requestable.
       return true;
+    case blink::PermissionType::CLIPBOARD_READ_WRITE:
+    case blink::PermissionType::CLIPBOARD_SANITIZED_WRITE:
+      if (IsVivaldiRunning()) {
+        return true;
+      }
+      // Support only controlled frame.
+      // Technically, there's no difficulty in supporting webview also,
+      // but the need for this api was expressed only for CF.
+      return IsOwnedByControlledFrameEmbedder();
     default:
       // Any other permission could not be legitimately granted to the webview.
       // We preemptivly reject such requests here. The permissions system should
@@ -2355,8 +2366,9 @@ void WebViewGuest::LoadURLWithParams(
   bool is_vivaldi_host = IsVivaldiApp(owner_host());
 
   // Handle chrome://restart and chrome://quit urls.
-  if (is_vivaldi_host && VivaldiBrowserComponentWrapper::GetInstance()
-                             ->HandleNonNavigationAboutURL(url)) {
+  if (is_vivaldi_host &&
+      VivaldiBrowserComponentWrapper::GetInstance()
+          ->HandleNonNavigationAboutURL(url, web_contents())) {
     return;
   }
 
@@ -2640,6 +2652,12 @@ void WebViewGuest::OnVisibilityChanged(content::Visibility visibility) {
     }
   }
 }
+
+
+bool WebViewGuest::CanOverscrollContent() {
+  return true;
+}
+
 // End Vivaldi
 
 }  // namespace extensions

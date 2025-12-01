@@ -30,10 +30,8 @@
 #include <unordered_set>
 #include <utility>
 
-#include "src/tint/lang/core/builtin_value.h"
+#include "src/tint/lang/core/enums.h"
 #include "src/tint/lang/core/fluent_types.h"
-#include "src/tint/lang/core/interpolation_sampling.h"
-#include "src/tint/lang/core/interpolation_type.h"
 #include "src/tint/lang/core/type/array.h"
 #include "src/tint/lang/core/type/binding_array.h"
 #include "src/tint/lang/core/type/bool.h"
@@ -209,6 +207,23 @@ ResourceBinding ConvertHandleToResourceBinding(const tint::sem::GlobalVariable* 
         [&](const core::type::ExternalTexture*) {
             result.resource_type = ResourceBinding::ResourceType::kExternalTexture;
             result.dim = ResourceBinding::TextureDimension::k2d;
+        },
+        [&](const core::type::TexelBuffer* tex) {
+            result.resource_type = ResourceBinding::ResourceType::kReadWriteTexelBuffer;
+            switch (tex->Access()) {
+                case core::Access::kRead:
+                    result.resource_type = ResourceBinding::ResourceType::kReadOnlyTexelBuffer;
+                    break;
+                case core::Access::kReadWrite:
+                    result.resource_type = ResourceBinding::ResourceType::kReadWriteTexelBuffer;
+                    break;
+                case core::Access::kWrite:
+                case core::Access::kUndefined:
+                    TINT_UNREACHABLE() << "unhandled texel buffer access";
+            }
+            result.dim = TypeTextureDimensionToResourceBindingTextureDimension(tex->Dim());
+            result.sampled_kind = BaseTypeToSampledKind(tex->Type());
+            result.image_format = TypeTexelFormatToResourceBindingTexelFormat(tex->TexelFormat());
         },
 
         [&](const core::type::InputAttachment* attachment) {
@@ -570,7 +585,8 @@ const Inspector::EntryPointTextureMetadata& Inspector::ComputeTextureMetadata(
                 // textureLoad uses textureNumLevels to clamp the level, unless the texture type
                 // doesn't support mipmapping.
                 uses_num_levels = !texture_type->IsAnyOf<core::type::MultisampledTexture,
-                                                         core::type::DepthMultisampledTexture>();
+                                                         core::type::DepthMultisampledTexture,
+                                                         core::type::ExternalTexture>();
                 metadata.has_texture_load_with_depth_texture |=
                     texture_type
                         ->IsAnyOf<core::type::DepthTexture, core::type::DepthMultisampledTexture>();

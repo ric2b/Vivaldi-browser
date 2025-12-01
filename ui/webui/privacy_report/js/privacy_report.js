@@ -123,24 +123,31 @@ export function formatData(megabytes) {
 
 // The main function for updating the site data
 export async function updateState() {
-  var interval = document.getElementById('timeperiod').value;
-  var adBlockEnabled = await isAdBlockEnabled();
-  var trackerBlockEnabled = await isTrackerBlockEnabled();
-  var blockingData = await getBlockingData(interval);
-  var adsBlocked = parseInt(blockingData[1]);
-  var trackersBlocked = parseInt(blockingData[2]);
-  var timeSaved = Math.round((trackersBlocked * 0.02  + adsBlocked * 0.02)* 100) / 100;
-  var bandwidthSaved = Math.round((trackersBlocked * 15  + adsBlocked * 15) *100) / 100000.0;
+ try {
+    var interval = document.getElementById('timeperiod').value;
+    var adBlockEnabled = await isAdBlockEnabled();
+    var trackerBlockEnabled = await isTrackerBlockEnabled();
+    var blockingData = await getBlockingData(interval);
+    var adsBlocked = parseInt(blockingData[1]);
+    var trackersBlocked = parseInt(blockingData[2]);
+    var timeSaved = Math.round((trackersBlocked * 0.02  + adsBlocked * 0.02)* 100) / 100;
+    var bandwidthSaved = Math.round((trackersBlocked * 15  + adsBlocked * 15) *100) / 100000.0;
 
-  // Create the list for the ads blocked / tracker sites blocked
-  createTrackerDivs(blockingData[3]);
-  createSiteDivs(blockingData[4]);
+    // Create the list for the ads blocked / tracker sites blocked
+    createTrackerDivs(blockingData[3]);
+    createSiteDivs(blockingData[4]);
 
 
-  document.getElementById('timeSavedNumber').innerHTML = formatTime(timeSaved);
-  document.getElementById('bandwidthNumber').innerHTML = formatData(bandwidthSaved);
-  updateReport(
-      adBlockEnabled, trackerBlockEnabled, adsBlocked, trackersBlocked)
+    document.getElementById('timeSavedNumber').innerHTML = formatTime(timeSaved);
+    document.getElementById('bandwidthNumber').innerHTML = formatData(bandwidthSaved);
+    updateReport(
+        adBlockEnabled, trackerBlockEnabled, adsBlocked, trackersBlocked)
+  } catch (error) {
+    updateReport(false, false, 0, 0)
+    document.getElementById('errorMessage').innerHTML = "Error: Something went wrong";
+  } finally {
+    document.body.style.visibility = 'visible';
+  }
 }
 
 // Update all visual elements based on the enabled Adblocking level

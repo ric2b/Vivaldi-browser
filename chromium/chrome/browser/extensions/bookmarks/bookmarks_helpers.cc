@@ -135,8 +135,10 @@ void PopulateBookmarkTreeNode(
       (node->type() == bookmarks::BookmarkNode::TRASH);
   out_bookmark_tree_node->theme_color =
       vivaldi_bookmark_kit::GetThemeColorForCSS(node);
-  out_bookmark_tree_node->display_url =
-      vivaldi_bookmark_kit::GetDisplayURL(node);
+  if (const auto display_url = vivaldi_bookmark_kit::GetDisplayURL(node);
+      !display_url.empty()) {
+    out_bookmark_tree_node->display_url = display_url;
+  }
 
   if (bookmarks::IsDescendantOf(node, managed->managed_node())) {
     out_bookmark_tree_node->unmodifiable =

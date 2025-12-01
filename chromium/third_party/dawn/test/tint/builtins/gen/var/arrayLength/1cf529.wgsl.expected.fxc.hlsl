@@ -1,73 +1,71 @@
 //
 // fragment_main
 //
+
 RWByteAddressBuffer prevent_dce : register(u0);
 ByteAddressBuffer sb_ro : register(t1);
-
 uint arrayLength_1cf529() {
-  uint tint_symbol_1 = 0u;
-  sb_ro.GetDimensions(tint_symbol_1);
-  uint tint_symbol_2 = ((tint_symbol_1 - 0u) / 4u);
-  uint res = tint_symbol_2;
+  uint v = 0u;
+  sb_ro.GetDimensions(v);
+  uint res = (v / 4u);
   return res;
 }
 
 void fragment_main() {
-  prevent_dce.Store(0u, asuint(arrayLength_1cf529()));
-  return;
+  prevent_dce.Store(0u, arrayLength_1cf529());
 }
+
 //
 // compute_main
 //
+
 RWByteAddressBuffer prevent_dce : register(u0);
 ByteAddressBuffer sb_ro : register(t1);
-
 uint arrayLength_1cf529() {
-  uint tint_symbol_1 = 0u;
-  sb_ro.GetDimensions(tint_symbol_1);
-  uint tint_symbol_2 = ((tint_symbol_1 - 0u) / 4u);
-  uint res = tint_symbol_2;
+  uint v = 0u;
+  sb_ro.GetDimensions(v);
+  uint res = (v / 4u);
   return res;
 }
 
 [numthreads(1, 1, 1)]
 void compute_main() {
-  prevent_dce.Store(0u, asuint(arrayLength_1cf529()));
-  return;
+  prevent_dce.Store(0u, arrayLength_1cf529());
 }
+
 //
 // vertex_main
 //
-ByteAddressBuffer sb_ro : register(t1);
-
-uint arrayLength_1cf529() {
-  uint tint_symbol_3 = 0u;
-  sb_ro.GetDimensions(tint_symbol_3);
-  uint tint_symbol_4 = ((tint_symbol_3 - 0u) / 4u);
-  uint res = tint_symbol_4;
-  return res;
-}
-
 struct VertexOutput {
   float4 pos;
   uint prevent_dce;
 };
-struct tint_symbol_1 {
-  nointerpolation uint prevent_dce : TEXCOORD0;
-  float4 pos : SV_Position;
+
+struct vertex_main_outputs {
+  nointerpolation uint VertexOutput_prevent_dce : TEXCOORD0;
+  float4 VertexOutput_pos : SV_Position;
 };
 
-VertexOutput vertex_main_inner() {
-  VertexOutput tint_symbol = (VertexOutput)0;
-  tint_symbol.pos = (0.0f).xxxx;
-  tint_symbol.prevent_dce = arrayLength_1cf529();
-  return tint_symbol;
+
+ByteAddressBuffer sb_ro : register(t1);
+uint arrayLength_1cf529() {
+  uint v = 0u;
+  sb_ro.GetDimensions(v);
+  uint res = (v / 4u);
+  return res;
 }
 
-tint_symbol_1 vertex_main() {
-  VertexOutput inner_result = vertex_main_inner();
-  tint_symbol_1 wrapper_result = (tint_symbol_1)0;
-  wrapper_result.pos = inner_result.pos;
-  wrapper_result.prevent_dce = inner_result.prevent_dce;
-  return wrapper_result;
+VertexOutput vertex_main_inner() {
+  VertexOutput v_1 = (VertexOutput)0;
+  v_1.pos = (0.0f).xxxx;
+  v_1.prevent_dce = arrayLength_1cf529();
+  VertexOutput v_2 = v_1;
+  return v_2;
 }
+
+vertex_main_outputs vertex_main() {
+  VertexOutput v_3 = vertex_main_inner();
+  vertex_main_outputs v_4 = {v_3.prevent_dce, v_3.pos};
+  return v_4;
+}
+

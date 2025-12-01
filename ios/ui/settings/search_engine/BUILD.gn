@@ -23,6 +23,7 @@ source_set("vivaldi_search_engine_settings") {
     "//ios/chrome/browser/shared/model/prefs",
     "//ios/chrome/browser/shared/model/utils",
     "//ui/base",
+    "//vivaldi/ios/ui/settings/search_engine/editor:vivaldi_search_engine_editor",
   ]
 
   frameworks = [

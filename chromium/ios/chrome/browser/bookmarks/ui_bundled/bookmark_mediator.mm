@@ -205,30 +205,6 @@ using bookmarks::BookmarkNode;
   return message;
 }
 
-#pragma mark - Private
-
-// The localized string that appears to users for bulk adding bookmarks.
-- (NSString*)messageForBulkAddingBookmarks:
-                 (BookmarkStorageType)bookmarkStorageType
-                successfullyAddedBookmarks:(int)count {
-  std::u16string result;
-
-  BOOL savedIntoAccount = bookmark_utils_ios::bookmarkSavedIntoAccount(
-      bookmarkStorageType, _authenticationService, _syncService);
-  if (savedIntoAccount) {
-    id<SystemIdentity> identity = _authenticationService->GetPrimaryIdentity(
-        signin::ConsentLevel::kSignin);
-    result = base::i18n::MessageFormatter::FormatWithNamedArgs(
-        l10n_util::GetStringUTF16(IDS_IOS_BOOKMARKS_BULK_SAVED_ACCOUNT),
-        "count", count, "email", base::SysNSStringToUTF16(identity.userEmail));
-  } else {
-    result =
-        l10n_util::GetPluralStringFUTF16(IDS_IOS_BOOKMARKS_BULK_SAVED, count);
-  }
-
-  return base::SysUTF16ToNSString(result);
-}
-
 #pragma mark - Vivaldi
 - (NSString*)messageForAddingBookmarksInFolder:(NSString*)folderTitle {
   NSString* bookmarkedInString = l10n_util::GetNSString(IDS_IOS_BOOKMARKED_IN);
@@ -277,5 +253,6 @@ using bookmarks::BookmarkNode;
   message.category = bookmark_utils_ios::kBookmarksSnackbarCategory;
   return message;
 }
+// End Vivaldi
 
 @end

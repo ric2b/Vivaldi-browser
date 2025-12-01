@@ -1,12 +1,12 @@
- // Copyright 2022 Vivaldi Technologies. All rights reserved.
+// Copyright 2022 Vivaldi Technologies. All rights reserved.
 
- #ifndef IOS_UI_AD_TRACKER_BLOCKER_VIVALDI_ATB_CONSUMER_H_
- #define IOS_UI_AD_TRACKER_BLOCKER_VIVALDI_ATB_CONSUMER_H_
+#ifndef IOS_UI_AD_TRACKER_BLOCKER_VIVALDI_ATB_CONSUMER_H_
+#define IOS_UI_AD_TRACKER_BLOCKER_VIVALDI_ATB_CONSUMER_H_
 
 #import <Foundation/Foundation.h>
 
-#import "components/ad_blocker/adblock_rule_manager.h"
-#import "components/ad_blocker/adblock_rule_service.h"
+#import "components/ad_blocker/public/core/adblock_rule_manager.h"
+#import "components/ad_blocker/public/ios/adblock_rule_service.h"
 
 typedef NS_ENUM(NSInteger, ATBFetchResult) {
     FetchResultSuccess,

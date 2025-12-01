@@ -1,22 +1,22 @@
 //
 // fragment_main
 //
-RWByteAddressBuffer prevent_dce : register(u0);
 
+RWByteAddressBuffer prevent_dce : register(u0);
 uint subgroupMin_2493ab() {
   uint res = WaveActiveMin(1u);
   return res;
 }
 
 void fragment_main() {
-  prevent_dce.Store(0u, asuint(subgroupMin_2493ab()));
-  return;
+  prevent_dce.Store(0u, subgroupMin_2493ab());
 }
+
 //
 // compute_main
 //
-RWByteAddressBuffer prevent_dce : register(u0);
 
+RWByteAddressBuffer prevent_dce : register(u0);
 uint subgroupMin_2493ab() {
   uint res = WaveActiveMin(1u);
   return res;
@@ -24,6 +24,6 @@ uint subgroupMin_2493ab() {
 
 [numthreads(1, 1, 1)]
 void compute_main() {
-  prevent_dce.Store(0u, asuint(subgroupMin_2493ab()));
-  return;
+  prevent_dce.Store(0u, subgroupMin_2493ab());
 }
+

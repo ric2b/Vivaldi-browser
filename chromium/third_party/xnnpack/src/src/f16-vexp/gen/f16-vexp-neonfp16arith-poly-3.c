@@ -12,11 +12,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "src/xnnpack/simd/f16-neonfp16arith.h"
-
 #include "src/xnnpack/common.h"
 #include "src/xnnpack/math.h"
 #include "src/xnnpack/microparams.h"
+#include "src/xnnpack/simd/f16-neonfp16arith.h"
 
 
 static XNN_INLINE xnn_simd_f16_t xnn_setexp_f16(xnn_simd_f16_t vx) {
@@ -42,7 +41,7 @@ void xnn_f16_vexp_ukernel__neonfp16arith_poly_3_u8(
     size_t batch,
     const xnn_float16* input,
     xnn_float16* output,
-    const struct xnn_f16_default_params unused_params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f16_default_params* unused_params)
 {
   assert(batch != 0);
   assert(batch % sizeof(xnn_float16) == 0);
@@ -117,7 +116,7 @@ void xnn_f16_vexp_ukernel__neonfp16arith_poly_3_u16(
     size_t batch,
     const xnn_float16* input,
     xnn_float16* output,
-    const struct xnn_f16_default_params unused_params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f16_default_params* unused_params)
 {
   assert(batch != 0);
   assert(batch % sizeof(xnn_float16) == 0);
@@ -229,7 +228,7 @@ void xnn_f16_vexp_ukernel__neonfp16arith_poly_3_u32(
     size_t batch,
     const xnn_float16* input,
     xnn_float16* output,
-    const struct xnn_f16_default_params unused_params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f16_default_params* unused_params)
 {
   assert(batch != 0);
   assert(batch % sizeof(xnn_float16) == 0);

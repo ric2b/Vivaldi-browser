@@ -29,14 +29,14 @@ export const DEFAULT_VIEW: View = (input, _output, target) => {
     <style>${targetCrashedScreenStyles}</style>
     <div class="message">${i18nString(UIStrings.devtoolsWasDisconnectedFromThe)}</div>
     <div class="message">${i18nString(UIStrings.oncePageIsReloadedDevtoolsWill)}</div>`,
-    target, {host: input});
+    target);
   // clang-format on
 };
 
 export class TargetCrashedScreen extends VBox {
   private readonly hideCallback: () => void;
   constructor(hideCallback: () => void, view = DEFAULT_VIEW) {
-    super(true);
+    super({useShadowDom: true});
     view({}, {}, this.contentElement);
     this.hideCallback = hideCallback;
   }

@@ -29,8 +29,8 @@ cc_library(
         "@abseil-cpp//absl/strings",
         "@abseil-cpp//absl/strings:string_view",
         "@abseil-cpp//absl/time",
-        "@com_google_fuzztest//fuzztest:flag_name",
-        "@com_google_fuzztest//fuzztest:subprocess",
+        "@com_google_fuzztest//fuzztest/internal:flag_name",
+        "@com_google_fuzztest//fuzztest/internal:subprocess",
     ],
 )
 
@@ -66,12 +66,13 @@ cc_test(
         "@abseil-cpp//absl/time",
         "@com_google_fuzztest//centipede:weak_sancov_stubs",
         "@com_google_fuzztest//common:temp_dir",
-        "@com_google_fuzztest//fuzztest:io",
-        "@com_google_fuzztest//fuzztest:logging",
-        "@com_google_fuzztest//fuzztest:printer",
-        "@com_google_fuzztest//fuzztest:serialization",
-        "@com_google_fuzztest//fuzztest:subprocess",
-        "@com_google_fuzztest//fuzztest:type_support",
+        "@com_google_fuzztest//fuzztest/internal:escaping",
+        "@com_google_fuzztest//fuzztest/internal:io",
+        "@com_google_fuzztest//fuzztest/internal:logging",
+        "@com_google_fuzztest//fuzztest/internal:printer",
+        "@com_google_fuzztest//fuzztest/internal:serialization",
+        "@com_google_fuzztest//fuzztest/internal:subprocess",
+        "@com_google_fuzztest//fuzztest/internal:type_support",
         "@googletest//:gtest_main",
         "@re2",
     ],
@@ -90,9 +91,35 @@ cc_binary(
         "@abseil-cpp//absl/strings",
         "@abseil-cpp//absl/strings:str_format",
         "@abseil-cpp//absl/time",
-        "@com_google_fuzztest//fuzztest:logging",
-        "@com_google_fuzztest//fuzztest:subprocess",
+        "@com_google_fuzztest//fuzztest/internal:logging",
+        "@com_google_fuzztest//fuzztest/internal:subprocess",
         "@re2",
+    ],
+)
+
+# Must be run with `--config=libfuzzer`
+cc_test(
+    name = "compatibility_mode_test",
+    timeout = "long",
+    srcs = ["compatibility_mode_test.cc"],
+    data = [
+        "@com_google_fuzztest//e2e_tests/testdata:fuzz_tests_for_functional_testing.stripped",
+    ],
+    tags = [
+        # Don't cache the results.
+        "external",
+        # Don't include in wildcard expansions (:..., :all).
+        "manual",
+    ],
+    deps = [
+        ":test_binary_util",
+        "@abseil-cpp//absl/container:flat_hash_map",
+        "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/time",
+        "@com_google_fuzztest//common:temp_dir",
+        "@com_google_fuzztest//fuzztest/internal:io",
+        "@com_google_fuzztest//fuzztest/internal:subprocess",
+        "@googletest//:gtest_main",
     ],
 )
 
@@ -126,9 +153,10 @@ cc_test(
         "@abseil-cpp//absl/time",
         "@com_google_fuzztest//centipede:weak_sancov_stubs",
         "@com_google_fuzztest//common:temp_dir",
-        "@com_google_fuzztest//fuzztest:io",
-        "@com_google_fuzztest//fuzztest:logging",
-        "@com_google_fuzztest//fuzztest:subprocess",
+        "@com_google_fuzztest//fuzztest/internal:escaping",
+        "@com_google_fuzztest//fuzztest/internal:io",
+        "@com_google_fuzztest//fuzztest/internal:logging",
+        "@com_google_fuzztest//fuzztest/internal:subprocess",
         "@googletest//:gtest_main",
     ],
 )

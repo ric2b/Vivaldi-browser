@@ -129,11 +129,11 @@ function isAiAssistanceServerSideLoggingEnabled(): boolean {
   return !Root.Runtime.hostConfig.aidaAvailability?.disallowLogging;
 }
 
-export class EmptyEntryLabelRemoveEvent extends Event {
-  static readonly eventName = 'emptyentrylabelremoveevent';
+export class EntryLabelRemoveEvent extends Event {
+  static readonly eventName = 'entrylabelremoveevent';
 
   constructor() {
-    super(EmptyEntryLabelRemoveEvent.eventName);
+    super(EntryLabelRemoveEvent.eventName);
   }
 }
 
@@ -158,10 +158,6 @@ export class EntryLabelOverlay extends HTMLElement {
   static readonly LABEL_AND_CONNECTOR_SHIFT_LENGTH = 8;
   // Length of the line that connects the label to the entry.
   static readonly LABEL_CONNECTOR_HEIGHT = 7;
-  static readonly LABEL_HEIGHT = 17;
-  static readonly LABEL_PADDING = 4;
-  static readonly LABEL_AND_CONNECTOR_HEIGHT =
-      EntryLabelOverlay.LABEL_HEIGHT + EntryLabelOverlay.LABEL_PADDING * 2 + EntryLabelOverlay.LABEL_CONNECTOR_HEIGHT;
   // Set the max label length to avoid labels that could signicantly increase the file size.
   static readonly MAX_LABEL_LENGTH = 100;
 
@@ -269,6 +265,10 @@ export class EntryLabelOverlay extends HTMLElement {
       // But we want to listen to the change event in the VE logs, so we dispatch it here.
       this.#inputField?.dispatchEvent(new Event('change', {bubbles: true, composed: true}));
     }
+    this.#setAIButtonRenderState();
+    // Rerender the label component when the label text changes because we need to
+    // make sure the 'auto annotation' button is only shown when the label is empty.
+    this.#render();
     this.#inputField?.setAttribute('aria-label', labelBoxTextContent);
   }
 
@@ -332,7 +332,8 @@ export class EntryLabelOverlay extends HTMLElement {
       return;
     }
 
-    const pastedText = clipboardData.getData('text');
+    // Remove newline characters to ensure single-line paste.
+    const pastedText = clipboardData.getData('text').replace(/(\r\n|\n|\r)/gm, '');
     const newText = this.#inputField.textContent + pastedText;
     const trimmedText = newText.slice(0, EntryLabelOverlay.MAX_LABEL_LENGTH + 1);
     this.#inputField.textContent = trimmedText;
@@ -340,12 +341,6 @@ export class EntryLabelOverlay extends HTMLElement {
   }
 
   set entryLabelVisibleHeight(entryLabelVisibleHeight: number) {
-    if (entryLabelVisibleHeight === this.#entryLabelVisibleHeight) {
-      // Even the position is not changed, the theme color might change, so we need to redraw the connector here.
-      this.#drawConnector();
-      return;
-    }
-
     this.#entryLabelVisibleHeight = entryLabelVisibleHeight;
     void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#render);
     // If the label is editable, focus cursor on it.
@@ -396,7 +391,8 @@ export class EntryLabelOverlay extends HTMLElement {
 
     // Draw the circle at the bottom of the connector
     circle.setAttribute('cx', EntryLabelOverlay.LABEL_AND_CONNECTOR_SHIFT_LENGTH.toString());
-    circle.setAttribute('cy', EntryLabelOverlay.LABEL_CONNECTOR_HEIGHT.toString());
+    // Add one to the offset of the circle which positions it perfectly centered on the border of the overlay.
+    circle.setAttribute('cy', (EntryLabelOverlay.LABEL_CONNECTOR_HEIGHT + 1).toString());
     circle.setAttribute('r', '3');
     circle.setAttribute('fill', connectorColor);
   }
@@ -427,8 +423,8 @@ export class EntryLabelOverlay extends HTMLElement {
       // Move the label down from above the entry to below it. The label is positioned by default quite far above the entry, hence why we add:
       // 1. the height of the entry + of the label (inc its padding)
       // 2. the height of the connector (*2), so we have room to draw it
-      const verticalTransform = this.#entryLabelVisibleHeight + EntryLabelOverlay.LABEL_HEIGHT +
-          EntryLabelOverlay.LABEL_PADDING * 2 + EntryLabelOverlay.LABEL_CONNECTOR_HEIGHT * 2;
+      const verticalTransform = this.#entryLabelVisibleHeight + (EntryLabelOverlay.LABEL_CONNECTOR_HEIGHT * 2) +
+          this.#inputField?.offsetHeight;
 
       yTranslation = verticalTransform;
     }
@@ -481,7 +477,7 @@ export class EntryLabelOverlay extends HTMLElement {
     // If the label is empty when it is being navigated away from, dispatch an event to remove this entry overlay
     if (!editable && newLabelText.length === 0 && !this.#isPendingRemoval) {
       this.#isPendingRemoval = true;
-      this.dispatchEvent(new EmptyEntryLabelRemoveEvent());
+      this.dispatchEvent(new EntryLabelRemoveEvent());
     }
   }
 
@@ -523,7 +519,7 @@ export class EntryLabelOverlay extends HTMLElement {
       try {
         // Trigger a re-render to display the loading component in the place of the button when the label is being generated.
         this.#currAIButtonState = AIButtonState.GENERATING_LABEL;
-        UI.ARIAUtils.alert(UIStringsNotTranslate.generatingLabel);
+        UI.ARIAUtils.LiveAnnouncer.alert(UIStringsNotTranslate.generatingLabel);
         // Trigger a re-render to put focus back on the input box, otherwise
         // when the button changes to a loading spinner, it loses focus and the
         // editing state is reset because the component loses focus.
@@ -625,10 +621,11 @@ export class EntryLabelOverlay extends HTMLElement {
     if (!hasAiExperiment || aiDisabledByEnterprisePolicy || !dataToGenerateLabelAvailable || !labelIsEmpty) {
       this.#currAIButtonState = AIButtonState.HIDDEN;
     } else {
-      // To verify whether AI can be used, check if the user is logged in, over 18, in a supported
-      // location and offline. If the user is not logged in, `blockedByAge` will return true.
-      const aiAvailable = !Root.Runtime.hostConfig.aidaAvailability?.blockedByAge &&
-          !Root.Runtime.hostConfig.aidaAvailability?.blockedByGeo && !navigator.onLine === false;
+      // To verify whether AI can be used, check if aida is available, the user is logged in, over 18, in a supported
+      // location and offline.
+      const aiAvailable = Root.Runtime.hostConfig.aidaAvailability?.enabled &&
+          !Root.Runtime.hostConfig.aidaAvailability?.blockedByAge &&
+          !Root.Runtime.hostConfig.aidaAvailability?.blockedByGeo && navigator.onLine;
       if (aiAvailable) {
         this.#currAIButtonState = AIButtonState.ENABLED;
       } else {
@@ -764,32 +761,22 @@ export class EntryLabelOverlay extends HTMLElement {
     // clang-format on
   }
 
-  #handleFocusOutEvent(): void {
+  #handleFocusOutEvent(event: FocusEvent): void {
     /**
      * Usually when the text box loses focus, we want to stop the edit mode and
      * just display the annotation. However, if the user tabs from the text box
      * to focus the GenerateAI button, we need to ensure that we do not exit
      * edit mode. The only reliable method is to listen to the focusout event
      * (which bubbles, unlike `blur`) on the parent.
-     * This means we get any updates on the focus state of anything inside this component.
-     * Once we get the event, we check to see if focus is still within this
-     * component (which means either the input, or the button, or the disclaimer popup).
-     * If it is, we do nothing, but if we have lost focus,  we can then exit editable mode.
-     *
-     * If you are thinking "why not `blur` on the span" it's because blur does
-     * not propagate; the span itself never blurs, but the elements inside it
-     * do as the span is not focusable.
-     *
-     * The reason we do it inside a rAF is because on the first run the values
-     * for `this.hasFocus()` are not accurate. I'm not quite sure why, but by
-     * letting the browser have a frame to update, it then accurately reports
-     * the up to date values for `this.hasFocus()`
      */
-    requestAnimationFrame(() => {
-      if (!this.hasFocus()) {
-        this.setLabelEditabilityAndRemoveEmptyLabel(false);
-      }
-    });
+    const relatedTarget = event.relatedTarget as Node | null;
+    // If the related target is null, it means the focus has left the browser
+    // window. If it's not null, we check if the new focused element is a
+    // descendant of this component's shadow root. If it is, we don't do anything.
+    if (relatedTarget && this.#shadow.contains(relatedTarget)) {
+      return;
+    }
+    this.setLabelEditabilityAndRemoveEmptyLabel(false);
   }
 
   #render(): void {
@@ -819,17 +806,26 @@ export class EntryLabelOverlay extends HTMLElement {
               }}
               @keydown=${this.#handleLabelInputKeyDown}
               @paste=${this.#handleLabelInputPaste}
-              @keyup=${() => {
-                this.#handleLabelInputKeyUp();
-                this.#setAIButtonRenderState();
-                // Rerender the label component when the label text changes because we need to
-                // make sure the 'auto annotation' button is only shown when the label is empty.
-                this.#render();
-                }}
+              @input=${this.#handleLabelInputKeyUp}
               contenteditable=${this.#isLabelEditable ? 'plaintext-only' : false}
               jslog=${VisualLogging.textField('timeline.annotations.entry-label-input').track({keydown: true, click: true, change: true})}
               tabindex="0"
             ></span>
+            ${this.#isLabelEditable && this.#inputField?.innerText !== '' ? html`
+              <button
+                class="delete-button"
+                @click=${() => this.dispatchEvent(new EntryLabelRemoveEvent())}
+                jslog=${VisualLogging.action('timeline.annotations.delete-entry-label').track({click: true})}>
+              <devtools-icon
+                .data=${{
+                  iconName: 'cross',
+                  color: 'var(--color-background)',
+                  width: '14px',
+                  height: '14px'
+                }}
+              ></devtools-icon>
+              </button>
+            ` : Lit.nothing}
             ${(() => {
               switch (this.#currAIButtonState) {
                 case AIButtonState.HIDDEN:

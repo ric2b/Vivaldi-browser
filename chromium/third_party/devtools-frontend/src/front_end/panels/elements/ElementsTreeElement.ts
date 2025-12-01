@@ -37,8 +37,10 @@ import * as Common from '../../core/common/common.js';
 import * as Host from '../../core/host/host.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import * as Platform from '../../core/platform/platform.js';
+import * as Root from '../../core/root/root.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as Protocol from '../../generated/protocol.js';
+import type * as Elements from '../../models/elements/elements.js';
 import type * as IssuesManager from '../../models/issues_manager/issues_manager.js';
 import * as TextUtils from '../../models/text_utils/text_utils.js';
 import * as CodeMirror from '../../third_party/codemirror.next/codemirror.next.js';
@@ -57,7 +59,7 @@ import * as ElementsComponents from './components/components.js';
 import {canGetJSPath, cssPath, jsPath, xPath} from './DOMPath.js';
 import {getElementIssueDetails} from './ElementIssueUtils.js';
 import {ElementsPanel} from './ElementsPanel.js';
-import {type ElementsTreeOutline, MappedCharToEntity, type UpdateRecord} from './ElementsTreeOutline.js';
+import {type ElementsTreeOutline, MappedCharToEntity} from './ElementsTreeOutline.js';
 import {ImagePreviewPopover} from './ImagePreviewPopover.js';
 import {getRegisteredDecorators, type MarkerDecorator, type MarkerDecoratorRegistration} from './MarkerDecorator.js';
 
@@ -184,6 +186,14 @@ const UIStrings = {
    */
   disableGridMode: 'Disable grid mode',
   /**
+   * @description ARIA label for an elements tree adorner
+   */
+  forceOpenPopover: 'Keep this popover open',
+  /**
+   * @description ARIA label for an elements tree adorner
+   */
+  stopForceOpenPopover: 'Stop keeping this popover open',
+  /**
    *@description Label of the adorner for flex elements in the Elements panel
    */
   enableFlexMode: 'Enable flex mode',
@@ -209,19 +219,91 @@ const UIStrings = {
   /**
    *@description Text of a tooltip to redirect to another element in the Elements panel
    */
-  showPopoverTarget: 'Show popover target',
+  showPopoverTarget: 'Show element associated with the `popovertarget` attribute',
   /**
-   *@description Text of a tooltip to redirect to another element in the Elements panel
+   *@description Text of a tooltip to redirect to another element in the Elements panel, associated with the `interesttarget` attribute
    */
-  showInterestTarget: 'Show interest target',
+  showInterestTarget: 'Show element associated with the `interesttarget` attribute',
   /**
-   *@description Text of a tooltip to redirect to another element in the Elements panel
+   *@description Text of a tooltip to redirect to another element in the Elements panel, associated with the `commandfor` attribute
    */
-  showCommandForTarget: 'Show commandfor target',
+  showCommandForTarget: 'Show element associated with the `commandfor` attribute',
   /**
    *@description Text of the tooltip for scroll adorner.
    */
   elementHasScrollableOverflow: 'This element has a scrollable overflow',
+  /**
+   *@description Text of a context menu item to redirect to the AI assistance panel and to start a chat.
+   */
+  startAChat: 'Start a chat',
+  /**
+   *@description Context menu item in Elements panel to assess visibility of an element via AI.
+   */
+  assessVisibility: 'Assess visibility',
+  /**
+   *@description Context menu item in Elements panel to center an element via AI.
+   */
+  centerElement: 'Center element',
+  /**
+   *@description Context menu item in Elements panel to wrap flex items via AI.
+   */
+  wrapTheseItems: 'Wrap these items',
+  /**
+   *@description Context menu item in Elements panel to distribute flex items evenly via AI.
+   */
+  distributeItemsEvenly: 'Distribute items evenly',
+  /**
+   *@description Context menu item in Elements panel to explain flexbox via AI.
+   */
+  explainFlexbox: 'Explain flexbox',
+  /**
+   *@description Context menu item in Elements panel to align grid items via AI.
+   */
+  alignItems: 'Align items',
+  /**
+   *@description Context menu item in Elements panel to add padding/gap to grid via AI.
+   */
+  addPadding: 'Add padding',
+  /**
+   *@description Context menu item in Elements panel to explain grid layout via AI.
+   */
+  explainGridLayout: 'Explain grid layout',
+  /**
+   *@description Context menu item in Elements panel to find grid definition for a subgrid item via AI.
+   */
+  findGridDefinition: 'Find grid definition',
+  /**
+   *@description Context menu item in Elements panel to change parent grid properties for a subgrid item via AI.
+   */
+  changeParentProperties: 'Change parent properties',
+  /**
+   *@description Context menu item in Elements panel to explain subgrids via AI.
+   */
+  explainSubgrids: 'Explain subgrids',
+  /**
+   *@description Context menu item in Elements panel to remove scrollbars via AI.
+   */
+  removeScrollbars: 'Remove scrollbars',
+  /**
+   *@description Context menu item in Elements panel to style scrollbars via AI.
+   */
+  styleScrollbars: 'Style scrollbars',
+  /**
+   *@description Context menu item in Elements panel to explain scrollbars via AI.
+   */
+  explainScrollbars: 'Explain scrollbars',
+  /**
+   *@description Context menu item in Elements panel to explain container queries via AI.
+   */
+  explainContainerQueries: 'Explain container queries',
+  /**
+   *@description Context menu item in Elements panel to explain container types via AI.
+   */
+  explainContainerTypes: 'Explain container types',
+  /**
+   *@description Context menu item in Elements panel to explain container context via AI.
+   */
+  explainContainerContext: 'Explain container context',
 } as const;
 const str_ = i18n.i18n.registerUIStrings('panels/elements/ElementsTreeElement.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
@@ -554,7 +636,7 @@ export class ElementsTreeElement extends UI.TreeOutline.TreeElement {
     const action = UI.ActionRegistry.ActionRegistry.instance().getAction('freestyler.elements-floating-button');
     if (this.contentElement && !this.aiButtonContainer) {
       this.aiButtonContainer = this.contentElement.createChild('span', 'ai-button-container');
-      const floatingButton = Buttons.FloatingButton.create('smart-assistant', action.title());
+      const floatingButton = Buttons.FloatingButton.create('smart-assistant', action.title(), 'ask-ai');
       floatingButton.addEventListener('click', ev => {
         ev.stopPropagation();
         this.select(true, false);
@@ -744,10 +826,10 @@ export class ElementsTreeElement extends UI.TreeOutline.TreeElement {
   }
 
   private showContextMenu(event: Event): void {
-    this.treeOutline && this.treeOutline.showContextMenu(this, event);
+    this.treeOutline && void this.treeOutline.showContextMenu(this, event);
   }
 
-  populateTagContextMenu(contextMenu: UI.ContextMenu.ContextMenu, event: Event): void {
+  async populateTagContextMenu(contextMenu: UI.ContextMenu.ContextMenu, event: Event): Promise<void> {
     // Add attribute-related actions.
     const treeElement =
         this.isClosingTag() && this.treeOutline ? this.treeOutline.findTreeElement(this.nodeInternal) : this;
@@ -766,7 +848,7 @@ export class ElementsTreeElement extends UI.TreeOutline.TreeElement {
           i18nString(UIStrings.editAttribute), this.startEditingAttribute.bind(this, attribute, target),
           {jslogContext: 'edit-attribute'});
     }
-    this.populateNodeContextMenu(contextMenu);
+    await this.populateNodeContextMenu(contextMenu);
     ElementsTreeElement.populateForcedPseudoStateItems(contextMenu, treeElement.node());
     this.populateScrollIntoView(contextMenu);
     contextMenu.viewSection().appendItem(i18nString(UIStrings.focus), async () => {
@@ -794,15 +876,15 @@ export class ElementsTreeElement extends UI.TreeOutline.TreeElement {
         {jslogContext: 'scroll-into-view'});
   }
 
-  populateTextContextMenu(contextMenu: UI.ContextMenu.ContextMenu, textNode: Element): void {
+  async populateTextContextMenu(contextMenu: UI.ContextMenu.ContextMenu, textNode: Element): Promise<void> {
     if (!this.editing) {
       contextMenu.editSection().appendItem(
           i18nString(UIStrings.editText), this.startEditingTextNode.bind(this, textNode), {jslogContext: 'edit-text'});
     }
-    this.populateNodeContextMenu(contextMenu);
+    return await this.populateNodeContextMenu(contextMenu);
   }
 
-  populateNodeContextMenu(contextMenu: UI.ContextMenu.ContextMenu): void {
+  async populateNodeContextMenu(contextMenu: UI.ContextMenu.ContextMenu): Promise<void> {
     // Add free-form node-related actions.
     const isEditable = this.hasEditableNode();
     // clang-format off
@@ -820,10 +902,159 @@ export class ElementsTreeElement extends UI.TreeOutline.TreeElement {
     }
     let menuItem;
 
-    if (UI.ActionRegistry.ActionRegistry.instance().hasAction('freestyler.element-panel-context')) {
-      contextMenu.footerSection().appendAction(
-          'freestyler.element-panel-context',
-      );
+    const openAiAssistanceId = 'freestyler.element-panel-context';
+    if (UI.ActionRegistry.ActionRegistry.instance().hasAction(openAiAssistanceId)) {
+      function appendSubmenuPromptAction(
+          submenu: UI.ContextMenu.SubMenu, action: UI.ActionRegistration.Action, label: Common.UIString.LocalizedString,
+          prompt: string, jslogContext: string): void {
+        submenu.defaultSection().appendItem(
+            label, () => action.execute({prompt}), {disabled: !action.enabled(), jslogContext});
+      }
+
+      UI.Context.Context.instance().setFlavor(SDK.DOMModel.DOMNode, this.nodeInternal);
+      if (Root.Runtime.hostConfig.devToolsAiSubmenuPrompts?.enabled) {
+        const action = UI.ActionRegistry.ActionRegistry.instance().getAction(openAiAssistanceId);
+        // Register new badge under the `devToolsAiSubmenuPrompts` feature, as the freestyler one is already used in ViewManager.
+        const submenu = contextMenu.footerSection().appendSubMenuItem(
+            action.title(), false, Root.Runtime.hostConfig.devToolsAiSubmenuPrompts?.featureName);
+        submenu.defaultSection().appendAction(openAiAssistanceId, i18nString(UIStrings.startAChat));
+
+        const submenuConfigs = [
+          {
+            condition: (props: SDK.CSSModel.LayoutProperties|null): boolean => Boolean(props?.isFlex),
+            items: [
+              {
+                label: i18nString(UIStrings.wrapTheseItems),
+                prompt: 'How can I make flex items wrap?',
+                jslogContextSuffix: '.flex-wrap',
+              },
+              {
+                label: i18nString(UIStrings.distributeItemsEvenly),
+                prompt: 'How do I distribute flex items evenly?',
+                jslogContextSuffix: '.flex-distribute',
+              },
+              {
+                label: i18nString(UIStrings.explainFlexbox),
+                prompt: 'What is flexbox?',
+                jslogContextSuffix: '.flex-what',
+              },
+            ],
+          },
+          {
+            condition: (props: SDK.CSSModel.LayoutProperties|null): boolean => Boolean(props?.isGrid),
+            items: [
+              {
+                label: i18nString(UIStrings.alignItems),
+                prompt: 'How do I align items in a grid?',
+                jslogContextSuffix: '.grid-align',
+              },
+              {
+                label: i18nString(UIStrings.addPadding),
+                prompt: 'How to add spacing between grid items?',
+                jslogContextSuffix: '.grid-gap',
+              },
+              {
+                label: i18nString(UIStrings.explainGridLayout),
+                prompt: 'How does grid layout work?',
+                jslogContextSuffix: '.grid-how',
+              },
+            ],
+          },
+          {
+            condition: (props: SDK.CSSModel.LayoutProperties|null): boolean => Boolean(props?.isSubgrid),
+            items: [
+              {
+                label: i18nString(UIStrings.findGridDefinition),
+                prompt: 'Where is this grid defined?',
+                jslogContextSuffix: '.subgrid-where',
+              },
+              {
+                label: i18nString(UIStrings.changeParentProperties),
+                prompt: 'How to overwrite parent grid properties?',
+                jslogContextSuffix: '.subgrid-override',
+              },
+              {
+                label: i18nString(UIStrings.explainSubgrids),
+                prompt: 'How do subgrids work?',
+                jslogContextSuffix: '.subgrid-how',
+              },
+            ],
+          },
+          {
+            condition: (props: SDK.CSSModel.LayoutProperties|null): boolean => Boolean(props?.hasScroll),
+            items: [
+              {
+                label: i18nString(UIStrings.removeScrollbars),
+                prompt: 'How do I remove scrollbars for this element?',
+                jslogContextSuffix: '.scroll-remove',
+              },
+              {
+                label: i18nString(UIStrings.styleScrollbars),
+                prompt: 'How can I style a scrollbar?',
+                jslogContextSuffix: '.scroll-style',
+              },
+              {
+                label: i18nString(UIStrings.explainScrollbars),
+                prompt: 'Why does this element scroll?',
+                jslogContextSuffix: '.scroll-why',
+              },
+            ],
+          },
+          {
+            condition: (props: SDK.CSSModel.LayoutProperties|null): boolean => Boolean(props?.isContainer),
+            items: [
+              {
+                label: i18nString(UIStrings.explainContainerQueries),
+                prompt: 'What are container queries?',
+                jslogContextSuffix: '.container-what',
+              },
+              {
+                label: i18nString(UIStrings.explainContainerTypes),
+                prompt: 'How do I use container-type?',
+                jslogContextSuffix: '.container-how',
+              },
+              {
+                label: i18nString(UIStrings.explainContainerContext),
+                prompt: 'What\'s the container context for this element?',
+                jslogContextSuffix: '.container-context',
+              },
+            ],
+          },
+          {
+            // Default items
+            condition: (): boolean => true,
+            items: [
+              {
+                label: i18nString(UIStrings.assessVisibility),
+                prompt: 'Why isn’t this element visible?',
+                jslogContextSuffix: '.visibility',
+              },
+              {
+                label: i18nString(UIStrings.centerElement),
+                prompt: 'How do I center this element?',
+                jslogContextSuffix: '.center',
+              },
+            ],
+          },
+        ];
+
+        const layoutProps =
+            await this.nodeInternal.domModel().cssModel().getLayoutPropertiesFromComputedStyle(this.nodeInternal.id);
+        const config = submenuConfigs.find(c => c.condition(layoutProps));
+        if (config) {
+          for (const item of config.items) {
+            appendSubmenuPromptAction(
+                submenu, action, item.label, item.prompt, openAiAssistanceId + item.jslogContextSuffix);
+          }
+        }
+      } else if (Root.Runtime.hostConfig.devToolsAiDebugWithAi?.enabled) {
+        // Register new badge under the `devToolsAiDebugWithAi` feature, as the freestyler one is already used in ViewManager.
+        contextMenu.footerSection().appendAction(
+            openAiAssistanceId, undefined, false, undefined,
+            Root.Runtime.hostConfig.devToolsAiDebugWithAi?.featureName);
+      } else {
+        contextMenu.footerSection().appendAction(openAiAssistanceId);
+      }
     }
 
     menuItem = contextMenu.clipboardSection().appendItem(
@@ -855,12 +1086,12 @@ export class ElementsTreeElement extends UI.TreeOutline.TreeElement {
           i18nString(UIStrings.copyFullXpath), this.copyFullXPath.bind(this), {jslogContext: 'copy-full-xpath'});
     }
 
-    if (!isShadowRoot) {
-      menuItem = copyMenu.clipboardSection().appendItem(
-          i18nString(UIStrings.copyElement), treeOutline.performCopyOrCut.bind(treeOutline, false, this.nodeInternal),
-          {jslogContext: 'copy-element'});
-      menuItem.setShortcut(createShortcut('C', modifier));
+    menuItem = copyMenu.clipboardSection().appendItem(
+        i18nString(UIStrings.copyElement),
+        treeOutline.performCopyOrCut.bind(treeOutline, false, this.nodeInternal, true), {jslogContext: 'copy-element'});
+    menuItem.setShortcut(createShortcut('C', modifier));
 
+    if (!isShadowRoot) {
       // Duplicate element, disabled on root element and ShadowDOM.
       const isRootElement = !this.nodeInternal.parentNode || this.nodeInternal.parentNode.nodeName() === '#document';
       menuItem = contextMenu.editSection().appendItem(
@@ -1427,7 +1658,7 @@ export class ElementsTreeElement extends UI.TreeOutline.TreeElement {
     return tags.length === 1 ? null : tags[tags.length - 1];
   }
 
-  updateTitle(updateRecord?: UpdateRecord|null): void {
+  updateTitle(updateRecord?: Elements.ElementUpdateRecord.ElementUpdateRecord|null): void {
     // If we are editing, return early to prevent canceling the edit.
     // After editing is committed updateTitle will be called.
     if (this.editing) {
@@ -1609,8 +1840,9 @@ export class ElementsTreeElement extends UI.TreeOutline.TreeElement {
   }
 
   private buildAttributeDOM(
-      parentElement: Element|DocumentFragment, name: string, value: string, updateRecord: UpdateRecord|null,
-      forceValue?: boolean, node?: SDK.DOMModel.DOMNode): HTMLElement {
+      parentElement: Element|DocumentFragment, name: string, value: string,
+      updateRecord: Elements.ElementUpdateRecord.ElementUpdateRecord|null, forceValue?: boolean,
+      node?: SDK.DOMModel.DOMNode): HTMLElement {
     const closingPunctuationRegex = /[\/;:\)\]\}]/g;
     let highlightIndex = 0;
     let highlightCount = 0;
@@ -1799,7 +2031,7 @@ export class ElementsTreeElement extends UI.TreeOutline.TreeElement {
 
   private buildTagDOM(
       parentElement: DocumentFragment, tagName: string, isClosingTag: boolean, isDistinctTreeElement: boolean,
-      updateRecord: UpdateRecord|null): void {
+      updateRecord: Elements.ElementUpdateRecord.ElementUpdateRecord|null): void {
     const node = this.nodeInternal;
     const classes = ['webkit-html-tag'];
     if (isClosingTag && isDistinctTreeElement) {
@@ -1838,7 +2070,7 @@ export class ElementsTreeElement extends UI.TreeOutline.TreeElement {
     }
   }
 
-  private nodeTitleInfo(updateRecord: UpdateRecord|null): DocumentFragment {
+  private nodeTitleInfo(updateRecord: Elements.ElementUpdateRecord.ElementUpdateRecord|null): DocumentFragment {
     const node = this.nodeInternal;
     const titleDOM = document.createDocumentFragment();
     const updateSearchHighlight = (): void => {
@@ -2215,7 +2447,7 @@ export class ElementsTreeElement extends UI.TreeOutline.TreeElement {
   }
 
   /**
-   * @param adornerType optional type of adorner to remove. If not provided, remove all adorners.
+   * @param adornerType - optional type of adorner to remove. If not provided, remove all adorners.
    */
   removeAdornersByType(adornerType?: ElementsComponents.AdornerManager.RegisteredAdorners): void {
     if (!isOpeningTag(this.tagTypeContext)) {
@@ -2267,26 +2499,60 @@ export class ElementsTreeElement extends UI.TreeOutline.TreeElement {
     for (const styleAdorner of this.tagTypeContext.styleAdorners) {
       this.removeAdorner(styleAdorner, this.tagTypeContext);
     }
-    if (!layout) {
-      return;
-    }
-
-    if (layout.isGrid) {
-      this.pushGridAdorner(this.tagTypeContext, layout.isSubgrid);
-    }
-    if (layout.isFlex) {
-      this.pushFlexAdorner(this.tagTypeContext);
-    }
-    if (layout.hasScroll) {
-      this.pushScrollSnapAdorner(this.tagTypeContext);
-    }
-    if (layout.isContainer) {
-      this.pushContainerAdorner(this.tagTypeContext);
+    if (layout) {
+      if (layout.isGrid) {
+        this.pushGridAdorner(this.tagTypeContext, layout.isSubgrid);
+      }
+      if (layout.isFlex) {
+        this.pushFlexAdorner(this.tagTypeContext);
+      }
+      if (layout.hasScroll) {
+        this.pushScrollSnapAdorner(this.tagTypeContext);
+      }
+      if (layout.isContainer) {
+        this.pushContainerAdorner(this.tagTypeContext);
+      }
     }
 
     if (node.isMediaNode()) {
       this.pushMediaAdorner(this.tagTypeContext);
     }
+
+    if (node.attributes().find(attr => attr.name === 'popover')) {
+      this.pushPopoverAdorner(this.tagTypeContext);
+    }
+  }
+
+  pushPopoverAdorner(context: OpeningTagContext): void {
+    if (!Root.Runtime.hostConfig.devToolsAllowPopoverForcing?.enabled) {
+      return;
+    }
+    const node = this.node();
+    const nodeId = node.id;
+
+    const config = ElementsComponents.AdornerManager.getRegisteredAdorner(
+        ElementsComponents.AdornerManager.RegisteredAdorners.POPOVER);
+    const adorner = this.adorn(config);
+    const onClick = async(): Promise<void> => {
+      const {nodeIds} = await node.domModel().agent.invoke_forceShowPopover({nodeId, enable: adorner.isActive()});
+      for (const closedPopoverNodeId of nodeIds) {
+        const node = this.node().domModel().nodeForId(closedPopoverNodeId);
+        const treeElement = node && this.treeOutline?.treeElementByNode.get(node);
+        if (!treeElement || !isOpeningTag(treeElement.tagTypeContext)) {
+          return;
+        }
+        const adorner = treeElement.tagTypeContext.adorners.values().find(adorner => adorner.name === config.name);
+        adorner?.toggle(false);
+      }
+    };
+    adorner.addInteraction(onClick, {
+      isToggle: true,
+      shouldPropagateOnKeydown: false,
+      ariaLabelDefault: i18nString(UIStrings.forceOpenPopover),
+      ariaLabelActive: i18nString(UIStrings.stopForceOpenPopover),
+    });
+
+    context.styleAdorners.add(adorner);
   }
 
   pushGridAdorner(context: OpeningTagContext, isSubgrid: boolean): void {

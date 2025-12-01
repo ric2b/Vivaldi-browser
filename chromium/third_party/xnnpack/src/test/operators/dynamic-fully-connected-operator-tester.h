@@ -3,7 +3,8 @@
 // This source code is licensed under the BSD-style license found in the
 // LICENSE file in the root directory of this source tree.
 
-#pragma once
+#ifndef XNNPACK_TEST_OPERATORS_DYNAMIC_FULLY_CONNECTED_OPERATOR_TESTER_H_
+#define XNNPACK_TEST_OPERATORS_DYNAMIC_FULLY_CONNECTED_OPERATOR_TESTER_H_
 
 #include <algorithm>
 #include <cassert>
@@ -219,15 +220,13 @@ class DynamicFullyConnectedOperatorTester {
                                           xnn_delete_operator);
 
       size_t workspace_size = 0;
-      size_t workspace_alignment = 0;
       ASSERT_EQ(
           xnn_status_success,
           xnn_reshape_dynamic_fully_connected_nc_f16(
               dynamic_fully_connected_op, batch_size(), input_channels(),
               output_channels(), input_stride(), output_stride(),
-              &workspace_size, &workspace_alignment, /*threadpool=*/nullptr));
+              &workspace_size, /*threadpool=*/nullptr));
       ASSERT_NE(workspace_size, 0);
-      ASSERT_LE(workspace_alignment, XNN_ALLOCATION_ALIGNMENT);
       xnnpack::Buffer<char, XNN_ALLOCATION_ALIGNMENT> workspace(workspace_size);
       // TODO(b/372731180): This should probably be initialized by the operator.
       std::fill(workspace.begin(), workspace.end(), 0);
@@ -352,15 +351,13 @@ class DynamicFullyConnectedOperatorTester {
                                           xnn_delete_operator);
 
       size_t workspace_size = 0;
-      size_t workspace_alignment = 0;
       ASSERT_EQ(
           xnn_status_success,
           xnn_reshape_dynamic_fully_connected_nc_f32(
               dynamic_fully_connected_op, batch_size(), input_channels(),
               output_channels(), input_stride(), output_stride(),
-              &workspace_size, &workspace_alignment, /*threadpool=*/nullptr));
+              &workspace_size, /*threadpool=*/nullptr));
       ASSERT_NE(workspace_size, 0);
-      ASSERT_LE(workspace_alignment, XNN_ALLOCATION_ALIGNMENT);
       xnnpack::Buffer<char, XNN_ALLOCATION_ALIGNMENT> workspace(workspace_size);
       // TODO(b/372731180): This should probably be initialized by the operator.
       std::fill(workspace.begin(), workspace.end(), 0);
@@ -408,3 +405,5 @@ class DynamicFullyConnectedOperatorTester {
   bool has_bias_{true};
   size_t iterations_{1};
 };
+
+#endif  // XNNPACK_TEST_OPERATORS_DYNAMIC_FULLY_CONNECTED_OPERATOR_TESTER_H_

@@ -167,7 +167,6 @@ TEST(CoreTest, DisconnectFailsWithEmptyEndpoint) {
   EXPECT_EQ(final_status.value, Status::kEndpointUnknown);
 }
 
-
 TEST(CoreTest, SendPayloadCallsScRouter) {
   MockServiceControllerRouter mock_controller;
   // Called when Core is destroyed.
@@ -240,7 +239,7 @@ TEST(CoreV3Test, TestCallbackWrapWorksStartAdvertisingV3FourArgs) {
   EXPECT_CALL(mock_controller, StartAdvertising)
       .WillOnce([&](ClientProxy*, absl::string_view, const AdvertisingOptions&,
                     const ConnectionRequestInfo& info, const ResultCallback&) {
-        NEARBY_LOGS(INFO) << "StartAdvertising called";
+        LOG(INFO) << "StartAdvertising called";
         ASSERT_FALSE(info.endpoint_info.Empty());
         // call all callbacks to make sure it all gets called correctly.
         info.listener.initiated_cb("FAKE", {});
@@ -251,7 +250,7 @@ TEST(CoreV3Test, TestCallbackWrapWorksStartAdvertisingV3FourArgs) {
       });
   EXPECT_CALL(mock_controller, StopAllEndpoints)
       .WillOnce([&](ClientProxy* client, ResultCallback callback) {
-        NEARBY_LOGS(INFO) << "StopAllEndpoints called";
+        LOG(INFO) << "StopAllEndpoints called";
         callback({Status::kSuccess});
       });
   Core core{&mock_controller};
@@ -297,7 +296,7 @@ TEST(CoreV3Test, TestStartAdvertisingV3NonConnectionsDeviceProvider) {
   EXPECT_CALL(mock_controller, StartAdvertising)
       .WillOnce([&](ClientProxy*, absl::string_view, const AdvertisingOptions&,
                     const ConnectionRequestInfo& info, ResultCallback) {
-        NEARBY_LOGS(INFO) << "StartAdvertising called";
+        LOG(INFO) << "StartAdvertising called";
         ASSERT_TRUE(info.endpoint_info.Empty());
         // call all callbacks to make sure it all gets called correctly.
         info.listener.initiated_cb("FAKE", {});
@@ -308,7 +307,7 @@ TEST(CoreV3Test, TestStartAdvertisingV3NonConnectionsDeviceProvider) {
       });
   EXPECT_CALL(mock_controller, StopAllEndpoints)
       .WillOnce([&](ClientProxy* client, ResultCallback callback) {
-        NEARBY_LOGS(INFO) << "StopAllEndpoints called";
+        LOG(INFO) << "StopAllEndpoints called";
         callback({Status::kSuccess});
       });
   Core core{&mock_controller};
@@ -356,7 +355,7 @@ TEST(CoreV3Test, TestStartAdvertisingV3NonConnectionsDevice) {
   EXPECT_CALL(mock_controller, StartAdvertising)
       .WillOnce([&](ClientProxy*, absl::string_view, const AdvertisingOptions&,
                     const ConnectionRequestInfo& info, const ResultCallback&) {
-        NEARBY_LOGS(INFO) << "StartAdvertising called";
+        LOG(INFO) << "StartAdvertising called";
         ASSERT_TRUE(info.endpoint_info.Empty());
         // call all callbacks to make sure it all gets called correctly.
         info.listener.initiated_cb("FAKE", {});
@@ -367,7 +366,7 @@ TEST(CoreV3Test, TestStartAdvertisingV3NonConnectionsDevice) {
       });
   EXPECT_CALL(mock_controller, StopAllEndpoints)
       .WillOnce([&](ClientProxy* client, ResultCallback callback) {
-        NEARBY_LOGS(INFO) << "StopAllEndpoints called";
+        LOG(INFO) << "StopAllEndpoints called";
         callback({Status::kSuccess});
       });
   Core core{&mock_controller};
@@ -414,7 +413,7 @@ TEST(CoreV3Test, TestCallbackWrapWorksStartAdvertisingV3FiveArgs) {
   EXPECT_CALL(mock_controller, StartAdvertising)
       .WillOnce([&](ClientProxy*, absl::string_view, const AdvertisingOptions&,
                     const ConnectionRequestInfo& info, const ResultCallback&) {
-        NEARBY_LOGS(INFO) << "StartAdvertising called";
+        LOG(INFO) << "StartAdvertising called";
         ASSERT_FALSE(info.endpoint_info.Empty());
         // call all callbacks to make sure it all gets called correctly.
         info.listener.initiated_cb("FAKE", {});
@@ -425,7 +424,7 @@ TEST(CoreV3Test, TestCallbackWrapWorksStartAdvertisingV3FiveArgs) {
       });
   EXPECT_CALL(mock_controller, StopAllEndpoints)
       .WillOnce([&](ClientProxy* client, ResultCallback callback) {
-        NEARBY_LOGS(INFO) << "StopAllEndpoints called";
+        LOG(INFO) << "StopAllEndpoints called";
         callback({Status::kSuccess});
       });
   Core core{&mock_controller};
@@ -473,14 +472,14 @@ TEST(CoreV3Test, TestCallbackWrapWorksStartDiscoveryV3) {
       .WillOnce([&](ClientProxy*, absl::string_view, const DiscoveryOptions&,
                     DiscoveryListener listener, const ResultCallback&) {
         // call all callbacks to make sure it all gets called correctly.
-        NEARBY_LOGS(INFO) << "StartDiscovery called";
+        LOG(INFO) << "StartDiscovery called";
         listener.endpoint_distance_changed_cb("FAKE", {});
         listener.endpoint_found_cb("FAKE", ByteArray(), "");
         listener.endpoint_lost_cb("FAKE");
       });
   EXPECT_CALL(mock_controller, StopAllEndpoints)
       .WillOnce([&](ClientProxy* client, ResultCallback callback) {
-        NEARBY_LOGS(INFO) << "StopAllEndpoints called";
+        LOG(INFO) << "StopAllEndpoints called";
         callback({Status::kSuccess});
       });
   v3::DiscoveryOptions options;

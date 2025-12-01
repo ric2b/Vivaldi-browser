@@ -4,7 +4,6 @@
 """The tests for resource detector classes."""
 
 import getpass
-import logging
 import os
 from pathlib import Path
 import platform
@@ -100,7 +99,7 @@ MemTotal: 35 kB
 
 
 def test_memory_info_class_warns_on_unexpected_unit(monkeypatch,
-                                                    caplog) -> None:
+                                                    capsys) -> None:
     proc_meminfo_contents = """
 SwapTotal: 15 mB
 VmallocTotal: 25 gB
@@ -113,10 +112,10 @@ MemTotal: 35 tB
         "read_text",
         mock_read_text(detector.PROC_MEMINFO_PATH, proc_meminfo_contents),
     )
-    caplog.set_level(logging.WARNING)
 
     m = detector.MemoryInfo()
-    assert "Unit for memory consumption in /proc/meminfo" in caplog.text
+    stderr = capsys.readouterr().err
+    assert "Unit for memory consumption in /proc/meminfo" in stderr
     # We do not attempt to correct unexpected units
     assert m.total_swap_memory == 15 * 1024
     assert m.total_physical_ram == 35 * 1024
@@ -139,7 +138,7 @@ SwapTotal: 15
     assert m.total_swap_memory == 15
 
 
-def test_memory_info_class_no_provided_value(monkeypatch, caplog) -> None:
+def test_memory_info_class_no_provided_value(monkeypatch, capsys) -> None:
     proc_meminfo_contents = """
 SwapTotal:
     """
@@ -150,10 +149,10 @@ SwapTotal:
         "read_text",
         mock_read_text(detector.PROC_MEMINFO_PATH, proc_meminfo_contents),
     )
-    caplog.set_level(logging.WARNING)
 
     detector.MemoryInfo()
-    assert "Unexpected /proc/meminfo entry with no label:number" in caplog.text
+    stderr = capsys.readouterr().err
+    assert "Unexpected /proc/meminfo entry with no label:number" in stderr
 
 
 def test_system_info_to_capture_memory_resources(monkeypatch) -> None:

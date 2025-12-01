@@ -94,7 +94,6 @@ class FakeFrameWidget : public blink::mojom::FrameWidget {
       const std::optional<blink::VisualProperties>& visual_properties) override;
 
   // Vivaldi
-  void LoadImageAt(const gfx::Point&) override {}
   void SetImagesEnabled(bool show) override {}
   void SetServeResourceFromCacheOnly(bool load) override {}
 

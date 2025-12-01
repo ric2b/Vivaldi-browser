@@ -29,10 +29,9 @@ use read_fonts::{
 };
 use skrifa::MetadataProvider;
 
-#[allow(unused)]
 pub fn fonts_and_indices(
     file_ref: Option<FileRef>,
-) -> impl Iterator<Item = (FontRef<'_>, Option<i32>)> {
+) -> impl Iterator<Item = (FontRef, Option<i32>)> {
     let (iter_one, iter_two) = match file_ref {
         Some(Font(font)) => (Some((Ok(font.clone()), None)), None),
         Some(Collection(collection)) => (

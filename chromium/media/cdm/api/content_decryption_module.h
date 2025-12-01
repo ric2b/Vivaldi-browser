@@ -5,18 +5,10 @@
 #ifndef CDM_CONTENT_DECRYPTION_MODULE_H_
 #define CDM_CONTENT_DECRYPTION_MODULE_H_
 
+#include <cstdint>
 #include <type_traits>
 
 #include "content_decryption_module_export.h"
-
-#if defined(_MSC_VER)
-typedef unsigned char uint8_t;
-typedef unsigned int uint32_t;
-typedef int int32_t;
-typedef __int64 int64_t;
-#else
-#include <stdint.h>
-#endif
 
 // The version number must be rolled when the exported functions are updated!
 // If the CDM and the adapter use different versions of these functions, the

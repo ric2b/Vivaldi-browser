@@ -23,7 +23,7 @@ ENABLED_REASON_KEY = "enabled_reason"
 TRACE_SECTION_KEY = "trace"
 DEFAULT_CONFIG = {
     ROOT_SECTION_KEY: {
-        NOTICE_COUNTDOWN_KEY: 10
+        NOTICE_COUNTDOWN_KEY: 9
     },
     TRACE_SECTION_KEY: {},
 }
@@ -42,12 +42,14 @@ class TraceConfig:
     def __init__(self, config: configparser.ConfigParser) -> None:
         self._config = config
 
-    def update(self, enabled: bool, reason: Literal["AUTO", "USER"]) -> None:
+        if not self.has_enabled() or self.enabled:
+            self.gen_id()
+
+    def update(self, enabled: bool, reason: Literal["AUTO", "USER",
+                                                    "BOT_USER"]) -> None:
         """Update the config."""
         self._config[TRACE_SECTION_KEY][ENABLED_KEY] = str(enabled)
         self._config[TRACE_SECTION_KEY][ENABLED_REASON_KEY] = reason
-        if enabled:
-            self.gen_id()
 
     def gen_id(self, regen=False) -> None:
         """[Re]generate UUIDs."""
@@ -89,13 +91,17 @@ class TraceConfig:
         """Checks if the enabled property exists in config."""
         return ENABLED_KEY in self._config[TRACE_SECTION_KEY]
 
+    def disabled(self) -> bool:
+        """Checks if the enabled probperty exists and is false"""
+        return self.has_enabled() and not self.enabled
+
     @property
     def enabled(self) -> bool:
         """Value of trace.enabled property in telemetry.cfg."""
         return self._config[TRACE_SECTION_KEY].getboolean(ENABLED_KEY, False)
 
     @property
-    def enabled_reason(self) -> Literal["AUTO", "USER"]:
+    def enabled_reason(self) -> Literal["AUTO", "USER", "BOT_USER"]:
         """Value of trace.enabled_reason property in telemetry.cfg."""
         return self._config[TRACE_SECTION_KEY].get(ENABLED_REASON_KEY, "AUTO")
 
@@ -131,8 +137,7 @@ class RootConfig:
     @property
     def notice_countdown(self) -> int:
         """Value for root.notice_countdown property in telemetry.cfg."""
-
-        return self._config[ROOT_SECTION_KEY].getint(NOTICE_COUNTDOWN_KEY, 10)
+        return self._config[ROOT_SECTION_KEY].getint(NOTICE_COUNTDOWN_KEY, 9)
 
 
 class Config:
@@ -152,17 +157,19 @@ class Config:
         self._trace_config = TraceConfig(self._config)
         self._root_config = RootConfig(self._config)
 
+
     def flush(self) -> None:
         """Flushes the current config to config file."""
 
-        tmpfile = tempfile.NamedTemporaryFile()
-        with open(tmpfile.name, "w", encoding="utf-8") as configfile:
+        tmpDir = tempfile.mkdtemp()
+        tmpfile = Path.joinpath(Path(tmpDir), 'telemetry.cfg')
+        with open(tmpfile, "w", encoding="utf-8") as configfile:
             self._config.write(configfile)
 
         if not self._path.parent.exists():
             self._path.parent.mkdir(parents=True, exist_ok=True)
 
-        shutil.copy(tmpfile.name, self._path)
+        shutil.copy(tmpfile, self._path)
 
     @property
     def root_config(self) -> RootConfig:

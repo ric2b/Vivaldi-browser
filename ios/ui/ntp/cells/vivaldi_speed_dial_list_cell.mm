@@ -202,7 +202,12 @@ const UIEdgeInsets faviconFallbackLabelPadding =
 
 - (void)configureCellWith:(VivaldiSpeedDialItem*)item {
   self.titleLabel.text = item.title;
-  self.urlLabel.text = item.urlString;
+  // Use display URL if available, otherwise fall back to regular URL
+  NSString* displayText = item.displayURL;
+  if (displayText.length == 0) {
+    displayText = item.urlString;
+  }
+  self.urlLabel.text = displayText;
 }
 
 - (void)configureCellWithAttributes:(const FaviconAttributes*)attributes

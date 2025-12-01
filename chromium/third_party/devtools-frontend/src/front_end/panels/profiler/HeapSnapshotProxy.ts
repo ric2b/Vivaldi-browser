@@ -246,10 +246,6 @@ export class HeapSnapshotProxyObject {
     this.worker.disposeObject(this.objectId);
   }
 
-  disposeWorker(): void {
-    this.worker.dispose();
-  }
-
   callFactoryMethod<T extends Object>(methodName: string, proxyConstructor: new(...arg1: any[]) => T, ...args: any[]):
       T {
     return this.worker.callFactoryMethod(null, String(this.objectId), methodName, proxyConstructor, [], ...args);
@@ -450,10 +446,6 @@ export class HeapSnapshotProxy extends HeapSnapshotProxyObject {
 }
 
 export class HeapSnapshotProviderProxy extends HeapSnapshotProxyObject implements ChildrenProvider {
-  constructor(worker: HeapSnapshotWorkerProxy, objectId: number) {
-    super(worker, objectId);
-  }
-
   nodePosition(snapshotObjectId: number): Promise<number> {
     return this.callMethodPromise('nodePosition', snapshotObjectId);
   }

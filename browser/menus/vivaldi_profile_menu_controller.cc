@@ -84,8 +84,29 @@ void ProfileMenuController::Populate(std::u16string label,
   std::vector<ProfileAttributesEntry*> target_profiles_entries;
   CollectTargetProfiles(active_profile_, target_profiles_entries);
 
+  // Add all profiles to the model. The model can be the main context menu or
+  // a sub menu if used has selected that layout in Settings. Default in a sub
+  // menu.
   Ids ids(GetIds(is_image_));
-
+  for (ProfileAttributesEntry* entry : target_profiles_entries) {
+    int menu_index =
+        static_cast<int>(rv_context_menu_->get_profile_link_paths().size());
+    int command_id = ids.first + menu_index;
+    // In extreme cases, we might have more profiles than available
+    // command ids. In that case, just stop creating new entries - the
+    // menu is probably useless at this point already.
+    if (command_id > ids.last) {
+      break;
+    }
+    rv_context_menu_->get_profile_link_paths().push_back(entry->GetPath());
+    menu_model->AddItem(command_id, entry->GetName());
+    SetImage(command_id, menu_model, entry->GetAvatarIcon());
+  }
+  // Kept commented out until we have decided What the best layout is. Code
+  // below will add one profile to the model, or of there is more than one, add
+  // a sub folder and next all profiles to that folder. If user has choosen to
+  // show profiles in a folder, we will get a folder in a folder problem.
+#if 0
   if (target_profiles_entries.size() == 1) {
     int menu_index =
         static_cast<int>(rv_context_menu_->get_profile_link_paths().size());
@@ -116,6 +137,7 @@ void ProfileMenuController::Populate(std::u16string label,
       SetImage(command_id, child_menu_model, entry->GetAvatarIcon());
     }
   }
+#endif
 }
 
 void ProfileMenuController::SetImage(int command_id,

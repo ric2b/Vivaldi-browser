@@ -19,7 +19,8 @@ import $ from "../$.js";
 import {accessor} from "proxy-pants/accessor";
 
 import {getDebugger} from "../introspection/log.js";
-import {toRegExp} from "../utils/general.js";
+import {profile} from "../introspection/profile.js";
+import {formatArguments, toRegExp} from "../utils/general.js";
 
 let {Error, URL} = $(window);
 let {cookie: documentCookies} = accessor(document);
@@ -43,7 +44,9 @@ export function cookieRemover(cookie, autoRemoveCookie = false) {
   if (!cookie)
     throw new Error("[cookie-remover snippet]: No cookie to remove.");
 
+  const formattedArguments = formatArguments(arguments);
   let debugLog = getDebugger("cookie-remover");
+  const {mark, end} = profile("cookie-remover");
   let re = toRegExp(cookie);
 
   // In some cases, when the snippet is executed, the protocol is about:blank
@@ -60,6 +63,7 @@ export function cookieRemover(cookie, autoRemoveCookie = false) {
 
   const mainLogic = () => {
     debugLog("info", "Parsing cookies for matches");
+    mark();
     for (const pair of $(getCookieMatches())) {
       let $hostname = $(location.hostname);
       // We need location.hostname to set the cookie's domain attribute.
@@ -81,9 +85,10 @@ export function cookieRemover(cookie, autoRemoveCookie = false) {
           domainParts.slice(domainParts.length - numDomainParts).join(".");
         documentCookies(`${$(name).trim()}=;${expires};${path};domain=${domain}`);
         documentCookies(`${$(name).trim()}=;${expires};${path};domain=.${domain}`);
-        debugLog("success", `Set expiration date on ${name}`);
+        debugLog("success", `Set expiration date on ${name}`, "\nFILTER: cookie-remover", formattedArguments);
       }
     }
+    end();
   };
 
   mainLogic();

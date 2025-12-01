@@ -40,4 +40,10 @@ extern NSString* const kBadgeButtonSaveCardActionIdentifier;
 extern NSString* const kBadgeButtonTranslateActionIdentifier;
 extern NSString* const kBadgeButtonPermissionsActionIdentifier;
 
+// Vivaldi
+extern NSString* const kBadgeButtonReaderModeActionIdentifier;
+extern NSString* const kBadgeButtonReaderModeAccessibilityIdentifier;
+extern NSString* const kBadgeButtonReaderModeAcceptedAccessibilityIdentifier;
+// End Vivaldi
+
 #endif  // IOS_CHROME_BROWSER_BADGES_UI_BUNDLED_BADGE_CONSTANTS_H_

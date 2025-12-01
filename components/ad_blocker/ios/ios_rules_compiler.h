@@ -1,0 +1,28 @@
+// Copyright (c) 2023 Vivaldi Technologies AS. All rights reserved
+
+#ifndef COMPONENTS_AD_BLOCKER_IOS_IOS_RULES_COMPILER_H_
+#define COMPONENTS_AD_BLOCKER_IOS_IOS_RULES_COMPILER_H_
+
+#include <set>
+
+#include "base/files/file_path.h"
+#include "components/ad_blocker/core/parse_result.h"
+
+namespace adblock_filter {
+// Used in tests
+std::string CompileIosRulesToString(bool allow_strict_blocking,
+                                    const ParseResult& parse_result,
+                                    const RuleSourceSettings& source_settings,
+                                    bool pretty_print);
+
+bool CompileIosRules(bool allow_strict_blocking,
+                     const ParseResult& parse_result,
+                     const RuleSourceSettings& source_settings,
+                     const base::FilePath& output_path,
+                     std::string& checksum);
+
+base::Value CompileExceptionsRule(const std::set<std::string>& exceptions,
+                                  bool process_list);
+}  // namespace adblock_filter
+
+#endif  // COMPONENTS_AD_BLOCKER_IOS_IOS_RULES_COMPILER_H_

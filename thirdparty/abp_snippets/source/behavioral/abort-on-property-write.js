@@ -16,6 +16,8 @@
  */
 
 import {abortOnWrite} from "../utils/execution.js";
+import {formatArguments} from "../utils/general.js";
+import {profile} from "../introspection/profile.js";
 
 /**
  * Patches a property on the window object to abort execution when the
@@ -35,6 +37,14 @@ import {abortOnWrite} from "../utils/execution.js";
  * @since Adblock Plus 3.4.3
  */
 export function abortOnPropertyWrite(property, setConfigurable) {
+  const formattedArguments = formatArguments(arguments);
+  const {mark, end} = profile("abort-on-property-write");
   const configurableFlag = !(setConfigurable === "false");
-  abortOnWrite("abort-on-property-write", window, property, configurableFlag);
+  mark();
+  abortOnWrite("abort-on-property-write",
+               window,
+               property,
+               formattedArguments,
+               configurableFlag);
+  end();
 }

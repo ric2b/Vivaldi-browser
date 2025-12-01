@@ -56,9 +56,7 @@ ResultOrError<Ref<ShaderModuleBase>> CreateShaderModule(
     wgslDesc.code = source;
     ShaderModuleDescriptor descriptor;
     descriptor.nextInChain = &wgslDesc;
-    std::unique_ptr<OwnedCompilationMessages> compilationMessages =
-        std::make_unique<OwnedCompilationMessages>();
-    return device->CreateShaderModule(&descriptor, internalExtensions, &compilationMessages);
+    return device->CreateShaderModule(&descriptor, internalExtensions);
 }
 
 ResultOrError<Ref<BufferBase>> CreateBufferFromData(DeviceBase* device,

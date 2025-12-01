@@ -58,6 +58,14 @@ ukm::SourceId UkmRecorder::GetSourceIdForWebIdentityFromScope(
 }
 
 // static
+ukm::SourceId UkmRecorder::GetSourceIdForWebIdentityFromScope(
+    base::PassKey<login_detection::IdentityProviderMetrics>,
+    const GURL& provider_url) {
+  return UkmRecorder::GetSourceIdFromScopeImpl(provider_url,
+                                               SourceIdType::WEB_IDENTITY_ID);
+}
+
+// static
 ukm::SourceId UkmRecorder::GetSourceIdForRedirectUrl(
     base::PassKey<content::BtmNavigationHandle>,
     const GURL& redirect_url) {
@@ -133,6 +141,14 @@ ukm::SourceId UkmRecorder::GetSourceIdForNotificationEvent(
 // static
 ukm::SourceId UkmRecorder::GetSourceIdForNotificationEvent(
     base::PassKey<NonPersistentNotificationHandler>,
+    const GURL& url) {
+  return UkmRecorder::GetSourceIdFromScopeImpl(url,
+                                               SourceIdType::NOTIFICATION_ID);
+}
+
+// static
+ukm::SourceId UkmRecorder::GetSourceIdForNotificationEvent(
+    base::PassKey<safe_browsing::NotificationContentDetectionUkmUtil>,
     const GURL& url) {
   return UkmRecorder::GetSourceIdFromScopeImpl(url,
                                                SourceIdType::NOTIFICATION_ID);

@@ -17,8 +17,8 @@
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
-#include "base/trace_event/base_tracing.h"
 #include "base/trace_event/named_trigger.h"
+#include "base/trace_event/trace_event.h"
 #include "components/crash/core/common/crash_key.h"
 #include "components/page_load_metrics/browser/navigation_handle_user_data.h"
 #include "components/page_load_metrics/browser/observers/core/largest_contentful_paint_handler.h"
@@ -30,6 +30,7 @@
 #include "components/page_load_metrics/google/browser/histogram_suffixes.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/site_instance.h"
+#include "net/http/http_connection_info.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
 
@@ -126,6 +127,37 @@ const char kHistogramGWSConnectionReuseStatus[] =
     HISTOGRAM_PREFIX "ConnectionReuseStatus";
 const char kHistogramIncognitoSuffix[] = ".Incognito";
 
+// Prerender related histograms.
+const char kHistogramPrerenderHostReused[] =
+    HISTOGRAM_PREFIX "Prerender.HostReused";
+
+// ServiceWorker related histograms.
+const char kHistogramServiceWorkerParseStartSearch[] =
+    "PageLoad.Clients.ServiceWorker2.ParseTiming.NavigationToParseStart.search";
+const char kHistogramServiceWorkerFirstContentfulPaintSearch[] =
+    "PageLoad.Clients.ServiceWorker2.PaintTiming."
+    "NavigationToFirstContentfulPaint.search";
+const char kHistogramServiceWorkerParseStartToFirstContentfulPaintSearch[] =
+    "PageLoad.Clients.ServiceWorker2.PaintTiming."
+    "ParseStartToFirstContentfulPaint.search";
+const char kHistogramServiceWorkerDomContentLoadedSearch[] =
+    "PageLoad.Clients.ServiceWorker2.DocumentTiming."
+    "NavigationToDOMContentLoadedEventFired.search";
+const char kHistogramServiceWorkerLoadSearch[] =
+    "PageLoad.Clients.ServiceWorker2.DocumentTiming.NavigationToLoadEventFired."
+    "search";
+const char kHistogramNoServiceWorkerFirstContentfulPaintSearch[] =
+    "PageLoad.Clients.NoServiceWorker2.PaintTiming."
+    "NavigationToFirstContentfulPaint.search";
+const char kHistogramNoServiceWorkerParseStartToFirstContentfulPaintSearch[] =
+    "PageLoad.Clients.NoServiceWorker2.PaintTiming."
+    "ParseStartToFirstContentfulPaint.search";
+const char kHistogramNoServiceWorkerDomContentLoadedSearch[] =
+    "PageLoad.Clients.NoServiceWorker2.DocumentTiming."
+    "NavigationToDOMContentLoadedEventFired.search";
+const char kHistogramNoServiceWorkerLoadSearch[] =
+    "PageLoad.Clients.NoServiceWorker2.DocumentTiming."
+    "NavigationToLoadEventFired.search";
 }  // namespace internal
 
 namespace {
@@ -203,17 +235,20 @@ GWSPageLoadMetricsObserver::OnCommit(
     content::NavigationHandle* navigation_handle) {
   const bool is_gws_url =
       page_load_metrics::IsGoogleSearchResultUrl(navigation_handle->GetURL());
-  if (is_first_navigation_) {
+  if (!is_prerendered_ && is_first_navigation_) {
     base::UmaHistogramBoolean(internal::kHistogramGWSIsFirstNavigationForGWS,
                               is_gws_url);
   }
   if (!is_gws_url) {
     return STOP_OBSERVING;
   }
-
   navigation_handle_timing_ = navigation_handle->GetNavigationHandleTiming();
   was_cached_ = navigation_handle->WasResponseCached();
-  RecordPreCommitHistograms();
+  http_connection_info_ =
+      net::HttpConnectionInfoToCoarse(navigation_handle->GetConnectionInfo());
+  if (!is_prerendered_) {
+    RecordPreCommitHistograms();
+  }
 
   return CONTINUE_OBSERVING;
 }
@@ -222,8 +257,24 @@ page_load_metrics::PageLoadMetricsObserver::ObservePolicy
 GWSPageLoadMetricsObserver::OnPrerenderStart(
     content::NavigationHandle* navigation_handle,
     const GURL& currently_committed_url) {
-  // TODO(crbug.com/40222513): Handle Prerendering cases.
-  return STOP_OBSERVING;
+  is_prerendered_ = true;
+  // TODO(crbug.com/40222513): Currently, we do not record most metrics for
+  // prerendered pages. Consider and enable metrics for prerender as well.
+  return CONTINUE_OBSERVING;
+}
+
+void GWSPageLoadMetricsObserver::DidActivatePrerenderedPage(
+    content::NavigationHandle* navigation_handle) {
+  CHECK(is_prerendered_);
+  // We record the prerender host reuse status.
+  base::UmaHistogramBoolean(internal::kHistogramPrerenderHostReused,
+                            navigation_handle->IsPrerenderHostReused());
+  if (IsIncognitoProfile()) {
+    auto histogram_name = base::StrCat({internal::kHistogramPrerenderHostReused,
+                                        internal::kHistogramIncognitoSuffix});
+    base::UmaHistogramBoolean(histogram_name,
+                              navigation_handle->IsPrerenderHostReused());
+  }
 }
 
 page_load_metrics::PageLoadMetricsObserver::ObservePolicy
@@ -242,9 +293,64 @@ void GWSPageLoadMetricsObserver::OnFirstContentfulPaintInPage(
           timing.paint_timing->first_contentful_paint, GetDelegate())) {
     return;
   }
+  CHECK(!is_prerendered_);
+
+  if (page_load_metrics::IsServiceWorkerControlled(GetDelegate())) {
+    PAGE_LOAD_HISTOGRAM(
+        internal::kHistogramServiceWorkerFirstContentfulPaintSearch,
+        timing.paint_timing->first_contentful_paint.value());
+    PAGE_LOAD_HISTOGRAM(
+        internal::kHistogramServiceWorkerParseStartToFirstContentfulPaintSearch,
+        timing.paint_timing->first_contentful_paint.value() -
+            timing.parse_timing->parse_start.value());
+  } else {
+    PAGE_LOAD_HISTOGRAM(
+        internal::kHistogramNoServiceWorkerFirstContentfulPaintSearch,
+        timing.paint_timing->first_contentful_paint.value());
+    PAGE_LOAD_HISTOGRAM(
+        internal::
+            kHistogramNoServiceWorkerParseStartToFirstContentfulPaintSearch,
+        timing.paint_timing->first_contentful_paint.value() -
+            timing.parse_timing->parse_start.value());
+  }
 
   PAGE_LOAD_HISTOGRAM(internal::kHistogramGWSFirstContentfulPaint,
                       timing.paint_timing->first_contentful_paint.value());
+}
+
+void GWSPageLoadMetricsObserver::OnDomContentLoadedEventStart(
+    const page_load_metrics::mojom::PageLoadTiming& timing) {
+  if (!page_load_metrics::WasStartedInForegroundOptionalEventInForeground(
+          timing.document_timing->dom_content_loaded_event_start,
+          GetDelegate())) {
+    return;
+  }
+
+  if (page_load_metrics::IsServiceWorkerControlled(GetDelegate())) {
+    PAGE_LOAD_HISTOGRAM(
+        internal::kHistogramServiceWorkerDomContentLoadedSearch,
+        timing.document_timing->dom_content_loaded_event_start.value());
+  } else {
+    PAGE_LOAD_HISTOGRAM(
+        internal::kHistogramNoServiceWorkerDomContentLoadedSearch,
+        timing.document_timing->dom_content_loaded_event_start.value());
+  }
+}
+
+void GWSPageLoadMetricsObserver::OnLoadEventStart(
+    const page_load_metrics::mojom::PageLoadTiming& timing) {
+  if (!page_load_metrics::WasStartedInForegroundOptionalEventInForeground(
+          timing.document_timing->load_event_start, GetDelegate())) {
+    return;
+  }
+
+  if (page_load_metrics::IsServiceWorkerControlled(GetDelegate())) {
+    PAGE_LOAD_HISTOGRAM(internal::kHistogramServiceWorkerLoadSearch,
+                        timing.document_timing->load_event_start.value());
+  } else {
+    PAGE_LOAD_HISTOGRAM(internal::kHistogramNoServiceWorkerLoadSearch,
+                        timing.document_timing->load_event_start.value());
+  }
 }
 
 void GWSPageLoadMetricsObserver::OnParseStart(
@@ -253,8 +359,13 @@ void GWSPageLoadMetricsObserver::OnParseStart(
           timing.parse_timing->parse_start, GetDelegate())) {
     return;
   }
+  CHECK(!is_prerendered_);
   PAGE_LOAD_HISTOGRAM(internal::kHistogramGWSParseStart,
                       timing.parse_timing->parse_start.value());
+  if (page_load_metrics::IsServiceWorkerControlled(GetDelegate())) {
+    PAGE_LOAD_HISTOGRAM(internal::kHistogramServiceWorkerParseStartSearch,
+                        timing.parse_timing->parse_start.value());
+  }
 }
 
 void GWSPageLoadMetricsObserver::OnConnectStart(
@@ -263,6 +374,7 @@ void GWSPageLoadMetricsObserver::OnConnectStart(
           timing.connect_start, GetDelegate())) {
     return;
   }
+  CHECK(!is_prerendered_);
   PAGE_LOAD_HISTOGRAM(AddHistogramSuffix(internal::kHistogramGWSConnectStart),
                       timing.connect_start.value());
 }
@@ -273,6 +385,7 @@ void GWSPageLoadMetricsObserver::OnDomainLookupStart(
           timing.domain_lookup_timing->domain_lookup_start, GetDelegate())) {
     return;
   }
+  CHECK(!is_prerendered_);
   PAGE_LOAD_HISTOGRAM(
       AddHistogramSuffix(internal::kHistogramGWSDomainLookupStart),
       timing.domain_lookup_timing->domain_lookup_start.value());
@@ -284,6 +397,7 @@ void GWSPageLoadMetricsObserver::OnDomainLookupEnd(
           timing.domain_lookup_timing->domain_lookup_end, GetDelegate())) {
     return;
   }
+  CHECK(!is_prerendered_);
   PAGE_LOAD_HISTOGRAM(
       AddHistogramSuffix(internal::kHistogramGWSDomainLookupEnd),
       timing.domain_lookup_timing->domain_lookup_end.value());
@@ -291,6 +405,10 @@ void GWSPageLoadMetricsObserver::OnDomainLookupEnd(
 
 void GWSPageLoadMetricsObserver::OnComplete(
     const page_load_metrics::mojom::PageLoadTiming& timing) {
+  if (is_prerendered_) {
+    return;
+  }
+
   const base::TimeTicks navigation_start = GetDelegate().GetNavigationStart();
   if (!navigation_start.is_null()) {
     PAGE_LOAD_HISTOGRAM(internal::kHistogramGWSNavigationStartToOnComplete,
@@ -302,6 +420,9 @@ void GWSPageLoadMetricsObserver::OnComplete(
 void GWSPageLoadMetricsObserver::OnCustomUserTimingMarkObserved(
     const std::vector<page_load_metrics::mojom::CustomUserTimingMarkPtr>&
         timings) {
+  if (is_prerendered_) {
+    return;
+  }
   for (const auto& mark : timings) {
     if (mark->mark_name == internal::kGwsAFTStartMarkName) {
       PAGE_LOAD_HISTOGRAM(internal::kHistogramGWSAFTStart, mark->start_time);
@@ -331,11 +452,15 @@ void GWSPageLoadMetricsObserver::OnCustomUserTimingMarkObserved(
 page_load_metrics::PageLoadMetricsObserver::ObservePolicy
 GWSPageLoadMetricsObserver::FlushMetricsOnAppEnterBackground(
     const page_load_metrics::mojom::PageLoadTiming& timing) {
-  LogMetricsOnComplete();
+  if (!is_prerendered_) {
+    LogMetricsOnComplete();
+  }
   return STOP_OBSERVING;
 }
 
 void GWSPageLoadMetricsObserver::LogMetricsOnComplete() {
+  CHECK(!is_prerendered_);
+
   const page_load_metrics::ContentfulPaintTimingInfo&
       all_frames_largest_contentful_paint =
           GetDelegate()
@@ -362,6 +487,7 @@ void GWSPageLoadMetricsObserver::LogMetricsOnComplete() {
 }
 
 void GWSPageLoadMetricsObserver::RecordNavigationTimingHistograms() {
+  CHECK(!is_prerendered_);
   const base::TimeTicks navigation_start_time =
       GetDelegate().GetNavigationStart();
   const content::NavigationHandleTiming& timing = navigation_handle_timing_;
@@ -406,24 +532,33 @@ void GWSPageLoadMetricsObserver::RecordNavigationTimingHistograms() {
         timing.first_request_start_time - *timing.first_fetch_start_time);
   }
 
-  PAGE_LOAD_SHORT_HISTOGRAM(
+  auto protocol = net::HttpConnectionInfoCoarseToString(http_connection_info_);
+  auto record_histogram_with_suffix =
+      [&protocol](const std::string& histogram_name, base::TimeDelta timing) {
+        auto histogram_with_suffix = base::StrCat({histogram_name, protocol});
+        PAGE_LOAD_SHORT_HISTOGRAM(histogram_name, timing);
+        PAGE_LOAD_SHORT_HISTOGRAM(histogram_with_suffix, timing);
+      };
+
+  record_histogram_with_suffix(
       internal::kHistogramGWSConnectTimingFirstRequestDomainLookupDelay,
       timing.first_request_domain_lookup_delay);
-  PAGE_LOAD_SHORT_HISTOGRAM(
+  record_histogram_with_suffix(
       internal::kHistogramGWSConnectTimingFirstRequestConnectDelay,
       timing.first_request_connect_delay);
-  PAGE_LOAD_SHORT_HISTOGRAM(
+  record_histogram_with_suffix(
       internal::kHistogramGWSConnectTimingFirstRequestSslDelay,
       timing.first_request_ssl_delay);
-  PAGE_LOAD_SHORT_HISTOGRAM(
+  record_histogram_with_suffix(
       internal::kHistogramGWSConnectTimingFinalRequestDomainLookupDelay,
       timing.final_request_domain_lookup_delay);
-  PAGE_LOAD_SHORT_HISTOGRAM(
+  record_histogram_with_suffix(
       internal::kHistogramGWSConnectTimingFinalRequestConnectDelay,
       timing.final_request_connect_delay);
-  PAGE_LOAD_SHORT_HISTOGRAM(
+  record_histogram_with_suffix(
       internal::kHistogramGWSConnectTimingFinalRequestSslDelay,
       timing.final_request_ssl_delay);
+
   PAGE_LOAD_SHORT_HISTOGRAM(internal::kHistogramGWSCreateStreamDelay,
                             timing.create_stream_delay);
   PAGE_LOAD_SHORT_HISTOGRAM(internal::kHistogramGWSConnectedCallbackDelay,
@@ -472,6 +607,7 @@ void GWSPageLoadMetricsObserver::RecordNavigationTimingHistograms() {
 }
 
 void GWSPageLoadMetricsObserver::RecordPreCommitHistograms() {
+  CHECK(!is_prerendered_);
   base::UmaHistogramEnumeration(internal::kHistogramGWSNavigationSourceType,
                                 source_type_);
   if (!was_cached_) {
@@ -481,6 +617,7 @@ void GWSPageLoadMetricsObserver::RecordPreCommitHistograms() {
 
 void GWSPageLoadMetricsObserver::RecordConnectionReuseHistograms() {
   DCHECK(!was_cached_);
+  CHECK(!is_prerendered_);
 
   const content::NavigationHandleTiming& timing = navigation_handle_timing_;
   ConnectionReuseStatus status = ConnectionReuseStatus::kNonReuse;
@@ -494,11 +631,21 @@ void GWSPageLoadMetricsObserver::RecordConnectionReuseHistograms() {
   }
   base::UmaHistogramEnumeration(internal::kHistogramGWSConnectionReuseStatus,
                                 status);
+
+  auto protocol = net::HttpConnectionInfoCoarseToString(http_connection_info_);
+  auto total_histogram_name =
+      base::StrCat({internal::kHistogramGWSConnectionReuseStatus, protocol});
+  base::UmaHistogramEnumeration(total_histogram_name, status);
+
   if (IsIncognitoProfile()) {
-    auto histogram_name =
+    auto histogram_name_with_incognito_suffix =
         base::StrCat({internal::kHistogramGWSConnectionReuseStatus,
                       internal::kHistogramIncognitoSuffix});
-    base::UmaHistogramEnumeration(histogram_name, status);
+    base::UmaHistogramEnumeration(histogram_name_with_incognito_suffix, status);
+
+    // Record the total histogram with protocol suffix as well.
+    total_histogram_name = base::StrCat({total_histogram_name, protocol});
+    base::UmaHistogramEnumeration(total_histogram_name, status);
   }
 
   switch (status) {
@@ -535,6 +682,7 @@ std::string GWSPageLoadMetricsObserver::AddHistogramSuffix(
 
 void GWSPageLoadMetricsObserver::RecordLatencyHitograms(
     base::TimeTicks response_start_time) {
+  CHECK(!is_prerendered_);
   const auto trace_id =
       TRACE_ID_WITH_SCOPE("GWSLatencyEvent", TRACE_ID_LOCAL(navigation_id_));
   // TODO(crbug.com/364278026): SRT starts from the time when the user submits

@@ -281,6 +281,10 @@ class OmniboxClient {
   // Called when the thumbnail image has been removed.
   virtual void OnThumbnailRemoved() {}
 
+  // Navigates to `gurl` in the current tab. Used for handling activations of
+  // the AI Mode page action icon.
+  virtual void OpenUrl(GURL gurl) {}
+
   // Even though IPH suggestions aren't selectable like normal matches, they can
   // have a 'learn more' or next-steps link. `OpenIphLink()` allows opening
   // these in a new tab.
@@ -288,6 +292,10 @@ class OmniboxClient {
 
   // Returns true if history embeddings is enabled and user has opted in.
   virtual bool IsHistoryEmbeddingsEnabled() const;
+
+  // Optionally warm-up for the default search engine so that we can navigate to
+  // the search result page effectively.
+  virtual void MaybePrewarmForDefaultSearchEngine() {}
 
   virtual base::WeakPtr<OmniboxClient> AsWeakPtr() = 0;
 };

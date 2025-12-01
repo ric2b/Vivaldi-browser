@@ -6,7 +6,7 @@ import type * as Common from '../../../../core/common/common.js';
 import type * as Platform from '../../../../core/platform/platform.js';
 import * as Trace from '../../../../models/trace/trace.js';
 import * as Extensions from '../../../../panels/timeline/extensions/extensions.js';
-import {assertScreenshot, renderElementIntoDOM} from '../../../../testing/DOMHelpers.js';
+import {assertScreenshot, raf, renderElementIntoDOM} from '../../../../testing/DOMHelpers.js';
 import {describeWithEnvironment} from '../../../../testing/EnvironmentHelpers.js';
 import {
   FakeFlameChartProvider,
@@ -14,6 +14,8 @@ import {
   renderFlameChartIntoDOM,
   renderFlameChartWithFakeProvider,
 } from '../../../../testing/TraceHelpers.js';
+import {TraceLoader} from '../../../../testing/TraceLoader.js';
+import * as VisualLogging from '../../../../ui/visual_logging/visual_logging.js';
 
 import * as PerfUI from './perf_ui.js';
 
@@ -74,6 +76,15 @@ describeWithEnvironment('FlameChart', () => {
       });
     }
   }
+  it('adds JSLog context to the canvas element', async () => {
+    const provider = new FakeProvider();
+    const delegate = new MockFlameChartDelegate();
+    chartInstance = new PerfUI.FlameChart.FlameChart(provider, delegate, {canvasVELogContext: 'testing-flamechart'});
+    renderChart(chartInstance);
+    const expected = VisualLogging.canvas('testing-flamechart').track({hover: true}).toString();
+    const canvas = chartInstance.contentElement.querySelector('canvas');
+    assert.strictEqual(canvas?.getAttribute('jslog'), expected);
+  });
 
   it('notifies the delegate when the window has changed', async () => {
     const provider = new FakeProvider();
@@ -244,29 +255,32 @@ describeWithEnvironment('FlameChart', () => {
 
   describe('updateLevelPositions', () => {
     class UpdateLevelPositionsTestProvider extends FakeFlameChartProvider {
+      static data = PerfUI.FlameChart.FlameChartTimelineData.create({
+        entryLevels: [0, 1, 2],
+        entryStartTimes: [5, 60, 80],
+        entryTotalTimes: [50, 10, 10],
+        groups:
+            [
+              {
+                name: 'Test Group 0' as Platform.UIString.LocalizedString,
+                startLevel: 0,
+                style: defaultGroupStyle,
+              },
+              {
+                name: 'Test Group 1' as Platform.UIString.LocalizedString,
+                startLevel: 1,
+                style: defaultGroupStyle,
+              },
+              {
+                name: 'Test Group 2' as Platform.UIString.LocalizedString,
+                startLevel: 2,
+                style: {...defaultGroupStyle, collapsible: true, nestingLevel: 1},
+              },
+            ],
+      });
+
       override timelineData(): PerfUI.FlameChart.FlameChartTimelineData|null {
-        return PerfUI.FlameChart.FlameChartTimelineData.create({
-          entryLevels: [0, 1, 2],
-          entryStartTimes: [5, 60, 80],
-          entryTotalTimes: [50, 10, 10],
-          groups: [
-            {
-              name: 'Test Group 0' as Platform.UIString.LocalizedString,
-              startLevel: 0,
-              style: defaultGroupStyle,
-            },
-            {
-              name: 'Test Group 1' as Platform.UIString.LocalizedString,
-              startLevel: 1,
-              style: defaultGroupStyle,
-            },
-            {
-              name: 'Test Group 2' as Platform.UIString.LocalizedString,
-              startLevel: 2,
-              style: {...defaultGroupStyle, collapsible: true, nestingLevel: 1},
-            },
-          ],
-        });
+        return UpdateLevelPositionsTestProvider.data;
       }
     }
 
@@ -352,30 +366,37 @@ describeWithEnvironment('FlameChart', () => {
 
     describe('hide/unhide nested group', () => {
       class UpdateLevelPositionsWithNestedGroupTestProvider extends FakeFlameChartProvider {
+        // Define this data statically; otherwise on each call to
+        // timelineData() it is recreated and we lose any state such as the
+        // group hidden / expanded state. This reproduces what we do in
+        // production too; calculating timelineData() is expensive so we want
+        // to do it as infrequently as possible.
+        static data = PerfUI.FlameChart.FlameChartTimelineData.create({
+          entryLevels: [0, 1, 2],
+          entryStartTimes: [5, 60, 80],
+          entryTotalTimes: [50, 10, 10],
+          groups:
+              [
+                {
+                  name: 'Test Group 0' as Platform.UIString.LocalizedString,
+                  startLevel: 0,
+                  style: defaultGroupStyle,
+                },
+                {
+                  name: 'Test Group 1' as Platform.UIString.LocalizedString,
+                  startLevel: 1,
+                  style: defaultGroupStyle,
+                },
+                // Make the nested group always expanded for better testing the nested case
+                {
+                  name: 'Test Group 2' as Platform.UIString.LocalizedString,
+                  startLevel: 2,
+                  style: {...defaultGroupStyle, nestingLevel: 1},
+                },
+              ],
+        });
         override timelineData(): PerfUI.FlameChart.FlameChartTimelineData|null {
-          return PerfUI.FlameChart.FlameChartTimelineData.create({
-            entryLevels: [0, 1, 2],
-            entryStartTimes: [5, 60, 80],
-            entryTotalTimes: [50, 10, 10],
-            groups: [
-              {
-                name: 'Test Group 0' as Platform.UIString.LocalizedString,
-                startLevel: 0,
-                style: defaultGroupStyle,
-              },
-              {
-                name: 'Test Group 1' as Platform.UIString.LocalizedString,
-                startLevel: 1,
-                style: defaultGroupStyle,
-              },
-              // Make the nested group always expanded for better testing the nested case
-              {
-                name: 'Test Group 2' as Platform.UIString.LocalizedString,
-                startLevel: 2,
-                style: {...defaultGroupStyle, nestingLevel: 1},
-              },
-            ],
-          });
+          return UpdateLevelPositionsWithNestedGroupTestProvider.data;
         }
       }
 
@@ -1007,8 +1028,30 @@ describeWithEnvironment('FlameChart', () => {
   });
 
   describe('rendering tracks', () => {
+    it('can render a Node CPU Profile', async function() {
+      // We have to do some work to render this trace, as we take the raw CPU
+      // Profile and wrap it in our code that maps it to a "real" trace. This is what happens for real if a user imports a CPU Profile.
+      const rawCPUProfile = await TraceLoader.rawCPUProfile(this, 'node-fibonacci-website.cpuprofile.gz');
+      const rawTrace = Trace.Helpers.SamplesIntegrator.SamplesIntegrator.createFakeTraceFromCpuProfile(
+          rawCPUProfile, Trace.Types.Events.ThreadID(1));
+      const {parsedTrace} = await TraceLoader.executeTraceEngineOnFileContents(rawTrace);
+
+      await renderFlameChartIntoDOM(this, {
+        dataProvider: 'MAIN',
+        traceFile: parsedTrace,
+        filterTracks(trackName) {
+          return trackName.startsWith('Main');
+        },
+        expandTracks() {
+          return true;
+        },
+      });
+      await assertScreenshot('timeline/main_thread_node_cpu_profile.png');
+    });
+
     it('renders the main thread correctly', async function() {
       await renderFlameChartIntoDOM(this, {
+        dataProvider: 'MAIN',
         traceFile: 'one-second-interaction.json.gz',
         filterTracks(trackName) {
           return trackName.startsWith('Main');
@@ -1022,6 +1065,7 @@ describeWithEnvironment('FlameChart', () => {
 
     it('renders iframe main threads correctly', async function() {
       await renderFlameChartIntoDOM(this, {
+        dataProvider: 'MAIN',
         traceFile: 'multiple-navigations-with-iframes.json.gz',
         filterTracks(trackName) {
           return trackName.startsWith('Frame');
@@ -1035,6 +1079,7 @@ describeWithEnvironment('FlameChart', () => {
 
     it('renders the rasterizer tracks, nested correctly', async function() {
       await renderFlameChartIntoDOM(this, {
+        dataProvider: 'MAIN',
         traceFile: 'web-dev.json.gz',
         filterTracks(trackName) {
           return trackName.startsWith('Raster');
@@ -1048,6 +1093,7 @@ describeWithEnvironment('FlameChart', () => {
 
     it('renders tracks for workers', async function() {
       await renderFlameChartIntoDOM(this, {
+        dataProvider: 'MAIN',
         traceFile: 'two-workers.json.gz',
         filterTracks(trackName) {
           return trackName.startsWith('Worker');
@@ -1065,6 +1111,7 @@ describeWithEnvironment('FlameChart', () => {
 
     it('renders threadpool groups correctly', async function() {
       await renderFlameChartIntoDOM(this, {
+        dataProvider: 'MAIN',
         traceFile: 'web-dev.json.gz',
         filterTracks(trackName) {
           return trackName.startsWith('Thread');
@@ -1082,6 +1129,7 @@ describeWithEnvironment('FlameChart', () => {
 
   it('renders the interactions track correctly', async function() {
     await renderFlameChartIntoDOM(this, {
+      dataProvider: 'MAIN',
       traceFile: 'slow-interaction-button-click.json.gz',
       filterTracks(trackName) {
         return trackName.startsWith('Interactions');
@@ -1097,6 +1145,7 @@ describeWithEnvironment('FlameChart', () => {
 
   it('candy stripes long interactions', async function() {
     await renderFlameChartIntoDOM(this, {
+      dataProvider: 'MAIN',
       traceFile: 'one-second-interaction.json.gz',
       filterTracks(trackName) {
         return trackName.startsWith('Interactions');
@@ -1108,6 +1157,143 @@ describeWithEnvironment('FlameChart', () => {
       customEndTime: 141253000 as Trace.Types.Timing.Milli,
     });
     await assertScreenshot('timeline/interactions_track_candystripe.png');
+  });
+
+  it('renders the frames track with screenshots', async function() {
+    const {flameChart} = await renderFlameChartIntoDOM(this, {
+      dataProvider: 'MAIN',
+      traceFile: 'web-dev-screenshot-source-ids.json.gz',
+      // This is a bit confusing: we filter out all tracks here because the
+      // Frames track was never migrated to an appender, and therefore it
+      // cannot be filtered using this helper.
+      // So instead, we filter all the appenders out, which leaves just the
+      // frames track. This also means we cannot expand it via this helper,
+      // hence the call to toggleGroupExpand below.
+      filterTracks() {
+        return false;
+      },
+      // A height manually picked that fits the screenshots in but no
+      // additional whitespace.
+      customHeight: 200,
+      // So that when we expand the track, the screenshots are already in
+      // memory and we do not have to async wait for them to be fetched &
+      // drawn.
+      preloadScreenshots: true,
+    });
+    flameChart.toggleGroupExpand(0);
+    await raf();
+    await assertScreenshot('timeline/frames_track_screenshots.png');
+  });
+
+  it('renders correctly with a vertical offset', async function() {
+    const {flameChart, parsedTrace, dataProvider} = await renderFlameChartIntoDOM(this, {
+      dataProvider: 'MAIN',
+      traceFile: 'web-dev.json.gz',
+      filterTracks() {
+        return true;
+      },
+      expandTracks() {
+        return true;
+      },
+      customHeight: 200,
+    });
+
+    // This event is one that is deep into the main thread, so it forces the
+    // flamechart to be vertically scrolled. That's why we pick this one.
+    const event = parsedTrace.Renderer.allTraceEntries.find(entry => {
+      return entry.dur === 462 && entry.ts === 1020035043753 &&
+          entry.name === Trace.Types.Events.Name.UPDATE_LAYOUT_TREE;
+    });
+    assert.isOk(event);
+    const index = dataProvider.indexForEvent(event);
+    assert.isOk(index);
+    flameChart.revealEntryVertically(index);
+    await raf();
+    await assertScreenshot('timeline/flamechart_with_vertical_offset.png');
+  });
+
+  it('renders the animations track', async function() {
+    await renderFlameChartIntoDOM(this, {
+      dataProvider: 'MAIN',
+      traceFile: 'animation.json.gz',
+      filterTracks(trackName) {
+        return trackName.startsWith('Animation');
+      },
+      expandTracks() {
+        return true;
+      },
+    });
+    await assertScreenshot('timeline/animations_track.png');
+  });
+
+  it('renders the GPU track', async function() {
+    await renderFlameChartIntoDOM(this, {
+      dataProvider: 'MAIN',
+      traceFile: 'threejs-gpu.json.gz',
+      filterTracks(trackName) {
+        return trackName.startsWith('GPU');
+      },
+      expandTracks() {
+        return true;
+      },
+    });
+    await assertScreenshot('timeline/gpu_track.png');
+  });
+
+  it('renders the network track', async function() {
+    const {flameChart} = await renderFlameChartIntoDOM(this, {
+      dataProvider: 'NETWORK',
+      traceFile: 'web-dev.json.gz',
+      customHeight: 350,
+      customEndTime: 1020035221.509 as Trace.Types.Timing.Milli,
+    });
+    flameChart.toggleGroupExpand(0);
+    await raf();
+    await assertScreenshot('timeline/network_track.png');
+  });
+
+  it('renders the user timing track', async function() {
+    await renderFlameChartIntoDOM(this, {
+      dataProvider: 'MAIN',
+      traceFile: 'timings-track.json.gz',
+      filterTracks(trackName) {
+        return trackName.startsWith('Timings');
+      },
+      expandTracks() {
+        return true;
+      },
+    });
+    await assertScreenshot('timeline/timings_track.png');
+  });
+
+  it('renders the auction worklets track', async function() {
+    await renderFlameChartIntoDOM(this, {
+      dataProvider: 'MAIN',
+      traceFile: 'fenced-frame-fledge.json.gz',
+      filterTracks(trackName) {
+        return trackName.includes('Worklet');
+      },
+      expandTracks() {
+        return true;
+      },
+      customStartTime: Trace.Types.Timing.Milli(220391498.289),
+      customEndTime: Trace.Types.Timing.Milli(220391697.601),
+    });
+    await assertScreenshot('timeline/auction_worklets_track.png');
+  });
+
+  it('renders the layout shifts track', async function() {
+    await renderFlameChartIntoDOM(this, {
+      dataProvider: 'MAIN',
+      traceFile: 'cls-single-frame.json.gz',
+      filterTracks(trackName) {
+        return trackName.startsWith('LayoutShifts');
+      },
+      expandTracks() {
+        return true;
+      },
+    });
+    await assertScreenshot('timeline/layout_shifts_track.png');
   });
 
   it('renders all the decoration types onto events', async () => {

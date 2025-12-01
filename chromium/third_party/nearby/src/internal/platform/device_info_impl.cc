@@ -15,19 +15,19 @@
 #include "internal/platform/device_info_impl.h"
 
 #include <cstddef>
-#include <filesystem>  // NOLINT
 #include <functional>
 #include <optional>
 #include <string>
+
 #include "absl/strings/string_view.h"
+#include "internal/base/file_path.h"
 #include "internal/base/files.h"
 #include "internal/platform/implementation/device_info.h"
 
 namespace nearby {
 
 std::string DeviceInfoImpl::GetOsDeviceName() const {
-  std::optional<std::string> device_name =
-      device_info_impl_->GetOsDeviceName();
+  std::optional<std::string> device_name = device_info_impl_->GetOsDeviceName();
   if (device_name.has_value()) {
     return *device_name;
   }
@@ -43,50 +43,38 @@ api::DeviceInfo::OsType DeviceInfoImpl::GetOsType() const {
   return device_info_impl_->GetOsType();
 }
 
-std::filesystem::path DeviceInfoImpl::GetDownloadPath() const {
-  std::optional<std::filesystem::path> path =
-      device_info_impl_->GetDownloadPath();
+FilePath DeviceInfoImpl::GetDownloadPath() const {
+  std::optional<FilePath> path = device_info_impl_->GetDownloadPath();
   if (path.has_value()) {
     return *path;
   }
-  return nearby::sharing::GetTemporaryDirectory().value_or(
-      nearby::sharing::CurrentDirectory());
+  return Files::GetTemporaryDirectory();
 }
 
-std::filesystem::path DeviceInfoImpl::GetAppDataPath() const {
-  std::optional<std::filesystem::path> path =
-      device_info_impl_->GetLocalAppDataPath();
+FilePath DeviceInfoImpl::GetAppDataPath() const {
+  std::optional<FilePath> path = device_info_impl_->GetLocalAppDataPath();
   if (path.has_value()) {
     return *path;
   }
-  return nearby::sharing::GetTemporaryDirectory().value_or(
-      nearby::sharing::CurrentDirectory());
+  return Files::GetTemporaryDirectory();
 }
 
-std::filesystem::path DeviceInfoImpl::GetTemporaryPath() const {
-  std::optional<std::filesystem::path> path =
-      device_info_impl_->GetTemporaryPath();
+FilePath DeviceInfoImpl::GetTemporaryPath() const {
+  std::optional<FilePath> path = device_info_impl_->GetTemporaryPath();
   if (path.has_value()) {
     return *path;
   }
-  return nearby::sharing::GetTemporaryDirectory().value_or(
-      nearby::sharing::CurrentDirectory());
+  return Files::GetTemporaryDirectory();
 }
 
-std::filesystem::path DeviceInfoImpl::GetLogPath() const {
-  std::optional<std::filesystem::path> path = device_info_impl_->GetLogPath();
+FilePath DeviceInfoImpl::GetLogPath() const {
+  std::optional<FilePath> path = device_info_impl_->GetLogPath();
   return path.value_or(GetTemporaryPath());
 }
 
 std::optional<size_t> DeviceInfoImpl::GetAvailableDiskSpaceInBytes(
-    const std::filesystem::path& path) const {
-  std::error_code error_code;
-  std::filesystem::space_info space_info =
-      std::filesystem::space(path, error_code);
-  if (error_code.value() == 0) {
-    return space_info.available;
-  }
-  return std::nullopt;
+    const FilePath& path) const {
+  return Files::GetAvailableDiskSpaceInBytes(path);
 }
 
 bool DeviceInfoImpl::IsScreenLocked() const {

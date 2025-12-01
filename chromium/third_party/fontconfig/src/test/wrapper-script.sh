@@ -1,5 +1,7 @@
 #! /bin/bash
 
+set -e
+
 CC=${CC:-gcc}
 
 case "$1" in

@@ -34,7 +34,7 @@ export interface OverviewData {
 /**
  * This component wraps the generic PerfUI Overview component and configures it
  * specifically for the Performance Panel, including injecting the CSS we use
- * to customise how the components render within the Performance Panel.
+ * to customize how the components render within the Performance Panel.
  *
  * It is also responsible for listening to events from the OverviewPane to
  * update the visible trace window, and when this happens it will update the
@@ -53,7 +53,7 @@ export class TimelineMiniMap extends
   constructor() {
     super();
     this.registerRequiredCSS(miniMapStyles);
-    this.element.classList.add('timeline-minimap');
+    this.element.classList.add('timeline-minimap', 'no-trace-active');
     this.#breadcrumbsUI = new TimelineComponents.BreadcrumbsUI.BreadcrumbsUI();
     this.element.prepend(this.#breadcrumbsUI);
 
@@ -86,6 +86,14 @@ export class TimelineMiniMap extends
     this.#overviewComponent.enableCreateBreadcrumbsButton();
 
     TraceBounds.TraceBounds.onChange(this.#onTraceBoundsChangeBound);
+    // Set the initial bounds for the overview. Otherwise if we mount & there
+    // is not an immediate RESET event, then we don't render correctly.
+    const state = TraceBounds.TraceBounds.BoundsManager.instance().state();
+    if (state) {
+      const {timelineTraceWindow, minimapTraceBounds} = state.milli;
+      this.#overviewComponent.setWindowTimes(timelineTraceWindow.min, timelineTraceWindow.max);
+      this.#overviewComponent.setBounds(minimapTraceBounds.min, minimapTraceBounds.max);
+    }
   }
 
   #onOverviewPanelWindowChanged(
@@ -261,7 +269,15 @@ export class TimelineMiniMap extends
     return this.#controls;
   }
 
-  setData(data: OverviewData): void {
+  setData(data: OverviewData|null): void {
+    this.element.classList.toggle('no-trace-active', data === null);
+
+    if (data === null) {
+      this.#data = null;
+      this.#controls = [];
+      return;
+    }
+
     if (this.#data?.parsedTrace === data.parsedTrace) {
       return;
     }

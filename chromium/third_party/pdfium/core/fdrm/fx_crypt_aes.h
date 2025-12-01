@@ -14,25 +14,22 @@
 #include "core/fxcrt/span.h"
 
 struct CRYPT_aes_context {
-  static constexpr int kMaxNb = 8;
-  static constexpr int kMaxNr = 14;
-  static constexpr int kSchedSize = (kMaxNr + 1) * kMaxNb;
+  static constexpr size_t kBlockSize = 4;       // Words, not bytes.
+  static constexpr size_t kMaxNb = 8;           // Max words in largest key.
+  static constexpr size_t kMaxNr = 6 + kMaxNb;  // Max rounds for largest key.
+  static constexpr size_t kMaxSchedSize = (kMaxNr + 1) * kBlockSize;
 
-  int Nb;
-  int Nr;
-  std::array<uint32_t, kSchedSize> keysched;
-  std::array<uint32_t, kSchedSize> invkeysched;
-  std::array<uint32_t, kMaxNb> iv;
+  size_t Nr;  // Actual number of rounds based on keysize.
+  std::array<uint32_t, kMaxSchedSize> keysched;
+  std::array<uint32_t, kMaxSchedSize> invkeysched;
+  std::array<uint32_t, kBlockSize> iv;
 };
 
-void CRYPT_AESSetKey(CRYPT_aes_context* ctx,
-                     const uint8_t* key,
-                     uint32_t keylen);
-void CRYPT_AESSetIV(CRYPT_aes_context* ctx, const uint8_t* iv);
+void CRYPT_AESSetKey(CRYPT_aes_context* ctx, pdfium::span<const uint8_t> key);
+void CRYPT_AESSetIV(CRYPT_aes_context* ctx, pdfium::span<const uint8_t, 16> iv);
 void CRYPT_AESDecrypt(CRYPT_aes_context* ctx,
-                      uint8_t* dest,
-                      const uint8_t* src,
-                      uint32_t size);
+                      pdfium::span<uint8_t> dest,
+                      pdfium::span<const uint8_t> src);
 void CRYPT_AESEncrypt(CRYPT_aes_context* ctx,
                       pdfium::span<uint8_t> dest,
                       pdfium::span<const uint8_t> src);

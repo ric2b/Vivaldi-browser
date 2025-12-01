@@ -118,9 +118,10 @@
         Request that the window will be moved with the cursor during the drag
         operation. The offset is a hint to the compositor how the toplevel
         should be positioned relative to the cursor hotspot in surface local
-        coordinates. For example it might only be used when an unmapped window
-        is attached. The attached window does not participate in the selection
-        of the drag target.
+        coordinates and relative to the geometry of the toplevel being attached.
+        See xdg_surface.set_window_geometry. For example it might only
+        be used when an unmapped window is attached. The attached window
+        does not participate in the selection of the drag target.
 
         If the toplevel is unmapped while it is attached, it is automatically
         detached from the drag. In this case this request has to be called again

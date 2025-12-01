@@ -119,14 +119,13 @@ CXFA_Object* CFXJSE_Engine::ToObject(CFXJSE_HostObject* pHostObj) {
   return pJSObject ? pJSObject->GetXFAObject() : nullptr;
 }
 
-CFXJSE_Engine::CFXJSE_Engine(CXFA_Document* pDocument,
-                             CJS_Runtime* fxjs_runtime)
+CFXJSE_Engine::CFXJSE_Engine(CXFA_Document* document, CJS_Runtime* fxjs_runtime)
     : CFX_V8(fxjs_runtime->GetIsolate()),
       subordinate_runtime_(fxjs_runtime),
-      document_(pDocument),
+      document_(document),
       js_context_(CFXJSE_Context::Create(fxjs_runtime->GetIsolate(),
                                          &kGlobalClassDescriptor,
-                                         pDocument->GetRoot()->JSObject(),
+                                         document->GetRoot()->JSObject(),
                                          nullptr)),
       node_helper_(std::make_unique<CFXJSE_NodeHelper>()),
       resolve_processor_(
@@ -261,8 +260,8 @@ void CFXJSE_Engine::GlobalPropertySetter(v8::Isolate* pIsolate,
                                          ByteStringView szPropName,
                                          v8::Local<v8::Value> pValue) {
   CXFA_Object* pOriginalNode = ToObject(pIsolate, pObject);
-  CXFA_Document* pDoc = pOriginalNode->GetDocument();
-  CFXJSE_Engine* pScriptContext = pDoc->GetScriptContext();
+  CXFA_Document* doc = pOriginalNode->GetDocument();
+  CFXJSE_Engine* pScriptContext = doc->GetScriptContext();
   CXFA_Node* pRefNode = ToNode(pScriptContext->GetThisObject());
   if (pOriginalNode->IsThisProxy()) {
     pRefNode = ToNode(pScriptContext->GetVariablesThis(pOriginalNode));
@@ -282,7 +281,7 @@ void CFXJSE_Engine::GlobalPropertySetter(v8::Isolate* pIsolate,
                                               pObject, szPropName);
     return;
   }
-  CXFA_FFNotify* pNotify = pDoc->GetNotify();
+  CXFA_FFNotify* pNotify = doc->GetNotify();
   if (!pNotify) {
     return;
   }
@@ -303,8 +302,8 @@ v8::Local<v8::Value> CFXJSE_Engine::GlobalPropertyGetter(
     v8::Local<v8::Object> pObject,
     ByteStringView szPropName) {
   CXFA_Object* pOriginalObject = ToObject(pIsolate, pObject);
-  CXFA_Document* pDoc = pOriginalObject->GetDocument();
-  CFXJSE_Engine* pScriptContext = pDoc->GetScriptContext();
+  CXFA_Document* doc = pOriginalObject->GetDocument();
+  CFXJSE_Engine* pScriptContext = doc->GetScriptContext();
   WideString wsPropName = WideString::FromUTF8(szPropName);
 
   // Assume failure.
@@ -353,7 +352,7 @@ v8::Local<v8::Value> CFXJSE_Engine::GlobalPropertyGetter(
     return pValue;
   }
 
-  CXFA_FFNotify* pNotify = pDoc->GetNotify();
+  CXFA_FFNotify* pNotify = doc->GetNotify();
   if (!pNotify) {
     return pValue;
   }

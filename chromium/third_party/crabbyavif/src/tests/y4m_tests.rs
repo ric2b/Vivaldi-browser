@@ -66,7 +66,7 @@ fn roundtrip(
     }
     // Read the image.
     let mut reader = Y4MReader::create(&output_filename)?;
-    let image2 = reader.read_frame(&Config::default())?;
+    let (image2, _) = reader.read_frame(&Config::default())?;
     are_images_equal(&image1, &image2)?;
     Ok(())
 }

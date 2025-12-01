@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -39,6 +40,7 @@
 #include "core/fxcrt/data_vector.h"
 #include "core/fxcrt/fx_memcpy_wrappers.h"
 #include "core/fxcrt/fx_safe_types.h"
+#include "core/fxcrt/notreached.h"
 #include "core/fxcrt/span_util.h"
 #include "core/fxcrt/stl_util.h"
 #include "core/fxcrt/zip.h"
@@ -106,7 +108,6 @@ CJPX_Decoder::ColorSpaceOption ColorSpaceOptionFromColorSpace(
 }
 
 enum class JpxDecodeAction {
-  kFail,
   kDoNothing,
   kUseGray,
   kUseIndexed,
@@ -127,14 +128,14 @@ bool IsJPXColorSpaceOrUnspecifiedOrUnknown(COLOR_SPACE actual,
 // Decides which JpxDecodeAction to use based on the colorspace information from
 // the PDF and the JPX image. Called only when the PDF's image object contains a
 // "/ColorSpace" entry.
-JpxDecodeAction GetJpxDecodeActionFromColorSpaces(
+std::optional<JpxDecodeAction> GetJpxDecodeActionFromColorSpaces(
     const CJPX_Decoder::JpxImageInfo& jpx_info,
     const CPDF_ColorSpace* pdf_colorspace) {
   if (pdf_colorspace ==
       CPDF_ColorSpace::GetStockCS(CPDF_ColorSpace::Family::kDeviceGray)) {
     if (!IsJPXColorSpaceOrUnspecifiedOrUnknown(/*actual=*/jpx_info.colorspace,
                                                /*expected=*/OPJ_CLRSPC_GRAY)) {
-      return JpxDecodeAction::kFail;
+      return std::nullopt;
     }
     return JpxDecodeAction::kUseGray;
   }
@@ -143,7 +144,7 @@ JpxDecodeAction GetJpxDecodeActionFromColorSpaces(
       CPDF_ColorSpace::GetStockCS(CPDF_ColorSpace::Family::kDeviceRGB)) {
     if (!IsJPXColorSpaceOrUnspecifiedOrUnknown(/*actual=*/jpx_info.colorspace,
                                                /*expected=*/OPJ_CLRSPC_SRGB)) {
-      return JpxDecodeAction::kFail;
+      return std::nullopt;
     }
 
     // The channel count of a JPX image can be different from the PDF color
@@ -158,7 +159,7 @@ JpxDecodeAction GetJpxDecodeActionFromColorSpaces(
       CPDF_ColorSpace::GetStockCS(CPDF_ColorSpace::Family::kDeviceCMYK)) {
     if (!IsJPXColorSpaceOrUnspecifiedOrUnknown(/*actual=*/jpx_info.colorspace,
                                                /*expected=*/OPJ_CLRSPC_CMYK)) {
-      return JpxDecodeAction::kFail;
+      return std::nullopt;
     }
     return JpxDecodeAction::kUseCmyk;
   }
@@ -181,18 +182,18 @@ JpxDecodeAction GetJpxDecodeActionFromColorSpaces(
 JpxDecodeAction GetJpxDecodeActionFromImageColorSpace(
     const CJPX_Decoder::JpxImageInfo& jpx_info) {
   switch (jpx_info.colorspace) {
-    case OPJ_CLRSPC_SYCC:
-    case OPJ_CLRSPC_EYCC:
     case OPJ_CLRSPC_UNKNOWN:
     case OPJ_CLRSPC_UNSPECIFIED:
+      return jpx_info.channels == 3 ? JpxDecodeAction::kUseRgb
+                                    : JpxDecodeAction::kDoNothing;
+
+    case OPJ_CLRSPC_SYCC:
+    case OPJ_CLRSPC_EYCC:
       return JpxDecodeAction::kDoNothing;
 
     case OPJ_CLRSPC_SRGB:
-      if (jpx_info.channels > 3) {
-        return JpxDecodeAction::kConvertArgbToRgb;
-      }
-
-      return JpxDecodeAction::kUseRgb;
+      return jpx_info.channels > 3 ? JpxDecodeAction::kConvertArgbToRgb
+                                   : JpxDecodeAction::kUseRgb;
 
     case OPJ_CLRSPC_GRAY:
       return JpxDecodeAction::kUseGray;
@@ -200,20 +201,16 @@ JpxDecodeAction GetJpxDecodeActionFromImageColorSpace(
     case OPJ_CLRSPC_CMYK:
       return JpxDecodeAction::kUseCmyk;
   }
+  NOTREACHED();
 }
 
-JpxDecodeAction GetJpxDecodeAction(const CJPX_Decoder::JpxImageInfo& jpx_info,
-                                   const CPDF_ColorSpace* pdf_colorspace) {
-  if (pdf_colorspace) {
-    return GetJpxDecodeActionFromColorSpaces(jpx_info, pdf_colorspace);
-  }
+int GetComponentCountFromJpxImageInfo(
+    const CJPX_Decoder::JpxImageInfo& jpx_info) {
+  switch (jpx_info.colorspace) {
+    case OPJ_CLRSPC_UNKNOWN:
+    case OPJ_CLRSPC_UNSPECIFIED:
+      return jpx_info.channels;
 
-  // When PDF does not provide a color space, check the image color space.
-  return GetJpxDecodeActionFromImageColorSpace(jpx_info);
-}
-
-int GetComponentCountFromOpjColorSpace(OPJ_COLOR_SPACE colorspace) {
-  switch (colorspace) {
     case OPJ_CLRSPC_GRAY:
       return 1;
 
@@ -224,16 +221,97 @@ int GetComponentCountFromOpjColorSpace(OPJ_COLOR_SPACE colorspace) {
 
     case OPJ_CLRSPC_CMYK:
       return 4;
-
-    default:
-      return 0;
   }
+  NOTREACHED();
 }
+
+class JpxDecodeConversion {
+ public:
+  static std::optional<JpxDecodeConversion> Create(
+      const CJPX_Decoder::JpxImageInfo& jpx_info,
+      const CPDF_ColorSpace* pdf_colorspace) {
+    // When the PDF does not provide a color space, check the image color space.
+    std::optional<JpxDecodeAction> maybe_action =
+        pdf_colorspace
+            ? GetJpxDecodeActionFromColorSpaces(jpx_info, pdf_colorspace)
+            : GetJpxDecodeActionFromImageColorSpace(jpx_info);
+    if (!maybe_action.has_value()) {
+      return std::nullopt;
+    }
+
+    JpxDecodeConversion conversion;
+    conversion.action_ = maybe_action.value();
+    switch (conversion.action_) {
+      case JpxDecodeAction::kDoNothing:
+        break;
+
+      case JpxDecodeAction::kUseGray:
+        conversion.override_colorspace_ =
+            CPDF_ColorSpace::GetStockCS(CPDF_ColorSpace::Family::kDeviceGray);
+        break;
+
+      case JpxDecodeAction::kUseIndexed:
+        break;
+
+      case JpxDecodeAction::kUseRgb:
+        DCHECK_GE(jpx_info.channels, 3);
+        conversion.override_colorspace_ = nullptr;
+        break;
+
+      case JpxDecodeAction::kUseCmyk:
+        conversion.override_colorspace_ =
+            CPDF_ColorSpace::GetStockCS(CPDF_ColorSpace::Family::kDeviceCMYK);
+        break;
+
+      case JpxDecodeAction::kConvertArgbToRgb:
+        conversion.override_colorspace_ = nullptr;
+        break;
+    }
+
+    // If there exists a PDF colorspace, then CPDF_DIB already has the
+    // components count.
+    if (!pdf_colorspace) {
+      conversion.jpx_components_count_ =
+          GetComponentCountFromJpxImageInfo(jpx_info);
+    }
+    return conversion;
+  }
+
+  JpxDecodeAction action() const { return action_; }
+
+  const std::optional<RetainPtr<CPDF_ColorSpace>>& override_colorspace() const {
+    return override_colorspace_;
+  }
+
+  const std::optional<int>& jpx_components_count() const {
+    return jpx_components_count_;
+  }
+
+  bool swap_rgb() const {
+    return action_ == JpxDecodeAction::kUseRgb ||
+           action_ == JpxDecodeAction::kConvertArgbToRgb;
+  }
+
+ private:
+  JpxDecodeAction action_;
+
+  // The colorspace to override the existing colorspace.
+  //
+  // std::nullopt means no override colorspace.
+  // nullptr means reset the colorspace.
+  std::optional<RetainPtr<CPDF_ColorSpace>> override_colorspace_;
+
+  // The components count from the JPEG2000 image.
+  //
+  // std::nullopt means no new components count.
+  // Value <= 0 means failure.
+  std::optional<int> jpx_components_count_;
+};
 
 }  // namespace
 
-CPDF_DIB::CPDF_DIB(CPDF_Document* pDoc, RetainPtr<const CPDF_Stream> pStream)
-    : document_(pDoc), stream_(std::move(pStream)) {}
+CPDF_DIB::CPDF_DIB(CPDF_Document* doc, RetainPtr<const CPDF_Stream> pStream)
+    : document_(doc), stream_(std::move(pStream)) {}
 
 CPDF_DIB::~CPDF_DIB() = default;
 
@@ -727,64 +805,39 @@ RetainPtr<CFX_DIBitmap> CPDF_DIB::LoadJpxBitmap(
     return nullptr;
   }
 
-  RetainPtr<CPDF_ColorSpace> original_colorspace = color_space_;
-  bool swap_rgb = false;
-  bool convert_argb_to_rgb = false;
-  auto action = GetJpxDecodeAction(image_info, color_space_.Get());
-  switch (action) {
-    case JpxDecodeAction::kFail:
-      return nullptr;
-
-    case JpxDecodeAction::kDoNothing:
-      break;
-
-    case JpxDecodeAction::kUseGray:
-      color_space_ =
-          CPDF_ColorSpace::GetStockCS(CPDF_ColorSpace::Family::kDeviceGray);
-      break;
-
-    case JpxDecodeAction::kUseIndexed:
-      break;
-
-    case JpxDecodeAction::kUseRgb:
-      DCHECK(image_info.channels >= 3);
-      swap_rgb = true;
-      color_space_ = nullptr;
-      break;
-
-    case JpxDecodeAction::kUseCmyk:
-      color_space_ =
-          CPDF_ColorSpace::GetStockCS(CPDF_ColorSpace::Family::kDeviceCMYK);
-      break;
-
-    case JpxDecodeAction::kConvertArgbToRgb:
-      swap_rgb = true;
-      convert_argb_to_rgb = true;
-      color_space_.Reset();
-      break;
+  auto maybe_conversion =
+      JpxDecodeConversion::Create(image_info, color_space_.Get());
+  if (!maybe_conversion.has_value()) {
+    return nullptr;
   }
 
-  // If |original_colorspace| exists, then LoadColorInfo() already set
-  // |components_|.
-  if (original_colorspace) {
-    DCHECK_NE(0u, components_);
-  } else {
+  const auto& conversion = maybe_conversion.value();
+  if (conversion.override_colorspace().has_value()) {
+    color_space_ = conversion.override_colorspace().value();
+  }
+
+  if (conversion.jpx_components_count().has_value()) {
     DCHECK_EQ(0u, components_);
-    components_ = GetComponentCountFromOpjColorSpace(image_info.colorspace);
-    if (components_ == 0) {
+    components_ = conversion.jpx_components_count().value();
+    if (components_ <= 0) {
       return nullptr;
     }
+  } else {
+    // LoadColorInfo() already set `components_`.
+    DCHECK_NE(0u, components_);
   }
 
   FXDIB_Format format;
-  if (action == JpxDecodeAction::kUseGray ||
-      action == JpxDecodeAction::kUseIndexed) {
+  if (conversion.action() == JpxDecodeAction::kUseGray ||
+      conversion.action() == JpxDecodeAction::kUseIndexed) {
     format = FXDIB_Format::k8bppRgb;
-  } else if (action == JpxDecodeAction::kUseRgb && image_info.channels == 3) {
+  } else if (conversion.action() == JpxDecodeAction::kUseRgb &&
+             image_info.channels == 3) {
     format = FXDIB_Format::kBgr;
-  } else if (action == JpxDecodeAction::kUseRgb && image_info.channels == 4) {
+  } else if (conversion.action() == JpxDecodeAction::kUseRgb &&
+             image_info.channels == 4) {
     format = FXDIB_Format::kBgrx;
-  } else if (action == JpxDecodeAction::kConvertArgbToRgb) {
+  } else if (conversion.action() == JpxDecodeAction::kConvertArgbToRgb) {
     CHECK_GE(image_info.channels, 4);
     format = FXDIB_Format::kBgrx;
   } else {
@@ -799,54 +852,17 @@ RetainPtr<CFX_DIBitmap> CPDF_DIB::LoadJpxBitmap(
 
   result_bitmap->Clear(0xFFFFFFFF);
   if (!decoder->Decode(result_bitmap->GetWritableBuffer(),
-                       result_bitmap->GetPitch(), swap_rgb, components_)) {
+                       result_bitmap->GetPitch(), conversion.swap_rgb(),
+                       components_)) {
     return nullptr;
   }
 
-  if (convert_argb_to_rgb) {
-    DCHECK_EQ(3u, components_);
-    auto rgb_bitmap = pdfium::MakeRetain<CFX_DIBitmap>();
-    if (!rgb_bitmap->Create(image_info.width, image_info.height,
-                            FXDIB_Format::kBgr)) {
+  if (conversion.action() == JpxDecodeAction::kConvertArgbToRgb) {
+    result_bitmap = ConvertArgbJpxBitmapToRgb(result_bitmap, image_info.width,
+                                              image_info.height);
+    if (!result_bitmap) {
       return nullptr;
     }
-    if (dict_->GetIntegerFor("SMaskInData") == 1) {
-      // TODO(thestig): Acrobat does not support "/SMaskInData 1" combined with
-      // filters. Check for that and fail early.
-      DCHECK(jpx_inline_data_.data.empty());
-      jpx_inline_data_.width = image_info.width;
-      jpx_inline_data_.height = image_info.height;
-      jpx_inline_data_.data.reserve(image_info.width * image_info.height);
-      for (uint32_t row = 0; row < image_info.height; ++row) {
-        auto src =
-            result_bitmap->GetScanlineAs<FX_BGRA_STRUCT<uint8_t>>(row).first(
-                image_info.width);
-        auto dest =
-            rgb_bitmap->GetWritableScanlineAs<FX_BGR_STRUCT<uint8_t>>(row);
-        for (auto [input, output] : fxcrt::Zip(src, dest)) {
-          jpx_inline_data_.data.push_back(input.alpha);
-          const uint8_t na = 255 - input.alpha;
-          output.blue = (input.blue * input.alpha + 255 * na) / 255;
-          output.green = (input.green * input.alpha + 255 * na) / 255;
-          output.red = (input.red * input.alpha + 255 * na) / 255;
-        }
-      }
-    } else {
-      // TODO(thestig): Is there existing code that does this already?
-      for (uint32_t row = 0; row < image_info.height; ++row) {
-        auto src =
-            result_bitmap->GetScanlineAs<FX_BGRA_STRUCT<uint8_t>>(row).first(
-                image_info.width);
-        auto dest =
-            rgb_bitmap->GetWritableScanlineAs<FX_BGR_STRUCT<uint8_t>>(row);
-        for (auto [input, output] : fxcrt::Zip(src, dest)) {
-          output.green = input.green;
-          output.red = input.red;
-          output.blue = input.blue;
-        }
-      }
-    }
-    result_bitmap = std::move(rgb_bitmap);
   } else if (color_space_ &&
              color_space_->GetFamily() == CPDF_ColorSpace::Family::kIndexed &&
              bpc_ < 8) {
@@ -865,6 +881,52 @@ RetainPtr<CFX_DIBitmap> CPDF_DIB::LoadJpxBitmap(
 
   bpc_ = 8;
   return result_bitmap;
+}
+
+RetainPtr<CFX_DIBitmap> CPDF_DIB::ConvertArgbJpxBitmapToRgb(
+    RetainPtr<CFX_DIBitmap> argb_bitmap,
+    uint32_t width,
+    uint32_t height) {
+  DCHECK_EQ(3u, components_);
+  auto rgb_bitmap = pdfium::MakeRetain<CFX_DIBitmap>();
+  if (!rgb_bitmap->Create(width, height, FXDIB_Format::kBgr)) {
+    return nullptr;
+  }
+  if (dict_->GetIntegerFor("SMaskInData") == 1) {
+    // TODO(thestig): Acrobat does not support "/SMaskInData 1" combined with
+    // filters. Check for that and fail early.
+    DCHECK(jpx_inline_data_.data.empty());
+    jpx_inline_data_.width = width;
+    jpx_inline_data_.height = height;
+    jpx_inline_data_.data.reserve(width * height);
+    for (uint32_t row = 0; row < height; ++row) {
+      auto src =
+          argb_bitmap->GetScanlineAs<FX_BGRA_STRUCT<uint8_t>>(row).first(width);
+      auto dest =
+          rgb_bitmap->GetWritableScanlineAs<FX_BGR_STRUCT<uint8_t>>(row);
+      for (auto [input, output] : fxcrt::Zip(src, dest)) {
+        jpx_inline_data_.data.push_back(input.alpha);
+        const uint8_t na = 255 - input.alpha;
+        output.blue = (input.blue * input.alpha + 255 * na) / 255;
+        output.green = (input.green * input.alpha + 255 * na) / 255;
+        output.red = (input.red * input.alpha + 255 * na) / 255;
+      }
+    }
+    return rgb_bitmap;
+  }
+
+  // TODO(thestig): Is there existing code that does this already?
+  for (uint32_t row = 0; row < height; ++row) {
+    auto src =
+        argb_bitmap->GetScanlineAs<FX_BGRA_STRUCT<uint8_t>>(row).first(width);
+    auto dest = rgb_bitmap->GetWritableScanlineAs<FX_BGR_STRUCT<uint8_t>>(row);
+    for (auto [input, output] : fxcrt::Zip(src, dest)) {
+      output.green = input.green;
+      output.red = input.red;
+      output.blue = input.blue;
+    }
+  }
+  return rgb_bitmap;
 }
 
 bool CPDF_DIB::LoadInternal(const CPDF_Dictionary* pFormResources,

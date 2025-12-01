@@ -41,7 +41,7 @@ struct main_out {
 float u_Float = 0.0f;
 vec3 u_Color = vec3(0.0f);
 vec2 vMainuv = vec2(0.0f);
-layout(binding = 6, std140)
+layout(binding = 2, std140)
 uniform f_x_269_block_ubo {
   LeftOver inner;
 } v;
@@ -368,7 +368,8 @@ void main_1() {
         uint tint_carry = uint((tint_low_inc == 4294967295u));
         tint_loop_idx.y = (tint_loop_idx.y - tint_carry);
         int x_441 = i;
-        i = (x_441 + 1);
+        uint v_7 = uint(x_441);
+        i = int((v_7 + uint(1)));
       }
       continue;
     }
@@ -443,10 +444,10 @@ void main_1() {
   vec3 x_548 = output3;
   glFragColor = vec4(x_548.x, x_548.y, x_548.z, 1.0f);
 }
-main_out main_inner(vec2 vMainuv_param, vec4 v_output1_param, bool v_7, vec2 v_uv_param, vec4 v_output2_param) {
+main_out main_inner(vec2 vMainuv_param, vec4 v_output1_param, bool v_8, vec2 v_uv_param, vec4 v_output2_param) {
   vMainuv = vMainuv_param;
   v_output1 = v_output1_param;
-  v_1 = v_7;
+  v_1 = v_8;
   v_uv = v_uv_param;
   v_output2 = v_output2_param;
   main_1();

@@ -168,7 +168,21 @@ ExtensionFunction::ResponseAction AutoUpdateNeedsCodecRestartFunction::Run() {
       base::BindOnce(&DetectNeedCodecRestart),
       base::BindOnce(&AutoUpdateNeedsCodecRestartFunction::DeliverResult,
                      this));
+
   return RespondLater();
+}
+
+ExtensionFunction::ResponseAction AutoUpdateRunStartupChecksFunction::Run() {
+#if defined(ARCH_CPU_ARMEL)
+  // In some specific situations, we want the frontend to
+  // be notified that "autoupdate" didn't finish. We are
+  // basically hijacking this system to notify frontend the
+  // OS is End-Of-Life'd - in this case linux is implied by the source code,
+  // and the cpu type is gated by the ifdef.
+  extensions::AutoUpdateAPI::SendUpdaterDidNotFindUpdate(
+                           "SystemIsTooOld");
+#endif
+  return RespondNow(NoArguments());
 }
 
 }  // namespace extensions

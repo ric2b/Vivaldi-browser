@@ -1156,4 +1156,132 @@ TEST(EncodeAPI, AllIntraAndNoRefLast) {
 }
 #endif  // !CONFIG_REALTIME_ONLY
 
+TEST(EncodeAPI, PerFramePsnr) {
+  aom_codec_iface_t *iface = aom_codec_av1_cx();
+  aom_codec_enc_cfg_t cfg;
+  ASSERT_EQ(aom_codec_enc_config_default(iface, &cfg, AOM_USAGE_REALTIME),
+            AOM_CODEC_OK);
+  ASSERT_EQ(cfg.g_lag_in_frames, 0);
+
+  aom_codec_ctx_t enc;
+  ASSERT_EQ(aom_codec_enc_init(&enc, iface, &cfg, 0), AOM_CODEC_OK);
+
+  aom_image_t *image = CreateGrayImage(AOM_IMG_FMT_I420, cfg.g_w, cfg.g_h);
+  ASSERT_NE(image, nullptr);
+
+  aom_enc_frame_flags_t psnr_flags = AOM_EFLAG_CALCULATE_PSNR;
+  ASSERT_EQ(
+      aom_codec_encode(&enc, image, /*pts=*/0, /*duration=*/1, psnr_flags),
+      AOM_CODEC_OK);
+
+  const aom_codec_cx_pkt_t *pkt;
+  aom_codec_iter_t iter = nullptr;
+  bool had_psnr = false;
+  while ((pkt = aom_codec_get_cx_data(&enc, &iter)) != nullptr) {
+    if (pkt->kind != AOM_CODEC_CX_FRAME_PKT) {
+      ASSERT_EQ(pkt->kind, AOM_CODEC_PSNR_PKT);
+      had_psnr = true;
+    }
+  }
+  EXPECT_TRUE(had_psnr);
+
+  aom_enc_frame_flags_t no_psnr_flags = 0;
+  ASSERT_EQ(
+      aom_codec_encode(&enc, image, /*pts=*/1, /*duration=*/1, no_psnr_flags),
+      AOM_CODEC_OK);
+
+  iter = nullptr;
+  had_psnr = false;
+  while ((pkt = aom_codec_get_cx_data(&enc, &iter)) != nullptr) {
+    if (pkt->kind != AOM_CODEC_CX_FRAME_PKT) {
+      ASSERT_EQ(pkt->kind, AOM_CODEC_PSNR_PKT);
+      had_psnr = true;
+    }
+  }
+#if CONFIG_INTERNAL_STATS
+  // CONFIG_INTERNAL_STATS unconditionally generates PSNR.
+  EXPECT_TRUE(had_psnr);
+#else
+  EXPECT_FALSE(had_psnr);
+#endif  // CONFIG_INTERNAL_STATS
+
+  aom_img_free(image);
+  ASSERT_EQ(aom_codec_destroy(&enc), AOM_CODEC_OK);
+}
+
+#if !CONFIG_REALTIME_ONLY
+TEST(EncodeAPI, PerFramePsnrGoodQualityZeroLagInFrames) {
+  aom_codec_iface_t *iface = aom_codec_av1_cx();
+  aom_codec_enc_cfg_t cfg;
+  ASSERT_EQ(aom_codec_enc_config_default(iface, &cfg, AOM_USAGE_GOOD_QUALITY),
+            AOM_CODEC_OK);
+  ASSERT_NE(cfg.g_lag_in_frames, 0);
+  cfg.g_lag_in_frames = 0;
+
+  aom_codec_ctx_t enc;
+  ASSERT_EQ(aom_codec_enc_init(&enc, iface, &cfg, 0), AOM_CODEC_OK);
+
+  aom_image_t *image = CreateGrayImage(AOM_IMG_FMT_I420, cfg.g_w, cfg.g_h);
+  ASSERT_NE(image, nullptr);
+
+  aom_enc_frame_flags_t psnr_flags = AOM_EFLAG_CALCULATE_PSNR;
+  ASSERT_EQ(
+      aom_codec_encode(&enc, image, /*pts=*/0, /*duration=*/1, psnr_flags),
+      AOM_CODEC_OK);
+  const aom_codec_cx_pkt_t *pkt;
+  aom_codec_iter_t iter = nullptr;
+  bool had_psnr = false;
+  while ((pkt = aom_codec_get_cx_data(&enc, &iter)) != nullptr) {
+    if (pkt->kind != AOM_CODEC_CX_FRAME_PKT) {
+      ASSERT_EQ(pkt->kind, AOM_CODEC_PSNR_PKT);
+      had_psnr = true;
+    }
+  }
+  EXPECT_TRUE(had_psnr);
+
+  aom_enc_frame_flags_t no_psnr_flags = 0;
+  ASSERT_EQ(
+      aom_codec_encode(&enc, image, /*pts=*/1, /*duration=*/1, no_psnr_flags),
+      AOM_CODEC_OK);
+  iter = nullptr;
+  had_psnr = false;
+  while ((pkt = aom_codec_get_cx_data(&enc, &iter)) != nullptr) {
+    if (pkt->kind != AOM_CODEC_CX_FRAME_PKT) {
+      ASSERT_EQ(pkt->kind, AOM_CODEC_PSNR_PKT);
+      had_psnr = true;
+    }
+  }
+#if CONFIG_INTERNAL_STATS
+  // CONFIG_INTERNAL_STATS unconditionally generates PSNR.
+  EXPECT_TRUE(had_psnr);
+#else
+  EXPECT_FALSE(had_psnr);
+#endif  // CONFIG_INTERNAL_STATS
+  aom_img_free(image);
+  ASSERT_EQ(aom_codec_destroy(&enc), AOM_CODEC_OK);
+}
+
+TEST(EncodeAPI, PerFramePsnrNotSupportedWithLagInFrames) {
+  aom_codec_iface_t *iface = aom_codec_av1_cx();
+  aom_codec_enc_cfg_t cfg;
+  ASSERT_EQ(aom_codec_enc_config_default(iface, &cfg, AOM_USAGE_GOOD_QUALITY),
+            AOM_CODEC_OK);
+  ASSERT_NE(cfg.g_lag_in_frames, 0);
+
+  aom_codec_ctx_t enc;
+  ASSERT_EQ(aom_codec_enc_init(&enc, iface, &cfg, 0), AOM_CODEC_OK);
+
+  aom_image_t *image = CreateGrayImage(AOM_IMG_FMT_I420, cfg.g_w, cfg.g_h);
+  ASSERT_NE(image, nullptr);
+
+  aom_enc_frame_flags_t psnr_flags = AOM_EFLAG_CALCULATE_PSNR;
+  ASSERT_EQ(
+      aom_codec_encode(&enc, image, /*pts=*/0, /*duration=*/1, psnr_flags),
+      AOM_CODEC_INCAPABLE);
+
+  aom_img_free(image);
+  ASSERT_EQ(aom_codec_destroy(&enc), AOM_CODEC_OK);
+}
+#endif  // !CONFIG_REALTIME_ONLY
+
 }  // namespace

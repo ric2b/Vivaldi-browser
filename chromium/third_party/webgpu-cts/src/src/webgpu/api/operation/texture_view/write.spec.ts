@@ -54,16 +54,16 @@ const kColorsFloat = [
   { R: 0.4, G: 0.3, B: 0.6, A: 0.8 },
 ];
 
-function FloatToIntColor(c: number) {
+function floatToIntColor(c: number) {
   return Math.floor(c * 100);
 }
 
 const kColorsInt = kColorsFloat.map(c => {
   return {
-    R: FloatToIntColor(c.R),
-    G: FloatToIntColor(c.G),
-    B: FloatToIntColor(c.B),
-    A: FloatToIntColor(c.A),
+    R: floatToIntColor(c.R),
+    G: floatToIntColor(c.G),
+    B: floatToIntColor(c.B),
+    A: floatToIntColor(c.A),
   };
 });
 
@@ -346,7 +346,7 @@ TODO: Test rgb10a2uint when TexelRepresentation.numericRange is made per-compone
     switch (method) {
       case 'storage-write-compute':
       case 'storage-write-fragment':
-        t.skipIfTextureFormatNotUsableAsStorageTexture(format);
+        t.skipIfTextureFormatNotUsableWithStorageAccessMode('write-only', format);
         break;
       case 'render-pass-store':
         t.skipIfTextureFormatNotUsableAsRenderAttachment(format);

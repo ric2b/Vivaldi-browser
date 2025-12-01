@@ -20,6 +20,7 @@
 #include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/common/pref_names.h"
+#include "components/prefs/pref_service.h"
 #include "components/printing/browser/print_composite_client.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
@@ -425,4 +426,8 @@ void VivaldiUIWebContentsDelegate::DraggableRegionsChanged(
     const std::vector<blink::mojom::DraggableRegionPtr>& regions,
     content::WebContents* contents) {
     window_->DraggableRegionsChanged(regions, contents);
+}
+
+bool VivaldiUIWebContentsDelegate::CanOverscrollContent() {
+  return false;
 }

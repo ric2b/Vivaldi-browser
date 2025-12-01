@@ -41,12 +41,12 @@
 #include "content/browser/webid/webid_utils.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/content_browser_client.h"
-#include "content/public/browser/federated_identity_api_permission_context_delegate.h"
-#include "content/public/browser/federated_identity_auto_reauthn_permission_context_delegate.h"
-#include "content/public/browser/federated_identity_permission_context_delegate.h"
-#include "content/public/browser/identity_request_account.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/browser/webid/federated_identity_api_permission_context_delegate.h"
+#include "content/public/browser/webid/federated_identity_auto_reauthn_permission_context_delegate.h"
+#include "content/public/browser/webid/federated_identity_permission_context_delegate.h"
+#include "content/public/browser/webid/identity_request_account.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/page_visibility_state.h"
@@ -55,6 +55,8 @@
 #include "third_party/blink/public/common/webid/login_status_options.h"
 #include "third_party/blink/public/mojom/webid/federated_auth_request.mojom.h"
 #include "url/gurl.h"
+
+#include "app/vivaldi_apptools.h"
 
 using base::Value;
 using blink::mojom::DisconnectStatus;
@@ -483,7 +485,7 @@ void FederatedAuthRequestImpl::RequestToken(
         CompleteRequestWithError(
             FederatedAuthRequestResult::kSilentMediationFailure,
             TokenStatus::kSilentMediationFailure,
-            /*should_delay_callback=*/false);
+            /*should_delay_callback=*/true);
         return;
       }
 
@@ -518,15 +520,14 @@ void FederatedAuthRequestImpl::RequestToken(
   if (IsFedCmMultipleIdentityProvidersEnabled() && unique_idps.empty()) {
     // At this point either all IDPs are signed out or mediation:silent was used
     // and there are no returning accounts.
-    bool should_delay_callback =
-        mediation_requirement_ == MediationRequirement::kSilent ? false : true;
     auto result = mediation_requirement_ == MediationRequirement::kSilent
                       ? FederatedAuthRequestResult::kSilentMediationFailure
                       : FederatedAuthRequestResult::kNotSignedInWithIdp;
     auto token_status = mediation_requirement_ == MediationRequirement::kSilent
                             ? TokenStatus::kSilentMediationFailure
                             : TokenStatus::kNotSignedInWithIdp;
-    CompleteRequestWithError(result, token_status, should_delay_callback);
+    CompleteRequestWithError(result, token_status,
+                             /*should_delay_callback=*/true);
     return;
   }
 
@@ -547,9 +548,6 @@ void FederatedAuthRequestImpl::RequestToken(
                            weak_ptr_factory_.GetWeakPtr()))) {
       return;
     }
-    // Because the loading dialog is not interactable, we do not count it for
-    // did_show_ui_, as it is not useful for IDPs in calculating a click-through
-    // rate.
   }
 
   if (IsFedCmMultipleIdentityProvidersEnabled()) {
@@ -557,6 +555,12 @@ void FederatedAuthRequestImpl::RequestToken(
   }
 
   CHECK(!unique_idps.empty());
+  if (rp_mode_ == RpMode::kPassive) {
+    request_dialog_controller_->ShouldShowAccountsPassiveDialog(base::BindOnce(
+        &FederatedAuthRequestImpl::OnShouldShowAccountsPassiveDialogResult,
+        weak_ptr_factory_.GetWeakPtr(), std::move(unique_idps)));
+    return;
+  }
   FetchEndpointsForIdps(std::move(unique_idps));
 }
 
@@ -617,7 +621,10 @@ void FederatedAuthRequestImpl::ResolveTokenRequest(
 void FederatedAuthRequestImpl::SetIdpSigninStatus(
     const url::Origin& idp_origin,
     blink::mojom::IdpSigninStatus status,
-    const std::optional<blink::common::webid::LoginStatusOptions>& options) {
+    const std::optional<blink::common::webid::LoginStatusOptions>& options,
+    SetIdpSigninStatusCallback callback) {
+  auto scoped_closure = base::ScopedClosureRunner(std::move(callback));
+
   if (render_frame_host().IsNestedWithinFencedFrame()) {
     RecordSetLoginStatusIgnoredReason(
         FedCmSetLoginStatusIgnoredReason::kInFencedFrame);
@@ -960,9 +967,13 @@ void FederatedAuthRequestImpl::MaybeShowAccountsDialog() {
           return !is_account2_new;
         }
         // Show returning accounts before non-returning.
-        if (account1->login_state == LoginState::kSignUp ||
-            account2->login_state == LoginState::kSignUp) {
-          return account1->login_state == LoginState::kSignIn;
+        if (account1->idp_claimed_login_state.value_or(
+                account1->browser_trusted_login_state) == LoginState::kSignUp ||
+            account2->idp_claimed_login_state.value_or(
+                account2->browser_trusted_login_state) == LoginState::kSignUp) {
+          return account1->idp_claimed_login_state.value_or(
+                     account1->browser_trusted_login_state) ==
+                 LoginState::kSignIn;
         }
         // Within returning accounts, prefer those with last used
         // timestamp.
@@ -1042,12 +1053,8 @@ void FederatedAuthRequestImpl::MaybeShowAccountsDialog() {
 
       // By this moment we know that the user has granted permission in the past
       // for the RP/IdP. Because otherwise we have returned already in
-      // `ShouldFailBeforeFetchingAccounts`. It means that we can do the
-      // following without privacy cost:
-      // 1. Reject the promise immediately without delay
-      // 2. Not to show any UI to respect `mediation: silent`
-      // TODO(crbug.com/40266561): validate the statement above with
-      // stakeholders
+      // `ShouldFailBeforeFetchingAccounts`. It means that we don't need to show
+      // any UI to respect `mediation: silent`.
       render_frame_host().AddMessageToConsole(
           blink::mojom::ConsoleMessageLevel::kError,
           "Silent mediation issue: the user has used FedCM with multiple "
@@ -1055,7 +1062,7 @@ void FederatedAuthRequestImpl::MaybeShowAccountsDialog() {
       CompleteRequestWithError(
           FederatedAuthRequestResult::kSilentMediationFailure,
           TokenStatus::kSilentMediationFailure,
-          /*should_delay_callback=*/false);
+          /*should_delay_callback=*/true);
       return;
     }
 
@@ -1152,6 +1159,18 @@ void FederatedAuthRequestImpl::MaybeShowAccountsDialog() {
       return;
     }
   } else {
+    // Vivaldi guard against use before tab-creation. VB-117342 & VB-112452.
+    WebContents* web_contents =
+        WebContents::FromRenderFrameHost(&render_frame_host());
+    bool no_web_contents_or_view =
+        !web_contents || !web_contents->GetNativeView();
+    if (vivaldi::IsVivaldiRunning() && no_web_contents_or_view) {
+      CompleteRequestWithError(FederatedAuthRequestResult::kRpPageNotVisible,
+                               TokenStatus::kRpPageNotVisible,
+                               /*should_delay_callback=*/true);
+      return;
+    }
+
     if (!request_dialog_controller_->ShowAccountsDialog(
             CreateRpData(), idp_data_for_display_, accounts_, rp_mode_,
             new_accounts_,
@@ -1167,8 +1186,24 @@ void FederatedAuthRequestImpl::MaybeShowAccountsDialog() {
       return;
     }
   }
-  did_show_ui_ = true;
+  AfterAccountsDialogShown(did_succeed_for_at_least_one_idp);
+}
 
+void FederatedAuthRequestImpl::OnShouldShowAccountsPassiveDialogResult(
+    const std::set<GURL>& unique_idps,
+    bool should_show) {
+  if (!should_show) {
+    CompleteRequestWithError(
+        FederatedAuthRequestResult::kSuppressedBySegmentationPlatform,
+        TokenStatus::kSuppressedBySegmentationPlatform,
+        /*should_delay_callback=*/true);
+    return;
+  }
+  FetchEndpointsForIdps(std::move(unique_idps));
+}
+
+void FederatedAuthRequestImpl::AfterAccountsDialogShown(
+    bool did_succeed_for_at_least_one_idp) {
   devtools_instrumentation::DidShowFedCmDialog(render_frame_host());
 
   if (identity_selection_type_ == kExplicit &&
@@ -1252,6 +1287,7 @@ void FederatedAuthRequestImpl::NotifyAutofillSuggestionAccepted(
                          weak_ptr_factory_.GetWeakPtr()))) {
     return;
   }
+  // TODO(crbug.com/435216589): Should we call AfterAccountsDialogShown here?
 }
 
 void FederatedAuthRequestImpl::OnAccountsDisplayed() {
@@ -1333,7 +1369,6 @@ void FederatedAuthRequestImpl::ShowSingleIdpFailureDialog() {
                               /*can_append_hints=*/true))) {
     return;
   }
-  did_show_ui_ = true;
 
   CHECK_EQ(idp_data_for_display_.size(), 1u);
   fedcm_metrics_->RecordSingleIdpMismatchDialogShown(
@@ -1540,10 +1575,6 @@ void FederatedAuthRequestImpl::OnDialogDismissed(
   if (should_embargo) {
     token_status = TokenStatus::kShouldEmbargo;
     result = FederatedAuthRequestResult::kShouldEmbargo;
-  } else if (dismiss_reason ==
-             IdentityRequestDialogController::DismissReason::kSuppressed) {
-    token_status = TokenStatus::kNotSelectAccount;
-    result = FederatedAuthRequestResult::kSuppressedBySegmentationPlatform;
   } else {
     token_status = TokenStatus::kNotSelectAccount;
     result = FederatedAuthRequestResult::kUiDismissedNoEmbargo;
@@ -1578,7 +1609,6 @@ void FederatedAuthRequestImpl::ShowModalDialog(DialogType dialog_type,
       url_to_show, rp_mode_,
       base::BindOnce(&FederatedAuthRequestImpl::OnDialogDismissed,
                      weak_ptr_factory_.GetWeakPtr()));
-  did_show_ui_ = true;
   // This may be null on Android, as the method cannot return the WebContents of
   // the CCT that will be created.
   if (web_contents) {
@@ -1670,7 +1700,6 @@ void FederatedAuthRequestImpl::ShowErrorDialog(
               : base::NullCallback())) {
     return;
   }
-  did_show_ui_ = true;
   devtools_instrumentation::DidShowFedCmDialog(render_frame_host());
 }
 
@@ -1868,7 +1897,8 @@ void FederatedAuthRequestImpl::CompleteRequest(
     // recording the account status on the mismatch UI.
     for (const auto& account : accounts_) {
       has_signin_account = false;
-      if (account->login_state == LoginState::kSignIn) {
+      if (account->idp_claimed_login_state.value_or(
+              account->browser_trusted_login_state) == LoginState::kSignIn) {
         has_signin_account = true;
         break;
       }
@@ -1883,7 +1913,7 @@ void FederatedAuthRequestImpl::CompleteRequest(
             : FedCmThirdPartyCookiesStatus::kDisabledInSettings,
         webid::ComputeRequesterFrameType(render_frame_host(), origin(),
                                          GetEmbeddingOrigin()),
-        has_signin_account);
+        has_signin_account, request_dialog_controller_->DidShowUi());
   }
 
   if (result == FederatedAuthRequestResult::kSuccess) {
@@ -1898,7 +1928,7 @@ void FederatedAuthRequestImpl::CompleteRequest(
           id_assertion_response_time_ - start_time_ -
               (accounts_dialog_display_time_ -
                ready_to_display_accounts_dialog_time_),
-          did_show_ui_);
+          request_dialog_controller_->DidShowUi());
     }
   } else if (!errors_logged_to_console_) {
     errors_logged_to_console_ = true;
@@ -1909,8 +1939,8 @@ void FederatedAuthRequestImpl::CompleteRequest(
     // fedcm_accounts_fetcher_ could be null if configs were not fetched, e.g.
     // because of cooldown.
     if (IsFedCmMetricsEndpointEnabled() && fedcm_accounts_fetcher_) {
-      fedcm_accounts_fetcher_->SendAllFailedTokenRequestMetrics(result,
-                                                                did_show_ui_);
+      fedcm_accounts_fetcher_->SendAllFailedTokenRequestMetrics(
+          result, request_dialog_controller_->DidShowUi());
     }
   }
 
@@ -1993,7 +2023,6 @@ void FederatedAuthRequestImpl::CleanUp() {
   dialog_type_ = kNone;
   identity_selection_type_ = kExplicit;
   had_transient_user_activation_ = false;
-  did_show_ui_ = false;
   rp_mode_ = RpMode::kPassive;
 }
 
@@ -2103,7 +2132,11 @@ void FederatedAuthRequestImpl::OnClose() {
   request_dialog_controller_->CloseModalDialog();
 
   // If we have not gotten a signin status change, abort the flow.
-  if (idps_user_tried_to_signin_to_.empty() &&
+  // The same goes if we did get a status change but the accounts fetch
+  // failed.
+  if ((idps_user_tried_to_signin_to_.empty() ||
+       (fetch_data_.pending_idps.empty() &&
+        !fetch_data_.did_succeed_for_at_least_one_idp)) &&
       dialog_type_ == kLoginToIdpPopup) {
     CompleteRequestWithError(FederatedAuthRequestResult::kError,
                              TokenStatus::kLoginPopupClosedWithoutSignin,
@@ -2244,8 +2277,9 @@ bool FederatedAuthRequestImpl::ShouldNotifyDevtoolsForDialogType(
 void FederatedAuthRequestImpl::AcceptAccountsDialogForDevtools(
     const GURL& config_url,
     const IdentityRequestAccount& account) {
-  bool is_sign_in =
-      account.login_state == IdentityRequestAccount::LoginState::kSignIn;
+  bool is_sign_in = account.idp_claimed_login_state.value_or(
+                        account.browser_trusted_login_state) ==
+                    IdentityRequestAccount::LoginState::kSignIn;
   OnAccountSelected(config_url, account.id, is_sign_in);
 }
 
@@ -2317,14 +2351,16 @@ bool FederatedAuthRequestImpl::GetAccountForAutoReauthn(
     }
   }
   for (const auto& account : accounts_) {
-    if (account->login_state == LoginState::kSignUp ||
+    if (account->idp_claimed_login_state.value_or(
+            account->browser_trusted_login_state) == LoginState::kSignUp ||
         account->is_filtered_out) {
       continue;
     }
-    // account.login_state could be set to kSignIn if the client is on the
-    // `approved_clients` list provided by IDP. However, in this case we have
-    // to trust the browser observed sign-in unless the IDP can be exempted.
-    // For example, they have third party cookies access on the RP site.
+    // account.idp_claimed_login_state will be set to kSignIn if the client is
+    // on the `approved_clients` list provided by IDP. However, in this case we
+    // have to trust the browser observed sign-in unless the IDP can be
+    // exempted. For example, they have third party cookies access on the RP
+    // site.
     if (!webid::HasSharingPermissionOrIdpHasThirdPartyCookiesAccess(
             render_frame_host(),
             /*provider_url=*/
@@ -2651,7 +2687,7 @@ bool FederatedAuthRequestImpl::HandlePendingRequestAndCancelNewRequest(
             : FedCmThirdPartyCookiesStatus::kDisabledInSettings,
         webid::ComputeRequesterFrameType(render_frame_host(), origin(),
                                          GetEmbeddingOrigin()),
-        /*has_signin_account=*/std::nullopt);
+        /*has_signin_account=*/std::nullopt, /*did_show_ui=*/false);
 
     AddDevToolsIssue(
         blink::mojom::FederatedAuthRequestResult::kTooManyRequests);

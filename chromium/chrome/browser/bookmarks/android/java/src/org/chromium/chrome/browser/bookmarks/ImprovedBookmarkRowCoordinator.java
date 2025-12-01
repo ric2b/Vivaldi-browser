@@ -4,12 +4,16 @@
 
 package org.chromium.chrome.browser.bookmarks;
 
+import static org.chromium.build.NullUtil.assumeNonNull;
+
 import android.content.Context;
 import android.graphics.drawable.Drawable;
 import android.util.Pair;
 
 import org.chromium.base.supplier.LazyOneshotSupplier;
 import org.chromium.base.supplier.LazyOneshotSupplierImpl;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.bookmarks.BookmarkUiPrefs.BookmarkRowDisplayPref;
 import org.chromium.chrome.browser.bookmarks.ImprovedBookmarkRowProperties.ImageVisibility;
 import org.chromium.components.bookmarks.BookmarkId;
@@ -26,11 +30,13 @@ import java.util.Objects;
 import org.chromium.build.BuildConfig;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.chrome.browser.profiles.ProfileManager;
+import org.chromium.url.GURL;
 import org.vivaldi.browser.common.DirectMatchBridge;
 import org.vivaldi.browser.common.VivaldiBookmarkUtils;
 // End Vivaldi
 
 /** Business logic for the improved bookmark row. */
+@NullMarked
 public class ImprovedBookmarkRowCoordinator {
     private final Context mContext;
     private final BookmarkImageFetcher mBookmarkImageFetcher;
@@ -40,8 +46,7 @@ public class ImprovedBookmarkRowCoordinator {
     private int mImageSize;
 
     // Vivaldi
-    private DirectMatchBridge mDirectMatchBridge;
-    // End Vivaldi
+    private final DirectMatchBridge mDirectMatchBridge;
 
     /**
      * @param context The calling context.
@@ -62,9 +67,8 @@ public class ImprovedBookmarkRowCoordinator {
         mBookmarkUiPrefs = bookmarkUiPrefs;
         mShoppingService = shoppingService;
         onBookmarkRowDisplayPrefChanged(mBookmarkUiPrefs.getBookmarkRowDisplayPref());
-        if (ChromeApplicationImpl.isVivaldi()) {
-            mDirectMatchBridge = new DirectMatchBridge(ProfileManager.getLastUsedRegularProfile());
-        } // End Vivaldi
+        // Vivaldi
+        mDirectMatchBridge = new DirectMatchBridge(ProfileManager.getLastUsedRegularProfile());
     }
 
     private void onBookmarkRowDisplayPrefChanged(@BookmarkRowDisplayPref int displayPref) {
@@ -74,7 +78,7 @@ public class ImprovedBookmarkRowCoordinator {
     /** Sets the given bookmark id. */
     public PropertyModel createBasePropertyModel(BookmarkId bookmarkId) {
         PropertyModel propertyModel = new PropertyModel(ImprovedBookmarkRowProperties.ALL_KEYS);
-        BookmarkItem bookmarkItem = mBookmarkModel.getBookmarkById(bookmarkId);
+        BookmarkItem bookmarkItem = assumeNonNull(mBookmarkModel.getBookmarkById(bookmarkId));
         PowerBookmarkMeta meta = mBookmarkModel.getPowerBookmarkMeta(bookmarkId);
         final @BookmarkRowDisplayPref int displayPref =
                 mBookmarkUiPrefs.getBookmarkRowDisplayPref();
@@ -132,6 +136,15 @@ public class ImprovedBookmarkRowCoordinator {
             propertyModel.set(
                     ImprovedBookmarkRowProperties.CONTENT_DESCRIPTION, contentDescription);
         } else {
+            if (BuildConfig.IS_VIVALDI) {
+                GURL displayURL = bookmarkItem.nativeGetUrlForDisplay();
+                if (!displayURL.equals(bookmarkItem.getUrl())) {
+                    propertyModel.set(
+                        ImprovedBookmarkRowProperties.DESCRIPTION, bookmarkItem.nativeGetUrlForDisplay().getSpec());
+                } else
+                    propertyModel.set(
+                            ImprovedBookmarkRowProperties.DESCRIPTION, bookmarkItem.getUrlForDisplay());
+            } else // End Vivaldi
             propertyModel.set(
                     ImprovedBookmarkRowProperties.DESCRIPTION, bookmarkItem.getUrlForDisplay());
         }
@@ -213,7 +226,8 @@ public class ImprovedBookmarkRowCoordinator {
                             if (BuildConfig.IS_VIVALDI) {
                                 String imagePath = getFaviconItemPath(item);
                                 if (imagePath != null)
-                                    mBookmarkImageFetcher.fetchFaviconForBookmark(item, imagePath, this::set);
+                                    mBookmarkImageFetcher.fetchFaviconForBookmark(
+                                            item, imagePath, this::set);
                                 else
                                     mBookmarkImageFetcher.fetchFaviconForBookmark(item, this::set);
                             } else // End Vivaldi
@@ -291,17 +305,12 @@ public class ImprovedBookmarkRowCoordinator {
                 && !specialFoldersIds.contains(folder);
     }
 
-    //Vivaldi
-    String getFaviconItemPath(BookmarkItem item)  {
-        String imagePath = null;
-        if (mDirectMatchBridge != null) {
-            List<DirectMatchBridge.DirectMatchItem> items =
-                    mDirectMatchBridge.getPopularSites(0);
-            for (DirectMatchBridge.DirectMatchItem matchItem : items) {
-                if (matchItem.mRedirectUrl.equals(item.getUrl().getSpec())) {
-                    imagePath = matchItem.mImagePath;
-                    return imagePath;
-                }
+    // Vivaldi
+    private @Nullable String getFaviconItemPath(BookmarkItem item)  {
+        List<DirectMatchBridge.DirectMatchItem> items = mDirectMatchBridge.getPopularSites(0);
+        for (DirectMatchBridge.DirectMatchItem matchItem : items) {
+            if (matchItem.mRedirectUrl.equals(item.getUrl().getSpec())) {
+                return matchItem.mImagePath;
             }
         }
         return null;

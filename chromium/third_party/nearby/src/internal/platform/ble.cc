@@ -69,9 +69,9 @@ bool BleMedium::StartScanning(
                 if (peripherals_.empty()) return;
                 auto context = peripherals_.find(&peripheral);
                 if (context == peripherals_.end()) return;
-                NEARBY_LOGS(INFO) << "Removing peripheral="
-                                  << context->second->peripheral.GetName()
-                                  << ", impl=" << &peripheral;
+                LOG(INFO) << "Removing peripheral="
+                          << context->second->peripheral.GetName()
+                          << ", impl=" << &peripheral;
                 discovered_peripheral_callback_.peripheral_lost_cb(
                     context->second->peripheral, service_id);
               },
@@ -83,7 +83,7 @@ bool BleMedium::StopScanning(const std::string& service_id) {
     MutexLock lock(&mutex_);
     discovered_peripheral_callback_ = {};
     peripherals_.clear();
-    NEARBY_LOGS(INFO) << "Ble Scanning disabled: impl=" << &GetImpl();
+    LOG(INFO) << "Ble Scanning disabled: impl=" << &GetImpl();
   }
   return impl_->StopScanning(service_id);
 }
@@ -102,12 +102,12 @@ bool BleMedium::StartAcceptingConnections(const std::string& service_id,
             &socket, std::make_unique<AcceptedConnectionInfo>());
         auto& context = *pair.first->second;
         if (!pair.second) {
-          NEARBY_LOGS(INFO) << "Accepting (again) socket=" << &context.socket
-                            << ", impl=" << &socket;
+          LOG(INFO) << "Accepting (again) socket=" << &context.socket
+                    << ", impl=" << &socket;
         } else {
           context.socket = BleSocket(&socket);
-          NEARBY_LOGS(INFO)
-              << "Accepting socket=" << &context.socket << ", impl=" << &socket;
+          LOG(INFO) << "Accepting socket=" << &context.socket
+                    << ", impl=" << &socket;
         }
         if (accepted_connection_callback_) {
           accepted_connection_callback_(context.socket, service_id);
@@ -120,8 +120,7 @@ bool BleMedium::StopAcceptingConnections(const std::string& service_id) {
     MutexLock lock(&mutex_);
     accepted_connection_callback_ = nullptr;
     sockets_.clear();
-    NEARBY_LOGS(INFO) << "Ble accepted connection disabled: impl="
-                      << &GetImpl();
+    LOG(INFO) << "Ble accepted connection disabled: impl=" << &GetImpl();
   }
   return impl_->StopAcceptingConnections(service_id);
 }
@@ -131,9 +130,8 @@ BleSocket BleMedium::Connect(BlePeripheral& peripheral,
                              CancellationFlag* cancellation_flag) {
   {
     MutexLock lock(&mutex_);
-    NEARBY_LOGS(INFO) << "BleMedium::Connect: peripheral="
-                      << peripheral.GetName()
-                      << ",impl=" << &peripheral.GetImpl();
+    LOG(INFO) << "BleMedium::Connect: peripheral=" << peripheral.GetName()
+              << ",impl=" << &peripheral.GetImpl();
   }
   return BleSocket(
       impl_->Connect(peripheral.GetImpl(), service_id, cancellation_flag));

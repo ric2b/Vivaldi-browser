@@ -39,7 +39,7 @@ bool ShouldShowVivaldiWhatsNewPage () {
   }
 
   bool version_changed = false;
-  std::string version = vivaldi::GetVivaldiVersionString();
+  std::string version = std::string(vivaldi::GetVivaldiVersionString());
   std::string last_seen_version = base::SysNSStringToUTF8(
       [[NSUserDefaults standardUserDefaults] stringForKey:vLastSeenVersionKey]);
 

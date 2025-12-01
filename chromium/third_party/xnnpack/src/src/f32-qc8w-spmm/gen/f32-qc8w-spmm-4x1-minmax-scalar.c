@@ -9,10 +9,13 @@
 // LICENSE file in the root directory of this source tree.
 
 #include <assert.h>
-#include "src/xnnpack/unaligned.h"
+#include <stddef.h>
+#include <stdint.h>
 
+#include "src/xnnpack/common.h"
 #include "src/xnnpack/math.h"
-#include "src/xnnpack/spmm.h"
+#include "src/xnnpack/microparams.h"
+#include "src/xnnpack/unaligned.h"
 
 
 void xnn_f32_qc8w_spmm_minmax_ukernel_4x1__scalar(
@@ -24,7 +27,7 @@ void xnn_f32_qc8w_spmm_minmax_ukernel_4x1__scalar(
     const uint32_t* nidx_nnzmap,
     float* output,
     size_t output_stride,
-    const struct xnn_f32_minmax_params params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f32_minmax_params* restrict params)
 {
   assert(mc != 0);
   assert(mc % sizeof(float) == 0);

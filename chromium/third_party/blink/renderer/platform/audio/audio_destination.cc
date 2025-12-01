@@ -39,6 +39,7 @@
 #include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/trace_event/trace_event.h"
+#include "media/audio/audio_features.h"
 #include "media/base/audio_bus.h"
 #include "media/base/audio_glitch_info.h"
 #include "third_party/blink/public/common/features.h"
@@ -109,10 +110,9 @@ scoped_refptr<AudioDestination> AudioDestination::Create(
     std::optional<float> context_sample_rate,
     unsigned render_quantum_frames) {
   TRACE_EVENT0("webaudio", "AudioDestination::Create");
-  return base::AdoptRef(
-      new AudioDestination(callback, sink_descriptor, number_of_output_channels,
-                           latency_hint, context_sample_rate,
-                           render_quantum_frames));
+  return base::AdoptRef(new AudioDestination(
+      callback, sink_descriptor, number_of_output_channels, latency_hint,
+      context_sample_rate, render_quantum_frames));
 }
 
 AudioDestination::~AudioDestination() {
@@ -172,13 +172,13 @@ int AudioDestination::Render(base::TimeDelta delay,
     if (worklet_task_runner_) {
       // Use the dual-thread rendering if the AudioWorklet is activated.
       output_buffer_bypass_wait_event_.Reset();
-      PostCrossThreadTask(
+      const bool posted_successfully = PostCrossThreadTask(
           *worklet_task_runner_, FROM_HERE,
           CrossThreadBindOnce(
               &AudioDestination::RequestRenderWait, WrapRefCounted(this),
               number_of_frames, frames_to_render, delay, delay_timestamp,
               glitch_info, /*request_timestamp=*/base::TimeTicks::Now()));
-      {
+      if (posted_successfully) {
         TRACE_EVENT0("webaudio", "AudioDestination::Render waiting");
         base::ScopedAllowBaseSyncPrimitivesOutsideBlockingScope allow_wait;
         // This is `Wait()`ing on the audio render thread for a `Signal()` from
@@ -197,6 +197,9 @@ int AudioDestination::Render(base::TimeDelta delay,
         // both threads waiting on each other. There is, however, no guarantee
         // that the task runner will finish within the real-time budget.
         output_buffer_bypass_wait_event_.Wait();
+      } else {
+        // The render request failed to post
+        state_change_underrun_in_bypass_mode_ = true;
       }
     } else {
       // Otherwise use the single-thread rendering.
@@ -368,7 +371,7 @@ void AudioDestination::StartWithWorkletTaskRunner(
   web_audio_device_->Start();
 }
 
-bool AudioDestination::IsPlaying() {
+bool AudioDestination::IsPlaying() const {
   DCHECK(IsMainThread());
   return device_state_ == DeviceState::kRunning;
 }
@@ -481,7 +484,7 @@ AudioDestination::AudioDestination(
   double scale_factor = 1.0;
 
   if (!base::FeatureList::IsEnabled(
-          features::kWebAudioRemoveAudioDestinationResampler) &&
+          ::features::kWebAudioRemoveAudioDestinationResampler) &&
       context_sample_rate_ != web_audio_device_->SampleRate()) {
     scale_factor = context_sample_rate_ / web_audio_device_->SampleRate();
     SendLogMessage(__func__,
@@ -677,6 +680,19 @@ void AudioDestination::PullFromCallback(AudioBus* destination_bus,
 media::OutputDeviceStatus AudioDestination::MaybeCreateSinkAndGetStatus() {
   TRACE_EVENT0("webaudio", "AudioDestination::MaybeCreateSinkAndGetStatus");
   return web_audio_device_->MaybeCreateSinkAndGetStatus();
+}
+
+size_t AudioDestination::FramesElapsed() const {
+  DCHECK(IsMainThread());
+  DCHECK(!IsPlaying());
+  return frames_elapsed_;
+}
+
+void AudioDestination::TransferElapsedFramesFrom(
+    const scoped_refptr<AudioDestination> previous_platform_destination) {
+  DCHECK(IsMainThread());
+  DCHECK(!IsPlaying() && !previous_platform_destination->IsPlaying());
+  frames_elapsed_ += previous_platform_destination->FramesElapsed();
 }
 
 void AudioDestination::SendLogMessage(const char* const function_name,

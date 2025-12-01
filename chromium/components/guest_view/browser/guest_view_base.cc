@@ -38,6 +38,7 @@
 #include "chrome/browser/resource_coordinator/tab_lifecycle_unit_external.h"
 #include "content/browser/browser_plugin/browser_plugin_guest.h"
 #include "content/browser/web_contents/web_contents_impl.h"
+#include "content/public/common/url_constants.h"
 #include "ui/content/vivaldi_tab_check.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -1106,7 +1107,8 @@ void GuestViewBase::OnZoomChanged(
   if (embedder_web_contents()) {
     auto *vivaldi_app_helper =
         extensions::VivaldiAppHelper::FromWebContents(embedder_web_contents());
-    if (vivaldi_app_helper) {
+    if (vivaldi_app_helper ||
+        web_contents()->GetURL().SchemeIs(content::kChromeDevToolsScheme)) {
       return;
     }
   }
@@ -1380,7 +1382,9 @@ void GuestViewBase::SetGuestZoomLevelToMatchEmbedder() {
   if (embedder_web_contents()) {
     auto *vivaldi_app_helper =
       extensions::VivaldiAppHelper::FromWebContents(owner_web_contents());
-    if (vivaldi_app_helper) {
+
+    if (vivaldi_app_helper ||
+        web_contents()->GetURL().SchemeIs(content::kChromeDevToolsScheme)) {
       // NOTE(arnar@vivaldi.com): Do not set Guest zoom level to match level of
       // embedder if embedder is Vivaldi app (UI Zoom)
       return;

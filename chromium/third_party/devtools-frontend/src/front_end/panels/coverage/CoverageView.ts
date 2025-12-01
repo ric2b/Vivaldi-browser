@@ -40,7 +40,7 @@ const UIStrings = {
    */
   filterByUrl: 'Filter by URL',
   /**
-   *@description Label for the type filter in the Converage Panel
+   *@description Label for the type filter in the Coverage Panel
    */
   filterCoverageByType: 'Filter coverage by type',
   /**
@@ -146,10 +146,11 @@ export class CoverageView extends UI.Widget.VBox {
   private statusMessageElement: HTMLElement;
 
   constructor() {
-    super(true);
+    super({
+      jslog: `${VisualLogging.panel('coverage').track({resize: true})}`,
+      useShadowDom: true,
+    });
     this.registerRequiredCSS(coverageViewStyles);
-
-    this.element.setAttribute('jslog', `${VisualLogging.panel('coverage').track({resize: true})}`);
 
     this.model = null;
     this.decorationManager = null;

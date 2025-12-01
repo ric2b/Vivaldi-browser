@@ -36,6 +36,10 @@
 // menu is tapped.
 - (void)showModalForBadgeType:(BadgeType)badgeType;
 
+// Vivaldi: Action when the reader mode badge is tapped.
+- (void)readerModeBadgeButtonTapped:(id)sender;
+// End Vivaldi
+
 @end
 
 #endif  // IOS_CHROME_BROWSER_BADGES_UI_BUNDLED_BADGE_DELEGATE_H_

@@ -1,0 +1,12 @@
+Name: GNU perf
+Short Name: gperf
+URL: http://gnuwin32.sourceforge.net/packages/gperf.htm
+Version: 3.0.1
+Update Mechanism: Manual
+License: GPL-2.0
+License File: src/gperf/3.0.1/gperf-3.0.1-src/COPYING
+Shipped: no
+Security Critical: no
+Description: Gperf for Windows.
+Local Modifications: None
+# TODO: crbug.com/431264806 - Switch to prebuilt CIPD binaries.

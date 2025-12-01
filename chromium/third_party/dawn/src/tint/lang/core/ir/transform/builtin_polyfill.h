@@ -28,6 +28,7 @@
 #ifndef SRC_TINT_LANG_CORE_IR_TRANSFORM_BUILTIN_POLYFILL_H_
 #define SRC_TINT_LANG_CORE_IR_TRANSFORM_BUILTIN_POLYFILL_H_
 
+#include "src/tint/lang/core/ir/validator.h"
 #include "src/tint/utils/reflection.h"
 #include "src/tint/utils/result.h"
 
@@ -37,6 +38,9 @@ class Module;
 }
 
 namespace tint::core::ir::transform {
+
+/// The capabilities that the transform can support.
+const Capabilities kBuiltinPolyfillCapabilities{Capability::kAllowDuplicateBindings};
 
 /// Enumerator of polyfill levels.
 enum class BuiltinPolyfillLevel {
@@ -52,6 +56,8 @@ enum class BuiltinPolyfillLevel {
 struct BuiltinPolyfillConfig {
     /// Should `clamp()` be polyfilled for integer values?
     bool clamp_int = false;
+    /// Should `abs()` be polyfilled for signed integer values?
+    bool abs_signed_int = false;
     /// Should `countLeadingZeros()` be polyfilled?
     bool count_leading_zeros = false;
     /// Should `countTrailingZeros()` be polyfilled?

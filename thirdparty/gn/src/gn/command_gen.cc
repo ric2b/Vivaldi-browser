@@ -76,6 +76,7 @@ const char kSwitchJsonIdeScript[] = "json-ide-script";
 const char kSwitchJsonIdeScriptArgs[] = "json-ide-script-args";
 const char kSwitchExportCompileCommands[] = "export-compile-commands";
 const char kSwitchExportRustProject[] = "export-rust-project";
+const char kSwitchFilterWithData[] = "filter-with-data";
 
 // A map type used to implement --ide=ninja_outputs
 using NinjaOutputsMap = NinjaOutputsWriter::MapType;
@@ -265,6 +266,8 @@ bool RunIdeWriter(const std::string& ide,
       version = VisualStudioWriter::Version::Vs2015;
     else if (ide == kSwitchIdeValueVs2017)
       version = VisualStudioWriter::Version::Vs2017;
+    else if (ide == kSwitchIdeValueVs2019)
+      version = VisualStudioWriter::Version::Vs2019;
     else if (ide == kSwitchIdeValueVs2022)
       version = VisualStudioWriter::Version::Vs2022;
 
@@ -357,10 +360,11 @@ bool RunIdeWriter(const std::string& ide,
     std::string exec_script_extra_args =
         command_line->GetSwitchValueString(kSwitchJsonIdeScriptArgs);
     std::string filters = command_line->GetSwitchValueString(kSwitchFilters);
+    bool filter_with_data = command_line->HasSwitch(kSwitchFilterWithData);
 
     bool res = JSONProjectWriter::RunAndWriteFiles(
         build_settings, builder, file_name, exec_script, exec_script_extra_args,
-        filters, quiet, err);
+        filters, filter_with_data, quiet, err);
     if (res && !quiet) {
       OutputString("Generating JSON projects took " +
                    base::Int64ToString(timer.Elapsed().InMilliseconds()) +
@@ -675,6 +679,10 @@ Generic JSON Output
   --json-ide-script-args=<argument>
       Optional second argument that will be passed to executed script.
 
+  --filter-with-data
+      Additionally follows data deps when filtering. Without this flag, only
+      public and private linked deps will be followed. Only used with --filters.
+
 Ninja Outputs
 
   The --ninja-outputs-file=<FILE> option dumps a JSON file that maps GN labels
@@ -910,7 +918,9 @@ int RunGen(const std::vector<std::string>& args) {
 
   // Just like the build graph, leak the resolved data to avoid expensive
   // process teardown here too.
+#ifndef ASAN_ENABLED
   write_info.LeakOnPurpose();
+#endif
 
   return 0;
 }

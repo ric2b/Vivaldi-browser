@@ -188,6 +188,21 @@ export function widgetRef<T extends Widget, Args extends unknown[]>(
   });
 }
 
+/**
+ * Wraps CSS text in a @scope at-rule to encapsulate widget styles.
+ *
+ * This function relies on an implicit scope root (the parent element of the
+ * <style> tag) and sets an explicit scope limit at `<devtools-widget>`.
+ * This prevents a parent widget's styles from cascading into any nested
+ * child widgets.
+ *
+ * @param styles - The CSS rules to be scoped.
+ * @returns The scoped CSS string.
+ */
+export function widgetScoped(styles: string): string {
+  return `@scope to (devtools-widget) { ${styles} }`;
+}
+
 const widgetCounterMap = new WeakMap<Node, number>();
 const widgetMap = new WeakMap<Node, Widget>();
 
@@ -214,6 +229,40 @@ function decrementWidgetCounter(parentElement: Element, childElement: Element): 
 const UPDATE_COMPLETE = Promise.resolve(true);
 const UPDATE_COMPLETE_RESOLVE = (_result: boolean): void => {};
 
+/**
+ * Additional options passed to the `Widget` constructor to configure the
+ * behavior of the resulting instance.
+ */
+export interface WidgetOptions {
+  /**
+   * If you pass `true` here, the `contentElement` of the resulting `Widget`
+   * will be placed into the shadow DOM of its `element`. If the `element`
+   * doesn't already have a `shadowRoot`, a new one will be created.
+   *
+   * Otherwise, the `contentElement` will be a regular child of the `element`.
+   *
+   * Its default value is `false`.
+   */
+  useShadowDom?: boolean;
+
+  /**
+   * A boolean that, when set to `true`, specifies behavior that mitigates
+   * custom element issues around focusability. When a non-focusable part of
+   * the shadow DOM is clicked, the first focusable part is given focus, and
+   * the shadow host is given any available `:focus` styling.
+   *
+   * Its default value is `false`.
+   *
+   * @see https://developer.mozilla.org/en-US/docs/Web/API/Element/attachShadow
+   */
+  delegatesFocus?: boolean;
+
+  /**
+   * The Visual Logging configuration to put onto the `element` of the resulting
+   * `Widget`.
+   */
+  jslog?: string;
+}
 export class Widget {
   readonly element: HTMLElement;
   contentElement: HTMLElement;
@@ -235,13 +284,45 @@ export class Widget {
   #updateComplete = UPDATE_COMPLETE;
   #updateCompleteResolve = UPDATE_COMPLETE_RESOLVE;
   #updateRequestID = 0;
-  constructor(useShadowDom?: boolean, delegatesFocus?: boolean, element?: HTMLElement) {
-    this.element = element || document.createElement('div');
+
+  /**
+   * Constructs a new `Widget` with the given `options`.
+   *
+   * @param options - optional settings to configure the behavior.
+   */
+  constructor(options?: WidgetOptions);
+
+  /**
+   * Constructs a new `Widget` with the given `options` and attached to the
+   * given `element`.
+   *
+   * If `element` is `undefined`, a new `<div>` element will be created instead
+   * and the widget will be attached to that.
+   *
+   * @param element - an (optional) `HTMLElement` to attach the `Widget` to.
+   * @param options - optional settings to configure the behavior.
+   */
+  constructor(element?: HTMLElement, options?: WidgetOptions);
+
+  constructor(elementOrOptions?: HTMLElement|WidgetOptions, options?: WidgetOptions) {
+    if (elementOrOptions instanceof HTMLElement) {
+      this.element = elementOrOptions;
+    } else {
+      this.element = document.createElement('div');
+      if (elementOrOptions !== undefined) {
+        options = elementOrOptions;
+      }
+    }
     this.#shadowRoot = this.element.shadowRoot;
-    if (useShadowDom && !this.#shadowRoot) {
+    if (options?.jslog) {
+      this.element.setAttribute('jslog', options.jslog);
+    }
+    if (options?.useShadowDom && !this.#shadowRoot) {
       this.element.classList.add('vbox');
       this.element.classList.add('flex-auto');
-      this.#shadowRoot = createShadowRootWithCoreStyles(this.element, {delegatesFocus});
+      this.#shadowRoot = createShadowRootWithCoreStyles(this.element, {
+        delegatesFocus: options?.delegatesFocus,
+      });
       this.contentElement = document.createElement('div');
       this.#shadowRoot.appendChild(this.contentElement);
     } else {
@@ -255,7 +336,7 @@ export class Widget {
    * Returns the {@link Widget} whose element is the given `node`, or `undefined`
    * if the `node` is not an element for a widget.
    *
-   * @param node a DOM node.
+   * @param node - a DOM node.
    * @returns the {@link Widget} that is attached to the `node` or `undefined`.
    */
   static get(node: Node): Widget|undefined {
@@ -270,7 +351,7 @@ export class Widget {
     if (element instanceof WidgetElement) {
       return element.createWidget();
     }
-    return new Widget(undefined, undefined, element);
+    return new Widget(element);
   }
 
   markAsRoot(): void {
@@ -359,6 +440,7 @@ export class Widget {
 
   private processWasHidden(): void {
     this.callOnVisibleChildren(this.processWasHidden);
+    this.notify(this.wasHidden);
   }
 
   private processOnResize(): void {
@@ -385,6 +467,9 @@ export class Widget {
   }
 
   willHide(): void {
+  }
+
+  wasHidden(): void {
   }
 
   onResize(): void {
@@ -775,7 +860,7 @@ export class Widget {
    * the `requestAnimationFrame` and executed with the animation frame. Instead,
    * use the `requestUpdate()` method to schedule an asynchronous update.
    *
-   * @return can either return nothing or a promise; in that latter case, the
+   * @returns can either return nothing or a promise; in that latter case, the
    *         update logic will await the resolution of the returned promise
    *         before proceeding.
    */
@@ -848,12 +933,27 @@ const storedScrollPositions = new WeakMap<Element, {
 }>();
 
 export class VBox extends Widget {
-  constructor(useShadowDom?: boolean|HTMLElement, delegatesFocus?: boolean, element?: HTMLElement) {
-    if (useShadowDom instanceof HTMLElement) {
-      element = useShadowDom;
-      useShadowDom = false;
-    }
-    super(useShadowDom, delegatesFocus, element);
+  /**
+   * Constructs a new `VBox` with the given `options`.
+   *
+   * @param options - optional settings to configure the behavior.
+   */
+  constructor(options?: WidgetOptions);
+
+  /**
+   * Constructs a new `VBox` with the given `options` and attached to the
+   * given `element`.
+   *
+   * If `element` is `undefined`, a new `<div>` element will be created instead
+   * and the widget will be attached to that.
+   *
+   * @param element - an (optional) `HTMLElement` to attach the `VBox` to.
+   * @param options - optional settings to configure the behavior.
+   */
+  constructor(element?: HTMLElement, options?: WidgetOptions);
+
+  constructor() {
+    super(...arguments);
     this.contentElement.classList.add('vbox');
   }
 
@@ -872,8 +972,27 @@ export class VBox extends Widget {
 }
 
 export class HBox extends Widget {
-  constructor(useShadowDom?: boolean) {
-    super(useShadowDom);
+  /**
+   * Constructs a new `HBox` with the given `options`.
+   *
+   * @param options - optional settings to configure the behavior.
+   */
+  constructor(options?: WidgetOptions);
+
+  /**
+   * Constructs a new `HBox` with the given `options` and attached to the
+   * given `element`.
+   *
+   * If `element` is `undefined`, a new `<div>` element will be created instead
+   * and the widget will be attached to that.
+   *
+   * @param element - an (optional) `HTMLElement` to attach the `HBox` to.
+   * @param options - optional settings to configure the behavior.
+   */
+  constructor(element?: HTMLElement, options?: WidgetOptions);
+
+  constructor() {
+    super(...arguments);
     this.contentElement.classList.add('hbox');
   }
 
@@ -924,30 +1043,34 @@ export class WidgetFocusRestorer {
   }
 }
 
+function domOperationError(funcName: 'appendChild'|'insertBefore'|'removeChild'|'removeChildren'): Error {
+  return new Error(`Attempt to modify widget with native DOM method \`${funcName}\``);
+}
+
 Element.prototype.appendChild = function<T extends Node>(node: T): T {
   if (widgetMap.get(node) && node.parentElement !== this) {
-    throw new Error('Attempt to add widget via regular DOM operation.');
+    throw domOperationError('appendChild');
   }
   return originalAppendChild.call(this, node) as T;
 };
 
 Element.prototype.insertBefore = function<T extends Node>(node: T, child: Node|null): T {
   if (widgetMap.get(node) && node.parentElement !== this) {
-    throw new Error('Attempt to add widget via regular DOM operation.');
+    throw domOperationError('insertBefore');
   }
   return originalInsertBefore.call(this, node, child) as T;
 };
 
 Element.prototype.removeChild = function<T extends Node>(child: T): T {
   if (widgetCounterMap.get(child) || widgetMap.get(child)) {
-    throw new Error('Attempt to remove element containing widget via regular DOM operation');
+    throw domOperationError('removeChild');
   }
   return originalRemoveChild.call(this, child) as T;
 };
 
 Element.prototype.removeChildren = function(): void {
   if (widgetCounterMap.get(this)) {
-    throw new Error('Attempt to remove element containing widget via regular DOM operation');
+    throw domOperationError('removeChildren');
   }
   return originalRemoveChildren.call(this);
 };

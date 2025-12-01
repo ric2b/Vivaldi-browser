@@ -375,8 +375,8 @@ ConsoleMessage* MixedContentChecker::CreateConsoleMessageAboutFetch(
     const KURL& url,
     mojom::blink::RequestContextType request_context,
     bool allowed,
-    std::unique_ptr<SourceLocation> source_location) {
-  String message = WTF::StrCat(
+    SourceLocation* source_location) {
+  String message = StrCat(
       {"Mixed Content: The page at '", main_resource_url.ElidedString(),
        "' was loaded over HTTPS, but requested an insecure ",
        RequestContextName(request_context), " '", url.ElidedString(), "'. ",
@@ -389,7 +389,7 @@ ConsoleMessage* MixedContentChecker::CreateConsoleMessageAboutFetch(
   if (source_location) {
     return MakeGarbageCollected<ConsoleMessage>(
         mojom::ConsoleMessageSource::kSecurity, message_level, message,
-        std::move(source_location));
+        source_location);
   }
   return MakeGarbageCollected<ConsoleMessage>(
       mojom::ConsoleMessageSource::kSecurity, message_level, message);
@@ -589,15 +589,8 @@ bool MixedContentChecker::ShouldBlockFetch(
   // (a) the request is actually an LNA request, and (b) the user has given
   // permission for the LNA request to go through.
   //
-  // Because we're still using PNA 1.0 terminology,
-  //
-  //   * local = IPAddressSpace.kPrivate
-  //   * loopback = IPAddressSpace.kLocal
-  //
-  // This will hopefully be renamed when we can remove PNA 1.0 code.
-  //
   // Reference:
-  // https://github.com/explainers-by-googlers/local-network-access
+  // https://wicg.github.io/local-network-access/
   //
   // This only checks for mixed content subresources; subframe navigation mixed
   // content is checked in
@@ -617,36 +610,11 @@ bool MixedContentChecker::ShouldBlockFetch(
     //
     // TODO(crbug.com/395895368): check the IP address space for initiator, only
     // skip when the initiator is more public.
-    if (target_address_space ==
-            network::mojom::blink::IPAddressSpace::kPrivate ||
-        target_address_space == network::mojom::blink::IPAddressSpace::kLocal ||
+    if (target_address_space == network::mojom::blink::IPAddressSpace::kLocal ||
+        target_address_space ==
+            network::mojom::blink::IPAddressSpace::kLoopback ||
         network::ParsePrivateIpFromUrl(GURL(url)) ||
         network::IsRFC6762LocalDomain(GURL(url))) {
-      allowed = true;
-    }
-  }
-
-  // Skip mixed content check for private and local targets.
-  // `target_address_space` here is private/local only when resource request
-  // has explicitly set `targetAddressSpace` fetch option.
-  // TODO(lyf): check the IP address space for initiator, only skip when the
-  // initiator is more public.
-  if (base::FeatureList::IsEnabled(
-          network::features::kPrivateNetworkAccessPermissionPrompt) &&
-      RuntimeEnabledFeatures::PrivateNetworkAccessPermissionPromptEnabled(
-          frame->DomWindow())) {
-    // TODO(crbug.com/323583084): Re-enable PNA permission prompt for documents
-    // fetched via service worker.
-    if (!frame->Loader()
-             .GetDocumentLoader()
-             ->GetResponse()
-             .WasFetchedViaServiceWorker() &&
-        (target_address_space ==
-             network::mojom::blink::IPAddressSpace::kPrivate ||
-         target_address_space ==
-             network::mojom::blink::IPAddressSpace::kLocal)) {
-      UseCounter::Count(frame->GetDocument(),
-                        WebFeature::kPrivateNetworkAccessPermissionPrompt);
       allowed = true;
     }
   }
@@ -739,7 +707,7 @@ ConsoleMessage* MixedContentChecker::CreateConsoleMessageAboutWebSocket(
     const KURL& main_resource_url,
     const KURL& url,
     bool allowed) {
-  String message = WTF::StrCat(
+  String message = StrCat(
       {"Mixed Content: The page at '", main_resource_url.ElidedString(),
        "' was loaded over HTTPS, but attempted to connect to the insecure "
        "WebSocket endpoint '",
@@ -942,7 +910,7 @@ bool MixedContentChecker::ShouldAutoupgrade(
   // A request is a possible LNA request if one of the following is true:
   //
   // (1) The `targetAddressSpace` fetch option was set.
-  //     `target_address_space` here is private/local only when resource
+  //     `target_address_space` here is local/loopback only when resource
   //     request has explicitly set `targetAddressSpace` fetch option.
   // (2) The host is a private IP address literal (already exempted above)
   // (3) The hostname is a .local domain (per RFC 6762).
@@ -954,16 +922,16 @@ bool MixedContentChecker::ShouldAutoupgrade(
   // considered secure and not mixed content.
   //
   // Reference:
-  // https://github.com/explainers-by-googlers/local-network-access
+  // https://wicg.github.io/local-network-access/
   //
   // TODO(crbug.com/395895368): check the IP address space for initiator, only
   // skip when the initiator is more public.
   if (base::FeatureList::IsEnabled(
           network::features::kLocalNetworkAccessChecks)) {
     if (resource_request.GetTargetAddressSpace() ==
-            network::mojom::blink::IPAddressSpace::kPrivate ||
-        resource_request.GetTargetAddressSpace() ==
             network::mojom::blink::IPAddressSpace::kLocal ||
+        resource_request.GetTargetAddressSpace() ==
+            network::mojom::blink::IPAddressSpace::kLoopback ||
         network::IsRFC6762LocalDomain(GURL(request_url))) {
       if (!request_url.ProtocolIs("https")) {
         if (auto* window =
@@ -1015,11 +983,11 @@ void MixedContentChecker::MixedContentFound(
     bool was_allowed,
     const KURL& url_before_redirects,
     bool had_redirect,
-    std::unique_ptr<SourceLocation> source_location) {
+    SourceLocation* source_location) {
   // Logs to the frame console.
   frame->GetDocument()->AddConsoleMessage(CreateConsoleMessageAboutFetch(
       main_resource_url, mixed_content_url, request_context, was_allowed,
-      std::move(source_location)));
+      source_location));
 
   AuditsIssue::ReportMixedContentIssue(
       main_resource_url, mixed_content_url, request_context, frame,

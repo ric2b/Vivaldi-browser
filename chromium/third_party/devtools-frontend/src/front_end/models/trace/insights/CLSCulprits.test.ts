@@ -46,8 +46,8 @@ describeWithEnvironment('CLSCulprits', function() {
       ];
       assert.deepEqual(animationFailures, expected);
     });
-    // Flaky test.
-    it.skip('[crbug.com/370382177]: gets the correct non composited animations for shift', async function() {
+
+    it('gets the correct non composited animations for shift', async function() {
       const {data, insights} = await processTrace(this, 'non-composited-animation-shift.json.gz');
       const firstNav = getFirstOrError(data.Meta.navigationsByNavigationId.values());
       const insight = getInsightOrError('CLSCulprits', insights, firstNav);
@@ -67,7 +67,10 @@ describeWithEnvironment('CLSCulprits', function() {
       const expectedWithShift: Models.CLSCulprits.NoncompositedAnimationFailure[] = [
         {
           name: 'simple-animation',
-          failureReasons: [Models.CLSCulprits.AnimationFailureReasons.UNSUPPORTED_CSS_PROPERTY],
+          failureReasons: [
+            Models.CLSCulprits.AnimationFailureReasons.TARGET_HAS_INVALID_COMPOSITING_STATE,
+            Models.CLSCulprits.AnimationFailureReasons.UNSUPPORTED_CSS_PROPERTY,
+          ],
           unsupportedProperties: ['height', 'color', 'top'],
           animation: simpleAnimation,
         },
@@ -77,13 +80,19 @@ describeWithEnvironment('CLSCulprits', function() {
       const expectedAll: Models.CLSCulprits.NoncompositedAnimationFailure[] = [
         {
           name: 'simple-animation',
-          failureReasons: [Models.CLSCulprits.AnimationFailureReasons.UNSUPPORTED_CSS_PROPERTY],
+          failureReasons: [
+            Models.CLSCulprits.AnimationFailureReasons.TARGET_HAS_INVALID_COMPOSITING_STATE,
+            Models.CLSCulprits.AnimationFailureReasons.UNSUPPORTED_CSS_PROPERTY
+          ],
           unsupportedProperties: ['height', 'color', 'top'],
           animation: simpleAnimation,
         },
         {
           name: 'top',
-          failureReasons: [Models.CLSCulprits.AnimationFailureReasons.UNSUPPORTED_CSS_PROPERTY],
+          failureReasons: [
+            Models.CLSCulprits.AnimationFailureReasons.TARGET_HAS_INVALID_COMPOSITING_STATE,
+            Models.CLSCulprits.AnimationFailureReasons.UNSUPPORTED_CSS_PROPERTY
+          ],
           unsupportedProperties: ['top'],
           animation: top,
         },
@@ -124,15 +133,18 @@ describeWithEnvironment('CLSCulprits', function() {
         assert.strictEqual(shifts.size, 3);
 
         const shift1 = Array.from(shifts)[0][0];
-        const shiftIframes = shifts.get(shift1)?.iframeIds;
+        const shiftIframes = shifts.get(shift1)?.iframes;
         assert.exists(shiftIframes);
         assert.lengthOf(shiftIframes, 1);
 
         const iframe = shiftIframes[0];
 
+        assert.strictEqual(iframe.frame, '36E9367B04D158F1DC34D4E46B5A124C');
+        assert.strictEqual(iframe.url, 'http://localhost:10200/simple-page.html');
+
         // Find the event with the matching frame id to make sure we got the right id.
         const dlEvent = data.LayoutShifts.domLoadingEvents.find(e => {
-          return e.args.frame === iframe;
+          return e.args.frame === iframe.frame;
         });
         assert.exists(dlEvent);
 
@@ -140,9 +152,9 @@ describeWithEnvironment('CLSCulprits', function() {
         assert.isTrue(dlEvent.ts < shift1.ts && dlEvent.ts >= shift1.ts - INVALIDATION_WINDOW);
         // Other shifts should not have iframe root causes.
         const shift2 = Array.from(shifts)[1][0];
-        assert.isEmpty(shifts.get(shift2)?.iframeIds);
+        assert.isEmpty(shifts.get(shift2)?.iframes);
         const shift3 = Array.from(shifts)[2][0];
-        assert.isEmpty(shifts.get(shift3)?.iframeIds);
+        assert.isEmpty(shifts.get(shift3)?.iframes);
       });
 
       it('handles potential font root cause correctly', async function() {
@@ -161,7 +173,7 @@ describeWithEnvironment('CLSCulprits', function() {
         assert.isOk(shift2);
         const shiftEvent = shift2[0];
 
-        const shiftFonts = shift2[1].fontRequests;
+        const shiftFonts = shift2[1].webFonts;
         assert.exists(shiftFonts);
         assert.lengthOf(shiftFonts, 1);
 
@@ -173,11 +185,11 @@ describeWithEnvironment('CLSCulprits', function() {
         // Other shifts should not have font root causes.
         const shift1 = layoutShiftEvents.at(0);
         assert.isOk(shift1);
-        assert.isEmpty(shift1[1].fontRequests);
+        assert.isEmpty(shift1[1].webFonts);
 
         const shift3 = layoutShiftEvents.at(2);
         assert.isOk(shift3);
-        assert.isEmpty(shift3[1].fontRequests);
+        assert.isEmpty(shift3[1].webFonts);
       });
 
       it('handles potential unsized images root cause correctly', async function() {

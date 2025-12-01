@@ -294,7 +294,8 @@ are exported to translation interchange files (e.g. XMB files), etc.
                             first_ids_file=extra_resource_ids,
                             predetermined_ids_file=predetermined_ids_file,
                             defines=self.defines,
-                            target_platform=target_platform),
+                            target_platform=target_platform,
+                            translate_genders=translate_genders),
                        allowlist_support=allowlist_support)
 
     # Replace ... with the single-character version. http://crbug.com/621772

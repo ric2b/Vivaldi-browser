@@ -14,6 +14,8 @@
 /sys/dav1d-sys/dav1d.rs
 /sys/libgav1-sys/libgav1
 /sys/libgav1-sys/src/libgav1.rs
+/sys/libsharpyuv-sys/libsharpyuv.rs
+/sys/libsharpyuv-sys/libwebp
 /sys/libyuv-sys/libyuv
 /sys/libyuv-sys/src/libyuv.rs
 /sys/ndk-sys/src/bindings.rs

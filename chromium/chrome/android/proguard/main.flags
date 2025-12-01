@@ -33,6 +33,14 @@
     public <init>();
 }
 
-# Vivaldi. Needed for design support library
-#-keep class android.support.design.widget.** { *; }
-#-keep interface android.support.design.widget.** { *; }
+# @IdentifierNameString, but does not exist due to the module not having any
+# Java code in it (this class is generated and then stripped as unused).
+-dontwarn org.chromium.chrome.modules.stack_unwinder.StackUnwinderModuleContentsImpl
+
+# TODO(crbug.com/430099860): Remove once OnDemandModuleEntryPointsImpl is not
+# removed due to being unused.
+-dontwarn org.chromium.chrome.modules.on_demand.OnDemandModuleEntryPointsImpl
+
+# Vivaldi: To silence R8 warnings
+-dontwarn org.chromium.chrome.browser.data_import.DataImporterServiceImpl
+-dontwarn org.chromium.chrome.modules.test_dummy.TestDummyProviderImpl

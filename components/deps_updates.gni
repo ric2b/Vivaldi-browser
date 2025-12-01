@@ -10,8 +10,6 @@ update_target("//chrome/browser:browser") {
     "//vivaldi/components/notes",
     "//vivaldi/components/notes:browser",
     "//vivaldi/components/request_filter",
-    "//vivaldi/components/request_filter/adblock_filter",
-    "//vivaldi/components/ad_blocker",
     "//vivaldi/components/page_actions",
     "//vivaldi/components/signature:signature",
   ]
@@ -19,12 +17,10 @@ update_target("//chrome/browser:browser") {
     "//vivaldi/components:adverse_adblocking",
     "//vivaldi/components/notes",
     "//vivaldi/components/notes:browser",
-    "//vivaldi/components/ad_blocker",
   ]
   deps += [
     "//vivaldi/components/datasource:resource_reader",
-    "//vivaldi/components/ad_blocker",
-    "//vivaldi/components/request_filter/adblock_filter/mojom",
+    "//vivaldi/components/ad_blocker/public/content/mojom",
     "//vivaldi/components:user_agent",
     "//vivaldi/components:version_utils",
   ]
@@ -47,7 +43,7 @@ update_target("//components/sync_bookmarks:sync_bookmarks") {
 if (!is_ios) {
   update_template_instance("//components/resources:components_resources") {
     deps += [
-      "//vivaldi/components/request_filter/adblock_filter/interstitial:bundle_js_document_blocked_interstitial",
+      "//vivaldi/components/ad_blocker/content/interstitial:bundle_js_document_blocked_interstitial",
     ]
   }
 }
@@ -55,7 +51,7 @@ if (!is_ios) {
 if (vivaldi_build_tests) {
   update_target("//components:components_unittests") {
       deps += [
-        "//vivaldi/components/ad_blocker:unit_tests",
+        "//vivaldi/components/ad_blocker/core:unit_tests",
         "//vivaldi/components/datasource:dataurl_unit_tests",
         "//vivaldi/components/notes:unit_tests",
         "//vivaldi/components/direct_match:unit_tests",

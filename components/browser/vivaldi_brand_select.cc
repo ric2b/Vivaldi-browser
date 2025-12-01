@@ -135,7 +135,7 @@ std::string GetBrandFullVersion() {
     case BrandSelection::kEdgeBrand:
       return EDGE_FULL_VERSION;
     case BrandSelection::kVivaldiBrand:
-      return GetVivaldiVersionString();
+      return std::string(GetVivaldiVersionString());
 
     case BrandSelection::kChromeBrand:
     case BrandSelection::kCustomBrand:

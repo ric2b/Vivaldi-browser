@@ -62,6 +62,7 @@ OBJS-$(CONFIG_RTPDEC)                    += rdt.o                       \
                                             rtpdec_mpeg12.o             \
                                             rtpdec_mpeg4.o              \
                                             rtpdec_mpegts.o             \
+                                            rtpdec_opus.o               \
                                             rtpdec_qcelp.o              \
                                             rtpdec_qdm2.o               \
                                             rtpdec_qt.o                 \
@@ -246,6 +247,7 @@ OBJS-$(CONFIG_G726_DEMUXER)              += g726.o
 OBJS-$(CONFIG_G726_MUXER)                += rawenc.o
 OBJS-$(CONFIG_G726LE_DEMUXER)            += g726.o
 OBJS-$(CONFIG_G726LE_MUXER)              += rawenc.o
+OBJS-$(CONFIG_G728_DEMUXER)              += g728dec.o
 OBJS-$(CONFIG_G729_DEMUXER)              += g729dec.o
 OBJS-$(CONFIG_GDV_DEMUXER)               += gdv.o
 OBJS-$(CONFIG_GENH_DEMUXER)              += genh.o
@@ -637,6 +639,7 @@ OBJS-$(CONFIG_WEBM_CHUNK_MUXER)          += webm_chunk.o
 OBJS-$(CONFIG_WEBP_MUXER)                += webpenc.o
 OBJS-$(CONFIG_WEBVTT_DEMUXER)            += webvttdec.o subtitles.o
 OBJS-$(CONFIG_WEBVTT_MUXER)              += webvttenc.o
+OBJS-$(CONFIG_WHIP_MUXER)                += whip.o avc.o http.o srtp.o
 OBJS-$(CONFIG_WSAUD_DEMUXER)             += westwood_aud.o
 OBJS-$(CONFIG_WSAUD_MUXER)               += westwood_audenc.o
 OBJS-$(CONFIG_WSD_DEMUXER)               += wsddec.o rawdec.o

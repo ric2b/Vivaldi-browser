@@ -12,7 +12,10 @@
 enum class UrlLoadStrategy;
 
 @protocol RecentTabsCoordinatorDelegate;
+
+// Vivaldi
 @class TabGridModeHolder;
+// End Vivaldi
 
 // Coordinator that presents Recent Tabs.
 @interface RecentTabsCoordinator : ChromeCoordinator
@@ -22,8 +25,10 @@ enum class UrlLoadStrategy;
 // Opaque instructions on how to open urls.
 @property(nonatomic) UrlLoadStrategy loadStrategy;
 
+// Vivaldi
 // Holder for the current Tab Grid mode.
 @property(nonatomic, strong) TabGridModeHolder* tabGridModeHolder;
+// End Vivaldi
 
 @end
 

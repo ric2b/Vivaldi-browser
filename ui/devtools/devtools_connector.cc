@@ -11,6 +11,8 @@
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/pref_names.h"
+#include "components/prefs/pref_service.h"
+#include "components/prefs/scoped_user_pref_update.h"
 #include "components/renderer_context_menu/context_menu_delegate.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/color_chooser.h"

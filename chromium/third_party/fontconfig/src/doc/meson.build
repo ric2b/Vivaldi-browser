@@ -3,7 +3,7 @@ tests = []
 
 if host_machine.system() != 'windows'
   tests += [
-    'check-missing-doc',
+    'check-missing-doc.py',
     #    'check-whitespace-in-args'
   ]
   meson.add_dist_script(find_program('check-whitespace-in-args.py'), '@SOURCE_ROOT@/doc')
@@ -65,6 +65,12 @@ edit_sgml = find_program('edit-sgml.py')
 # copy into build directory, it includes generated files from build directory
 fontconfig_devel_sgml = fs.copyfile('fontconfig-devel.sgml')
 fontconfig_user_sgml = fs.copyfile('fontconfig-user.sgml')
+
+cacheversion_conf = configuration_data()
+cacheversion_conf.set('CACHE_VERSION', cacheversion)
+configure_file(output: 'cache-version.sgml',
+  input: 'cache-version.sgml.in',
+  configuration: cacheversion_conf)
 
 version_conf = configuration_data()
 version_conf.set('VERSION', meson.project_version())
@@ -193,5 +199,5 @@ endif
 
 foreach script : tests
   py = find_program(script)
-  test(script, py)
+  test(script, py, args: [meson.project_source_root(), meson.project_build_root()])
 endforeach

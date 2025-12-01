@@ -7,8 +7,8 @@ import("//vivaldi/gn/config/product.gni")
 import("//vivaldi/gn/config/hermetic.gni")
 import("//vivaldi/gn/config/reclient.gni")
 
-import("//build/toolchain/cc_wrapper.gni")
-import("//build/toolchain/rbe.gni")
+# import("//build/toolchain/cc_wrapper.gni")
+# import("//build/toolchain/rbe.gni")
 
 declare_overrides() {
   chrome_pgo_phase = 0
@@ -66,6 +66,7 @@ declare_overrides() {
   }
 
   if (is_android) {
+    treat_warnings_as_errors = is_debug # Temp 140
     if (is_official_build) {
       symbol_level = 1
       use_relr_relocations = false
@@ -93,6 +94,9 @@ declare_overrides() {
       # NOTE(jarle): For Lynkco we do not treat warnings as errors due to 3rd party
       # library integration.
       treat_warnings_as_errors = false
+
+      # NOTE(jarle@vivaldi.com): Lynk&Co third-party libs require 28.
+      default_min_sdk_version = 28
     }
     if (is_vivaldi_mercedes) {
       # AUTO-208: Avoid using unrar because of its license.
@@ -105,7 +109,7 @@ declare_overrides() {
     enable_hangout_services_extension = true
   }
 
-  enable_precompiled_headers = !is_official_build && cc_wrapper == "" && !use_remoteexec
+  # enable_precompiled_headers = !is_official_build && cc_wrapper == "" && !use_remoteexec
   enable_nocompile_tests = false
   # We cannot use this functionality at present because the system assumes
   # "../../" is the Chromium src dir, but it is the vivaldi dir for us
@@ -147,7 +151,7 @@ declare_overrides() {
     # Needed until we understand chromium partition allocator better.
     ios_partition_alloc_enabled = false
 
-    ios_application_icons_target = "//vivaldi/ios/app/resources:vivaldi_appicons"
+    ios_application_icons_target_legacy = "//vivaldi/ios/app/resources:vivaldi_appicons"
     ios_launchscreen_assets_target = "//vivaldi/ios/app/resources:launchscreen_assets"
 
     # Just making sure it stays off

@@ -558,13 +558,16 @@ class GerritApi(recipe_api.RecipeApi):
       publish_command.append('--verbose')
     self('publish edit', publish_command)
 
+    NEW_PATCHSET_REVISION_NUMBER = 2
     # Make sure the new patchset is propagated to Gerrit backend.
     with self.m.step.nest('verify the patchset exists on CL %d' % change):
       retries = 0
       max_retries = 2
       while retries <= max_retries:
         try:
-          if self.get_revision_info(host, change, 2):
+          if self.get_revision_info(host,
+                                    change,
+                                    patchset=NEW_PATCHSET_REVISION_NUMBER):
             break
         except self.m.step.InfraFailure:
           if retries == max_retries:  # pragma: no cover
@@ -580,6 +583,8 @@ class GerritApi(recipe_api.RecipeApi):
           host,
           '--change',
           change,
+          '--revision',
+          NEW_PATCHSET_REVISION_NUMBER,
       ]
       if verbose:
         set_bot_commit_command.append('--verbose')

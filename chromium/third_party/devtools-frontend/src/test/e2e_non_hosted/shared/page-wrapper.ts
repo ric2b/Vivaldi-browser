@@ -5,6 +5,7 @@
 import type * as puppeteer from 'puppeteer-core';
 
 import {AsyncScope} from '../../conductor/async-scope.js';
+import {platform} from '../../conductor/platform.js';
 
 export class PageWrapper {
   page: puppeteer.Page;
@@ -25,7 +26,13 @@ export class PageWrapper {
     this.locator = page.locator.bind(page);
   }
 
-  async waitForFunction<T>(fn: () => Promise<T|undefined>, asyncScope = new AsyncScope(), description?: string) {
+  /**
+   * `waitForFunction` runs in the test context and not in the page
+   * context. If you want to evaluate code on the page, use
+   * {@link PageWrapper.evaluate} within the `waitForFunction` callback.
+   */
+  async waitForFunction<T>(
+      fn: () => T | undefined | Promise<T|undefined>, asyncScope = new AsyncScope(), description?: string) {
     const innerFunction = async () => {
       while (true) {
         AsyncScope.abortSignal?.throwIfAborted();
@@ -59,5 +66,41 @@ export class PageWrapper {
     await this.page.evaluate(() => {
       return new Promise(resolve => window.requestAnimationFrame(resolve));
     });
+  }
+
+  async pressKey(key: puppeteer.KeyInput, modifiers?: {control?: boolean, alt?: boolean, shift?: boolean}) {
+    if (modifiers) {
+      if (modifiers.control) {
+        if (platform === 'mac') {
+          // Use command key on mac
+          await this.page.keyboard.down('Meta');
+        } else {
+          await this.page.keyboard.down('Control');
+        }
+      }
+      if (modifiers.alt) {
+        await this.page.keyboard.down('Alt');
+      }
+      if (modifiers.shift) {
+        await this.page.keyboard.down('Shift');
+      }
+    }
+    await this.page.keyboard.press(key);
+    if (modifiers) {
+      if (modifiers.shift) {
+        await this.page.keyboard.up('Shift');
+      }
+      if (modifiers.alt) {
+        await this.page.keyboard.up('Alt');
+      }
+      if (modifiers.control) {
+        if (platform === 'mac') {
+          // Use command key on mac
+          await this.page.keyboard.up('Meta');
+        } else {
+          await this.page.keyboard.up('Control');
+        }
+      }
+    }
   }
 }

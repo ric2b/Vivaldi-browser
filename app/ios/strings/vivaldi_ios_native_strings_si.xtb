@@ -83,7 +83,6 @@
 <translation id="2034405583989639424">වේග ඩයල් එක සංස්කරණය කරන්න</translation>
 <translation id="2048247880942380698">අරාබි (<ph name="ORIGIN" />)</translation>
 <translation id="2079545284768500474">අහෝසි කරන්න</translation>
-<translation id="2129408066358825297">වයස</translation>
 <translation id="2148384276939959392">සමමුහුර්ත කිරීම තෝරා ඇත</translation>
 <translation id="2195713384412091023">මෙය අපගේ සේවාදායකයේ ගබඩා කර ඇති සියලුම සමමුහුර්ත දත්ත ඉවත් කර, ඔබගේ සංකේතාංකන මුරපදය නැවත සකසනු ඇති අතර, ඔබව ලොග් අවුට් කරනු ඇත.</translation>
 <translation id="2228584369802328636">ක්‍රීඩා කිරීම</translation>
@@ -92,7 +91,6 @@
 <translation id="2273327106802955778">තවත් මෙනුව</translation>
 <translation id="2283599456633275070">ගමන්</translation>
 <translation id="2324160330092901720"><ph name="EMAIL_ID" />වෙත සත්‍යාපන කේතයක් යවා ඇත.</translation>
-<translation id="2324257568471626606">නව සෙවුම් යන්ත්‍රයක්</translation>
 <translation id="2330644510603114741">ටැබ් හැසිරීම</translation>
 <translation id="2336309953058658733">කුණු කූඩය හිස් කරන්න</translation>
 <translation id="2359808026110333948">ඉදිරියට යන්න</translation>
@@ -112,7 +110,6 @@
 <translation id="2563886993995570961">උපරිම තීරු</translation>
 <translation id="257674075312929031">සමූහය</translation>
 <translation id="2577446409661931381">නව සටහන</translation>
-<translation id="2578190116190373975"><ph name="OLD_SEARCH_ENGINE" />භාවිතා කිරීම දිගටම කරගෙන යන්න</translation>
 <translation id="2590350610957954839">අවසන් වරට පැමිණි කණ්ඩායම</translation>
 <translation id="261264557609353020">ආරම්භක පිටුව</translation>
 <translation id="2619628557366098325">පෘතුගීසි (<ph name="ORIGIN" />)</translation>
@@ -122,7 +119,6 @@
 <translation id="2677862276555105603">දැන්වීම
 අවහිර කර ඇත</translation>
 <translation id="2678542925523700624">එස්තෝනියානු (<ph name="ORIGIN" />)</translation>
-<translation id="2697254781659515880">Vivaldi හි සංවර්ධනයට සහාය වීම සඳහා, අපි <ph name="NEW_SEARCH_ENGINE" /> සමඟ හවුල් වී එය ඔබගේ නව පෙරනිමි සෙවුම් යන්ත්‍රය ලෙස සකසා ඇත්තෙමු.</translation>
 <translation id="2701366016894985129">සෙවුම් ප්‍රතිඵලවල දැන්වීම්</translation>
 <translation id="2702801445560668637">කියවීම් ලැයිස්තුව</translation>
 <translation id="2709516037105925701">ස්වයං පිරවුම</translation>
@@ -168,7 +164,6 @@
 <translation id="3285898158753554866">පරිවර්තනය කළ පිටපත</translation>
 <translation id="3335772982573114336">නව සටහන</translation>
 <translation id="33451081266695216">සේවාදායකය මඟින් සම්බන්ධතාවය පාලනය කර ඇත.</translation>
-<translation id="3346386541263128307">ඊමේල් ලිපින ගැළපිය යුතුයි.</translation>
 <translation id="3363375699928395745">මාතෘකාව ඇතුළත් කරන්න</translation>
 <translation id="3365991203476235715">ඉංග්‍රීසි (<ph name="ORIGIN" />)</translation>
 <translation id="3368960138304620657">ලිතුවේනියානු (<ph name="ORIGIN" />)</translation>
@@ -200,7 +195,6 @@
 <translation id="373855430416507951">පිටුව තුළ සොයන්න</translation>
 <translation id="3745190878148784130">විශාලන පෙළ සඟවන්න</translation>
 <translation id="3766350025418769949">ඔබ Vivaldi මුරපද කළමනාකරු වෙත සුරකින ලද මුරපද ඔබගේ iPad හි අනෙකුත් යෙදුම්වල භාවිතා කළ හැක.</translation>
-<translation id="3782426324365706059"><ph name="NEW_SEARCH_ENGINE" />භාවිතා කරන්න</translation>
 <translation id="3815158430926662417">මට මගේ Vivaldi සමමුහුර්ත ගිණුමට පුරනය විය නොහැක.</translation>
 <translation id="3817539520771282781">කරුණාව අනුව</translation>
 <translation id="383723620494271391">ඔබට තවත් යමක් එකතු කිරීමට අවශ්‍යද?</translation>
@@ -214,7 +208,6 @@
 <translation id="3897092660631435901">මෙනුව</translation>
 <translation id="3920366244737784074"><ph name="ITEM_TYPE" />එකතු කරන්න</translation>
 <translation id="3921585859122905677">ලිපින තීරු ස්ථානය</translation>
-<translation id="3925725503020335904">Vivaldi හි සංවර්ධනයට සහාය වීම සඳහා, අපි <ph name="NEW_SEARCH_ENGINE_1" /> සමඟ හවුල් වී එය ඔබගේ නව පෙරනිමි සෙවුම් යන්ත්‍රය ලෙස සකසා ඇත්තෙමු. <ph name="NEW_SEARCH_ENGINE_2" /> යනු අපි කැමති පුද්ගලික සෙවුම් යන්ත්‍රයක් වන අතර, ඔබත් එයට කැමති වේ යැයි අපි බලාපොරොත්තු වෙමු.</translation>
 <translation id="3953599441418463312">ජපන් (<ph name="ORIGIN" />)</translation>
 <translation id="395506590020066151">ට්‍රැකර් අවහිර කර ඇත</translation>
 <translation id="3958433364221339259"><ph name="SEARCH_ENGINE" />සමඟ සොයන්න</translation>
@@ -330,7 +323,6 @@
 <translation id="5191012692655103305">ටැබ් සහ ඉතිහාසය ලබා ගනිමින්...</translation>
 <translation id="5238642303473095117">දත්ත මකන්න</translation>
 <translation id="5245732982828228444">ඔබට ඔබේ සටහන් මෙතැනින් සොයාගත හැකිය.</translation>
-<translation id="5249199221558969362">කරුණාකර යථාර්ථවාදී ආයුකාල අංකයක් ඇතුළත් කරන්න.</translation>
 <translation id="5271549068863921519">මුරපදය සුරකින්න</translation>
 <translation id="5290452628447338707">සටහන් නැත</translation>
 <translation id="5317780077021120954">සුරකින්න</translation>
@@ -400,7 +392,6 @@
 <translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" /> තෝරා ගන්නා ලදී</translation>
 <translation id="6442584491342758233">සෘජු ගැළපීම</translation>
 <translation id="6443682944493983866">භාෂා පිළිගන්න</translation>
-<translation id="6468130661190228905">කණගාටුයි, අපගේ ප්‍රජාවට සම්බන්ධ වීමට පෙර ඔබ ටිකක් බලා සිටිය යුතු බව පෙනේ. අපගේ සාමාජිකයින්ට සම්බන්ධ වීමට අවම වශයෙන් අවුරුදු 16 ක් වත් විය යුතුය.</translation>
 <translation id="6487150267908786236"><ph name="BEGIN_LINK" />ආයාත කරන්න<ph name="END_LINK" /></translation>
 <translation id="6517411226162529295">උපස්ථ සංකේතන යතුර</translation>
 <translation id="6527303717912515753">බෙදාගන්න</translation>
@@ -522,7 +513,6 @@
 <translation id="7961270736686975887">භාෂා මාරු කරන්න</translation>
 <translation id="7967161908152532036">වෙබ් අඩවි ලිපිනය</translation>
 <translation id="7979036127916589816">සමමුහුර්ත දෝෂය</translation>
-<translation id="8008214489230610096">ප්‍රතිසාධන ඊමේල් ලිපිනය තහවුරු කරන්න</translation>
 <translation id="8038592796033755028"><ph name="USERNAME" />ගේ උපාංග</translation>
 <translation id="8041093619605951337">සතුටුයි</translation>
 <translation id="8046542428651654244">සිඟිති රුව යාවත්කාලීන කරන්න</translation>
@@ -537,7 +527,6 @@
 <translation id="8131740175452115882">තහවුරු කරන්න</translation>
 <translation id="8134672010161840864">රූපය කප්පාදු කර ස්ථානගත කිරීමට පින්ච් කරන්න</translation>
 <translation id="8142291334394582384">සෙවුම් යෝජනා අනුපිළිවෙල ප්‍රතිලෝම කරන්න</translation>
-<translation id="8147118677117542370">කරුණාකර ඔබේ වයස ලබා දෙන්න.</translation>
 <translation id="8165573437634525334">සංකේතාංකන මුරපදය මඟින් දත්ත සුරක්ෂිත කර ඇත</translation>
 <translation id="8237090677709100373">අභිරුචි වර්ණ කේතය</translation>
 <translation id="8257908958623224237">වෙනත් සේවාදායකයෙකුගේ දත්ත සමඟ ගැටුමක්.</translation>

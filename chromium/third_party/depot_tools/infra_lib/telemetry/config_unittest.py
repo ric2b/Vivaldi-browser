@@ -21,12 +21,12 @@ class ConfigTest(unittest.TestCase):
             cfg = config.Config(path)
 
             with open(path, 'r') as f:
-                self.assertEqual(
-                    f.read(), "[root]\nnotice_countdown = 10\n\n[trace]\n\n")
+                self.assertEqual(f.read(),
+                                 "[root]\nnotice_countdown = 9\n\n[trace]\n\n")
             self.assertFalse(cfg.trace_config.enabled)
             self.assertFalse(cfg.trace_config.has_enabled())
             self.assertEqual("AUTO", cfg.trace_config.enabled_reason)
-            self.assertEqual(10, cfg.root_config.notice_countdown)
+            self.assertEqual(9, cfg.root_config.notice_countdown)
 
     def test_load_config_file(self) -> None:
         """Test Config to load config file."""
@@ -60,19 +60,17 @@ class ConfigTest(unittest.TestCase):
             cfg.flush()
 
             with open(path, 'r') as f:
-                self.assertEqual(
-                    f.read(),
+                file = f.read()
+                self.assertIn(
                     "\n".join([
                         "[root]",
                         "notice_countdown = 9",
-                        "",
-                        "[trace]",
-                        "enabled = False",
-                        "enabled_reason = AUTO",
-                        "",
-                        "",
                     ]),
+                    file,
                 )
+                self.assertIn("[trace]", file)
+                self.assertIn("enabled = False", file)
+                self.assertIn("enabled_reason = AUTO", file)
 
 
 def test_default_trace_config() -> None:
@@ -111,7 +109,7 @@ def test_default_root_config() -> None:
     cfg[config.ROOT_SECTION_KEY] = {}
     root_config = config.RootConfig(cfg)
 
-    assert root_config.notice_countdown == 10
+    assert root_config.notice_countdown == 9
 
 
 def test_root_config_update() -> None:

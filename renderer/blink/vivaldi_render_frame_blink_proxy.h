@@ -7,7 +7,7 @@
 
 #include "third_party/blink/renderer/core/core_export.h"
 
-#include "components/request_filter/adblock_filter/mojom/adblock_cosmetic_filter.mojom-blink-forward.h"
+#include "components/ad_blocker/public/content/mojom/adblock_cosmetic_filter.mojom-blink-forward.h"
 #include "renderer/mojo/vivaldi_frame_host_service.mojom-blink-forward.h"
 
 namespace blink {

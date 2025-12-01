@@ -327,6 +327,7 @@
 <translation id="2240366984605217732">Εναλλαγή διάταξης</translation>
 <translation id="224421911978987610">μακρά έκθεση</translation>
 <translation id="2244834438220057800">πράσινο</translation>
+<translation id="2248689665683494517">νεκρή φύση σε μίνιμαλ στιλ με λίγα λουλούδια παπαρούνας σε γυάλινο βάζο και μαύρο φόντο</translation>
 <translation id="225692081236532131">Κατάσταση ενεργοποίησης</translation>
 <translation id="2267285889943769271">Προσθήκη στιγμιότυπου</translation>
 <translation id="2268044343513325586">Περιορισμός</translation>
@@ -334,7 +335,7 @@
 <translation id="2276999893457278469">Κορυφαίο περιεχόμενο βοήθειας</translation>
 <translation id="2277631741861284101">Εγγράψτε και μοιραστείτε εύκολα τον ήχο σας</translation>
 <translation id="2279051792571591988">Επαναφορά προεπιλογών</translation>
-<translation id="2286454467119466181">Απλή</translation>
+<translation id="2286454467119466181">Απλός</translation>
 <translation id="2287186687001756809">Δεν υπάρχει διαθέσιμη εικόνα. Για προσθήκη φωτογραφιών, μεταβείτε στη διεύθυνση <ph name="LINK" /></translation>
 <translation id="2294577623958216786">Το τρέχον πρόγραμμα έχει οριστεί σε <ph name="SUNRISE" />-<ph name="SUNSET" />. Για αυτόματη ενημέρωση του προγράμματος δύσης και ανατολής ηλίου ενεργοποιήστε την πρόσβαση τοποθεσίας του συστήματος.</translation>
 <translation id="2305172810646967500">μαύρο</translation>
@@ -757,6 +758,7 @@
 <translation id="430786093962686457">σιφόν</translation>
 <translation id="4310735698903592804">Πρόσφατες ταπετσαρίες με την υποστήριξη του Google AI</translation>
 <translation id="4320904097188876154">ροζ νέον</translation>
+<translation id="432961742358282111">Κάντε δεξί κλικ ή πατήστε παρατεταμένα, για να λάβετε ορισμούς, μεταφράσεις ή μετατροπές μονάδων. Χρησιμοποιήστε τα πλήκτρα αριστερού ή δεξιού βέλους για τη διαχείριση αυτής της λειτουργίας.</translation>
 <translation id="4333390807948134856">Το πλήκτρο <ph name="KEY_NAME" /> πατήθηκε</translation>
 <translation id="4334293042716981313">Μπορείτε, επίσης, να <ph name="BEGIN_LINK_FREEFORM_SUBPAGE" />γράψετε τη δική σας οδηγία<ph name="END_LINK_FREEFORM_SUBPAGE" /></translation>
 <translation id="4354430579665871434">πλήκτρο</translation>
@@ -1436,7 +1438,6 @@
 <translation id="7302860742311162920">ICCID</translation>
 <translation id="7305884605064981971">EDGE</translation>
 <translation id="7308203371573257315">Ρωτήστε τους ειδικούς στο φόρουμ βοήθειας του Chromebook</translation>
-<translation id="7309823890857024809">νεκρή φύση σε μίνιμαλ στιλ με λίγους μίσχους παπαρούνας σε γυάλινο βάζο και μαύρο φόντο</translation>
 <translation id="7311368985037279727">χρώμα πληκτρολογίου</translation>
 <translation id="7317831949569936035">Εγγραφή του σχολείου</translation>
 <translation id="7319430975418800333">A3</translation>

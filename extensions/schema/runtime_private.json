@@ -17,20 +17,8 @@
             "description": "Name of this feature flag. This is the key used to look up the name.",
             "type": "string"
           },
-          "friendlyName": {
-            "description": "This is the normalized name of this feature flag suitable to be showed to the user.",
-            "type": "string"
-          },
-          "description": {
-            "description": "Description of this feature flag.",
-            "type": "string"
-          },
-          "value": {
-            "description": "The current value for this flag (true or false).",
-            "type": "boolean"
-          },
-          "locked": {
-            "description": "Locked from being changed. If true, it cannot be changed as it's locked from command line.",
+          "enabled": {
+            "description": "Enabled state of the feature",
             "type": "boolean"
           }
         }
@@ -136,33 +124,6 @@
               "name": "results",
               "type": "array",
               "items": { "$ref": "FeatureFlagInfo" }
-            }
-          ]
-        }
-      },
-      {
-        "name": "setFeatureEnabled",
-        "type": "function",
-        "description": "Enables or disables a feature.",
-        "parameters": [
-          {
-            "type": "string",
-            "name": "featureName",
-            "description": "Name of the feature to enable or disable."
-          },
-          {
-            "type": "boolean",
-            "name": "enable",
-            "description": "true to enable feature."
-          }
-        ],
-        "returns_async": {
-          "name": "callback",
-          "parameters": [
-            {
-              "type": "boolean",
-              "name": "success",
-              "description": "true if feature name was valid, false on any error."
             }
           ]
         }

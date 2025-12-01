@@ -3,8 +3,8 @@
 // This source code is licensed under the BSD-style license found in the
 // LICENSE file in the root directory of this source tree.
 
-#ifndef THIRD_PARTY_XNNPACK_TEST_UNARY_OPS_H_
-#define THIRD_PARTY_XNNPACK_TEST_UNARY_OPS_H_
+#ifndef XNNPACK_TEST_UNARY_OPS_H_
+#define XNNPACK_TEST_UNARY_OPS_H_
 
 #include <algorithm>
 #include <cassert>
@@ -143,15 +143,6 @@ struct Convert : public UnaryOpInfo {
                ? 1.0f
                : TolMixed(y_ref, xnnpack::epsilon(datatype),
                           xnnpack::epsilon(datatype));
-  }
-};
-
-struct ReLU : public UnaryOpInfo {
-  float ReferenceImpl(float x, const xnn_unary_params&) const override {
-    return std::max(x, 0.0f);
-  }
-  int32_t ReferenceImpl(int32_t x, const xnn_unary_params&) const override {
-    return std::max<int32_t>(x, 0);
   }
 };
 
@@ -629,14 +620,6 @@ struct CubeRoot : public UnaryOpInfo {
   float Tolerance(float y_ref, xnn_datatype datatype) const override {
     return TolRelative(y_ref, 2.5f * xnnpack::epsilon(datatype));
   }
-
-  Interval Domain(xnn_datatype datatype) const override {
-    if (datatype == xnn_datatype_fp16 || datatype == xnn_datatype_bf16) {
-      return {0.001f, 10.0f};
-    } else {
-      return Interval::Positive(datatype);
-    }
-  }
 };
 
 struct Cosine : public UnaryOpInfo {
@@ -782,4 +765,4 @@ void UnaryReferenceImpl(
   }
 }
 
-#endif  // THIRD_PARTY_XNNPACK_TEST_UNARY_OPS_H_
+#endif  // XNNPACK_TEST_UNARY_OPS_H_

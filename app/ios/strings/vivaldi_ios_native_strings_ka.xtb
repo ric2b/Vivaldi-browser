@@ -5,6 +5,7 @@
 <translation id="1016495303386450659">ელემენტი განახლდა</translation>
 <translation id="1033201038396796706">მუქი რეჟიმის, განახლების სიხშირის, ან თემის პრობლემები</translation>
 <translation id="1041637248958093184">ძებნები, ნანახი საიტები, ქუქიები და დროებითი ფაილები Vivaldi-ის მიერ შენახული, ინკოგნიტო ჩანართების გამოყენებისას, არ იქნება.</translation>
+<translation id="104766043551382253">ხატულა</translation>
 <translation id="1062373127858055283">შეიყვანეთ გამოსახულების ბმული</translation>
 <translation id="1066692930984703744">ჩართეთ ტრეკერებისა და რეკლამის დაბლოკვა ინტერნეტში უსაფრთხოდ და უფრო სწრაფად სამუშაოდ</translation>
 <translation id="1116694919640316211">პროგრამის შესახებ</translation>
@@ -89,7 +90,6 @@
 <translation id="2034405583989639424">სწრაფი წვდომის ჩასწორება</translation>
 <translation id="2048247880942380698">არაბული (<ph name="ORIGIN" />)</translation>
 <translation id="2079545284768500474">ბრძანების გაუქმება</translation>
-<translation id="2129408066358825297">ასაკი</translation>
 <translation id="2138901399878617625">დარგეთ ხეები ძებნისას</translation>
 <translation id="2148384276939959392">მონიშნულის სინქი</translation>
 <translation id="2195713384412091023">ეს ჩვენს სერვერზე დამახსოვრებულ ყველა სინქრონიზაციის მონაცემს წაშლის, ჩამოყრის თქვენს დაშიფვრის პაროლის და გაგიყვანთ სისტემიდან.</translation>
@@ -100,7 +100,6 @@
 <translation id="2273327106802955778">მეტი მენიუ</translation>
 <translation id="2283599456633275070">მოგზაურობა</translation>
 <translation id="2324160330092901720">გადამოწმების კოდი გაიგზავნა მისამართზე <ph name="EMAIL_ID" /></translation>
-<translation id="2324257568471626606">ახალი საძიებო სისტემა</translation>
 <translation id="2326657631721795616">Vivaldi-ის მხარდაჭერა ისედაც შეგიძლიათ კონფიდენციალობაზე ფოკუსის მქონე, დამოუკიდებელი საძიებო სისტემის არჩევით:</translation>
 <translation id="2330644510603114741">ჩანართის ქცევა</translation>
 <translation id="233493642829799329">ამის შეცვლამ, შეიძლება, ზოგიერთი თქვენი ჩანართის თავიდან ჩატვირთვა გამოიწვიოს</translation>
@@ -122,7 +121,6 @@
 <translation id="2563886993995570961">სვეტების მაქსიმუმი</translation>
 <translation id="257674075312929031">ჯგუფი</translation>
 <translation id="2577446409661931381">ახალი ჩანაწერი</translation>
-<translation id="2578190116190373975"><ph name="OLD_SEARCH_ENGINE" />-ის გამოყენების გაგრძელება</translation>
 <translation id="2590350610957954839">ბოლოს ნანახი ჯგუფი</translation>
 <translation id="261264557609353020">საწყისი გვერდი</translation>
 <translation id="2619628557366098325">პორტუგალიური (<ph name="ORIGIN" />)</translation>
@@ -132,7 +130,6 @@
 <translation id="2677862276555105603">რეკლამა
 დაიბლოკა</translation>
 <translation id="2678542925523700624">ესტონური (<ph name="ORIGIN" />)</translation>
-<translation id="2697254781659515880">Vivaldi-ის განვითარების მხარდასაჭერად ჩვენ დავიწყეთ პარტნიორობა <ph name="NEW_SEARCH_ENGINE" />-სთან და ის თქვენს ახალ საძიებო სისტემად დავაყენეთ.</translation>
 <translation id="2701366016894985129">რეკლამა ძებნის შედეგებში</translation>
 <translation id="2702801445560668637">წასაკითხი სია</translation>
 <translation id="2709516037105925701">ავტომატური შევსება</translation>
@@ -182,7 +179,6 @@
 <translation id="3288330578370776290">გვერდების გარე აპების მაგიერ ბრაუზერში გახსნა</translation>
 <translation id="3335772982573114336">ახალი შენიშვნა</translation>
 <translation id="33451081266695216">შეერთება დაყოვნებულია სერვერის მიერ.</translation>
-<translation id="3346386541263128307">ელფოსტის მისამართები არ ემთხვევა.</translation>
 <translation id="3363375699928395745">შეიყვანეთ სათაური</translation>
 <translation id="3365991203476235715">ინგლისური (<ph name="ORIGIN" />)</translation>
 <translation id="3368960138304620657">ლიეტუვური (<ph name="ORIGIN" />)</translation>
@@ -216,7 +212,6 @@
 <translation id="373855430416507951">გვერდში ძებნა</translation>
 <translation id="3745190878148784130">ტექსტის გადიდების დამალვა</translation>
 <translation id="3766350025418769949">პაროლები, რომლებიც Vivaldi-ის პაროლების მმართველში შეინახეთ, თქვენს iPad-ზე არსებულ სხვა აპებზეც შეგიძლიათ, გამოიყენოთ.</translation>
-<translation id="3782426324365706059"><ph name="NEW_SEARCH_ENGINE" />-ის გამოყენება</translation>
 <translation id="3815158430926662417">ვერ შევდივარ ჩემს Vivaldi Sync-ის ანგარიშში</translation>
 <translation id="3817539520771282781">ტიპით</translation>
 <translation id="383723620494271391">რამეს ხომ არ დაამატებთ?</translation>
@@ -231,7 +226,6 @@
 <translation id="3897092660631435901">მენიუ</translation>
 <translation id="3920366244737784074"><ph name="ITEM_TYPE" />-ის დამატება</translation>
 <translation id="3921585859122905677">მისამართის ზოლის პოზიცია</translation>
-<translation id="3925725503020335904">Vivaldi-ის განვითარების მხარდასაჭერად ჩვენ ახლა <ph name="NEW_SEARCH_ENGINE_1" />-ის პარტნიორები ვართ და ის თქვენს ახალ ნაგულისხმევ საძიებო სისტემად დავაყენეთ. <ph name="NEW_SEARCH_ENGINE_2" /> საძიებო სისტემაა, რომელიც ჩვენ მოგვწონს და იმედი გვაქვს, თქვენც მოგეწონებათ.</translation>
 <translation id="3934481038955624945">ყველაფრის ჩამოყრა</translation>
 <translation id="3953599441418463312">იაპონური (<ph name="ORIGIN" />)</translation>
 <translation id="395506590020066151">ტრეკერი დაიბლოკა</translation>
@@ -287,6 +281,7 @@
 <translation id="445620040230332178">ჩანართის სტილი</translation>
 <translation id="4461652107878667683">ნავიგაცია წინ</translation>
 <translation id="4474581062946673155">ამჟამად სხვა მოწყობილობებიდან დასინქრონებული ჩანართები არ გაგაჩნიათ.</translation>
+<translation id="4478475525737953027">მკაცრი დაბლოკვა</translation>
 <translation id="4488900295693536220">გამოსადეგია, როცა მისამართის პანელი დაბლაა. აადვილებს მინიშნებებთან წვდომას.</translation>
 <translation id="4497115807425788318">ადგილმდებარეობა</translation>
 <translation id="4507213865286211606">მინიატურის ზომა</translation>
@@ -358,7 +353,6 @@
 <translation id="5195305454041437917">X-ის ჩვენება მინიშნების მოსაცილებლად</translation>
 <translation id="5238642303473095117">მონაცემების წაშლა</translation>
 <translation id="5245732982828228444">თქვენს შენიშვნებს აქ იპოვით</translation>
-<translation id="5249199221558969362">შეიყვანეთ რეალური სიცოცხლის ხანგრძლივობის რიცხვი.</translation>
 <translation id="5271549068863921519">პაროლის შენახვა</translation>
 <translation id="5290452628447338707">შენიშვნების გარეშე</translation>
 <translation id="5317780077021120954">შენახვა</translation>
@@ -368,6 +362,7 @@
 <translation id="535312628536375213">ჩვენ ამ საიტის პარტიორები ვართ , მისი რეკლამები გამონაკლისია და ნაგულისხმევად არ იბგუკება. ეს რეკლამები Vivaldi-ის არსებობისთვის საჭირო შემოსავალს იძლევა.</translation>
 <translation id="5378841821586202982">ნაგვის საქაღალდე</translation>
 <translation id="5398772614898833570">რეკლამა დაიბლოკა</translation>
+<translation id="5415265829033764921">დაბლოკვის წესების დაშვება ზოგიერთი ვებგვერდის დასაბლოკად.</translation>
 <translation id="5421638721143596928">თქვენი ავტორიზაციის დეტალების გაშიფვრა ჩავარდა. თავიდან სცადეთ.</translation>
 <translation id="5439599923922718668">ხშირად ნანახი</translation>
 <translation id="5439835075346716808">რეგისტრაცია ამ IP-დან დროებით დაბლოკილია. მოგვიანებით სცადეთ.</translation>
@@ -439,7 +434,6 @@
 <translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" /> მონიშნულია</translation>
 <translation id="6442584491342758233">პირდაპირი დამთხვევა</translation>
 <translation id="6443682944493983866">ენების მიღება</translation>
-<translation id="6468130661190228905">უკაცრავად, როგორც ჩანს, ჩვენს საზოგადოებასთან შესაერთებლად ცოტა ხანს მოცდა მოგიწევთ. ჩვენი მოთხოვნაა, წევრების ასაკი 16-ზე მეტი იყოს.</translation>
 <translation id="6487150267908786236"><ph name="BEGIN_LINK" />შემოტანა<ph name="END_LINK" /></translation>
 <translation id="6517411226162529295">დაშიფვრის გასაღების მარქაფი</translation>
 <translation id="6527303717912515753">გაზიარება</translation>
@@ -569,7 +563,6 @@
 <translation id="7961270736686975887">ენების მიმოცვლა</translation>
 <translation id="7967161908152532036">ვებსაიტის მისამართი</translation>
 <translation id="7979036127916589816">სინქრონიზაციის შეცდომა</translation>
-<translation id="8008214489230610096">გაიმეორეთ აღდგენის ელფოსტა</translation>
 <translation id="8038592796033755028"><ph name="USERNAME" /> მოწყობილობა</translation>
 <translation id="8041093619605951337">ბედნიერი</translation>
 <translation id="8046542428651654244">მინიატურის განახლება</translation>
@@ -584,7 +577,6 @@
 <translation id="8131740175452115882">დადასტურება</translation>
 <translation id="8134672010161840864">დაატყაპუნეთ გამოსახულების ამოსაჭრელად და გადასაადგილებლად</translation>
 <translation id="8142291334394582384">ძებნის მინიშნებების მიმდევრობის შებრუნება</translation>
-<translation id="8147118677117542370">შეიყვანთ თქვენი ასაკი.</translation>
 <translation id="8165573437634525334">დაშფვრს პაროლით დაცული მონაცემები</translation>
 <translation id="8237090677709100373">მომხმარებლის ფერის კოდი</translation>
 <translation id="8255101384731542819">დამოუკიდებელი ძებნა. აგებულია საფრანგეთში</translation>

@@ -36,6 +36,7 @@ interface Config {
   copyScreenshotGoldens: boolean;
   retries: number;
   configureChrome: (executablePath: string) => void;
+  cpuThrottle: number;
 }
 
 function sliceArrayFromElement(array: string[], element: string) {
@@ -44,7 +45,7 @@ function sliceArrayFromElement(array: string[], element: string) {
 }
 
 const diffBehaviors = asArray(options['on-diff']);
-// --diff=throw is the default, so set the option to true if there is either no --diff=no-throw or if it is overriden
+// --diff=throw is the default, so set the option to true if there is either no --diff=no-throw or if it is overridden
 // by a later --diff=throw
 const onDiffThrow = !diffBehaviors.includes(DiffBehaviors.NO_THROW) ||
     sliceArrayFromElement(diffBehaviors, DiffBehaviors.NO_THROW).includes(DiffBehaviors.THROW);
@@ -108,7 +109,7 @@ export const TestConfig: Config = {
   chromeBinary: options['chrome-binary'] ?? defaultChromePath(),
   serverType: ServerType.HOSTED_MODE,
   debug: options['debug'],
-  headless: options['headless'],
+  headless: options['headless'] === undefined ? !options['debug'] : options['headless'],
   coverage: options['coverage'],
   repetitions: options['repeat'],
   onDiff: {
@@ -120,6 +121,7 @@ export const TestConfig: Config = {
   copyScreenshotGoldens: false,
   retries: options['retries'],
   configureChrome,
+  cpuThrottle: options['cpu-throttle'],
 };
 
 export function loadTests(testDirectory: string) {

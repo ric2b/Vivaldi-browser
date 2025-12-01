@@ -174,6 +174,7 @@ public final class BaseSuggestionViewBinder<T extends View>
             actionView.setContentDescription(action.accessibilityDescription);
             applySelectableBackground(model, actionView);
             updateIcon(
+                    model,
                     actionView,
                     action.icon,
                     ChromeColors.getPrimaryIconTintRes(isIncognito(model)));
@@ -222,6 +223,7 @@ public final class BaseSuggestionViewBinder<T extends View>
             applySelectableBackground(model, actionView);
             if (BuildConfig.IS_VIVALDI) try { // Vivaldi VAB-10664
                 updateIcon(
+                        model,
                         actionView,
                         actions.get(index).icon,
                         ChromeColors.getPrimaryIconTintRes(isIncognito(model)));
@@ -229,6 +231,7 @@ public final class BaseSuggestionViewBinder<T extends View>
                 // Do nothing.
             } else // End Vivaldi
             updateIcon(
+                    model,
                     actionView,
                     actions.get(index).icon,
                     ChromeColors.getPrimaryIconTintRes(isIncognito(model)));
@@ -268,7 +271,7 @@ public final class BaseSuggestionViewBinder<T extends View>
                     sds.isLarge ? sLargeIconRoundingRadius : sSmallIconRoundingRadius);
         }
 
-        updateIcon(rciv, sds, ChromeColors.getSecondaryIconTintRes(isIncognito(model)));
+        updateIcon(model, rciv, sds, ChromeColors.getSecondaryIconTintRes(isIncognito(model)));
     }
 
     /**
@@ -346,7 +349,7 @@ public final class BaseSuggestionViewBinder<T extends View>
 
     /** Update image view using supplied drawable state object. */
     private static void updateIcon(
-            ImageView view, OmniboxDrawableState sds, @ColorRes int tintRes) {
+            PropertyModel model, ImageView view, OmniboxDrawableState sds, @ColorRes int tintRes) {
         view.setVisibility(sds == null ? View.GONE : View.VISIBLE);
         if (sds == null) {
             // Release any drawable that is still attached to this view to reclaim memory.
@@ -359,7 +362,7 @@ public final class BaseSuggestionViewBinder<T extends View>
             tint = AppCompatResources.getColorStateList(view.getContext(), tintRes);
         }
 
-        view.setImageDrawable(sds.drawable);
+        view.setImageDrawable(isIncognito(model) ? sds.incognitoDrawable : sds.drawable);
         view.setForegroundTintList(tint);
         ImageViewCompat.setImageTintList(view, tint);
     }

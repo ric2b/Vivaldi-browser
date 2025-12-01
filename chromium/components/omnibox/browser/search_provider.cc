@@ -8,8 +8,11 @@
 
 #include <algorithm>
 #include <cmath>
+#include <memory>
 #include <optional>
+#include <string>
 #include <utility>
+#include <vector>
 
 #include "base/base64.h"
 #include "base/feature_list.h"
@@ -28,6 +31,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/timer/elapsed_timer.h"
 #include "base/trace_event/trace_event.h"
+#include "components/history/core/browser/history_types.h"
 #include "components/history/core/browser/in_memory_database.h"
 #include "components/history/core/browser/keyword_search_term.h"
 #include "components/history/core/browser/keyword_search_term_util.h"
@@ -248,7 +252,9 @@ void SearchProvider::Start(const AutocompleteInput& input,
                                                             &keyword_input_);
   if (keyword_provider == nullptr)
     keyword_input_.Clear();
-  else if (keyword_input_.text().empty())
+  else if (keyword_input_.text().empty() ||
+           (keyword_provider && keyword_provider->is_active() ==
+                                    TemplateURLData::ActiveStatus::kFalse))
     keyword_provider = nullptr;
 
   const TemplateURL* default_provider =
@@ -321,9 +327,10 @@ void SearchProvider::Start(const AutocompleteInput& input,
     // Vivaldi: (VIB-914/VAB-7032) - Search provider also does history
     // search by default. When Search Engine Keyword is active disable history
     // search and return only suggestions for Typed Input.
-    if (!client()->GetTemplateURLService()->VivaldiIsDefaultOverridden() &&
+    if (!vivaldi::IsVivaldiRunning() ||
+        (!client()->GetTemplateURLService()->VivaldiIsDefaultOverridden() &&
         client()->GetPrefs()->GetBoolean(
-            vivaldiprefs::kAddressBarOmniboxSearchHistoryEnable)) {
+            vivaldiprefs::kAddressBarOmniboxSearchHistoryEnable))) {
     DoHistoryQuery(minimal_changes);
     }  // End Vivaldi
 
@@ -640,7 +647,7 @@ void SearchProvider::Run(bool query_is_private) {
   // Start a new request with the current input.
   time_suggest_request_sent_ = base::TimeTicks::Now();
 
-  if (!query_is_private) {
+  if (!query_is_private && !input_.InKeywordMode()) {
     default_loader_ =
         CreateSuggestLoader(providers_.GetDefaultProviderURL(), input_);
   }
@@ -751,7 +758,10 @@ void SearchProvider::StartOrStopSuggestQuery(bool minimal_changes) {
       (!query_is_private &&
        //Vivaldi
        !keyword_turl &&
-       (!client()->VivaldiOnlyKeywordSearch() || input_.from_search_field) &&
+       ((vivaldi::IsVivaldiRunning() &&
+         !client()->GetPrefs()->GetBoolean(
+             vivaldiprefs::kAddressBarInlineSearchSuggestOnNickname)) ||
+        input_.from_search_field) &&
        //End Vivaldi
        CanSendSuggestRequest(page_classification, default_turl, client())) ||
       CanSendSuggestRequest(page_classification, keyword_turl, client());
@@ -1030,7 +1040,8 @@ void SearchProvider::ConvertResultsToAutocompleteMatches() {
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
     // Boost SEARCH_WHAT_YOU_TYPED item if autocomplete is disabled and
     // typed text doesn't look like an URL to place it on top of dropdown.
-    if (!client()->GetPrefs()->GetBoolean(
+    if (vivaldi::IsVivaldiRunning() &&
+        !client()->GetPrefs()->GetBoolean(
             vivaldiprefs::kAddressBarAutocompleteEnabled)) {
       GURL verbatim_url = GURL(trimmed_verbatim);
       if (!verbatim_url.has_scheme()) {
@@ -1060,7 +1071,8 @@ void SearchProvider::ConvertResultsToAutocompleteMatches() {
     // so it's not possible to open a verbatim search match. Do not provide one.
     if (keyword_url &&
         (keyword_url->type() != TemplateURL::OMNIBOX_API_EXTENSION) &&
-        (keyword_url->starter_pack_id() != TemplateURLStarterPackData::kTabs)) {
+        (keyword_url->starter_pack_id() !=
+         template_url_starter_pack_data::kTabs)) {
       bool keyword_relevance_from_server;
       const int keyword_verbatim_relevance =
           GetKeywordVerbatimRelevance(&keyword_relevance_from_server);
@@ -1240,11 +1252,12 @@ void SearchProvider::AddTransformedHistoryResultsToMap(
 }
 
 SearchSuggestionParser::SuggestResults
-SearchProvider::ScoreHistoryResultsHelper(const HistoryResults& results,
-                                          bool base_prevent_inline_autocomplete,
-                                          bool input_multiple_words,
-                                          const std::u16string& input_text,
-                                          bool is_keyword) {
+SearchProvider::ScoreHistoryResultsHelper(
+    const history::KeywordSearchTermVisitList& results,
+    bool base_prevent_inline_autocomplete,
+    bool input_multiple_words,
+    const std::u16string& input_text,
+    bool is_keyword) {
   SearchSuggestionParser::SuggestResults scored_results;
   // True if the user has asked this exact query previously.
   bool found_what_you_typed_match = false;
@@ -1343,7 +1356,7 @@ SearchProvider::ScoreHistoryResultsHelper(const HistoryResults& results,
 }
 
 void SearchProvider::ScoreHistoryResults(
-    const HistoryResults& results,
+    const history::KeywordSearchTermVisitList& results,
     bool is_keyword,
     SearchSuggestionParser::SuggestResults* scored_results) {
   DCHECK(scored_results);

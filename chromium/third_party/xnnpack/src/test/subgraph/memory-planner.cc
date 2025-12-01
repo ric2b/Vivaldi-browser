@@ -90,21 +90,12 @@ TEST(MemoryPlanner, MemoryBlocksCoalescing) {
   }
   xnn_plan_value_allocation_tracker(&tracker);
 
-#if XNN_ENABLE_MEMOPT
   EXPECT_EQ(192, tracker.mem_arena_size);
   EXPECT_EQ(64, tracker.usage[0].alloc_offset);
   EXPECT_EQ(152, tracker.usage[1].alloc_offset);
   EXPECT_EQ(0, tracker.usage[2].alloc_offset);
   EXPECT_EQ(0, tracker.usage[3].alloc_offset);
   EXPECT_EQ(120, tracker.usage[4].alloc_offset);
-#else
-  EXPECT_EQ(332, tracker.mem_arena_size);
-  EXPECT_EQ(0, tracker.usage[0].alloc_offset);
-  EXPECT_EQ(57, tracker.usage[1].alloc_offset);
-  EXPECT_EQ(96, tracker.usage[2].alloc_offset);
-  EXPECT_EQ(160, tracker.usage[3].alloc_offset);
-  EXPECT_EQ(312, tracker.usage[4].alloc_offset);
-#endif
 
   xnn_release_value_allocation_tracker(&tracker);
 }
@@ -154,7 +145,6 @@ TEST(MemoryPlanner, GeneralPlanning) {
   }
   xnn_plan_value_allocation_tracker(&tracker);
 
-#if XNN_ENABLE_MEMOPT
   EXPECT_EQ(124, tracker.mem_arena_size);
   EXPECT_EQ(0, tracker.usage[0].alloc_offset);
   EXPECT_EQ(32, tracker.usage[1].alloc_offset);
@@ -164,17 +154,6 @@ TEST(MemoryPlanner, GeneralPlanning) {
   EXPECT_EQ(0, tracker.usage[5].alloc_offset);
   EXPECT_EQ(104, tracker.usage[6].alloc_offset);
   EXPECT_EQ(64, tracker.usage[7].alloc_offset);
-#else
-  EXPECT_EQ(234, tracker.mem_arena_size);
-  EXPECT_EQ(0, tracker.usage[0].alloc_offset);
-  EXPECT_EQ(32, tracker.usage[1].alloc_offset);
-  EXPECT_EQ(60, tracker.usage[2].alloc_offset);
-  EXPECT_EQ(96, tracker.usage[3].alloc_offset);
-  EXPECT_EQ(112, tracker.usage[4].alloc_offset);
-  EXPECT_EQ(120, tracker.usage[5].alloc_offset);
-  EXPECT_EQ(184, tracker.usage[6].alloc_offset);
-  EXPECT_EQ(194, tracker.usage[7].alloc_offset);
-#endif
 
   xnn_release_value_allocation_tracker(&tracker);
 }
@@ -347,36 +326,6 @@ TEST(MemoryPlanner, ExternalInputsCannotBeInPlace) {
   ASSERT_EQ(runtime->workspace->size,
             xnn_tensor_get_rounded_size(&runtime->values[leaky_relu_out]) +
                 MEMORY_ARENA_EXTRA_BYTES);
-}
-
-TEST(MemoryPlanner, PersistentValuesCannotReuseInternalValues) {
-  uint32_t input_id = 0;
-  uint32_t clamp_out_id = 1;
-  uint32_t leaky_relu_out_id = 2;
-  uint32_t output_id = 3;
-
-  // Clamp -> Leaky Relu -> Clamp
-  RuntimeTester tester(4);
-  tester.AddInputTensorF32({1, 3, 3, 3}, input_id)
-      .AddDynamicTensorF32({1, 3, 3, 3}, clamp_out_id,
-                           /*flags=*/0)  // 108 bytes.
-      .AddDynamicTensorF32({1, 3, 3, 3}, leaky_relu_out_id,
-                           XNN_VALUE_FLAG_PERSISTENT)  // 108 bytes.
-      .AddOutputTensorF32({1, 3, 3, 3}, output_id)
-      .AddClamp(0.0f, 1.0f, input_id, clamp_out_id)
-      .AddLeakyRelu(1.0f, clamp_out_id, leaky_relu_out_id)
-      .AddClamp(0.0f, 1.0f, leaky_relu_out_id, output_id);
-  tester.CreateRuntime(xnn_test_runtime_flags());
-  tester.SetupRuntime();
-
-  xnn_runtime_t runtime = tester.Runtime();
-
-  // Persistent values need to be allocated their own space.
-  ASSERT_EQ(
-      runtime->workspace->size,
-      xnn_tensor_get_rounded_size(&runtime->values[clamp_out_id]) +
-          xnn_tensor_get_rounded_size(&runtime->values[leaky_relu_out_id]) +
-          MEMORY_ARENA_EXTRA_BYTES);
 }
 
 TEST(MemoryPlanner, CannotReuseStaticValues) {

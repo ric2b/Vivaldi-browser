@@ -4,8 +4,8 @@
 // LICENSE file in the root directory of this source tree.
 //
 
-#ifndef __XNNPACK_SRC_XNNPACK_SIMD_F32_HVX_H_
-#define __XNNPACK_SRC_XNNPACK_SIMD_F32_HVX_H_
+#ifndef XNNPACK_SRC_XNNPACK_SIMD_F32_HVX_H_
+#define XNNPACK_SRC_XNNPACK_SIMD_F32_HVX_H_
 
 #include <assert.h>
 #include <hexagon_protos.h>
@@ -243,6 +243,11 @@ static XNN_INLINE xnn_simd_f32_t xnn_xor_f32(xnn_simd_f32_t a,
   return Q6_V_vxor_VV(a, b);
 }
 
+static XNN_INLINE xnn_simd_f32_t xnn_andnot_f32(xnn_simd_f32_t a,
+                                                xnn_simd_f32_t b) {
+  return Q6_V_vand_VV(Q6_V_vnot_V(a), b);
+}
+
 static XNN_INLINE xnn_simd_f32_t xnn_sll_f32(xnn_simd_f32_t a, uint8_t bits) {
   return Q6_Vw_vasl_VwR(a, (uint32_t)bits);
 }
@@ -354,4 +359,4 @@ static XNN_INLINE void xnn_store_tail_f32(float* output, xnn_simd_f32_t v,
   return Q6_V_vstu_variable(output, num_elements << XNN_LOG2_SIZEOF_FLOAT, v);
 }
 
-#endif  // __XNNPACK_SRC_XNNPACK_SIMD_F32_HVX_H_
+#endif  // XNNPACK_SRC_XNNPACK_SIMD_F32_HVX_H_

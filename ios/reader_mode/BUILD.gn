@@ -1,0 +1,37 @@
+# Copyright (c) 2025 Vivaldi Technologies AS. All rights reserved
+
+import("//ios/web/public/js_messaging/optimize_js.gni")
+
+optimize_js("vivaldi_reader_mode_js") {
+  primary_script = "resources/reader_mode_controls.js"
+  sources = [
+    "resources/reader_mode_controls.js",
+    "resources/readability.js",
+    "resources/readability_readerable.js",
+  ]
+
+  deps = [
+    "//ios/web/public/js_messaging:gcrweb",
+    "//ios/web/public/js_messaging:util_scripts",
+  ]
+}
+
+source_set("vivaldi_reader_mode_feature") {
+  sources = [
+    "vivaldi_reader_mode_java_script_feature.h",
+    "vivaldi_reader_mode_java_script_feature.mm",
+    "reader_mode_controller.h",
+    "reader_mode_controller.mm",
+    "reader_mode_controller_ui_bridge.mm",
+  ]
+
+  deps = [
+    ":vivaldi_reader_mode_js",
+    "//base",
+    "//components/prefs:prefs",
+    "//components/prefs/ios",
+    "//ios/web/common",
+    "//ios/web/public",
+    "//ios/web/public/js_messaging",
+  ]
+}

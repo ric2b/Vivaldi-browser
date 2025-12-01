@@ -32,6 +32,11 @@
 // The consumer for this protocol.
 @property(nonatomic, weak) id<LanguageSettingsConsumer> consumer;
 
+// Vivaldi
+// Returns whether or not Translate infobar is disabled.
+- (BOOL)translateInfobarDisabled;
+// End Vivaldi
+
 @end
 
 #endif  // IOS_CHROME_BROWSER_SETTINGS_UI_BUNDLED_LANGUAGE_LANGUAGE_SETTINGS_DATA_SOURCE_H_

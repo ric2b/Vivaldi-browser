@@ -18,8 +18,10 @@
 import $ from "../$.js";
 
 import {$$, $closest, hideElement} from "../utils/dom.js";
+import {formatArguments} from "../utils/general.js";
 import {raceWinner} from "../introspection/race.js";
 import {getDebugger} from "../introspection/log.js";
+import {profile} from "../introspection/profile.js";
 
 const {parseFloat, Math, MutationObserver, WeakSet} = $(window);
 const {min} = Math;
@@ -81,7 +83,9 @@ export function hideIfContainsSimilarText(
   maxSearches = 0
 ) {
   const visitedNodes = new WeakSet();
+  const formattedArguments = formatArguments(arguments);
   const debugLog = getDebugger("hide-if-contains-similar-text");
+  const {mark, end} = profile("hide-if-contains-similar-text");
   const $search = $(search);
   const {length} = $search;
   const chars = length + parseFloat(ignoreChars) || 0;
@@ -91,9 +95,10 @@ export function hideIfContainsSimilarText(
   if (searchSelector == null)
     searchSelector = selector;
 
-  debugLog("Looking for similar text: " + $search);
+  debugLog("info", "Looking for similar text: " + $search);
 
   const callback = () => {
+    mark();
     for (const {element, rootParents} of $$(searchSelector, true)) {
       if (visitedNodes.has(element))
         continue;
@@ -106,7 +111,11 @@ export function hideIfContainsSimilarText(
         const distance = ld(find, $([...str]).sort()) - ignoreChars;
         if (distance <= 0) {
           const closest = $closest($(element), selector, rootParents);
-          debugLog("success", "Found similar text: " + $search, closest);
+          debugLog("success",
+                   "Found similar text: " + $search,
+                   closest,
+                   "\nFILTER: hide-if-contains-similar-text",
+                   formattedArguments);
           if (closest) {
             win();
             hideElement(closest);
@@ -115,6 +124,7 @@ export function hideIfContainsSimilarText(
         }
       }
     }
+    end();
   };
 
   let mo = new MutationObserver(callback);

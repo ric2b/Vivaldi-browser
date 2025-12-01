@@ -55,9 +55,7 @@ void VivaldiSubresourceFilterAdblockingThrottleManager::
         content::NavigationThrottleRegistry& registry,
         bool done_mainframe) {
   if (navigation_handle->IsInMainFrame()) {
-    std::unique_ptr<VivaldiSubresourceFilterAdblockingThrottle> throttle(
-        new VivaldiSubresourceFilterAdblockingThrottle(navigation_handle));
-    registry.AddThrottle(std::move(throttle));
+    registry.AddThrottle(std::make_unique<VivaldiSubresourceFilterAdblockingThrottle>(registry));
   }
 
   auto* throttle_manager =

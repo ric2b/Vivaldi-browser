@@ -1477,7 +1477,7 @@ TEST_F(FPDFEditEmbedderTest, RemoveMarkedObjectsPrime) {
 #ifdef ARCH_CPU_ARM64
       return "401858d37db450bfd3f9458ac490eb08";
 #else
-      return "6275396f29951f92f8f5e145f0eff03a";
+      return "7c898d207b5f9bc7843d4ef93349bf71";
 #endif  // ARCH_CPU_ARM64
 #else
       return "3d5a3de53d5866044c2b6bf339742c97";
@@ -1533,12 +1533,14 @@ TEST_F(FPDFEditEmbedderTest, RemoveMarkedObjectsPrime) {
 #ifdef ARCH_CPU_ARM64
     return "6a1e31ffe451997946e449250b97d5b2";
 #else
-    return "631be723d5ff1f36e75c971cc940351b";
+    return "727b1ea388b2374270f21d35d1fae70e";
 #endif  // ARCH_CPU_ARM64
 #else
     return "bc8623c052f12376c3d8dd09a6cd27df";
 #endif  // BUILDFLAG(IS_APPLE)
   }();
+  // TODO(thestig): Should `non_primes_checksum` and
+  // `non_primes_after_save_checksum` be merged together?
   const char* non_primes_after_save_checksum = []() {
     if (CFX_DefaultRenderDevice::UseSkiaRenderer()) {
 #if BUILDFLAG(IS_WIN)
@@ -1553,7 +1555,7 @@ TEST_F(FPDFEditEmbedderTest, RemoveMarkedObjectsPrime) {
 #ifdef ARCH_CPU_ARM64
     return "d250bee3658c74e5d74729a09cbd80cd";
 #else
-    return "631be723d5ff1f36e75c971cc940351b";
+    return "727b1ea388b2374270f21d35d1fae70e";
 #endif  // ARCH_CPU_ARM64
 #else
     return "bc8623c052f12376c3d8dd09a6cd27df";
@@ -2332,6 +2334,51 @@ TEST_F(FPDFEditEmbedderTest, InsertPageObjectEditAndSave) {
   EXPECT_EQ(3, FPDFPage_CountObjects(saved_page));
   CloseSavedPage(saved_page);
   CloseSavedDocument();
+}
+
+TEST_F(FPDFEditEmbedderTest, InsertObjectAtIndex) {
+  ScopedFPDFDocument doc(FPDF_CreateNewDocument());
+  ASSERT_TRUE(doc);
+  ScopedFPDFPage page(FPDFPage_New(doc.get(), 0, 100, 100));
+  ASSERT_TRUE(page);
+
+  EXPECT_EQ(0, FPDFPage_CountObjects(page.get()));
+
+  FPDF_PAGEOBJECT img1 = FPDFPageObj_NewImageObj(doc.get());
+  FPDF_PAGEOBJECT img2 = FPDFPageObj_NewImageObj(doc.get());
+  FPDF_PAGEOBJECT img3 = FPDFPageObj_NewImageObj(doc.get());
+  ASSERT_TRUE(img1);
+  ASSERT_TRUE(img2);
+  ASSERT_TRUE(img3);
+
+  EXPECT_TRUE(FPDFPage_InsertObjectAtIndex(page.get(), img1, 0));
+  EXPECT_TRUE(FPDFPage_InsertObjectAtIndex(page.get(), img2, 0));
+  EXPECT_TRUE(FPDFPage_InsertObjectAtIndex(page.get(), img3, 1));
+
+  EXPECT_EQ(3, FPDFPage_CountObjects(page.get()));
+
+  EXPECT_EQ(img2, FPDFPage_GetObject(page.get(), 0));
+  EXPECT_EQ(img3, FPDFPage_GetObject(page.get(), 1));
+  EXPECT_EQ(img1, FPDFPage_GetObject(page.get(), 2));
+
+  // Test invalid index
+  FPDF_PAGEOBJECT img4 = FPDFPageObj_NewImageObj(doc.get());
+  ASSERT_TRUE(img4);
+  EXPECT_FALSE(FPDFPage_InsertObjectAtIndex(page.get(), img4, 4));
+
+  EXPECT_EQ(3, FPDFPage_CountObjects(page.get()));
+  EXPECT_EQ(img1, FPDFPage_GetObject(page.get(), 2));
+
+  // inserting at the end
+  FPDF_PAGEOBJECT img5 = FPDFPageObj_NewImageObj(doc.get());
+  ASSERT_TRUE(img5);
+  EXPECT_TRUE(FPDFPage_InsertObjectAtIndex(page.get(), img5, 3));
+  EXPECT_EQ(4, FPDFPage_CountObjects(page.get()));
+  EXPECT_EQ(img5, FPDFPage_GetObject(page.get(), 3));
+
+  FPDF_PAGEOBJECT img6 = FPDFPageObj_NewImageObj(doc.get());
+  ASSERT_TRUE(img6);
+  EXPECT_FALSE(FPDFPage_InsertObjectAtIndex(nullptr, img6, 0));
 }
 
 TEST_F(FPDFEditEmbedderTest, InsertAndRemoveLargeFile) {
@@ -5504,7 +5551,20 @@ TEST_F(FPDFEditEmbedderTest, FormModifyObject) {
   ASSERT_EQ(0, FPDFFormObj_CountObjects(form_obj));
 
   FPDFPageObj_Destroy(image_obj);
+
   ASSERT_TRUE(FPDFPage_GenerateContent(page));
 
+  // Save the document to the internal buffer
+  EXPECT_TRUE(FPDF_SaveAsCopy(document(), this, 0));
+
+  // Unload the original page and close the document
   UnloadPage(page);
+  CloseDocument();
+
+  const char kExpectedChecksumAfterRemoval[] =
+      "847febf1c7c38c1d2a1673cbea0bbe6b";
+  constexpr int kPageWidth = 200;
+  constexpr int kPageHeight = 300;
+
+  VerifySavedDocument(kPageWidth, kPageHeight, kExpectedChecksumAfterRemoval);
 }

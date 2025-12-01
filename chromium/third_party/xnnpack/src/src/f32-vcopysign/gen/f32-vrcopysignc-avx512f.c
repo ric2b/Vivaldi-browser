@@ -12,10 +12,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "src/xnnpack/simd/f32-avx512f.h"
-
 #include "src/xnnpack/common.h"
 #include "src/xnnpack/microparams.h"
+#include "src/xnnpack/simd/f32-avx512f.h"
 #include "src/xnnpack/vunary.h"
 
 
@@ -24,7 +23,7 @@ void xnn_f32_vrcopysignc_ukernel__avx512f_u16(
     const float* sign,
     const float* mag,
     float* output,
-    const struct xnn_f32_default_params unused_params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f32_default_params* unused_params)
 {
   assert(batch != 0);
   assert(batch % sizeof(float) == 0);
@@ -62,7 +61,7 @@ void xnn_f32_vrcopysignc_ukernel__avx512f_u32(
     const float* sign,
     const float* mag,
     float* output,
-    const struct xnn_f32_default_params unused_params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f32_default_params* unused_params)
 {
   assert(batch != 0);
   assert(batch % sizeof(float) == 0);
@@ -115,7 +114,7 @@ void xnn_f32_vrcopysignc_ukernel__avx512f_u48(
     const float* sign,
     const float* mag,
     float* output,
-    const struct xnn_f32_default_params unused_params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f32_default_params* unused_params)
 {
   assert(batch != 0);
   assert(batch % sizeof(float) == 0);
@@ -172,7 +171,7 @@ void xnn_f32_vrcopysignc_ukernel__avx512f_u64(
     const float* sign,
     const float* mag,
     float* output,
-    const struct xnn_f32_default_params unused_params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f32_default_params* unused_params)
 {
   assert(batch != 0);
   assert(batch % sizeof(float) == 0);

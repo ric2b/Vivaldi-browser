@@ -155,7 +155,7 @@ def RunSteps(api, repository):
   configs = [
       {
           'name': 'debug',
-          'args': ['-d'],
+          'args': ['-d', '--use-asan', '--use-ubsan'],
           'targets': [api.target.host],
       },
       {

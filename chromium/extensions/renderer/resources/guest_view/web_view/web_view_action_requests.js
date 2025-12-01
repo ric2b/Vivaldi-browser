@@ -32,7 +32,9 @@ var PERMISSION_TYPES = ['media',
                         'clipboard',
                         // Vivaldi end
                         'fullscreen',
-                        'hid'];
+                        'hid',
+                        'clipboardReadWrite',
+                        'clipboardSanitizedWrite'];
 
 // The browser will kill us if we send it a bad instance ID.
 // TODO(crbug.com/41353094): Remove once the cause of the bad ID is known.

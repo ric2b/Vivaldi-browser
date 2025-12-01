@@ -146,10 +146,12 @@ static void reset_stats(OSQChannel *cb)
 
 static void update_stats(OSQChannel *cb, int val)
 {
-    cb->sum += FFABS(val) - cb->history[cb->pos];
-    cb->history[cb->pos] = FFABS(val);
+    cb->sum += FFABS((int64_t)val) - cb->history[cb->pos];
+    cb->history[cb->pos] = FFABS((int64_t)val);
     cb->pos++;
     cb->count++;
+    //NOTE for this to make sense count would need to be limited to FF_ARRAY_ELEMS(cb->history)
+    //Otherwise the average computation later makes no sense
     if (cb->pos >= FF_ARRAY_ELEMS(cb->history))
         cb->pos = 0;
 }
@@ -163,7 +165,8 @@ static int update_residue_parameter(OSQChannel *cb)
     if (!sum)
         return 0;
     x = sum / cb->count;
-    rice_k = ceil(log2(x));
+    av_assert2(x <= 0x80000000U);
+    rice_k = av_ceil_log2(x);
     if (rice_k >= 30) {
         double f = floor(sum / 1.4426952 + 0.5);
         if (f <= 1) {
@@ -209,6 +212,8 @@ static int osq_channel_parameters(AVCodecContext *avctx, int ch)
         cb->residue_parameter = get_urice(gb, 4);
         if (!cb->residue_parameter || cb->residue_parameter >= 31)
             return AVERROR_INVALIDDATA;
+        if (cb->coding_mode == 2)
+            avpriv_request_sample(avctx, "coding mode 2");
     } else if (cb->coding_mode == 3) {
         cb->residue_bits = get_urice(gb, 4);
         if (!cb->residue_bits || cb->residue_bits >= 31)

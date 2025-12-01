@@ -12,7 +12,7 @@
 #include "content/public/browser/web_contents.h"
 
 #if !BUILDFLAG(IS_ANDROID)
-#include "ui/views/native_window_tracker.h"
+#include "ui/native_window_tracker/native_window_tracker.h"
 #endif
 
 #include "app/vivaldi_apptools.h"
@@ -74,7 +74,7 @@ ExtensionInstallPromptShowParams::ExtensionInstallPromptShowParams(
   DCHECK(!parent_window) << "Android does not support a parent window.";
 #else
   if (parent_window_) {
-    native_window_tracker_ = views::NativeWindowTracker::Create(parent_window_);
+    native_window_tracker_ = ui::NativeWindowTracker::Create(parent_window_);
   }
 #endif
 }

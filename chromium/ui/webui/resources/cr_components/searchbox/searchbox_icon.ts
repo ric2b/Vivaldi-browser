@@ -4,10 +4,10 @@
 
 import {getFaviconForPageURL} from '//resources/js/icon.js';
 import {loadTimeData} from '//resources/js/load_time_data.js';
+import type {AutocompleteMatch} from '//resources/mojo/components/omnibox/browser/searchbox.mojom-webui.js';
 import {PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {getTemplate} from './searchbox_icon.html.js';
-import type {AutocompleteMatch} from './searchbox.mojom-webui.js';
 
 const CALCULATOR: string = 'search-calculator-answer';
 const DOCUMENT_MATCH_TYPE: string = 'document';
@@ -129,7 +129,7 @@ export class SearchboxIconElement extends PolymerElement {
 
       iconSrc_: {
         type: String,
-        computed: `computeIconSrc_(match.iconUrl, match)`,
+        computed: `computeIconSrc_(match.iconUrl.url, match)`,
         observer: 'onIconSrcChanged_',
       },
 
@@ -148,7 +148,7 @@ export class SearchboxIconElement extends PolymerElement {
        */
       showIconImg_: {
         type: Boolean,
-        computed: `computeShowIconImg_(isLensSearchbox_, match.iconUrl,
+        computed: `computeShowIconImg_(isLensSearchbox_, match.iconUrl.url,
             match, iconLoading_)`,
       },
 
@@ -198,18 +198,17 @@ export class SearchboxIconElement extends PolymerElement {
 
   private computeBackgroundImage_(): string {
     if (this.match && !this.match.isSearchType) {
-      if (this.match.type !== DOCUMENT_MATCH_TYPE &&
-          this.match.type !== HISTORY_CLUSTER_MATCH_TYPE &&
-          this.match.type !== PEDAL) {
+      if (this.match.type === DOCUMENT_MATCH_TYPE ||
+          this.match.type === PEDAL ||
+          this.match.isEnterpriseSearchAggregatorPeopleType) {
+        return `url(${this.match.iconPath})`;
+      }
+
+      if (this.match.type !== HISTORY_CLUSTER_MATCH_TYPE) {
         return getFaviconForPageURL(
             this.match.destinationUrl.url, /* isSyncedUrlForHistoryUi= */ false,
             /* remoteIconUrlForUma= */ '', /* size= */ 16,
             /* forceLightMode= */ true);
-      }
-
-      if (this.match.type === DOCUMENT_MATCH_TYPE ||
-          this.match.type === PEDAL) {
-        return `url(${this.match.iconPath})`;
       }
     }
 
@@ -239,7 +238,7 @@ export class SearchboxIconElement extends PolymerElement {
 
   private computeShowIconImg_(): boolean {
     // Lens searchbox should not use icon URL.
-    return !this.isLensSearchbox_ && this.match && !!this.match.iconUrl &&
+    return !this.isLensSearchbox_ && this.match && !!this.match.iconUrl.url &&
         !this.iconLoading_;
   }
 
@@ -288,6 +287,7 @@ export class SearchboxIconElement extends PolymerElement {
       'drive_sheets',
       'drive_slides',
       'drive_video',
+      'google_agentspace_logo',
       'google_g',
       'google_g_gradient',
       'note',
@@ -316,7 +316,7 @@ export class SearchboxIconElement extends PolymerElement {
   }
 
   private computeIconSrc_(): string {
-    return this.computeSrc_(this.match?.iconUrl);
+    return this.computeSrc_(this.match?.iconUrl?.url);
   }
 
   private computeImageSrc_(): string {

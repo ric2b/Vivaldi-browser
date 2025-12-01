@@ -13,8 +13,14 @@ namespace web {
 class WebState;
 }
 
+#if defined(VIVALDI_BUILD)
+class WebStateList;
+TabStripItemIdentifier* CreateTabItemIdentifier(web::WebState* web_state,
+                                                WebStateList* web_state_list);
+#else
 // Returns the `TabStripItemIdentifier` for `web_state`.
 TabStripItemIdentifier* CreateTabItemIdentifier(web::WebState* web_state);
+#endif // End Vivaldi
 
 // Returns the `TabStripItemIdentifier` for `group`.
 TabStripItemIdentifier* CreateGroupItemIdentifier(const TabGroup* group);

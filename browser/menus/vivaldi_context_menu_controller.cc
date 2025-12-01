@@ -570,6 +570,9 @@ void ContextMenuController::MenuClosed(ui::SimpleMenuModel* source) {
       rv_context_menu_->SetMenuDelegate(nullptr);
       // And do not access this object anymore as its root model has signalled.
       rv_context_menu_ = nullptr;
+      // The vivaldi context menu interface must not access the render view as
+      // the view will be released before the menu later on.
+      menu_->ResetRenderView();
     } else {
       // Prevent the root model we have created from accessing us while we wait
       // to close.

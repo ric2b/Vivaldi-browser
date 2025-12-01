@@ -27,8 +27,8 @@
 
 #include <gtest/gtest.h>
 
+#include "src/tint/lang/wgsl/enums.h"
 #include "src/tint/lang/wgsl/feature_status.h"
-#include "src/tint/lang/wgsl/language_feature.h"
 
 namespace tint::wgsl {
 namespace {
@@ -52,6 +52,11 @@ TEST(LanguageFeatureStatusTest, ChromiumTestingValues) {
                   tint::wgsl::LanguageFeature::kChromiumTestingShippedWithKillswitch));
     EXPECT_EQ(FeatureStatus::kShipped,
               GetLanguageFeatureStatus(tint::wgsl::LanguageFeature::kChromiumTestingShipped));
+}
+
+TEST(LanguageFeatureStatusTest, ChromiumDeveloperFeatures) {
+    EXPECT_EQ(FeatureStatus::kUnsafeExperimental,
+              GetLanguageFeatureStatus(tint::wgsl::LanguageFeature::kChromiumPrint));
 }
 
 }  // namespace

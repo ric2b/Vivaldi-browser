@@ -6,7 +6,7 @@
       <include name="IDR_NET_ERROR_HTML" file="neterror/neterror.html"
                flattenhtml="true" type="BINDATA" compress="gzip"/>
       <if expr="not is_ios">
-        <include name="IDR_DOCUMENT_BLOCKED_INTERSTITIAL_HTML" file="../../../components/request_filter/adblock_filter/interstitial/document_blocked_interstitial.html"
+        <include name="IDR_DOCUMENT_BLOCKED_INTERSTITIAL_HTML" file="../../../components/ad_blocker/content/interstitial/document_blocked_interstitial.html"
                 compress="gzip" flattenhtml="true" type="BINDATA"/>
       </if>
     </includes>

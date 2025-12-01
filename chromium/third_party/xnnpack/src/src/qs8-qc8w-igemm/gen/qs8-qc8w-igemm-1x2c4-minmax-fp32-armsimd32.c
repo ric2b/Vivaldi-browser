@@ -9,9 +9,13 @@
 // LICENSE file in the root directory of this source tree.
 
 #include <assert.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #include <arm_acle.h>
 
+#include "src/xnnpack/common.h"
+#include "src/xnnpack/microparams.h"
 #include "src/xnnpack/intrinsics-polyfill.h"
 #include "src/xnnpack/math.h"
 #include "src/xnnpack/gemm.h"
@@ -30,7 +34,7 @@ void xnn_qs8_qc8w_igemm_minmax_fp32_ukernel_1x2c4__armsimd32(
     size_t cn_stride,
     size_t a_offset,
     const int8_t* zero,
-    const union xnn_qs8_qc8w_conv_minmax_params params[restrict XNN_MIN_ELEMENTS(1)])
+    const union xnn_qs8_qc8w_conv_minmax_params* restrict params)
 {
   assert(mr != 0);
   assert(mr <= 1);

@@ -16,6 +16,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <string_view>
 
 #include "./fuzz_utils.h"
@@ -50,7 +51,7 @@ void HuffmanTest(std::string_view blob) {
   VP8LBitReader* br;
   VP8LDecoder* dec = VP8LNew();
   if (dec == NULL) goto Error;
-  br = &dec->br_;
+  br = &dec->br;
   VP8LInitBitReader(br, data, size);
 
   color_cache_bits = VP8LReadBits(br, kColorCacheBitsBits);

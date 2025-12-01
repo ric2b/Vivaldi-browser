@@ -133,7 +133,6 @@ void TemplateURLServiceFactory::RegisterProfilePrefs(
   DefaultSearchManager::RegisterProfilePrefs(registry);
   EnterpriseSearchManager::RegisterProfilePrefs(registry);
   TemplateURLService::RegisterProfilePrefs(registry);
-  registry->RegisterStringPref(prefs::kLanguageAtInstall,"");
 }
 
 bool TemplateURLServiceFactory::ServiceIsNULLWhileTesting() const {

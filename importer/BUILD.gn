@@ -33,7 +33,6 @@ static_library("importer") {
       "//components/autofill/core/common",
       "//components/bookmarks/browser:browser",
       "//components/sync/protocol",
-      "//ppapi/buildflags",
       "//printing/buildflags",
       "//sql",
       "//third_party/boringssl",

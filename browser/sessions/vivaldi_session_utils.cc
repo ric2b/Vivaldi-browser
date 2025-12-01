@@ -28,6 +28,8 @@
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 #include "ui/base/l10n/l10n_util.h"
 
+#include "ui/vivaldi_browser_ui_data.h"
+
 using content::BrowserContext;
 using sessions::Index_Model;
 using sessions::Index_Node;
@@ -1651,7 +1653,10 @@ void DumpContent(base::FilePath name) {
 bool AddCommandLineTab(Browser* browser) {
   if (!browser)
     return false;
-  std::string v_e_d = browser->viv_ext_data();
+
+  vivaldi::VivaldiBrowserUiData* browser_ui_data =
+    vivaldi::VivaldiBrowserUiData::From(browser);
+  std::string v_e_d = browser_ui_data->viv_ext_data();
   std::optional<base::Value> json = std::nullopt;
   json = base::JSONReader::Read(v_e_d, base::JSON_PARSE_RFC);
   if (!(json && json->is_dict()))
@@ -1663,7 +1668,7 @@ bool AddCommandLineTab(Browser* browser) {
   std::string new_v_e_d;
   JSONStringValueSerializer serializer(&new_v_e_d);
   serializer.Serialize(*json);
-  browser->set_viv_ext_data(new_v_e_d);
+  browser_ui_data->set_viv_ext_data(new_v_e_d);
   return true;
 }
 
@@ -1691,6 +1696,11 @@ bool IsRestorableInVivaldi(const sessions::tab_restore::Entry& entry) {
   // Don't restore new-tab-url in the history only.
   if (base::StartsWith(tab.navigations[0].original_request_url().spec(),
                  vivaldi::kVivaldiNewTabURL))
+    return false;
+
+  // Don't restore session-recovery in the history only.
+  if (base::StartsWith(tab.navigations[0].original_request_url().spec(),
+                       vivaldi::kVivaldiCrashStartPageURL))
     return false;
 
   return true;

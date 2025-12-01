@@ -287,9 +287,6 @@ void Tokenizer::AdvanceToEndOfToken(const Location& location,
         if (IsCurrentStringTerminator(initial)) {
           Advance();  // Skip past last "
           break;
-        } else if (IsCurrentNewline()) {
-          *err_ = Err(LocationRange(location, GetCurrentLocation()),
-                      "Newline in string constant.");
         }
         Advance();
       }

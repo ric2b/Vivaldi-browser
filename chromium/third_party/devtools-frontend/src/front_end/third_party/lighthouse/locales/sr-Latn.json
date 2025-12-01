@@ -1188,7 +1188,7 @@
     "message": "Maksimalno potencijalno kašnjenje prvog prikaza koje može da se desi korisnicima je trajanje najdužeg zadatka. [Saznajte više o pokazatelju Maksimalno potencijalno kašnjenje prvog prikaza](https://developer.chrome.com/docs/lighthouse/performance/lighthouse-max-potential-fid/)."
   },
   "core/audits/metrics/speed-index.js | description": {
-    "message": "Indeks brzine prikazuje koliko brzo sadržaj stranice postaje vidljiv za korisnike. [Saznajte više o pokazatelju Indeks brzine](https://developer.chrome.com/docs/lighthouse/performance/speed-index/)."
+    "message": "Speed Index prikazuje koliko brzo sadržaj stranice postaje vidljiv za korisnike. [Saznajte više o pokazatelju Speed Index](https://developer.chrome.com/docs/lighthouse/performance/speed-index/)."
   },
   "core/audits/metrics/total-blocking-time.js | description": {
     "message": "Zbir svih perioda između FCP-a i vremena do početka interakcije, kada zadatak traje duže od 50 ms, izraženo u milisekundama. [Saznajte više o pokazatelju Ukupno vreme blokiranja](https://developer.chrome.com/docs/lighthouse/performance/lighthouse-total-blocking-time/)."
@@ -1440,7 +1440,7 @@
     "message": "Početno vreme odgovora servera je bilo kratko"
   },
   "core/audits/third-party-cookies.js | description": {
-    "message": "Chrome se kreće ka novom doživljaju koji omogućava korisnicima da biraju pregledanje sadržaja bez kolačića treće strane. [Saznajte više o kolačićima treće strane](https://developers.google.com/privacy-sandbox/cookies)."
+    "message": "Kolačići treće strane mogu da budu blokirani u nekim kontekstima. [Saznajte više o pripremi za ograničenja kolačića treće strane](https://privacysandbox.google.com/cookies/prepare/overview)."
   },
   "core/audits/third-party-cookies.js | displayValue": {
     "message": "{itemCount,plural, =1{Pronađen je 1 kolačić}one{Pronađen je # kolačić}few{Pronađena su # kolačića}other{Pronađeno je # kolačića}}"
@@ -1492,6 +1492,18 @@
   },
   "core/audits/third-party-summary.js | title": {
     "message": "Smanjite korišćenje sadržaja treće strane"
+  },
+  "core/audits/trusted-types-xss.js | columnSeverity": {
+    "message": "Ozbiljnost"
+  },
+  "core/audits/trusted-types-xss.js | description": {
+    "message": "Direktiva `require-trusted-types-for` u zaglavlju `Content-Security-Policy` (CSP) upućuje korisničke agente da kontrolišu podatke koji se prosleđuju DOM XSS funkcijama za obradu zlonamernog materijala. [Saznajte više o ublažavanju XSS-a zasnovanog na DOM-u pomoću pouzdanih tipova](https://developer.chrome.com/docs/lighthouse/best-practices/trusted-types-xss)."
+  },
+  "core/audits/trusted-types-xss.js | noTrustedTypesToMitigateXss": {
+    "message": "Nije pronađeno zaglavlje `Content-Security-Policy` sa direktivom Pouzdani tipovi"
+  },
+  "core/audits/trusted-types-xss.js | title": {
+    "message": "Ublažite XSS zasnovan na DOM-u pomoću pouzdanih tipova"
   },
   "core/audits/unsized-images.js | description": {
     "message": "Podesite eksplicitnu širinu i visinu u elementima slika radi smanjenja prelaza izgleda i poboljšanja kumulativnog pomaka sadržaja stranice. [Saznajte kako da podesite dimenzije slike](https://web.dev/articles/optimize-cls#images_without_dimensions)"
@@ -1676,17 +1688,23 @@
   "core/config/default-config.js | firstPaintImprovementsGroupTitle": {
     "message": "Poboljšanja prvog prikazivanja"
   },
+  "core/config/default-config.js | insightsGroupDescription": {
+    "message": "Ovi uvidi su dostupni i u oknu za učinak Chrome alatki za programere – [snimite trag](https://developer.chrome.com/docs/devtools/performance/reference) da biste videli detaljnije informacije."
+  },
+  "core/config/default-config.js | insightsGroupTitle": {
+    "message": "Uvid"
+  },
   "core/config/default-config.js | metricGroupTitle": {
     "message": "Pokazatelji"
   },
   "core/config/default-config.js | overallImprovementsGroupDescription": {
-    "message": "Poboljšajte opšti doživljaj učitavanja da bi stranica počela da se odaziva i da bi bila spremna za korišćenje u najkraćem mogućem roku. Ključni pokazatelji: Vreme početka interakcije, Indeks brzine"
+    "message": "Poboljšajte opšti doživljaj učitavanja da bi stranica počela da se odaziva i da bi bila spremna za korišćenje u najkraćem mogućem roku. Ključni pokazatelji: Vreme početka interakcije, Speed Index"
   },
   "core/config/default-config.js | overallImprovementsGroupTitle": {
     "message": "Opšta poboljšanja"
   },
   "core/config/default-config.js | performanceCategoryTitle": {
-    "message": "Učinak"
+    "message": "Performanse"
   },
   "core/config/default-config.js | seoCategoryDescription": {
     "message": "Zahvaljujući ovim proverama stranica će sigurno biti u skladu sa osnovnim savetima za optimizaciju za pretraživače. Ima mnogo dodatnih faktora koje Lighthouse ovde ne uzima u obzir, a koji mogu da utiču na rangiranje u pretrazi, uključujući učinak u [Osnovnim pokazateljima za veb](https://web.dev/explore/vitals). [Saznajte više o osnovama Google pretrage](https://support.google.com/webmasters/answer/35769)."
@@ -1857,22 +1875,22 @@
     "message": "URL"
   },
   "core/lib/i18n/i18n.js | columnWastedBytes": {
-    "message": "Potencijalna ušteda"
+    "message": "Procenjena ušteda"
   },
   "core/lib/i18n/i18n.js | columnWastedMs": {
-    "message": "Potencijalna ušteda"
+    "message": "Procenjena ušteda"
   },
   "core/lib/i18n/i18n.js | cumulativeLayoutShiftMetric": {
     "message": "Cumulative Layout Shift"
   },
   "core/lib/i18n/i18n.js | displayValueByteSavings": {
-    "message": "Potencijalna ušteda od {wastedBytes, number, bytes} KiB"
+    "message": "Procenjena ušteda od {wastedBytes, number, bytes} KiB"
   },
   "core/lib/i18n/i18n.js | displayValueElementsFound": {
     "message": "{nodeCount,plural, =1{Pronađen je 1 element}one{Pronađen je # element}few{Pronađena su # elementa}other{Pronađeno je # elemenata}}"
   },
   "core/lib/i18n/i18n.js | displayValueMsSavings": {
-    "message": "Potencijalna ušteda od {wastedMs, number, milliseconds} ms"
+    "message": "Procenjena ušteda od {wastedMs, number, milliseconds} ms"
   },
   "core/lib/i18n/i18n.js | documentResourceType": {
     "message": "Dokument"
@@ -2043,7 +2061,7 @@
     "message": "Najbolje prakse"
   },
   "flow-report/src/i18n/ui-strings.js | categoryPerformance": {
-    "message": "Učinak"
+    "message": "Performanse"
   },
   "flow-report/src/i18n/ui-strings.js | categorySeo": {
     "message": "Optimizacija za pretraživače"
@@ -2070,7 +2088,7 @@
     "message": "Preuzmite Lighthouse ocenu učinka."
   },
   "flow-report/src/i18n/ui-strings.js | helpUseCaseNavigation2": {
-    "message": "Izmerite pokazatelje učinka za učitavanje stranice, kao što su najveće prikazivanje sadržaja i indeks brzine."
+    "message": "Izmerite pokazatelje učinka za učitavanje stranice, kao što su najveće prikazivanje sadržaja i Speed Index."
   },
   "flow-report/src/i18n/ui-strings.js | helpUseCaseNavigation3": {
     "message": "Pristupite mogućnostima progresivnih veb-aplikacija."
@@ -2191,9 +2209,6 @@
   },
   "node_modules/@paulirish/trace_engine/generated/Deprecation.js | CrossOriginWindowConfirm": {
     "message": "Pokretanje window.confirm iz iframe-ova različitog porekla je zastarelo i ukloniće se u budućnosti."
-  },
-  "node_modules/@paulirish/trace_engine/generated/Deprecation.js | DOMMutationEvents": {
-    "message": "Događaji DOM mutacije, uključujući DOMSubtreeModified, DOMNodeInserted, DOMNodeRemoved, DOMNodeRemovedFromDocument, DOMNodeInsertedIntoDocument i DOMCharacterDataModified su zastareli (https://w3c.github.io/uievents/#legacy-event-types) i biće uklonjeni. Umesto njega koristite MutationObserver."
   },
   "node_modules/@paulirish/trace_engine/generated/Deprecation.js | DataUrlInSvgUse": {
     "message": "Podrška za podatke: URL-ovi u SVGUseElement-u su zastareli i biće uklonjeni u budućnosti."
@@ -2336,9 +2351,6 @@
   "node_modules/@paulirish/trace_engine/models/trace/insights/CLSCulprits.js | description": {
     "message": "Do promena rasporeda dolazi kada se elementi pomeraju bez ikakve interakcije korisnika. [Istražite uzroke promena rasporeda](https://web.dev/articles/optimize-cls), kao što su dodavanje i uklanjanje elemenata ili promena njihovih fontova dok se stranica učitava."
   },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/CLSCulprits.js | fontRequest": {
-    "message": "Zahtev za font"
-  },
   "node_modules/@paulirish/trace_engine/models/trace/insights/CLSCulprits.js | injectedIframe": {
     "message": "Umetnuti iframe"
   },
@@ -2357,8 +2369,8 @@
   "node_modules/@paulirish/trace_engine/models/trace/insights/CLSCulprits.js | topCulprits": {
     "message": "Najčešći uzroci promene rasporeda"
   },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/CLSCulprits.js | unsizedImages": {
-    "message": "Slike bez veličine"
+  "node_modules/@paulirish/trace_engine/models/trace/insights/CLSCulprits.js | unsizedImage": {
+    "message": "Element slike bez veličine"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/CLSCulprits.js | worstCluster": {
     "message": "Najgori skup"
@@ -2412,10 +2424,10 @@
     "message": "Prvi zahtev za mrežu je najvažniji.  Smanjite kašnjenje izbegavanjem preusmeravanja, obezbeđivanjem brzog odgovora servera i omogućavanjem kompresije teksta."
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/DocumentLatency.js | failedRedirects": {
-    "message": "Bilo je preusmeravanja"
+    "message": "Bilo je preusmeravanja ({PH1} preusmeravanja, +{PH2})"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/DocumentLatency.js | failedServerResponseTime": {
-    "message": "Server je odgovorio sporo"
+    "message": "Server je odgovorio sporo (uočeno: {PH1})"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/DocumentLatency.js | failedTextCompression": {
     "message": "Nije primenjeno komprimovanje"
@@ -2424,7 +2436,7 @@
     "message": "Izbegava preusmeravanja"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/DocumentLatency.js | passingServerResponseTime": {
-    "message": "Server odgovara brzo"
+    "message": "Server odgovara brzo (uočeno {PH1})"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/DocumentLatency.js | passingTextCompression": {
     "message": "Primenjuje se kompresija teksta"
@@ -2465,6 +2477,9 @@
   "node_modules/@paulirish/trace_engine/models/trace/insights/FontDisplay.js | wastedTimeColumn": {
     "message": "Protraćeno vreme"
   },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/ForcedReflow.js | anonymous": {
+    "message": "(anonimno)"
+  },
   "node_modules/@paulirish/trace_engine/models/trace/insights/ForcedReflow.js | description": {
     "message": "Mnogi API-ji, koji obično čitaju geometriju rasporeda, primoravaju mehanizam za renderovanje da pauzira izvršavanje skripte da bi izračunali stil i raspored. Saznajte više o [prinudnom preoblikovanju](https://developers.google.com/web/fundamentals/performance/rendering/avoid-large-complex-layouts-and-layout-thrashing#avoid-forced-synchronous-layouts) i njegovom ublažavanju."
   },
@@ -2481,7 +2496,7 @@
     "message": "Ukupno vreme preoblikovanja"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/ForcedReflow.js | unattributed": {
-    "message": "Nepripisno"
+    "message": "[nepripisano]"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/ImageDelivery.js | description": {
     "message": "Smanjivanje vremena preuzimanja slika može da poboljša vidljivu brzinu učitavanja stranice i LCP. [Saznajte više o optimizovanju veličine slike](https://developer.chrome.com/docs/lighthouse/performance/uses-optimized-images/)"
@@ -2513,30 +2528,6 @@
   "node_modules/@paulirish/trace_engine/models/trace/insights/ImageDelivery.js | useVideoFormat": {
     "message": "Ako koristite video formate umesto GIF-ova, možete da poboljšate veličinu preuzimanja animiranog sadržaja."
   },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/InteractionToNextPaint.js | description": {
-    "message": "Počnite da istražujete sa najdužom fazom. [Kašnjenja mogu da se umanje](https://web.dev/articles/optimize-inp#optimize_interactions). Da biste smanjili trajanje obrade, [optimizujte troškove glavne niti](https://web.dev/articles/optimize-long-tasks), često JS."
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/InteractionToNextPaint.js | duration": {
-    "message": "Trajanje"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/InteractionToNextPaint.js | inputDelay": {
-    "message": "Kašnjenje unosa"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/InteractionToNextPaint.js | noInteractions": {
-    "message": "Nije otkrivena nijedna interakcija"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/InteractionToNextPaint.js | phase": {
-    "message": "Faza"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/InteractionToNextPaint.js | presentationDelay": {
-    "message": "Kašnjenje prezentacije"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/InteractionToNextPaint.js | processingDuration": {
-    "message": "Trajanje obrade"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/InteractionToNextPaint.js | title": {
-    "message": "INP po fazi"
-  },
   "node_modules/@paulirish/trace_engine/models/trace/insights/LCPDiscovery.js | description": {
     "message": "Optimizujte LCP tako što ćete [omogućiti otkrivanje](https://web.dev/articles/optimize-lcp#1_eliminate_resource_load_delay) LCP slike iz HTML-a odmah i [izbegavati spora učitavanja](https://web.dev/articles/lcp-lazy-loading)"
   },
@@ -2564,36 +2555,6 @@
   "node_modules/@paulirish/trace_engine/models/trace/insights/LCPDiscovery.js | title": {
     "message": "Otkrivanje LCP zahteva"
   },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | description": {
-    "message": "Svaka [faza ima specifične strategije poboljšanja](https://web.dev/articles/optimize-lcp#lcp-breakdown). Idealno bi bilo da se većina vremena LCP-a potroši na učitavanje resursa, a ne na kašnjenja."
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | duration": {
-    "message": "Trajanje"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | elementRenderDelay": {
-    "message": "Kašnjenje prikazivanja elementa"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | fieldDuration": {
-    "message": "75. percentil polja"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | noLcp": {
-    "message": "Nije otkriven LCP"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | phase": {
-    "message": "Faza"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | resourceLoadDelay": {
-    "message": "Kašnjenje učitavanja resursa"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | resourceLoadDuration": {
-    "message": "Trajanje učitavanja resursa"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | timeToFirstByte": {
-    "message": "Time to first byte"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | title": {
-    "message": "LCP prema fazi"
-  },
   "node_modules/@paulirish/trace_engine/models/trace/insights/LegacyJavaScript.js | columnScript": {
     "message": "Skripta"
   },
@@ -2601,7 +2562,7 @@
     "message": "Neiskorišćeni bajtovi"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/LegacyJavaScript.js | description": {
-    "message": "Polifili i transformacije omogućavaju da stare verzije pregledača koriste nove funkcije JavaScript-a. Međutim, mnogi nisu neophodni za moderne pregledače. Razmislite o tome da modifikujete proces pravljenja JavaScript-a tako da ne transpajlira [referentni](https://web.dev/articles/baseline-and-polyfills) skup funkcija, osim ako znate da mora da podržava zastarele pregledače. [Saznajte zašto većina sajtova može da koristi ES6+ kôd bez transpajliranja](https://philipwalton.com/articles/the-state-of-es5-on-the-web/)"
+    "message": "Polifili i transformacije omogućavaju da starije verzije pregledača koriste nove funkcije JavaScript-a. Međutim, mnogi nisu neophodni za moderne pregledače. Razmislite o tome da modifikujete proces pravljenja JavaScript-a tako da ne transpajlira [referentni](https://web.dev/articles/baseline-and-polyfills) skup funkcija, osim ako znate da mora da podržava starije pregledače. [Saznajte zašto većina sajtova može da koristi ES6+ kôd bez transpajliranja](https://philipwalton.com/articles/the-state-of-es5-on-the-web/)"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/LegacyJavaScript.js | title": {
     "message": "Stara verzija JavaScript-a"
@@ -2621,8 +2582,32 @@
   "node_modules/@paulirish/trace_engine/models/trace/insights/ModernHTTP.js | title": {
     "message": "Moderan HTTP"
   },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | columnOrigin": {
+    "message": "Izvor"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | columnRequest": {
+    "message": "Zahtev"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | columnSource": {
+    "message": "Izvor"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | columnTime": {
+    "message": "Vreme"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | columnWastedMs": {
+    "message": "Procenjena ušteda LCP-a"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | crossoriginWarning": {
+    "message": "Nekorišćeno povezivanje unapred. Proverite da li je atribut crossorigin pravilno upotrebljen."
+  },
   "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | description": {
     "message": "[Izbegavajte pravljenje lanaca kritičnih zahteva](https://developer.chrome.com/docs/lighthouse/performance/critical-request-chains) tako što ćete smanjiti dužinu lanaca, smanjiti veličinu preuzimanja za resurse ili odložiti preuzimanje resursa koji nisu neophodni radi bržeg učitavanja stranice."
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | estSavingTableDescription": {
+    "message": "Dodajte savete za [povezivanje unapred](https://developer.chrome.com/docs/lighthouse/performance/uses-rel-preconnect/) sa najvažnijim izvorima, ali probajte da koristite najviše 4."
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | estSavingTableTitle": {
+    "message": "Kandidati za povezivanje unapred"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | maxCriticalPathLatency": {
     "message": "Maksimalno kašnjenje kritične putanje:"
@@ -2630,14 +2615,32 @@
   "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | noNetworkDependencyTree": {
     "message": "Zavisnosti mreže nisu uticale na zadatke renderovanja"
   },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | noPreconnectCandidates": {
+    "message": "Nijedan dodatni izvor nije dobar kandidat za povezivanje unapred"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | noPreconnectOrigins": {
+    "message": "Nijedan izvor nije unapred povezan"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | preconnectOriginsTableDescription": {
+    "message": "Saveti za [povezivanje unapred](https://developer.chrome.com/docs/lighthouse/performance/uses-rel-preconnect/) pomažu pregledaču da uspostavi vezu ranije tokom učitavanja stranice, što štedi vreme kada se uputi prvi zahtev za taj izvor. U nastavku su navedeni izvori sa kojima je stranica povezana unapred."
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | preconnectOriginsTableTitle": {
+    "message": "Unapred povezani izvori"
+  },
   "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | title": {
     "message": "Stablo mrežne zavisnosti"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | tooManyPreconnectLinksWarning": {
+    "message": "Pronađeno je više od 4 povezivanja preconnect. Ona treba da se koriste retko i samo do najvažnijih izvora."
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | unusedWarning": {
+    "message": "Nekorišćeno povezivanje unapred. Koristite preconnect samo za izvore koje će stranica verovatno zahtevati."
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | warningDescription": {
     "message": "Izbegavajte pravljenje lanaca kritičnih zahteva tako što ćete smanjiti dužinu lanaca, smanjiti veličinu preuzimanja za resurse ili odložiti preuzimanje resursa koji nisu neophodni radi bržeg učitavanja stranice."
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/RenderBlocking.js | description": {
-    "message": "Zahtevi blokiraju prvi prikaz stranice, što može da odloži LCP. [Odlaganje ili ugrađivanje](https://web.dev/learn/performance/understanding-the-critical-path#render-blocking_resources/) može da premesti ove mrežne zahteve sa kritične putanje."
+    "message": "Zahtevi blokiraju prvi prikaz stranice, što može da odloži LCP. [Odlaganje ili ugrađivanje](https://web.dev/learn/performance/understanding-the-critical-path#render-blocking_resources) može da premesti ove mrežne zahteve sa kritične putanje."
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/RenderBlocking.js | duration": {
     "message": "Trajanje"
@@ -2685,7 +2688,7 @@
     "message": "Veličina prenosa"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/ThirdParties.js | description": {
-    "message": "Kôd nezavisnog dobavljača može značajno da utiče na učinak učitavanja. [Smanjite i odložite učitavanje koda nezavisnog dobavljača](https://developers.google.com/web/fundamentals/performance/optimizing-content-efficiency/loading-third-party-javascript/) da biste utvrdili prioritete sadržaja stranice."
+    "message": "Kôd nezavisnog dobavljača može značajno da utiče na učinak učitavanja. [Smanjite i odložite učitavanje koda nezavisnog dobavljača](https://web.dev/articles/optimizing-content-efficiency-loading-third-party-javascript/) da biste utvrdili prioritete sadržaja stranice."
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/ThirdParties.js | noThirdParties": {
     "message": "Nije pronađena nijedna treća strana"
@@ -2695,6 +2698,9 @@
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/Viewport.js | description": {
     "message": "Interakcije dodirom mogu da budu [odložene za najviše 300 ms](https://developer.chrome.com/blog/300ms-tap-delay-gone-away/) ako oblast prikaza nije optimizovana za mobilne uređaje."
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/Viewport.js | mobileTapDelayLabel": {
+    "message": "Kašnjenje pri dodiru na mobilnom uređaju"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/Viewport.js | title": {
     "message": "Optimizujte oblast prikaza za mobilne uređaje"
@@ -3587,8 +3593,14 @@
   "report/renderer/report-utils.js | footerIssue": {
     "message": "Prijavite problem"
   },
+  "report/renderer/report-utils.js | goBackToAudits": {
+    "message": "Nazad na revizije"
+  },
   "report/renderer/report-utils.js | hide": {
     "message": "Sakrij"
+  },
+  "report/renderer/report-utils.js | insightsNotice": {
+    "message": "Kasnije u toku godine uvidi će zameniti revizije učinka. [Saznajte više i pošaljite povratne informacije ovde](https://github.com/GoogleChrome/lighthouse/discussions/16462)."
   },
   "report/renderer/report-utils.js | labDataTitle": {
     "message": "Podaci o eksperimentalnim funkcijama"
@@ -3689,6 +3701,9 @@
   "report/renderer/report-utils.js | toplevelWarningsMessage": {
     "message": "Bilo je izvesnih problema koji su uticali na ovo pokretanje Lighthouse-a:"
   },
+  "report/renderer/report-utils.js | tryInsights": {
+    "message": "Isprobaj uvide"
+  },
   "report/renderer/report-utils.js | unattributable": {
     "message": "Nepripisivo"
   },
@@ -3719,6 +3734,9 @@
   "treemap/app/src/util.js | duplicateModulesLabel": {
     "message": "Duplirani moduli"
   },
+  "treemap/app/src/util.js | duplicatedBytesLabel": {
+    "message": "Duplirani bajtovi"
+  },
   "treemap/app/src/util.js | resourceBytesLabel": {
     "message": "Bajtovi resursa"
   },
@@ -3727,6 +3745,9 @@
   },
   "treemap/app/src/util.js | toggleTableButtonLabel": {
     "message": "Uključi/isključi tabelu"
+  },
+  "treemap/app/src/util.js | transferBytesLabel": {
+    "message": "Bajtovi fajla za prenos"
   },
   "treemap/app/src/util.js | unusedBytesLabel": {
     "message": "Neiskorišćeni bajtovi"

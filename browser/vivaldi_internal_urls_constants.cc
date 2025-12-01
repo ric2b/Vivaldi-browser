@@ -12,7 +12,7 @@ base::span<const base::cstring_view> VivaldiURLHosts() {
 base::span<const base::cstring_view> VivaldiURLHosts() {
   static constexpr auto kVivaldiURLHosts = std::to_array<base::cstring_view>(
       {"version", "help", "about", "welcome", "notes", "bookmarks", "history",
-       "settings", "extensions", "experiments", "game"});
+       "settings", "extensions", "game"});
   return base::span(kVivaldiURLHosts);
 }
 #endif

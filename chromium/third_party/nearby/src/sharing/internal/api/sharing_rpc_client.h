@@ -20,7 +20,6 @@
 #include "absl/functional/any_invocable.h"
 #include "absl/status/statusor.h"
 #include "proto/identity/v1/rpcs.pb.h"
-#include "sharing/internal/api/sharing_rpc_notifier.h"
 #include "sharing/proto/certificate_rpc.pb.h"
 #include "sharing/proto/contact_rpc.pb.h"
 #include "sharing/proto/device_rpc.pb.h"
@@ -64,26 +63,11 @@ class SharingRpcClient {
   SharingRpcClient() = default;
   virtual ~SharingRpcClient() = default;
 
-  // Updates device data.
-  virtual void UpdateDevice(
-      const proto::UpdateDeviceRequest& request,
-      absl::AnyInvocable<
-          void(const absl::StatusOr<proto::UpdateDeviceResponse>& response) &&>
-          callback) = 0;
-
   // NearbyShareService v1: ListContactPeople
   virtual void ListContactPeople(
       const proto::ListContactPeopleRequest& request,
       absl::AnyInvocable<void(const absl::StatusOr<
                               proto::ListContactPeopleResponse>& response) &&>
-          callback) = 0;
-
-  // NearbyShareService v1: ListPublicCertificates
-  virtual void ListPublicCertificates(
-      const proto::ListPublicCertificatesRequest& request,
-      absl::AnyInvocable<
-          void(const absl::StatusOr<proto::ListPublicCertificatesResponse>&
-                   response) &&>
           callback) = 0;
 };
 
@@ -97,7 +81,6 @@ class SharingRpcClientFactory {
 
   virtual std::unique_ptr<SharingRpcClient> CreateInstance() = 0;
   virtual std::unique_ptr<IdentityRpcClient> CreateIdentityInstance() = 0;
-  virtual api::SharingRpcNotifier* GetRpcNotifier() const  = 0;
 };
 
 }  // namespace nearby::sharing::api

@@ -150,6 +150,22 @@ function getColorSpace(colorSpaceText: string): ColorSpace|null {
   return null;
 }
 
+export const enum ColorChannel {
+  A = 'a',
+  ALPHA = 'alpha',
+  B = 'b',
+  C = 'c',
+  G = 'g',
+  H = 'h',
+  L = 'l',
+  R = 'r',
+  S = 's',
+  W = 'w',
+  X = 'x',
+  Y = 'y',
+  Z = 'z',
+}
+
 /**
  * Percents in color spaces are mapped to ranges.
  * These ranges change based on the syntax.
@@ -158,8 +174,8 @@ function getColorSpace(colorSpaceText: string): ColorSpace|null {
  * Some percentage values can be negative
  * though their ranges don't change depending on the sign
  * (for now, according to spec).
- * @param percent % value of the number. 42 for 42%.
- * @param range Range of [min, max]. Including `min` and `max`.
+ * @param percent - % value of the number. 42 for 42%.
+ * @param range - Range of [min, max]. Including `min` and `max`.
  */
 function mapPercentToRange(percent: number, range: [number, number]): number {
   const sign = Math.sign(percent);
@@ -329,8 +345,8 @@ function parseAlpha(value: string|undefined): number|null {
 
 /**
  *
- * @param value Text value to be parsed in the form of 'number|percentage'.
- * @param range Range to map the percentage.
+ * @param value - Text value to be parsed in the form of 'number|percentage'.
+ * @param range - Range to map the percentage.
  * @returns If it is not percentage, returns number directly; otherwise,
  * maps the percentage to the range. For example:
  * - 30% in range [0, 100] is 30
@@ -641,6 +657,7 @@ interface ColorConversions<T = void> {
 
 export interface Color {
   readonly alpha: number|null;
+  readonly channels: [ColorChannel, ColorChannel, ColorChannel, ColorChannel];
 
   equal(color: Color): boolean;
   asString(format?: Format): string;
@@ -720,6 +737,8 @@ export class Lab implements Color {
   readonly alpha: number|null;
   readonly #authoredText?: string;
   readonly #rawParams: Color3D;
+  readonly channels: [ColorChannel, ColorChannel, ColorChannel, ColorChannel] =
+      [ColorChannel.L, ColorChannel.A, ColorChannel.B, ColorChannel.ALPHA];
 
   static readonly #conversions: ColorConversions<Lab> = {
     [Format.HEX]: (self: Lab) => new Legacy(self.#getRGBArray(/* withAlpha= */ false), Format.HEX),
@@ -857,6 +876,8 @@ export class LCH implements Color {
   readonly h: number;
   readonly alpha: number|null;
   readonly #authoredText?: string;
+  readonly channels: [ColorChannel, ColorChannel, ColorChannel, ColorChannel] =
+      [ColorChannel.L, ColorChannel.C, ColorChannel.H, ColorChannel.ALPHA];
 
   static readonly #conversions: ColorConversions<LCH> = {
     [Format.HEX]: (self: LCH) => new Legacy(self.#getRGBArray(/* withAlpha= */ false), Format.HEX),
@@ -997,6 +1018,8 @@ export class Oklab implements Color {
   readonly b: number;
   readonly alpha: number|null;
   readonly #authoredText?: string;
+  readonly channels: [ColorChannel, ColorChannel, ColorChannel, ColorChannel] =
+      [ColorChannel.L, ColorChannel.A, ColorChannel.B, ColorChannel.ALPHA];
 
   static readonly #conversions: ColorConversions<Oklab> = {
     [Format.HEX]: (self: Oklab) => new Legacy(self.#getRGBArray(/* withAlpha= */ false), Format.HEX),
@@ -1134,6 +1157,8 @@ export class Oklch implements Color {
   readonly h: number;
   readonly alpha: number|null;
   readonly #authoredText?: string;
+  readonly channels: [ColorChannel, ColorChannel, ColorChannel, ColorChannel] =
+      [ColorChannel.L, ColorChannel.C, ColorChannel.H, ColorChannel.ALPHA];
 
   static readonly #conversions: ColorConversions<Oklch> = {
     [Format.HEX]: (self: Oklch) => new Legacy(self.#getRGBArray(/* withAlpha= */ false), Format.HEX),
@@ -1271,6 +1296,10 @@ export class ColorFunction implements Color {
   readonly alpha: number|null;
   readonly colorSpace: ColorSpace;
   readonly #authoredText?: string;
+  get channels(): [ColorChannel, ColorChannel, ColorChannel, ColorChannel] {
+    return this.isXYZ() ? [ColorChannel.X, ColorChannel.Y, ColorChannel.Z, ColorChannel.ALPHA] :
+                          [ColorChannel.R, ColorChannel.G, ColorChannel.B, ColorChannel.ALPHA];
+  }
 
   static readonly #conversions: ColorConversions<ColorFunction> = {
     [Format.HEX]: (self: ColorFunction) => new Legacy(self.#getRGBArray(/* withAlpha= */ false), Format.HEX),
@@ -1437,8 +1466,8 @@ export class ColorFunction implements Color {
    *
    * Instead of making `splitColorFunctionParameters` work for this case too
    * I've decided to implement it specifically.
-   * @param authoredText Original definition of the color with `color`
-   * @param parametersText Inside of the `color()` function. ex, `display-p3 0.1 0.2 0.3 / 0%`
+   * @param authoredText - Original definition of the color with `color`
+   * @param parametersText - Inside of the `color()` function. ex, `display-p3 0.1 0.2 0.3 / 0%`
    * @returns `Color` object
    */
   static fromSpec(authoredText: string, parametersWithAlphaText: string): ColorFunction|null {
@@ -1502,6 +1531,8 @@ export class HSL implements Color {
   readonly alpha: number|null;
   readonly #rawParams: Color3D;
   #authoredText: string|undefined;
+  readonly channels: [ColorChannel, ColorChannel, ColorChannel, ColorChannel] =
+      [ColorChannel.H, ColorChannel.S, ColorChannel.L, ColorChannel.ALPHA];
 
   static readonly #conversions: ColorConversions<HSL> = {
     [Format.HEX]: (self: HSL) => new Legacy(self.#getRGBArray(/* withAlpha= */ false), Format.HEX),
@@ -1646,6 +1677,7 @@ export class HSL implements Color {
     return [Math.round(this.h * 360), Math.round(this.s * 100), Math.round(this.l * 100), this.alpha ?? 1];
   }
 }
+
 export class HWB implements Color {
   readonly h: number;
   readonly w: number;
@@ -1653,6 +1685,8 @@ export class HWB implements Color {
   readonly alpha: number|null;
   readonly #rawParams: Color3D;
   #authoredText: string|undefined;
+  readonly channels: [ColorChannel, ColorChannel, ColorChannel, ColorChannel] =
+      [ColorChannel.H, ColorChannel.W, ColorChannel.B, ColorChannel.ALPHA];
 
   static readonly #conversions: ColorConversions<HWB> = {
     [Format.HEX]: (self: HWB) => new Legacy(self.#getRGBArray(/* withAlpha= */ false), Format.HEX),
@@ -1810,6 +1844,8 @@ function toRgbValue(value: number): number {
 
 abstract class ShortFormatColorBase implements Color {
   protected readonly color: Legacy;
+  readonly channels: [ColorChannel, ColorChannel, ColorChannel, ColorChannel] =
+      [ColorChannel.R, ColorChannel.G, ColorChannel.B, ColorChannel.ALPHA];
   constructor(color: Legacy) {
     this.color = color;
   }
@@ -1919,6 +1955,8 @@ export class Legacy implements Color {
   #rgbaInternal: Color4D;
   readonly #authoredText: string|null;
   #formatInternal: LegacyColor;
+  readonly channels: [ColorChannel, ColorChannel, ColorChannel, ColorChannel] =
+      [ColorChannel.R, ColorChannel.G, ColorChannel.B, ColorChannel.ALPHA];
 
   static readonly #conversions: ColorConversions<Legacy> = {
     [Format.HEX]: (self: Legacy) => new Legacy(self.#rgbaInternal, Format.HEX),

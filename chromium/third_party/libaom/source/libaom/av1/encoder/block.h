@@ -44,7 +44,7 @@ extern "C" {
 #define MAX_TX_TYPE_PROB 1024
 
 //! Compute color sensitivity index for given plane
-#define COLOR_SENS_IDX(plane) ((plane)-1)
+#define COLOR_SENS_IDX(plane) ((plane) - 1)
 
 //! Enable timer statistics of mode search in non-rd
 #define COLLECT_NONRD_PICK_MODE_STAT 0

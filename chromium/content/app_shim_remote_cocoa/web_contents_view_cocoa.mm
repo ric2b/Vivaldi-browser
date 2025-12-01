@@ -124,8 +124,6 @@ STATIC_ASSERT_ENUM(NSDragOperationMove, ui::DragDropTypes::DRAG_MOVE);
   WebDragSource* __strong _dragSource;
   NSDragOperation _dragOperation;
 
-  gfx::Rect _windowControlsOverlayRect;
-
   BOOL _willSetWebContentsOccludedAfterDelay;
 
   // Vivaldi
@@ -219,36 +217,6 @@ STATIC_ASSERT_ENUM(NSDragOperationMove, ui::DragDropTypes::DRAG_MOVE);
 - (void)setMouseDownCanMoveWindow:(BOOL)canMove {
   _mouseDownCanMoveWindow = canMove;
 }
-
-- (void)VivaldiSetInFramelessContentView:(BOOL)framelessContentView {
-  vivaldiFramelessContentView_ = framelessContentView;
-}
-
-// Reimplemented for vivaldi.
-- (void)setFrame:(NSRect)rect {
-  if (vivaldiFramelessContentView_) {
-    // This view must cover the entire framless window area.
-    rect = [[[self.window contentView] superview] frame];
-    [[self.window contentView] setFrame:rect];
-    [super setFrame:rect];
-  } else {
-    [super setFrame:rect];
-  }
-}
-
-/*
-// Reimplemented for vivaldi.
-- (void)setFrameSize:(NSSize)size {
-  if (vivaldiFramelessContentView_) {
-    // This view must cover the entire framless window area.
-    size = [[[self.window contentView] superview] frame].size;
-    [[self.window contentView] setFrameSize:size];
-    [super setFrameSize:size];
-  } else {
-    [super setFrameSize:size];
-  }
-}
-*/
 
 - (BOOL)mouseDownCanMoveWindow {
   // This is needed to prevent mouseDowns from moving the window
@@ -529,11 +497,6 @@ STATIC_ASSERT_ENUM(NSDragOperationMove, ui::DragDropTypes::DRAG_MOVE);
 }
 
 - (void)setFrameSize:(NSSize)newSize {
-  if (vivaldiFramelessContentView_) {
-    // This view must cover the entire framless window area.
-    newSize = [[[self.window contentView] superview] frame].size;
-    [[self.window contentView] setFrameSize:newSize];
-  }
   [super setFrameSize:newSize];
 
   // Perform manual layout of subviews, e.g., when the window size changes.
@@ -585,28 +548,6 @@ STATIC_ASSERT_ENUM(NSDragOperationMove, ui::DragDropTypes::DRAG_MOVE);
 // ViewsHostable protocol implementation.
 - (ui::ViewsHostableView*)viewsHostableView {
   return _viewsHostableView;
-}
-
-- (void)updateWindowControlsOverlay:(const gfx::Rect&)boundingRect {
-  _windowControlsOverlayRect = boundingRect;
-}
-
-- (NSView*)hitTest:(NSPoint)point {
-  if (!_windowControlsOverlayRect.IsEmpty()) {
-    // _windowControlsOverlayRect represents the area at the top of the web
-    // contents that is available for the web. As such, if the y coordinate
-    // falls within this rect, but the x coordinate doesn't we want to route
-    // events to the BridgedContentView (our superview) instead.
-    gfx::Point p = gfx::Point(point);
-    p.set_y(NSHeight(self.bounds) - p.y());
-    if (p.y() >= _windowControlsOverlayRect.y() &&
-        p.y() < _windowControlsOverlayRect.bottom() &&
-        (p.x() < _windowControlsOverlayRect.x() ||
-         p.x() >= _windowControlsOverlayRect.right())) {
-      return self.superview;
-    }
-  }
-  return [super hitTest:point];
 }
 
 @end

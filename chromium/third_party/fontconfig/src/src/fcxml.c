@@ -66,9 +66,6 @@ static void
 _ensureWin32GettersReady ();
 #endif
 
-static FcChar8 *__fc_userdir = NULL;
-static FcChar8 *__fc_userconf = NULL;
-
 static void
 FcExprDestroy (FcExpr *e);
 static FcBool
@@ -2309,37 +2306,15 @@ bail:
 	FcStrFree (data);
 }
 
-void
-FcConfigPathFini (void)
-{
-    FcChar8 *s;
-
-retry_dir:
-    s = fc_atomic_ptr_get (&__fc_userdir);
-    if (!fc_atomic_ptr_cmpexch (&__fc_userdir, s, NULL))
-	goto retry_dir;
-    free (s);
-
-retry_conf:
-    s = fc_atomic_ptr_get (&__fc_userconf);
-    if (!fc_atomic_ptr_cmpexch (&__fc_userconf, s, NULL))
-	goto retry_conf;
-    free (s);
-}
-
 static void
 FcParseInclude (FcConfigParse *parse)
 {
     FcChar8       *s;
     const FcChar8 *attr;
     FcBool         ignore_missing = FcFalse;
-#ifndef _WIN32
-    FcBool deprecated = FcFalse;
-#endif
-    FcChar8    *prefix = NULL, *p;
-    FcChar8    *userdir = NULL, *userconf = NULL;
-    FcRuleSet  *ruleset;
-    FcMatchKind k;
+    FcChar8       *prefix = NULL, *p;
+    FcRuleSet     *ruleset;
+    FcMatchKind    k;
 
     s = FcStrBufDoneStatic (&parse->pstack->str);
     if (!s) {
@@ -2349,11 +2324,12 @@ FcParseInclude (FcConfigParse *parse)
     attr = FcConfigGetAttribute (parse, "ignore_missing");
     if (attr && FcConfigLexBool (parse, (FcChar8 *)attr) == FcTrue)
 	ignore_missing = FcTrue;
+    /* deprecated attribute has ever been used to mark
+     * old configuration path as deprecated.
+     * We don't have any code for it but just keep it for
+     * backward compatibility.
+     */
     attr = FcConfigGetAttribute (parse, "deprecated");
-#ifndef _WIN32
-    if (attr && FcConfigLexBool (parse, (FcChar8 *)attr) == FcTrue)
-	deprecated = FcTrue;
-#endif
     attr = FcConfigGetAttribute (parse, "prefix");
     if (attr && FcStrCmp (attr, (const FcChar8 *)"xdg") == 0) {
 	prefix = FcConfigXdgConfigHome();
@@ -2366,7 +2342,6 @@ FcParseInclude (FcConfigParse *parse)
     if (prefix) {
 	size_t   plen = strlen ((const char *)prefix);
 	size_t   dlen = strlen ((const char *)s);
-	FcChar8 *u;
 
 	p = realloc (prefix, plen + 1 + dlen + 1);
 	if (!p) {
@@ -2378,37 +2353,6 @@ FcParseInclude (FcConfigParse *parse)
 	memcpy (&prefix[plen + 1], s, dlen);
 	prefix[plen + 1 + dlen] = 0;
 	s = prefix;
-	if (FcFileIsDir (s)) {
-	userdir:
-	    userdir = fc_atomic_ptr_get (&__fc_userdir);
-	    if (!userdir) {
-		u = FcStrdup (s);
-		if (!fc_atomic_ptr_cmpexch (&__fc_userdir, userdir, u)) {
-		    free (u);
-		    goto userdir;
-		}
-		userdir = u;
-	    }
-	} else if (FcFileIsFile (s)) {
-	userconf:
-	    userconf = fc_atomic_ptr_get (&__fc_userconf);
-	    if (!userconf) {
-		u = FcStrdup (s);
-		if (!fc_atomic_ptr_cmpexch (&__fc_userconf, userconf, u)) {
-		    free (u);
-		    goto userconf;
-		}
-		userconf = u;
-	    }
-	} else {
-	    /* No config dir nor file on the XDG directory spec compliant place
-	     * so need to guess what it is supposed to be.
-	     */
-	    if (FcStrStr (s, (const FcChar8 *)"conf.d") != NULL)
-		goto userdir;
-	    else
-		goto userconf;
-	}
     }
     /* flush the ruleset into the queue */
     ruleset = parse->ruleset;
@@ -2428,50 +2372,6 @@ FcParseInclude (FcConfigParse *parse)
     FcRuleSetDestroy (ruleset);
     if (!_FcConfigParse (parse->config, s, !ignore_missing, !parse->scanOnly))
 	parse->error = FcTrue;
-#ifndef _WIN32
-    else {
-	FcChar8      *filename;
-	static FcBool warn_conf = FcFalse, warn_confd = FcFalse;
-
-	filename = FcConfigGetFilename (parse->config, s);
-	if (deprecated == FcTrue &&
-	    filename != NULL &&
-	    userdir != NULL &&
-	    !FcFileIsLink (filename)) {
-	    if (FcFileIsDir (filename)) {
-		FcChar8 *parent = FcStrDirname (userdir);
-
-		if (!FcFileIsDir (parent))
-		    FcMakeDirectory (parent);
-		FcStrFree (parent);
-		if (FcFileIsDir (userdir) ||
-		    rename ((const char *)filename, (const char *)userdir) != 0 ||
-		    symlink ((const char *)userdir, (const char *)filename) != 0) {
-		    if (!warn_confd) {
-			FcConfigMessage (parse, FcSevereWarning, "reading configurations from %s is deprecated. please move it to %s manually", s, userdir);
-			warn_confd = FcTrue;
-		    }
-		}
-	    } else {
-		FcChar8 *parent = FcStrDirname (userconf);
-
-		if (!FcFileIsDir (parent))
-		    FcMakeDirectory (parent);
-		FcStrFree (parent);
-		if (FcFileIsFile (userconf) ||
-		    rename ((const char *)filename, (const char *)userconf) != 0 ||
-		    symlink ((const char *)userconf, (const char *)filename) != 0) {
-		    if (!warn_conf) {
-			FcConfigMessage (parse, FcSevereWarning, "reading configurations from %s is deprecated. please move it to %s manually", s, userconf);
-			warn_conf = FcTrue;
-		    }
-		}
-	    }
-	}
-	if (filename)
-	    FcStrFree (filename);
-    }
-#endif
     FcStrBufDestroy (&parse->pstack->str);
 
 bail:

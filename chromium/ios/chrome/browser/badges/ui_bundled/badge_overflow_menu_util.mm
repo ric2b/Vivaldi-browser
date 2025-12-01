@@ -18,6 +18,7 @@
 // Vivaldi
 #import "app/vivaldi_apptools.h"
 #import "ios/ui/vivaldi_overflow_menu/vivaldi_oveflow_menu_constants.h"
+#import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
@@ -99,6 +100,15 @@ UIAction* GetOverflowMenuElementForBadgeType(
                                                  kInfobarSymbolPointSize);
       histogram_type = MobileMessagesInfobarType::Permissions;
       break;
+
+    // Vivaldi
+    case kBadgeTypeReaderMode:
+      action_identifier = kBadgeButtonReaderModeActionIdentifier;
+      title = l10n_util::GetNSString(IDS_IOS_READER_MODE_TITLE);
+      image = CustomSymbolWithPointSize(vOverflowReaderMode,
+                                        kInfobarSymbolPointSize);
+      break; //End Vivaldi
+
     case kBadgeTypeIncognito:
       NOTREACHED() << "An overflow menu badge should not be an Incognito badge";
     case kBadgeTypeOverflow:

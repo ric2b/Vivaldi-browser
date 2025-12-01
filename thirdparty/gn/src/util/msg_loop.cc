@@ -28,6 +28,8 @@ MsgLoop::~MsgLoop() {
 }
 
 void MsgLoop::Run() {
+  should_quit_ = false;
+
   while (!should_quit_) {
     std::function<void()> task;
     {

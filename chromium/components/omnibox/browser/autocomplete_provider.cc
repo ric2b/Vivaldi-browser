@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
-#pragma allow_unsafe_libc_calls
-#endif
-
 #include "components/omnibox/browser/autocomplete_provider.h"
 
 #include <algorithm>
@@ -31,6 +26,7 @@
 
 AutocompleteProvider::AutocompleteProvider(Type type)
     : provider_max_matches_(OmniboxFieldTrial::GetProviderMaxMatches(type)),
+      provider_max_matches_in_keyword_mode_(provider_max_matches_),
       type_(type) {}
 
 // static

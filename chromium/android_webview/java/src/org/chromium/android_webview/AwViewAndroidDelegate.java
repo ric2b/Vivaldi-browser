@@ -8,10 +8,12 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
+import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.android_webview.common.Lifetime;
 import org.chromium.ui.base.ViewAndroidDelegate;
+import org.chromium.ui.dragdrop.DragStateTracker;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -28,6 +30,7 @@ public class AwViewAndroidDelegate extends ViewAndroidDelegate {
 
     private final AwContentsClient mContentsClient;
     private final AwScrollOffsetManager mScrollManager;
+    private final @Nullable AwDisplayCutoutController mDisplayCutoutController;
 
     /** Represents the position of an anchor view. */
     @VisibleForTesting
@@ -54,10 +57,17 @@ public class AwViewAndroidDelegate extends ViewAndroidDelegate {
     public AwViewAndroidDelegate(
             ViewGroup containerView,
             AwContentsClient contentsClient,
-            AwScrollOffsetManager scrollManager) {
+            AwScrollOffsetManager scrollManager,
+            @Nullable AwDisplayCutoutController displayCutoutController) {
         super(containerView);
         mContentsClient = contentsClient;
         mScrollManager = scrollManager;
+        mDisplayCutoutController = displayCutoutController;
+    }
+
+    @Override
+    public @Nullable DragStateTracker getDragStateTracker() {
+        return getDragStateTrackerInternal();
     }
 
     @Override
@@ -135,5 +145,17 @@ public class AwViewAndroidDelegate extends ViewAndroidDelegate {
     @Override
     public void onBackgroundColorChanged(int color) {
         mContentsClient.onBackgroundColorChanged(color);
+    }
+
+    /**
+     * @return The Visual Viewport bottom inset in pixels.
+     */
+    @Override
+    @VisibleForTesting(otherwise = VisibleForTesting.PROTECTED)
+    public int getViewportInsetBottom() {
+        if (mDisplayCutoutController != null) {
+            return mDisplayCutoutController.getBottomImeInset();
+        }
+        return 0;
     }
 }

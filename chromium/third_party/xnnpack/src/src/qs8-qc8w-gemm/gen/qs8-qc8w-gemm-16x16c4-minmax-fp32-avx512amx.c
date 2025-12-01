@@ -9,6 +9,8 @@
 // LICENSE file in the root directory of this source tree.
 
 #include <assert.h>
+#include <stddef.h>
+#include <stdint.h>
 #if defined(__has_feature)
   #if __has_feature(memory_sanitizer)
     #include <sanitizer/msan_interface.h>
@@ -21,7 +23,7 @@
 #include "src/xnnpack/gemm.h"
 #include "src/xnnpack/intrinsics-polyfill.h"
 #include "src/xnnpack/math.h"
-#include "src/xnnpack/unaligned.h"
+#include "src/xnnpack/microparams.h"
 
 
 void xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_16x16c4__avx512amx(
@@ -34,7 +36,7 @@ void xnn_qs8_qc8w_gemm_minmax_fp32_ukernel_16x16c4__avx512amx(
     int8_t* restrict c,
     size_t cm_stride,
     size_t cn_stride,
-    const union xnn_qs8_qc8w_conv_minmax_params params[restrict XNN_MIN_ELEMENTS(1)])
+    const union xnn_qs8_qc8w_conv_minmax_params* restrict params)
 {
   assert(mr != 0);
   assert(mr <= 16);

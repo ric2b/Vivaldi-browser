@@ -711,21 +711,21 @@ CJS_Result CJS_Document::get_info(CJS_Runtime* pRuntime) {
     return CJS_Result::Failure(JSMessage::kBadObjectError);
   }
 
-  RetainPtr<const CPDF_Dictionary> pDictionary =
+  RetainPtr<const CPDF_Dictionary> dict =
       form_fill_env_->GetPDFDocument()->GetInfo();
-  if (!pDictionary) {
+  if (!dict) {
     return CJS_Result::Failure(JSMessage::kBadObjectError);
   }
 
-  WideString cwAuthor = pDictionary->GetUnicodeTextFor("Author");
-  WideString cwTitle = pDictionary->GetUnicodeTextFor("Title");
-  WideString cwSubject = pDictionary->GetUnicodeTextFor("Subject");
-  WideString cwKeywords = pDictionary->GetUnicodeTextFor("Keywords");
-  WideString cwCreator = pDictionary->GetUnicodeTextFor("Creator");
-  WideString cwProducer = pDictionary->GetUnicodeTextFor("Producer");
-  WideString cwCreationDate = pDictionary->GetUnicodeTextFor("CreationDate");
-  WideString cwModDate = pDictionary->GetUnicodeTextFor("ModDate");
-  WideString cwTrapped = pDictionary->GetUnicodeTextFor("Trapped");
+  WideString cwAuthor = dict->GetUnicodeTextFor("Author");
+  WideString cwTitle = dict->GetUnicodeTextFor("Title");
+  WideString cwSubject = dict->GetUnicodeTextFor("Subject");
+  WideString cwKeywords = dict->GetUnicodeTextFor("Keywords");
+  WideString cwCreator = dict->GetUnicodeTextFor("Creator");
+  WideString cwProducer = dict->GetUnicodeTextFor("Producer");
+  WideString cwCreationDate = dict->GetUnicodeTextFor("CreationDate");
+  WideString cwModDate = dict->GetUnicodeTextFor("ModDate");
+  WideString cwTrapped = dict->GetUnicodeTextFor("Trapped");
 
   v8::Local<v8::Object> pObj = pRuntime->NewObject();
   pRuntime->PutObjectProperty(pObj, "Author",
@@ -748,7 +748,7 @@ CJS_Result CJS_Document::get_info(CJS_Runtime* pRuntime) {
                               pRuntime->NewString(cwTrapped.AsStringView()));
 
   // PutObjectProperty() calls below may re-enter JS and change info dict.
-  CPDF_DictionaryLocker locker(ToDictionary(pDictionary->Clone()));
+  CPDF_DictionaryLocker locker(ToDictionary(dict->Clone()));
   for (const auto& it : locker) {
     const ByteString& bsKey = it.first;
     const RetainPtr<CPDF_Object>& pValueObj = it.second;
@@ -779,14 +779,13 @@ CJS_Result CJS_Document::GetPropertyInternal(CJS_Runtime* pRuntime,
     return CJS_Result::Failure(JSMessage::kBadObjectError);
   }
 
-  RetainPtr<CPDF_Dictionary> pDictionary =
-      form_fill_env_->GetPDFDocument()->GetInfo();
-  if (!pDictionary) {
+  RetainPtr<CPDF_Dictionary> dict = form_fill_env_->GetPDFDocument()->GetInfo();
+  if (!dict) {
     return CJS_Result::Failure(JSMessage::kBadObjectError);
   }
 
   return CJS_Result::Success(pRuntime->NewString(
-      pDictionary->GetUnicodeTextFor(property_name).AsStringView()));
+      dict->GetUnicodeTextFor(property_name).AsStringView()));
 }
 
 CJS_Result CJS_Document::get_creation_date(CJS_Runtime* pRuntime) {
@@ -1314,18 +1313,18 @@ CJS_Result CJS_Document::getPageNthWord(
   int nWordNo = params.size() > 1 ? pRuntime->ToInt32(params[1]) : 0;
   bool bStrip = params.size() > 2 ? pRuntime->ToBoolean(params[2]) : true;
 
-  CPDF_Document* pDocument = form_fill_env_->GetPDFDocument();
-  if (nPageNo < 0 || nPageNo >= pDocument->GetPageCount()) {
+  CPDF_Document* document = form_fill_env_->GetPDFDocument();
+  if (nPageNo < 0 || nPageNo >= document->GetPageCount()) {
     return CJS_Result::Failure(JSMessage::kValueError);
   }
 
   RetainPtr<CPDF_Dictionary> pPageDict =
-      pDocument->GetMutablePageDictionary(nPageNo);
+      document->GetMutablePageDictionary(nPageNo);
   if (!pPageDict) {
     return CJS_Result::Failure(JSMessage::kBadObjectError);
   }
 
-  auto page = pdfium::MakeRetain<CPDF_Page>(pDocument, std::move(pPageDict));
+  auto page = pdfium::MakeRetain<CPDF_Page>(document, std::move(pPageDict));
   page->AddPageImageCache();
   page->ParseContent();
 
@@ -1377,18 +1376,18 @@ CJS_Result CJS_Document::getPageNumWords(
   }
 
   int nPageNo = params.size() > 0 ? pRuntime->ToInt32(params[0]) : 0;
-  CPDF_Document* pDocument = form_fill_env_->GetPDFDocument();
-  if (nPageNo < 0 || nPageNo >= pDocument->GetPageCount()) {
+  CPDF_Document* document = form_fill_env_->GetPDFDocument();
+  if (nPageNo < 0 || nPageNo >= document->GetPageCount()) {
     return CJS_Result::Failure(JSMessage::kValueError);
   }
 
   RetainPtr<CPDF_Dictionary> pPageDict =
-      pDocument->GetMutablePageDictionary(nPageNo);
+      document->GetMutablePageDictionary(nPageNo);
   if (!pPageDict) {
     return CJS_Result::Failure(JSMessage::kBadObjectError);
   }
 
-  auto page = pdfium::MakeRetain<CPDF_Page>(pDocument, std::move(pPageDict));
+  auto page = pdfium::MakeRetain<CPDF_Page>(document, std::move(pPageDict));
   page->AddPageImageCache();
   page->ParseContent();
 
@@ -1470,9 +1469,9 @@ CJS_Result CJS_Document::gotoNamedDest(
     return CJS_Result::Failure(JSMessage::kBadObjectError);
   }
 
-  CPDF_Document* pDocument = form_fill_env_->GetPDFDocument();
+  CPDF_Document* document = form_fill_env_->GetPDFDocument();
   RetainPtr<const CPDF_Array> dest_array = CPDF_NameTree::LookupNamedDest(
-      pDocument, pRuntime->ToByteString(params[0]));
+      document, pRuntime->ToByteString(params[0]));
   if (!dest_array) {
     return CJS_Result::Failure(JSMessage::kBadObjectError);
   }
@@ -1480,7 +1479,7 @@ CJS_Result CJS_Document::gotoNamedDest(
   CPDF_Dest dest(std::move(dest_array));
   std::vector<float> positions = dest.GetScrollPositionArray();
   pRuntime->BeginBlock();
-  form_fill_env_->DoGoToAction(dest.GetDestPageIndex(pDocument),
+  form_fill_env_->DoGoToAction(dest.GetDestPageIndex(document),
                                dest.GetZoomMode(), positions);
   pRuntime->EndBlock();
   return CJS_Result::Success();

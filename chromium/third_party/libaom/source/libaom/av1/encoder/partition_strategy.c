@@ -355,7 +355,7 @@ static inline int get_simple_motion_search_prune_agg(int qindex,
 
   // Aggressiveness value for SIMPLE_MOTION_SEARCH_PRUNE_LEVEL except
   // QIDX_BASED_AGG_LVL
-  const int sms_prune_agg_levels[TOTAL_SIMPLE_AGG_LVLS] = { 0, 1, 2, 3 };
+  const int sms_prune_agg_levels[TOTAL_SIMPLE_AGG_LVLS] = { 0, 1, 2, 3, 4, 5 };
   if (prune_level < TOTAL_SIMPLE_AGG_LVLS) {
     return sms_prune_agg_levels[prune_level];
   }
@@ -364,7 +364,7 @@ static inline int get_simple_motion_search_prune_agg(int qindex,
   // Aggressive pruning for lower quantizers in non-boosted frames to prune
   // rectangular partitions.
   const int qband = is_rect_part ? (qindex <= 90 ? 1 : 0) : 0;
-  const int sms_prune_agg_qindex_based[2] = { 1, 2 };
+  const int sms_prune_agg_qindex_based[2] = { 3, 4 };
   return sms_prune_agg_qindex_based[qband];
 }
 
@@ -388,16 +388,20 @@ static void simple_motion_search_based_split(AV1_COMP *const cpi, MACROBLOCK *x,
   assert(bsize_idx >= 0 && bsize_idx <= 4 &&
          "Invalid bsize in simple_motion_search_based_split");
 
-  const float *ml_mean = av1_simple_motion_search_split_mean[bsize_idx];
-  const float *ml_std = av1_simple_motion_search_split_std[bsize_idx];
-  const NN_CONFIG *nn_config =
-      av1_simple_motion_search_split_nn_config[bsize_idx];
-
   const int agg = get_simple_motion_search_prune_agg(
       x->qindex, cpi->sf.part_sf.simple_motion_search_prune_agg, 0);
   if (agg < 0) {
     return;
   }
+
+  int ml_model_index = (agg == SIMPLE_AGG_LVL1 || agg == SIMPLE_AGG_LVL2);
+
+  const float *ml_mean =
+      av1_simple_motion_search_split_mean[ml_model_index][bsize_idx];
+  const float *ml_std =
+      av1_simple_motion_search_split_std[ml_model_index][bsize_idx];
+  const NN_CONFIG *nn_config =
+      av1_simple_motion_search_split_nn_config[ml_model_index][bsize_idx];
 
   const float split_only_thresh =
       av1_simple_motion_search_split_thresh[agg][res_idx][bsize_idx];
@@ -446,9 +450,8 @@ static void simple_motion_search_based_split(AV1_COMP *const cpi, MACROBLOCK *x,
   if (cpi->sf.part_sf.simple_motion_search_rect_split) {
     const float scale = res_idx >= 2 ? 3.0f : 2.0f;
     const float rect_split_thresh =
-        scale * av1_simple_motion_search_no_split_thresh
-                    [cpi->sf.part_sf.simple_motion_search_rect_split][res_idx]
-                    [bsize_idx];
+        scale * av1_simple_motion_search_no_split_thresh[SIMPLE_AGG_LVL3]
+                                                        [res_idx][bsize_idx];
     if (score < rect_split_thresh) {
       part_state->do_rectangular_split = 0;
     }
@@ -1032,7 +1035,10 @@ void av1_ml_early_term_after_split(AV1_COMP *const cpi, MACROBLOCK *const x,
   const NN_CONFIG *nn_config = NULL;
   float thresh = -1e6;
   switch (bsize) {
-    case BLOCK_128X128: break;
+    case BLOCK_128X128:
+      nn_config = &av1_early_term_after_split_nnconfig_64;
+      thresh = is_480p_or_larger ? -2.0f : -1.2f;
+      break;
     case BLOCK_64X64:
       nn_config = &av1_early_term_after_split_nnconfig_64;
       thresh = is_480p_or_larger ? -2.0f : -1.2f;
@@ -1476,37 +1482,51 @@ void av1_ml_predict_breakout(AV1_COMP *const cpi, const MACROBLOCK *const x,
   const int mi_row = blk_params->mi_row, mi_col = blk_params->mi_col;
   const BLOCK_SIZE bsize = blk_params->bsize;
 
+  const int bsize_idx = convert_bsize_to_idx(bsize);
+  if (bsize_idx < 0) return;
+  const float *ml_mean = av1_hd_partition_breakout_nn_mean[bsize_idx];
+  const float *ml_std = av1_hd_partition_breakout_nn_std[bsize_idx];
+
   const NN_CONFIG *nn_config = NULL;
-  int thresh = 0;
+  float thresh = 0;
   switch (bsize) {
     case BLOCK_8X8:
-      nn_config = &av1_partition_breakout_nnconfig_8;
-      thresh = cpi->sf.part_sf.ml_partition_search_breakout_thresh[0];
+      nn_config =
+          &av1_partition_breakout_nnconfig_8
+              [cpi->sf.part_sf.ml_partition_search_breakout_model_index];
+      thresh = cpi->sf.part_sf.ml_partition_search_breakout_thresh[bsize_idx];
       break;
     case BLOCK_16X16:
-      nn_config = &av1_partition_breakout_nnconfig_16;
-      thresh = cpi->sf.part_sf.ml_partition_search_breakout_thresh[1];
+      nn_config =
+          &av1_partition_breakout_nnconfig_16
+              [cpi->sf.part_sf.ml_partition_search_breakout_model_index];
+      thresh = cpi->sf.part_sf.ml_partition_search_breakout_thresh[bsize_idx];
       break;
     case BLOCK_32X32:
-      nn_config = &av1_partition_breakout_nnconfig_32;
-      thresh = cpi->sf.part_sf.ml_partition_search_breakout_thresh[2];
+      nn_config =
+          &av1_partition_breakout_nnconfig_32
+              [cpi->sf.part_sf.ml_partition_search_breakout_model_index];
+      thresh = cpi->sf.part_sf.ml_partition_search_breakout_thresh[bsize_idx];
       break;
     case BLOCK_64X64:
-      nn_config = &av1_partition_breakout_nnconfig_64;
-      thresh = cpi->sf.part_sf.ml_partition_search_breakout_thresh[3];
+      nn_config =
+          &av1_partition_breakout_nnconfig_64
+              [cpi->sf.part_sf.ml_partition_search_breakout_model_index];
+      thresh = cpi->sf.part_sf.ml_partition_search_breakout_thresh[bsize_idx];
       break;
     case BLOCK_128X128:
-      nn_config = &av1_partition_breakout_nnconfig_128;
-      thresh = cpi->sf.part_sf.ml_partition_search_breakout_thresh[4];
+      nn_config =
+          &av1_partition_breakout_nnconfig_128
+              [cpi->sf.part_sf.ml_partition_search_breakout_model_index];
+      thresh = cpi->sf.part_sf.ml_partition_search_breakout_thresh[bsize_idx];
       break;
     default: assert(0 && "Unexpected bsize.");
   }
   if (!nn_config || thresh < 0) return;
 
   const float ml_predict_breakout_thresh_scale[3] = { 1.15f, 1.05f, 1.0f };
-  thresh = (int)((float)thresh *
-                 ml_predict_breakout_thresh_scale
-                     [cpi->sf.part_sf.ml_predict_breakout_level - 1]);
+  thresh = thresh * ml_predict_breakout_thresh_scale
+                        [cpi->sf.part_sf.ml_predict_breakout_level - 1];
 
   // Generate feature values.
   float features[FEATURES];
@@ -1528,6 +1548,12 @@ void av1_ml_predict_breakout(AV1_COMP *const cpi, const MACROBLOCK *const x,
   features[feature_index++] = (float)(dc_q * dc_q) / 256.0f;
   assert(feature_index == FEATURES);
 
+  if (cpi->sf.part_sf.ml_partition_search_breakout_model_index) {
+    for (int idx = 0; idx < FEATURES; idx++) {
+      features[idx] = (features[idx] - ml_mean[idx]) / ml_std[idx];
+    }
+  }
+
   // Write features to file
   write_features_to_file(cpi->oxcf.partition_info_path,
                          cpi->ext_part_controller.test_mode, features, FEATURES,
@@ -1544,8 +1570,10 @@ void av1_ml_predict_breakout(AV1_COMP *const cpi, const MACROBLOCK *const x,
   float score = 0.0f;
   av1_nn_predict(features, nn_config, 1, &score);
 
+  float thresh_score = (float)log(thresh / (1 - thresh));
+
   // Make decision.
-  if ((int)(score * 100) >= thresh) {
+  if (score >= thresh_score) {
     part_state->do_square_split = 0;
     part_state->do_rectangular_split = 0;
   }

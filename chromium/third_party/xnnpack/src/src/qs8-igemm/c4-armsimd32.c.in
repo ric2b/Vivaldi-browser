@@ -8,9 +8,13 @@ $assert DATATYPE in ["QC8", "QS8", "QU8"]
 $assert 1 <= MR <= 2
 $assert 1 <= NR <= 2
 #include <assert.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #include <arm_acle.h>
 
+#include "src/xnnpack/common.h"
+#include "src/xnnpack/microparams.h"
 #include "src/xnnpack/intrinsics-polyfill.h"
 #include "src/xnnpack/math.h"
 #include "src/xnnpack/gemm.h"
@@ -36,7 +40,7 @@ void xnn_${DATATYPE_SPEC}_igemm_minmax_${REQUANTIZATION.lower()}_ukernel_${MR}x$
     size_t cn_stride,
     size_t a_offset,
     const ${XINT8_T}* zero,
-    const ${PARAMS_TYPE} params[restrict XNN_MIN_ELEMENTS(1)])
+    const ${PARAMS_TYPE}* restrict params)
 {
   assert(mr != 0);
   assert(mr <= ${MR});

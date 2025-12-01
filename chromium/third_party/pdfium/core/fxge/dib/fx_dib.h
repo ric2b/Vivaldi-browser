@@ -12,6 +12,7 @@
 #include <utility>
 
 #include "core/fxcrt/compiler_specific.h"
+#include "core/fxcrt/span.h"
 
 // Encoding:
 // - Bits-per-pixel: value & 0xFF
@@ -211,30 +212,15 @@ constexpr FX_CMYK CmykEncode(uint32_t c, uint32_t m, uint32_t y, uint32_t k) {
   ((uint8_t)(argb >> 16) | ((uint8_t)(argb >> 8)) << 8 | \
    ((uint8_t)(argb)) << 16 | ((uint8_t)(argb >> 24) << 24))
 
-// PRECONDITIONS: Caller must ensure 4 valid bytes at `p`.
-UNSAFE_BUFFER_USAGE inline FX_ARGB FXARGB_GetDIB(const uint8_t* p) {
-  // SAFETY: required from caller, enforced by UNSAFE_BUFFER_USAGE.
-  return ArgbEncode(UNSAFE_BUFFERS(p[3]), UNSAFE_BUFFERS(p[2]),
-                    UNSAFE_BUFFERS(p[1]), UNSAFE_BUFFERS(p[0]));
+inline FX_ARGB FXARGB_GetDIB(pdfium::span<const uint8_t, 4> p) {
+  return ArgbEncode(p[3], p[2], p[1], p[0]);
 }
 
-// PRECONDITIONS: Caller must ensure 4 valid bytes at `p`.
-UNSAFE_BUFFER_USAGE inline void FXARGB_SetDIB(uint8_t* p, uint32_t argb) {
-  // SAFETY: required from caller, enforced by UNSAFE_BUFFER_USAGE.
-  UNSAFE_BUFFERS(p[0]) = FXARGB_B(argb);
-  UNSAFE_BUFFERS(p[1]) = FXARGB_G(argb);
-  UNSAFE_BUFFERS(p[2]) = FXARGB_R(argb);
-  UNSAFE_BUFFERS(p[3]) = FXARGB_A(argb);
-}
-
-// PRECONDITIONS: Caller must ensure 4 valid bytes at `p`.
-UNSAFE_BUFFER_USAGE inline void FXARGB_SetRGBOrderDIB(uint8_t* p,
-                                                      uint32_t argb) {
-  // SAFETY: required from caller, enforced by UNSAFE_BUFFER_USAGE.
-  UNSAFE_BUFFERS(p[0]) = FXARGB_R(argb);
-  UNSAFE_BUFFERS(p[1]) = FXARGB_G(argb);
-  UNSAFE_BUFFERS(p[2]) = FXARGB_B(argb);
-  UNSAFE_BUFFERS(p[3]) = FXARGB_A(argb);
+inline void FXARGB_SetDIB(pdfium::span<uint8_t, 4> p, uint32_t argb) {
+  p[0] = FXARGB_B(argb);
+  p[1] = FXARGB_G(argb);
+  p[2] = FXARGB_R(argb);
+  p[3] = FXARGB_A(argb);
 }
 
 // PRECONDITIONS: Caller must ensure 3 valid bytes at `dest` and `src`.

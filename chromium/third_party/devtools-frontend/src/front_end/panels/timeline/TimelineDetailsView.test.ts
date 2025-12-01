@@ -3,10 +3,11 @@
 // found in the LICENSE file.
 
 import * as Trace from '../../models/trace/trace.js';
-import {doubleRaf} from '../../testing/DOMHelpers.js';
+import {doubleRaf, raf, renderElementIntoDOM} from '../../testing/DOMHelpers.js';
 import {describeWithEnvironment} from '../../testing/EnvironmentHelpers.js';
 import {TraceLoader} from '../../testing/TraceLoader.js';
 
+import type * as Components from './components/components.js';
 import * as Timeline from './timeline.js';
 
 class MockViewDelegate implements Timeline.TimelinePanel.TimelineModeViewDelegate {
@@ -28,6 +29,8 @@ describeWithEnvironment('TimelineDetailsView', function() {
     const {parsedTrace, insights} = await TraceLoader.traceEngine(this, 'lcp-web-font.json.gz');
     const detailsView = new Timeline.TimelineDetailsView.TimelineDetailsPane(mockViewDelegate);
 
+    renderElementIntoDOM(detailsView);
+
     const networkRequests = parsedTrace.NetworkRequests.byTime;
     const cssRequest = networkRequests.find(request => {
       return request.args.data.url === 'https://chromedevtools.github.io/performance-stories/lcp-web-font/app.css';
@@ -37,30 +40,29 @@ describeWithEnvironment('TimelineDetailsView', function() {
     }
     const selection = Timeline.TimelineSelection.selectionFromEvent(cssRequest);
 
+    // Set up a related insight to test the rendering of the chips
+    const relatedInsights: Components.RelatedInsightChips.EventToRelatedInsightsMap = new Map([
+      [cssRequest, [{insightLabel: 'Test insight', activateInsight: () => {}, messages: []}]],
+    ]);
+
     await detailsView.setModel({
       parsedTrace,
       selectedEvents: null,
       traceInsightsSets: insights,
-      eventToRelatedInsightsMap: null,
+      eventToRelatedInsightsMap: relatedInsights,
       entityMapper: null
     });
     await detailsView.setSelection(selection);
+    await raf();
 
     const detailsContentElement = detailsView.getDetailsContentElementForTest();
-    assert.deepEqual(
-        Array.from(detailsContentElement.children).map(n => n.localName),
-        ['devtools-performance-network-request-details']);
-
-    const content = detailsContentElement.firstElementChild?.shadowRoot;
-    assert(content);
-    assert.lengthOf(content.querySelectorAll('div.network-request-details-row'), 9);
-    assert.lengthOf(content.querySelectorAll('div.network-request-details-item'), 2);
-    assert.lengthOf(content.querySelectorAll('devtools-related-insight-chips'), 1);
+    assert.isNotNull(detailsContentElement.querySelector('[data-network-request-details]'));
   });
 
   it('displays the details for a frame correctly', async function() {
     const {parsedTrace} = await TraceLoader.traceEngine(this, 'web-dev-with-commit.json.gz');
     const detailsView = new Timeline.TimelineDetailsView.TimelineDetailsPane(mockViewDelegate);
+    renderElementIntoDOM(detailsView);
     await detailsView.setModel({
       parsedTrace,
       selectedEvents: null,
@@ -84,10 +86,10 @@ describeWithEnvironment('TimelineDetailsView', function() {
     assert.strictEqual(duration.innerText, 'Duration37.85 ms (at 109.82 ms)');
   });
 
-  // Semi-regularly flaking on CQ bots.
-  it.skip('[crbug.com/406981939]: renders the layout shift component for a single layout shift', async function() {
+  it('renders the layout shift component for a single layout shift', async function() {
     const {parsedTrace} = await TraceLoader.traceEngine(this, 'shift-attribution.json.gz');
     const detailsView = new Timeline.TimelineDetailsView.TimelineDetailsPane(mockViewDelegate);
+    renderElementIntoDOM(detailsView);
     await detailsView.setModel({
       parsedTrace,
       selectedEvents: null,
@@ -103,14 +105,14 @@ describeWithEnvironment('TimelineDetailsView', function() {
     const detailsContentElement = detailsView.getDetailsContentElementForTest();
     // Assert that the right component is rendered. This component has its own
     // tests for its contents so no need to duplicate those here.
-    const layoutShiftDetails = detailsContentElement.querySelector('devtools-performance-layout-shift-details');
+    const layoutShiftDetails = detailsContentElement.querySelector('[data-layout-shift-details]');
     assert.isNotNull(layoutShiftDetails);
   });
 
-  // Semi-regularly flaking on CQ bots.
-  it.skip('[crbug.com/406981939]: renders the layout shift component for a selected cluster', async function() {
+  it('renders the layout shift component for a selected cluster', async function() {
     const {parsedTrace} = await TraceLoader.traceEngine(this, 'shift-attribution.json.gz');
     const detailsView = new Timeline.TimelineDetailsView.TimelineDetailsPane(mockViewDelegate);
+    renderElementIntoDOM(detailsView);
     await detailsView.setModel({
       parsedTrace,
       selectedEvents: null,
@@ -126,13 +128,14 @@ describeWithEnvironment('TimelineDetailsView', function() {
     const detailsContentElement = detailsView.getDetailsContentElementForTest();
     // Assert that the right component is rendered. This component has its own
     // tests for its contents so no need to duplicate those here.
-    const layoutShiftDetails = detailsContentElement.querySelector('devtools-performance-layout-shift-details');
+    const layoutShiftDetails = detailsContentElement.querySelector('[data-layout-shift-details]');
     assert.isNotNull(layoutShiftDetails);
   });
 
   it('updates the range details when the user has a range selected', async function() {
     const {parsedTrace} = await TraceLoader.traceEngine(this, 'web-dev-with-commit.json.gz');
     const detailsView = new Timeline.TimelineDetailsView.TimelineDetailsPane(mockViewDelegate);
+    renderElementIntoDOM(detailsView);
     await detailsView.setModel({
       parsedTrace,
       // We have to set selected events for the range selection UI to be drawn
@@ -148,9 +151,11 @@ describeWithEnvironment('TimelineDetailsView', function() {
         bounds.max,
     );
     await detailsView.setSelection(selection);
+    await raf();
+
     const detailsContentElement = detailsView.getDetailsContentElementForTest();
     const component = detailsContentElement.querySelector<HTMLElement>('devtools-performance-timeline-summary');
     const range = component?.shadowRoot?.querySelector<HTMLElement>('.summary-range');
-    assert.strictEqual(range?.innerText, 'Range:  0 ms – 5.39 s');
+    assert.strictEqual(range?.innerText, 'Range: 0 ms – 5.39 s');
   });
 });

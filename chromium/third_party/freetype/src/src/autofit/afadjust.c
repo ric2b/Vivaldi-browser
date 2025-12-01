@@ -18,6 +18,9 @@
  */
 
 #include "afadjust.h"
+#ifdef FT_CONFIG_OPTION_USE_HARFBUZZ
+#  include "afgsub.h"
+#endif
 
 #include <freetype/freetype.h>
 #include <freetype/internal/ftobjs.h>
@@ -48,8 +51,7 @@
     - The vertical adjustment type.  This should be a combination of the
       AF_ADJUST_XXX and AF_IGNORE_XXX macros.
   */
-  FT_LOCAL_ARRAY_DEF( AF_AdjustmentDatabaseEntry )
-  adjustment_database[] =
+  static AF_AdjustmentDatabaseEntry  adjustment_database[] =
   {
     /* C0 Controls and Basic Latin */
     { 0x21,  AF_ADJUST_UP | AF_ADJUST_NO_HEIGHT_CHECK }, /* ! */
@@ -1171,145 +1173,106 @@
 
 #ifdef FT_CONFIG_OPTION_USE_HARFBUZZ
 
-  /*
-    Find all glyphs that a code point could turn into from the OpenType
-    'GSUB' table.
-
-    The algorithm first gets the glyph index from the code point (using the
-    'cmap' table) and puts it into the result set.  It then calls function
-    `hb_ot_layout_lookup_get_glyph_alternates` on each OpenType lookup (only
-    handling 'SingleSubst' and 'AlternateSubst' lookups, ignoring all other
-    types) to check which ones map the glyph in question onto something
-    different.  These alternate glyph indices are then added to the result
-    set.
-
-    If there are results, `hb_ot_layout_lookup_get_glyph_alternates` is
-    tried again on each of them to find out whether these glyphs in turn
-    have also alternates, which are eventually added to the result set, too.
-    This gets repeated in a loop until no more additional glyphs are found.
-
-    Example:
-
-      Suppose we have the following lookups in the GSUB table:
-
-        L1: a -> b
-        L2: b -> c
-        L3: d -> e
-
-      The algorithm takes the following steps to find all variants of 'a'.
-
-      - Add 'a' to the result.
-      - Check lookup L1 for 'a', yielding {b}.
-      - Check lookups L2 and L3 for 'a', yielding nothing.
-      => Add 'b' to the result list, try again.
-        - Check lookup L1 for 'b', yielding nothing.
-        - Check lookup L2 for 'b', yielding {c}.
-        - Check lookup L3 for 'b', yielding nothing.
-        => Add 'c' to the result list, try again.
-          - Check lookups L1 to L3 for 'c', yielding nothing.
-          => Done.
-  */
-
-
-  /* The chunk size used for retrieving results of */
-  /* `hb_ot_layout_lookup_get_glyph_alternates`.   */
-#define ALTERNATE_CHUNK  20
-
-
-  /* Get all alternates for a given glyph index. */
-  static void
-  af_get_glyph_alternates_helper( AF_FaceGlobals  globals,
-                                  hb_face_t      *hb_face,
-                                  hb_codepoint_t  glyph,
-                                  hb_set_t       *gsub_lookups,
-                                  hb_set_t       *helper_result )
+  static FT_Error
+  add_substitute( FT_Int     glyph_idx,
+                  size_t     value,
+                  FT_UInt32  codepoint,
+                  FT_Hash    reverse_map,
+                  FT_Hash    subst_map,
+                  FT_Memory  memory )
   {
-    hb_codepoint_t  lookup_index = HB_SET_VALUE_INVALID;
+    FT_Error  error;
 
-    FT_UNUSED( globals );
+    FT_Int  first_substitute = (FT_Int)( value & 0xFFFF );
+
+    FT_UInt  used = reverse_map->used;
 
 
-    /* Iterate over all lookups. */
-    while ( hb( set_next )( gsub_lookups, &lookup_index ) )
+    /*
+      OpenType features like 'unic' map lowercase letter glyphs to uppercase
+      forms (and vice versa), which could lead to the use of wrong entries
+      in the adjustment database.  For this reason we don't overwrite,
+      prioritizing cmap entries.
+
+      XXX Note, however, that this cannot cover all cases since there might
+      be contradictory entries for glyphs not in the cmap.  A possible
+      solution might be to specially mark pairs of related lowercase and
+      uppercase characters in the adjustment database that have diacritics
+      on different vertical sides (for example, U+0122 'Ģ' and U+0123 'ģ'). 
+      The auto-hinter could then perform a topological analysis to do the
+      right thing.
+    */
+    error = ft_hash_num_insert_no_overwrite( first_substitute, codepoint,
+                                             reverse_map, memory );
+    if ( error )
+      return error;
+
+    if ( reverse_map->used > used )
     {
-      FT_Bool       lookup_done  = FALSE;
-      unsigned int  start_offset = 0;
+      size_t*  subst = ft_hash_num_lookup( first_substitute, subst_map );
 
 
-      while ( !lookup_done )
+      if ( subst )
       {
-        unsigned int    alternates_count = ALTERNATE_CHUNK;
-        hb_codepoint_t  alternates[ALTERNATE_CHUNK];
-
-        unsigned int  n;
-
-
-        (void)hb( ot_layout_lookup_get_glyph_alternates )( hb_face,
-                                                           lookup_index,
-                                                           glyph,
-                                                           start_offset,
-                                                           &alternates_count,
-                                                           alternates );
-
-        start_offset += ALTERNATE_CHUNK;
-        if ( alternates_count < ALTERNATE_CHUNK )
-          lookup_done = TRUE;
-
-        for ( n = 0; n < alternates_count; n++ )
-          hb( set_add )( helper_result, alternates[n] );
+        error = add_substitute( first_substitute, *subst, codepoint,
+                                reverse_map, subst_map, memory );
+        if ( error )
+          return error;
       }
     }
-  }
 
-
-  /* Get all alternates (including alternates of alternates) */
-  /* for a given glyph index.                                */
-  static void
-  af_get_glyph_alternates( AF_FaceGlobals  globals,
-                           hb_font_t      *hb_font,
-                           hb_codepoint_t  glyph,
-                           hb_set_t       *gsub_lookups,
-                           hb_set_t       *helper_result,
-                           hb_set_t       *glyph_alternates )
-  {
-    hb_face_t  *hb_face = hb( font_get_face )( hb_font );
-
-
-    hb( set_clear )( helper_result );
-    hb( set_clear )( glyph_alternates );
-
-    /* Seed `helper_result` with `glyph` itself, then get all possible */
-    /* values.  Note that we can't use `hb_set_next` to control the    */
-    /* loop because we modify `helper_result` during iteration.        */
-    hb( set_add )( helper_result, glyph );
-    while ( !hb( set_is_empty )( helper_result ) )
+    /* The remaining substitutes. */
+    if ( value & 0xFFFF0000U )
     {
-      hb_codepoint_t  elem;
+      FT_UInt  num_substitutes = value >> 16;
+
+      FT_UInt  i;
 
 
-      /* Always get the smallest element of the set. */
-      elem = HB_SET_VALUE_INVALID;
-      hb( set_next )( helper_result, &elem );
-
-      /* Don't process already handled glyphs again. */
-      if ( !hb( set_has )( glyph_alternates, elem ) )
+      for ( i = 1; i <= num_substitutes; i++ )
       {
-        /* This call updates the glyph set in `helper_result`. */
-        af_get_glyph_alternates_helper( globals,
-                                        hb_face,
-                                        elem,
-                                        gsub_lookups,
-                                        helper_result );
-        hb( set_add )( glyph_alternates, elem );
-      }
+        FT_Int   idx        = glyph_idx + (FT_Int)( i << 16 );
+        size_t*  substitute = ft_hash_num_lookup( idx, subst_map );
 
-      hb( set_del )( helper_result, elem );
+
+        used = reverse_map->used;
+
+        error = ft_hash_num_insert_no_overwrite( *substitute,
+                                                 codepoint,
+                                                 reverse_map,
+                                                 memory );
+        if ( error )
+          return error;
+
+        if ( reverse_map->used > used )
+        {
+          size_t*  subst = ft_hash_num_lookup( *substitute, subst_map );
+
+
+          if ( subst )
+          {
+            error = add_substitute( *substitute, *subst, codepoint,
+                                    reverse_map, subst_map, memory );
+            if ( error )
+              return error;
+          }
+        }
+      }
     }
+
+    return FT_Err_Ok;
   }
 
 #endif /* FT_CONFIG_OPTION_USE_HARFBUZZ */
 
 
+  /* Construct a 'reverse cmap' (i.e., a mapping from glyph indices to   */
+  /* character codes) for all glyphs that an input code point could turn */
+  /* into.                                                               */
+  /*                                                                     */
+  /* If HarfBuzz support is not available, this is the direct inversion  */
+  /* of the cmap table, otherwise the mapping gets extended with data    */
+  /* from the 'GSUB' table.                                              */
   FT_LOCAL_DEF( FT_Error )
   af_reverse_character_map_new( FT_Hash         *map,
                                 AF_StyleMetrics  metrics )
@@ -1324,23 +1287,6 @@
 
     FT_UInt32  codepoint;
     FT_Offset  i;
-
-#ifdef FT_CONFIG_OPTION_USE_HARFBUZZ
-    /* The next four variables are initialized to avoid compiler warnings. */
-    hb_font_t  *hb_font = NULL;
-    hb_face_t  *hb_face = NULL;
-
-    hb_set_t  *glyph_alternates = NULL;
-    hb_set_t  *gsub_lookups     = NULL;
-    hb_set_t  *helper_result    = NULL;
-
-    hb_script_t  script;
-
-    unsigned int  script_count   = 1;
-    hb_tag_t      script_tags[2] = { HB_TAG_NONE, HB_TAG_NONE };
-
-    hb_codepoint_t  glyph;
-#endif
 
 
     FT_TRACE4(( "af_reverse_character_map_new:"
@@ -1364,35 +1310,7 @@
     if ( error )
       goto Exit;
 
-#ifdef FT_CONFIG_OPTION_USE_HARFBUZZ
-    if ( hb( version_atleast )( 7, 2, 0 ) )
-    {
-      /* No need to check whether HarfBuzz has allocation issues; */
-      /* it continues to work in such cases and simply returns    */
-      /* 'empty' objects that do nothing.                         */
-
-      hb_font = globals->hb_font;
-      hb_face = hb( font_get_face )( hb_font );
-
-      glyph_alternates = hb( set_create )();
-      gsub_lookups     = hb( set_create )();
-      helper_result    = hb( set_create )();
-
-      script = af_hb_scripts[metrics->style_class->script];
-
-      hb( ot_tags_from_script_and_language )( script, NULL,
-                                              &script_count, script_tags,
-                                              NULL, NULL );
-
-      /* Compute set of all script-specific GSUB lookups. */
-      hb( ot_layout_collect_lookups )( hb_face,
-                                       HB_OT_TAG_GSUB,
-                                       script_tags, NULL, NULL,
-                                       gsub_lookups );
-    }
-#endif /* FT_CONFIG_OPTION_USE_HARFBUZZ */
-
-    /* Insert all glyphs from the database that have entries in the cmap. */
+    /* Initialize reverse cmap with data directly from the cmap table. */
     for ( i = 0; i < AF_ADJUSTMENT_DATABASE_LENGTH; i++ )
     {
       FT_Int  cmap_glyph;
@@ -1426,70 +1344,166 @@
       */
       codepoint = adjustment_database[i].codepoint;
 
-      cmap_glyph = FT_Get_Char_Index( face, codepoint );
+      cmap_glyph = (FT_Int)FT_Get_Char_Index( face, codepoint );
       if ( cmap_glyph == 0 )
         continue;
 
       error = ft_hash_num_insert( cmap_glyph, codepoint, *map, memory );
       if ( error )
         goto Exit;
-
-#ifdef FT_CONFIG_OPTION_USE_HARFBUZZ
-      if ( hb( version_atleast )( 7, 2, 0 ) )
-      {
-        /* Find all glyph alternates of the code points in  */
-        /* the adjustment database and put them into `map`. */
-        af_get_glyph_alternates( globals,
-                                 hb_font,
-                                 cmap_glyph,
-                                 gsub_lookups,
-                                 helper_result,
-                                 glyph_alternates );
-
-        glyph = HB_SET_VALUE_INVALID;
-        while ( hb( set_next )( glyph_alternates, &glyph ) )
-        {
-          /* OpenType features like 'unic' map lowercase letter glyphs  */
-          /* to uppercase forms (and vice versa), which could lead to   */
-          /* the use of a wrong entry in the adjustment database.  For  */
-          /* this reason we prioritize cmap entries.                    */
-          /*                                                            */
-          /* XXX Note, however, that this cannot cover all cases since  */
-          /* there might be contradictory entries for glyphs not in the */
-          /* cmap.  A possible solution might be to specially mark      */
-          /* pairs of related lowercase and uppercase characters in the */
-          /* adjustment database that have diacritics on different      */
-          /* vertical sides (for example, U+0122 'Ģ' and U+0123 'ģ').   */
-          /* The auto-hinter could then perform a topological analysis  */
-          /* to do the right thing.                                     */
-
-          /* A glyph index in a lookup might be virtual (i.e., its */
-          /* value might be larger than the number of glyphs); we  */
-          /* ignore such cases.                                    */
-          if ( !( glyph < face->num_glyphs                             &&
-                  ( globals->glyph_styles[glyph] & AF_HAS_CMAP_ENTRY ) ) )
-          {
-            error = ft_hash_num_insert( glyph, codepoint, *map, memory );
-            if ( error )
-              goto Exit;
-          }
-        }
-      }
-#endif /* FT_CONFIG_OPTION_USE_HARFBUZZ */
-
     }
 
 #ifdef FT_CONFIG_OPTION_USE_HARFBUZZ
-    if ( hb( version_atleast )( 7, 2, 0 ) )
+
     {
-      hb( set_destroy )( glyph_alternates );
-      hb( set_destroy )( gsub_lookups );
-      hb( set_destroy )( helper_result );
-    }
+      hb_font_t  *hb_font;
+      hb_face_t  *hb_face;
+
+      hb_set_t    *gsub_lookups;
+      hb_script_t  script;
+
+      unsigned int  script_count   = 1;
+      hb_tag_t      script_tags[2] = { HB_TAG_NONE, HB_TAG_NONE };
+
+      FT_Hash  subst_map = NULL;
+
+      hb_codepoint_t  idx;
+      FT_UInt         hash_idx;
+      FT_Int          glyph_idx;
+      size_t          value;
+
+
+      /* No need to check whether HarfBuzz has allocation issues; */
+      /* it continues to work in such cases and simply returns    */
+      /* 'empty' objects that do nothing.                         */
+
+      hb_font = globals->hb_font;
+      hb_face = hb( font_get_face )( hb_font );
+
+      gsub_lookups = hb( set_create )();
+
+      script = af_hb_scripts[metrics->style_class->script];
+
+      hb( ot_tags_from_script_and_language )( script, NULL,
+                                              &script_count, script_tags,
+                                              NULL, NULL );
+
+      /* Compute set of all script-specific GSUB lookups. */
+      hb( ot_layout_collect_lookups )( hb_face,
+                                       HB_OT_TAG_GSUB,
+                                       script_tags, NULL, NULL,
+                                       gsub_lookups );
+
+#ifdef FT_DEBUG_LEVEL_TRACE
+      {
+        FT_Bool  have_idx = FALSE;
+
+
+        FT_TRACE4(( "  GSUB lookups to check:\n" ));
+
+        FT_TRACE4(( "  " ));
+        idx = HB_SET_VALUE_INVALID;
+        while ( hb( set_next )( gsub_lookups, &idx ) )
+          if ( globals->gsub_lookups_single_alternate[idx] )
+          {
+            have_idx = TRUE;
+            FT_TRACE4(( "  %u", idx ));
+          }
+        if ( !have_idx )
+          FT_TRACE4(( "  (none)" ));
+        FT_TRACE4(( "\n" ));
+
+        FT_TRACE4(( "\n" ));
+      }
 #endif
 
+      if ( FT_QNEW( subst_map ) )
+        goto Exit_HarfBuzz;
+
+      error = ft_hash_num_init( subst_map, memory );
+      if ( error )
+        goto Exit_HarfBuzz;
+
+      idx = HB_SET_VALUE_INVALID;
+      while ( hb( set_next )( gsub_lookups, &idx ) )
+      {
+        FT_UInt32  offset = globals->gsub_lookups_single_alternate[idx];
+
+
+        /* Put all substitutions into a single hash table.  Note that   */
+        /* the hash values usually contain more than a single character */
+        /* code; this can happen if different 'SingleSubst' subtables   */
+        /* map a given glyph index to different substitutions, or if    */
+        /* 'AlternateSubst' subtable entries are present.               */
+        if ( offset )
+          af_map_lookup( globals, subst_map, offset );
+      }
+
+      /*
+        Now iterate over the collected substitution data in `subst_map`
+        (using recursion to resolve one-to-many mappings) and insert the
+        data into the reverse cmap.
+
+        As an example, suppose we have the following cmap and substitution
+        data:
+
+          cmap: X -> a
+                Y -> b
+                Z -> c
+
+          substitutions: a -> b
+                         b -> c, d
+                         d -> e
+
+        The reverse map now becomes as follows.
+
+          a -> X
+          b -> Y
+          c -> Z (via cmap, ignoring mapping from 'b')
+          d -> Y (via 'b')
+          e -> Y (via 'b' and 'd')
+      */
+
+      hash_idx = 0;
+      while ( ft_hash_num_iterator( &hash_idx,
+                                    &glyph_idx,
+                                    &value,
+                                    subst_map ) )
+      {
+        size_t*  val;
+
+
+        /* Ignore keys that do not point to the first substitute. */
+        if ( (FT_UInt)glyph_idx & 0xFFFF0000U )
+          continue;
+
+        /* Ignore glyph indices that are not related to accents. */
+        val = ft_hash_num_lookup( glyph_idx, *map );
+        if ( !val )
+          continue;
+
+        codepoint = *val;
+
+        error = add_substitute( glyph_idx, value, codepoint,
+                                *map, subst_map, memory );
+        if ( error )
+          break;
+      }
+
+    Exit_HarfBuzz:
+      hb( set_destroy )( gsub_lookups );
+
+      ft_hash_num_free( subst_map, memory );
+      FT_FREE( subst_map );
+
+      if ( error )
+        goto Exit;
+    }
+
+#endif /* FT_CONFIG_OPTION_USE_HARFBUZZ */
+
     FT_TRACE4(( "    reverse character map built successfully"
-                " with %d entries\n", ( *map )->used ));
+                " with %u entries\n", ( *map )->used ));
 
 #ifdef FT_DEBUG_LEVEL_TRACE
 
@@ -1531,7 +1545,7 @@
         size_t  j;
 
 
-        val = ft_hash_num_lookup( cnt, *map );
+        val = ft_hash_num_lookup( (FT_Int)cnt, *map );
         if ( !val )
           continue;
         codepoint = *val;
@@ -1555,7 +1569,7 @@
           }
         }
 
-        FT_TRACE7(( "      %5d  0x%04X  %s\n", cnt, codepoint, flag_str ));
+        FT_TRACE7(( "      %5u  0x%04X  %s\n", cnt, codepoint, flag_str ));
       }
     }
 

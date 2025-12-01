@@ -6,12 +6,14 @@ package org.chromium.chrome.browser.suggestions;
 
 import androidx.annotation.IntDef;
 
+import org.chromium.build.annotations.NullMarked;
 import org.chromium.components.browser_ui.widget.displaystyle.UiConfig;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 
 /** Provides configuration details for suggestions. */
+@NullMarked
 public final class SuggestionsConfig {
     @IntDef({TileStyle.MODERN, TileStyle.MODERN_CONDENSED})
     @Retention(RetentionPolicy.SOURCE)
@@ -51,9 +53,7 @@ public final class SuggestionsConfig {
                 : TileStyle.MODERN;
     }
 
-    /**
-     * @return The value of referrer URL to use with content suggestions.
-     */
+    /** Returns the value of referrer URL to use with content suggestions. */
     public static String getReferrerUrl() {
         return DEFAULT_CONTENT_SUGGESTIONS_REFERRER_URL;
     }

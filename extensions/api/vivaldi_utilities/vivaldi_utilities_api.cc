@@ -129,6 +129,7 @@
 #include "ui/vivaldi_browser_window.h"
 #include "ui/vivaldi_skia_utils.h"
 #include "ui/vivaldi_ui_utils.h"
+#include "ui/webui/privacy_report_dialog.h"
 #include "vivaldi_status/vivaldi_status_factory.h"
 
 #include "chrome/browser/net/proxy_service_factory.h"
@@ -1624,7 +1625,7 @@ ExtensionFunction::ResponseAction UtilitiesCanShowWhatsNewPageFunction::Run() {
                               ->GetString(vivaldiprefs::kStartupLastSeenVersion)
                               .empty());
 
-  const std::string version = ::vivaldi::GetVivaldiVersionString();
+  const std::string_view version = ::vivaldi::GetVivaldiVersionString();
   const base::Version last_seen_version = base::Version(
       profile->GetPrefs()->GetString(vivaldiprefs::kStartupLastSeenVersion));
   // The main version only changes if we had a valid version before in the
@@ -2699,5 +2700,28 @@ UtilitiesRequestVivaldiSyncStatusFunction::Run() {
   return RespondNow(NoArguments());
 }
 
+ExtensionFunction::ResponseAction
+UtilitiesOpenPrivacyReportDialogFunction::Run() {
+  ::vivaldi::PrivacyReportDialog* dialog =
+      new ::vivaldi::PrivacyReportDialog(browser_context());
+  dialog->Show();
+
+  return RespondNow(NoArguments());
+}
+
+ExtensionFunction::ResponseAction
+UtilitiesUpdatePrimarySelectionFunction::Run() {
+  using vivaldi::utilities::UpdatePrimarySelection::Params;
+  std::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  if (ui::Clipboard::IsSupportedClipboardBuffer(
+          ui::ClipboardBuffer::kSelection)) {
+    ui::ScopedClipboardWriter scw(ui::ClipboardBuffer::kSelection);
+    std::u16string tmp = base::UTF8ToUTF16(params->text);
+    scw.WriteText(std::u16string_view(tmp));
+  }
+  return RespondNow(NoArguments());
+}
 
 }  // namespace extensions

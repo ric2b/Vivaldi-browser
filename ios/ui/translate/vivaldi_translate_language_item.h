@@ -20,9 +20,6 @@
 // Whether the language is the Translate target language.
 @property(nonatomic, assign, getter=isTargetLanguage) BOOL targetLanguage;
 
-// Whether the language is supported by the Translate server.
-@property(nonatomic, assign) BOOL supportsTranslate;
-
 @end
 
 #endif  // IOS_UI_TRANSLATE_VIVALDI_TRANSLATE_LANGUAGE_ITEM_H_

@@ -440,3 +440,50 @@ class DependencyMetadata:
            Otherwise the text content extracted from the metadata.
         """
         return self._return_as_property(known_fields.LOCAL_MODIFICATIONS)
+
+    @property
+    def update_mechanism(
+            self) -> Optional[Tuple[str, Optional[str], Optional[str]]]:
+        """
+        Returns the parsed Update Mechanism value.
+
+        The format is `Primary[.Secondary] [(bug_link)]. This function returns
+        (Primary, Secondary, bug_link) if the field is valid, otherwise (None, None, None).
+        """
+        return self._return_as_property(known_fields.UPDATE_MECHANISM)
+
+    @property
+    def vuln_scan_sufficiency(self) -> str:
+        """Determines if the dependency metadata is sufficient for vulnerability scanning.
+
+        Returns:
+            A string indicating the sufficiency status:
+            - 'sufficient:CPE' if a CPE prefix is provided.
+            - 'sufficient:URL and Revision' if URL and Revision are provided.
+            - 'sufficient:URL and Revision[DEPS]' as above, but 'Revision:DEPS'.
+            - 'sufficient:URL and Version' if URL and version are provided.
+            - 'ignore:Canonical' if the dependency is the canonical repository.
+            - 'ignore:Internal' if the dependency is internal.
+            - 'ignore:Static' if the dependency's update mechanism is static.
+            - 'insufficient' otherwise.
+        """
+        if self.cpe_prefix:
+            return "sufficient:CPE"
+        if self.url:
+            if self.revision:
+                return "sufficient:URL and Revision"
+            if self.revision_in_deps:
+                return "sufficient:URL and Revision[DEPS]"
+            if self.version:
+                return "sufficient:URL and Version"
+
+        raw_url = self._metadata.get(known_fields.URL, None)
+        if raw_url is not None and known_fields.URL.repo_is_canonical(raw_url):
+            return "ignore:Canonical"
+        if raw_url is not None and known_fields.URL.repo_is_internal(raw_url):
+            return "ignore:Internal"
+        if (self.update_mechanism and self.update_mechanism[0]
+                and self.update_mechanism[0].lower() == "static"):
+            return "ignore:Static"
+
+        return "insufficient"

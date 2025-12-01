@@ -43,10 +43,19 @@ const LanguageCodePair kTranslateOnlySynonyms[] = {
 // If this table is updated, please sync this with the synonym table in
 // chrome/browser/resources/settings/languages_page/languages.ts.
 const LanguageCodePair kLanguageCodeSynonyms[] = {
+
+#if defined(VIVALDI_BUILD) && BUILDFLAG(IS_IOS)
+    // We need to convert iw to he, jw to jv and sr to sr-Cyrl to
+    // make it compatible with the Translate sever API. // VIB-1336
+    {"he", "iw"},
+    {"jv", "jw"},
+    {"sr-Cyrl", "sr"},
+#else
     {"gom", "kok"},
     {"iw", "he"},
     {"jw", "jv"},
     {"tl", "fil"},
+#endif // End Vivaldi
 };
 
 // Some Chinese language codes are compatible with zh-TW or zh-CN in terms of
@@ -55,9 +64,18 @@ const LanguageCodePair kLanguageCodeSynonyms[] = {
 // If this table is updated, please sync this with the synonym table in
 // chrome/browser/resources/settings/languages_page/languages.ts.
 const LanguageCodePair kLanguageCodeChineseCompatiblePairs[] = {
+
+#if defined(VIVALDI_BUILD) && BUILDFLAG(IS_IOS)
+    // We need to convert zh-TW to zh-Hant and zh-CN to zh-Hans to
+    // make it compatible with the Translate sever API. // VIB-1336
+    {"zh-Hant", "zh-TW"},
+    {"zh-Hans", "zh-CN"},
+#else
     {"zh-TW", "zh-HK"},
     {"zh-TW", "zh-MO"},
     {"zh-CN", "zh-SG"},
+#endif // End Vivaldi
+
 };
 
 }  // namespace
@@ -114,6 +132,15 @@ void ToTranslateLanguageSynonym(std::string* language) {
     }
     // Note that "zh" does not have any mapping and as such we leave it as is.
     // See https://crbug/798512 for more info.
+
+#if defined(VIVALDI_BUILD) && BUILDFLAG(IS_IOS)
+    // Some page languages detected as raw zh on iOS. And sending 'zh' to
+    // translation server fails to translate the page. In this case fallback
+    // to Chinese, Simplified version like Desktop. Something is better than
+    // nothing. // VIB-1336
+    *language = "zh-Hans";
+#endif // End Vivaldi
+
     return;
   }
 

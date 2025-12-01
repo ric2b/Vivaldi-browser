@@ -34,6 +34,7 @@
 #include "src/tint/lang/core/ir/transform/binding_remapper.h"
 #include "src/tint/lang/core/ir/transform/block_decorated_structs.h"
 #include "src/tint/lang/core/ir/transform/builtin_polyfill.h"
+#include "src/tint/lang/core/ir/transform/builtin_scalarize.h"
 #include "src/tint/lang/core/ir/transform/combine_access_instructions.h"
 #include "src/tint/lang/core/ir/transform/conversion_polyfill.h"
 #include "src/tint/lang/core/ir/transform/demote_to_helper.h"
@@ -43,6 +44,7 @@
 #include "src/tint/lang/core/ir/transform/preserve_padding.h"
 #include "src/tint/lang/core/ir/transform/prevent_infinite_loops.h"
 #include "src/tint/lang/core/ir/transform/robustness.h"
+#include "src/tint/lang/core/ir/transform/signed_integer_polyfill.h"
 #include "src/tint/lang/core/ir/transform/std140.h"
 #include "src/tint/lang/core/ir/transform/vectorize_scalar_matrix_constructors.h"
 #include "src/tint/lang/core/ir/transform/zero_init_workgroup_memory.h"
@@ -52,6 +54,7 @@
 #include "src/tint/lang/spirv/writer/raise/expand_implicit_splats.h"
 #include "src/tint/lang/spirv/writer/raise/fork_explicit_layout_types.h"
 #include "src/tint/lang/spirv/writer/raise/handle_matrix_arithmetic.h"
+#include "src/tint/lang/spirv/writer/raise/keep_binding_array_as_pointer.h"
 #include "src/tint/lang/spirv/writer/raise/merge_return.h"
 #include "src/tint/lang/spirv/writer/raise/pass_matrix_by_pointer.h"
 #include "src/tint/lang/spirv/writer/raise/remove_unreachable_in_loop_continuing.h"
@@ -76,6 +79,15 @@ Result<SuccessType> Raise(core::ir::Module& module, const Options& options) {
     RUN_TRANSFORM(core::ir::transform::BindingRemapper, module, remapper_data);
 
     if (!options.disable_robustness) {
+        core::ir::transform::RobustnessConfig config;
+        if (options.disable_image_robustness) {
+            config.clamp_texture = false;
+        }
+        config.disable_runtime_sized_array_index_clamping =
+            options.disable_runtime_sized_array_index_clamping;
+        config.use_integer_range_analysis = options.enable_integer_range_analysis;
+        RUN_TRANSFORM(core::ir::transform::Robustness, module, config);
+
         RUN_TRANSFORM(core::ir::transform::PreventInfiniteLoops, module);
     }
 
@@ -114,22 +126,12 @@ Result<SuccessType> Raise(core::ir::Module& module, const Options& options) {
     core_polyfills.pack_unpack_4x8 = true;
     core_polyfills.pack_4xu8_clamp = true;
     core_polyfills.pack_unpack_4x8_norm = options.polyfill_pack_unpack_4x8_norm;
+    core_polyfills.abs_signed_int = true;
     RUN_TRANSFORM(core::ir::transform::BuiltinPolyfill, module, core_polyfills);
 
     core::ir::transform::ConversionPolyfillConfig conversion_polyfills;
     conversion_polyfills.ftoi = true;
     RUN_TRANSFORM(core::ir::transform::ConversionPolyfill, module, conversion_polyfills);
-
-    if (!options.disable_robustness) {
-        core::ir::transform::RobustnessConfig config;
-        if (options.disable_image_robustness) {
-            config.clamp_texture = false;
-        }
-        config.disable_runtime_sized_array_index_clamping =
-            options.disable_runtime_sized_array_index_clamping;
-        config.use_integer_range_analysis = options.enable_integer_range_analysis;
-        RUN_TRANSFORM(core::ir::transform::Robustness, module, config);
-    }
 
     RUN_TRANSFORM(core::ir::transform::MultiplanarExternalTexture, module, multiplanar_map);
 
@@ -146,6 +148,13 @@ Result<SuccessType> Raise(core::ir::Module& module, const Options& options) {
     dva_options.transform_private = true;
     dva_options.transform_handle = options.dva_transform_handle;
     RUN_TRANSFORM(core::ir::transform::DirectVariableAccess, module, dva_options);
+
+    // Fixup loads of binding_arrays of handles that may have been introduced by
+    // DirectVariableAccess (DVA). Vulkan drivers that need DVA of handle expect binding_arrays to
+    // stay as pointer and many mishandle by-value binding_arrays.
+    if (options.dva_transform_handle) {
+        RUN_TRANSFORM(raise::KeepBindingArrayAsPointer, module);
+    }
 
     if (options.pass_matrix_by_pointer) {
         // PassMatrixByPointer must come after PreservePadding+DirectVariableAccess.
@@ -168,9 +177,21 @@ Result<SuccessType> Raise(core::ir::Module& module, const Options& options) {
     }
 
     raise::PolyfillConfig config = {.use_vulkan_memory_model = options.use_vulkan_memory_model,
-                                    .scalarize_clamp_builtin = options.scalarize_clamp_builtin};
+                                    .version = options.spirv_version,
+                                    .subgroup_shuffle_clamped = options.subgroup_shuffle_clamped};
     RUN_TRANSFORM(raise::BuiltinPolyfill, module, config);
     RUN_TRANSFORM(raise::ExpandImplicitSplats, module);
+
+    core::ir::transform::BuiltinScalarizeConfig scalarize_config{
+        .scalarize_clamp = options.scalarize_max_min_clamp,
+        .scalarize_max = options.scalarize_max_min_clamp,
+        .scalarize_min = options.scalarize_max_min_clamp};
+    RUN_TRANSFORM(core::ir::transform::BuiltinScalarize, module, scalarize_config);
+
+    core::ir::transform::SignedIntegerPolyfillConfig signed_integer_cfg{
+        .signed_negation = true, .signed_arithmetic = true, .signed_shiftleft = true};
+    RUN_TRANSFORM(core::ir::transform::SignedIntegerPolyfill, module, signed_integer_cfg);
+
     // kAllowAnyInputAttachmentIndexType required after ExpandImplicitSplats
     RUN_TRANSFORM(raise::HandleMatrixArithmetic, module);
     RUN_TRANSFORM(raise::MergeReturn, module);
@@ -183,7 +204,7 @@ Result<SuccessType> Raise(core::ir::Module& module, const Options& options) {
 
     // ForkExplicitLayoutTypes must come after Std140, since it rewrites host-shareable array types
     // to use the explicitly laid array type defined by the SPIR-V dialect.
-    RUN_TRANSFORM(raise::ForkExplicitLayoutTypes, module);
+    RUN_TRANSFORM(raise::ForkExplicitLayoutTypes, module, options.spirv_version);
 
     RUN_TRANSFORM(raise::VarForDynamicIndex, module);
 

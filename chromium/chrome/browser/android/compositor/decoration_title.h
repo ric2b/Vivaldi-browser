@@ -51,11 +51,16 @@ class DecorationTitle {
   const gfx::Size& size() { return size_; }
 
   // Vivaldi
-  void SetTitleOffset(float offset);
-  void ShowOnlyFavicon(bool show_only_favicon);
-  void SetIsCloseButtonVisible(float is_visible);
+  void SetTitleOffset(float offset) { title_offset_ = offset; }
+  void ShowOnlyFavicon(bool show_only_favicon) {
+    show_only_favicon_ = show_only_favicon;
+  }
+  void SetIsCloseButtonVisible(float is_visible) {
+    is_close_button_visible_ = is_visible;
+  }
 
  protected:
+  void SetShouldHideTitleText(bool hide);
   void setBounds(const gfx::Size& bounds, int start_space);
   virtual gfx::Size calculateSize(int favicon_width);
 
@@ -75,11 +80,12 @@ class DecorationTitle {
 
  private:
   bool needs_refresh_ = true;
+  bool should_hide_title_text_ = false;
 
   // Vivaldi
-  float title_offset_;
-  bool show_only_favicon_;
-  bool is_close_button_visible_;
+  float title_offset_ = 0.0;
+  bool show_only_favicon_ = false;
+  bool is_close_button_visible_ = false;
 };
 
 }  // namespace android

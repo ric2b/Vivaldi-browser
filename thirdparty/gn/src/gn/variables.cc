@@ -2210,6 +2210,32 @@ Example
   }
 )";
 
+const char kTargetXcodePlatform[] = "target_xcode_platform";
+const char kTargetXcodePlatform_HelpShort[] =
+    "target_xcode_platform: [string] The desired platform for the build.";
+const char kTargetXcodePlatform_Help[] =
+    R"(target_xcode_platform: The desired platform for the build.
+
+  This value should be used to indicate the kind of iOS or iOS-based platform
+  that is being the desired platform for the primary object(s) of the build.
+
+  This should be set to the most specific value possible. So, "iphoneos" or
+  "tvos" should be used instead of "ios" where applicable, even though
+  iPhoneOS and tvOS are both iOS variants.
+
+  GN defaults this value to "iphoneos" and the configuration files should set
+  it to an appropriate value if it is not set via the command line or in the
+  args.gn file.
+
+  This value configures the base SDK and the targeted device families of the
+  generated Xcode project. only meaningful when generating with --ide=xcode.
+
+  Possible values
+
+  - "iphoneos"
+  - "tvos"
+)";
+
 const char kTestonly[] = "testonly";
 const char kTestonly_HelpShort[] =
     "testonly: [boolean] Declares a target must only be used for testing.";
@@ -2489,6 +2515,7 @@ const VariableInfoMap& GetTargetVariables() {
     INSERT_VARIABLE(Sources)
     INSERT_VARIABLE(Swiftflags)
     INSERT_VARIABLE(XcodeTestApplicationName)
+    INSERT_VARIABLE(TargetXcodePlatform)
     INSERT_VARIABLE(Testonly)
     INSERT_VARIABLE(Visibility)
     INSERT_VARIABLE(WalkKeys)

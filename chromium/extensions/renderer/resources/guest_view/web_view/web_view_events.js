@@ -28,7 +28,7 @@ var WebRequestMessageEvent = CreateEvent('webViewInternal.onMessage');
 function WebViewEvents(webViewImpl) {
   $Function.call(GuestViewEvents, this, webViewImpl);
 
-  this.setupWebRequestEvents();
+  this.view.setRequestPropertyOnWebViewElement(this.createWebRequestEvents());
 }
 
 function createOnMessageEvent(name, schema, options, webviewId) {
@@ -187,7 +187,7 @@ for (var eventName in WebViewEvents.EVENTS) {
 
 WebViewEventPrivate.addPrivateEvents(WebViewEvents);
 
-WebViewEvents.prototype.setupWebRequestEvents = function() {
+WebViewEvents.prototype.createWebRequestEvents = function() {
   var request = {};
   var createWebRequestEvent = $Function.bind(function(webRequestEvent) {
     return this.weakWrapper(function() {
@@ -242,15 +242,16 @@ WebViewEvents.prototype.setupWebRequestEvents = function() {
     var eventSchema = WebRequestSchema.events[i];
 
     // Skip "onActionIgnored" which is not relevant for webviews.
-    if (eventSchema.name === 'onActionIgnored')
+    if (eventSchema.name === 'onActionIgnored') {
       continue;
+    }
 
     var webRequestEvent = createWebRequestEvent(eventSchema);
     $Object.defineProperty(
         request, eventSchema.name, {get: webRequestEvent, enumerable: true});
   }
 
-  this.view.setRequestPropertyOnWebViewElement(request);
+  return request;
 };
 
 WebViewEvents.prototype.getEvents = function() {

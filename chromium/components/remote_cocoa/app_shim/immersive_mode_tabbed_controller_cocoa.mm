@@ -55,6 +55,7 @@ ImmersiveModeTabbedControllerCocoa::~ImmersiveModeTabbedControllerCocoa() {
   SetAlwaysShowTrafficLights(browser_window(), false);
   StopObservingChildWindows(tab_window_);
   browser_window().toolbar = nil;
+  browser_window().toolbarStyle = NSWindowToolbarStyleAutomatic;
   BridgedContentView* tab_content_view = tab_content_view_;
   [tab_content_view removeFromSuperview];
   tab_window_.contentView = tab_content_view;
@@ -108,15 +109,13 @@ void ImmersiveModeTabbedControllerCocoa::Init() {
   ObserveChildWindows(tab_window_);
 
   // The presence of a visible NSToolbar causes the titlebar to be revealed.
-  NSToolbar* toolbar = [[NSToolbar alloc] init];
-
-  // Remove the baseline separator for macOS 10.15 and earlier. This has no
-  // effect on macOS 11 and above. See
-  // `-[ImmersiveModeTitlebarViewController separatorView]` for removing the
-  // separator on macOS 11+.
-  toolbar.showsBaselineSeparator = NO;
-
-  browser_window().toolbar = toolbar;
+  browser_window().toolbar = [[NSToolbar alloc] init];
+  // Since macOS 26, a titlebar accessory of type NSLayoutAttributeTrailing can
+  // only customize its height when using UnifiedCompat toolbar style.
+  // This style is available since macOS 11.0. It is a no-op for Chrome on
+  // pre-macOS 26. However, if Chrome starts using NSToolbarItem in the future,
+  // their height will be affected by this style.
+  browser_window().toolbarStyle = NSWindowToolbarStyleUnifiedCompact;
 
   // `UpdateToolbarVisibility()` will make the toolbar visible as necessary.
   UpdateToolbarVisibility(last_used_style());

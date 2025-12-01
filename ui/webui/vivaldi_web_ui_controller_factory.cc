@@ -4,6 +4,7 @@
 
 #include "app/vivaldi_constants.h"
 #include "app/vivaldi_resources.h"
+#include "browser/features/vivaldi_features.h"
 #include "chrome/browser/profiles/profile.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_controller.h"
@@ -19,8 +20,6 @@
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
 #endif
-
-#include "browser/vivaldi_runtime_feature.h"
 
 using content::WebUI;
 using content::WebUIController;
@@ -52,11 +51,7 @@ WebUIFactoryFunction GetVivaldiWebUIFactoryFunction(WebUI* web_ui,
     return &NewVivaldiWebUI<GameUI>;
 #endif
 
-  const auto feature =
-      vivaldi_runtime_feature::GetFeature("new_privacy_report");
-  // Feature is enabled or inactive for OS (e.g. Android)
-  if (vivaldi_runtime_feature::IsEnabled(profile, "new_privacy_report") ||
-      (feature && feature->inactive)) {
+  if (base::FeatureList::IsEnabled(vivaldi_features::kNewPrivacyReport)) {
     if (url.host() == vivaldi::kVivaldiPrivacyReportHost) {
       return &NewVivaldiWebUI<PrivacyReportUI>;
     }

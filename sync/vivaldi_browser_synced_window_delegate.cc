@@ -15,8 +15,12 @@
 #include "ui/vivaldi_browser_window.h"
 
 VivaldiBrowserSyncedWindowDelegate::VivaldiBrowserSyncedWindowDelegate(
-    Browser* browser)
-    : BrowserSyncedWindowDelegate(browser), browser_copy_(browser) {}
+    Browser* browser,
+    TabStripModel* tab_strip_model,
+    SessionID session_id,
+    BrowserWindowInterface::Type type)
+    : BrowserSyncedWindowDelegate(browser, tab_strip_model, session_id, type),
+      browser_copy_(browser) {}
 
 VivaldiBrowserSyncedWindowDelegate::~VivaldiBrowserSyncedWindowDelegate() {}
 

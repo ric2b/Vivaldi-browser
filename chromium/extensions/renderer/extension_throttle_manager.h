@@ -9,12 +9,11 @@
 #include <memory>
 #include <string>
 
+#include "base/observer_list.h"
 #include "base/synchronization/lock.h"
 #include "extensions/renderer/extension_throttle_entry.h"
 #include "services/network/public/mojom/url_response_head.mojom-forward.h"
 #include "url/gurl.h"
-
-#include "base/observer_list.h"
 
 namespace blink {
 class URLLoaderThrottle;
@@ -39,6 +38,10 @@ namespace extensions {
 // are registered, and does garbage collection from time to time in order to
 // clean out outdated entries. URL ID consists of lowercased scheme, host, port
 // and path. All URLs converted to the same ID will share the same entry.
+//
+// ExtensionThrottleManager can be destructed before ExtensionURLLoaderThrottle
+// even though it is an explicit constructor argument. In that case, the
+// throttle will have no effect (failing open).
 class ExtensionThrottleManager {
  public:
   ExtensionThrottleManager();
@@ -80,23 +83,23 @@ class ExtensionThrottleManager {
 
   int GetNumberOfEntriesForTests() const { return url_entries_.size(); }
 
-   // NOTE(andre@vivaldi.com) : This is to avoid acccess to freed
-  // |extension_throttle_manager_|. It would be handed over to the
-  // webservice-worker, here in URLLoaderThrottleProviderImpl, and
-  // blink::ThrottlingURLLoader. If the loader owner, ie. a webservice-worker
-  // dies before the throttlingurlloader we would crash. Was VB-110644.
-  class Vivaldi_ExtensionManagerObserver {
+  // Observe extension throttle manager.
+  class ExtensionThrottleManagerObserver : public base::CheckedObserver {
    public:
-    // Called when the observer class dies.
-    virtual void OnExtensionThrottleManagerExit(ExtensionThrottleManager* manager) {}
+    ExtensionThrottleManagerObserver() = default;
+
+    virtual void OnExtensionThrottleManagerDestruct(
+        ExtensionThrottleManager* manager) {}
+
    protected:
-    virtual ~Vivaldi_ExtensionManagerObserver() = default;
+    ~ExtensionThrottleManagerObserver() override = default;
   };
 
-  void AddObserver(Vivaldi_ExtensionManagerObserver* observer) {
+  void AddObserver(ExtensionThrottleManagerObserver* observer) {
     observers_.AddObserver(observer);
   }
-  void RemoveObserver(Vivaldi_ExtensionManagerObserver* observer) {
+
+  void RemoveObserver(ExtensionThrottleManagerObserver* observer) {
     observers_.RemoveObserver(observer);
   }
 
@@ -154,7 +157,8 @@ class ExtensionThrottleManager {
   // Used to synchronize all public methods.
   base::Lock lock_;
 
-  base::ObserverList<Vivaldi_ExtensionManagerObserver>::Unchecked observers_;
+  // Observers of `ExtensionThrottleManager`.
+  base::ObserverList<ExtensionThrottleManagerObserver> observers_;
 };
 
 }  // namespace extensions

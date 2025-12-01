@@ -108,7 +108,6 @@ class VivaldiRootDocumentHandlerFactory
 class VivaldiRootDocumentHandler : public KeyedService,
                                    public extensions::ExtensionRegistryObserver,
                                    public ProfileObserver,
-                                   protected content::WebContentsObserver,
                                    public infobars::InfoBarContainer::Delegate,
                                    public CommandService::Observer {
   friend base::DefaultSingletonTraits<VivaldiRootDocumentHandler>;

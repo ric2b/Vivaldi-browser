@@ -35,7 +35,6 @@
 
 #include <limits>
 #include <optional>
-#include <type_traits>
 
 #include "dawn/common/Assert.h"
 #include "dawn/common/Platform.h"
@@ -131,14 +130,6 @@ DAWN_FORCE_INLINE const T* AlignPtr(const T* ptr, size_t alignment) {
                                       ~(alignment - 1));
 }
 
-template <typename destType, typename sourceType>
-destType BitCast(const sourceType& source) {
-    static_assert(sizeof(destType) == sizeof(sourceType), "BitCast: cannot lose precision.");
-    destType output;
-    std::memcpy(&output, &source, sizeof(destType));
-    return output;
-}
-
 uint16_t Float32ToFloat16(float fp32);
 float Float16ToFloat32(uint16_t fp16);
 bool IsFloat16NaN(uint16_t fp16);
@@ -150,9 +141,8 @@ T FloatToUnorm(float value) {
 
 float SRGBToLinear(float srgb);
 
-template <typename T1,
-          typename T2,
-          typename Enable = typename std::enable_if<sizeof(T1) == sizeof(T2)>::type>
+template <typename T1, typename T2>
+    requires(sizeof(T1) == sizeof(T2))
 constexpr bool IsSubset(T1 subset, T2 set) {
     T2 bitsAlsoInSet = subset & set;
     return bitsAlsoInSet == subset;

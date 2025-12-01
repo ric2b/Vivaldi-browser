@@ -53,6 +53,7 @@
 #include "rtpdec_formats.h"
 #include "rtpenc_chain.h"
 #include "url.h"
+#include "tls.h"
 #include "rtpenc.h"
 #include "mpegts.h"
 #include "version.h"
@@ -103,6 +104,9 @@ const AVOption ff_rtsp_options[] = {
     { "timeout", "set timeout (in microseconds) of socket I/O operations", OFFSET(stimeout), AV_OPT_TYPE_INT64, {.i64 = 0}, INT_MIN, INT64_MAX, DEC },
     COMMON_OPTS(),
     { "user_agent", "override User-Agent header", OFFSET(user_agent), AV_OPT_TYPE_STRING, {.str = LIBAVFORMAT_IDENT}, 0, 0, DEC },
+
+    // TLS options
+    FF_TLS_CLIENT_OPTIONS(RTSPState, tls_opts),
     { NULL },
 };
 
@@ -138,6 +142,29 @@ static AVDictionary *map_to_opts(RTSPState *rt)
 
     return opts;
 }
+
+#define ERR_RET(c)      \
+    do {                \
+        int ret = c;    \
+        if (ret < 0)    \
+            return ret; \
+    } while (0)
+
+/**
+ * Add the TLS options of the given RTSPState to the dict
+ */
+static int copy_tls_opts_dict(RTSPState *rt, AVDictionary **dict)
+{
+    ERR_RET(av_dict_set_int(dict, "tls_verify", rt->tls_opts.verify, 0));
+    ERR_RET(av_dict_set(dict, "ca_file", rt->tls_opts.ca_file, 0));
+    ERR_RET(av_dict_set(dict, "cert_file", rt->tls_opts.cert_file, 0));
+    ERR_RET(av_dict_set(dict, "key_file", rt->tls_opts.key_file, 0));
+    ERR_RET(av_dict_set(dict, "verifyhost", rt->tls_opts.host, 0));
+
+    return 0;
+}
+
+#undef ERR_RET
 
 static void get_word_until_chars(char *buf, int buf_size,
                                  const char *sep, const char **pp)
@@ -586,8 +613,8 @@ static void sdp_parse_line(AVFormatContext *s, SDPParseState *s1,
                 if (proto[0] == '\0') {
                     /* relative control URL */
                     if (rtsp_st->control_url[strlen(rtsp_st->control_url)-1]!='/')
-                    av_strlcat(rtsp_st->control_url, "/",
-                               sizeof(rtsp_st->control_url));
+                        av_strlcat(rtsp_st->control_url, "/",
+                                   sizeof(rtsp_st->control_url));
                     av_strlcat(rtsp_st->control_url, p,
                                sizeof(rtsp_st->control_url));
                 } else
@@ -617,6 +644,13 @@ static void sdp_parse_line(AVFormatContext *s, SDPParseState *s1,
             } else {
                 s1->seen_fmtp = 1;
                 av_strlcpy(s1->delayed_fmtp, buf, sizeof(s1->delayed_fmtp));
+            }
+        } else if (av_strstart(p, "framerate:", &p) && s->nb_streams > 0) {
+            // RFC 8866
+            double framerate;
+            if (av_sscanf(p, "%lf%c", &framerate, &(char){0}) == 1) {
+                st = s->streams[s->nb_streams - 1];
+                st->avg_frame_rate = av_d2q(framerate, INT_MAX);
             }
         } else if (av_strstart(p, "ssrc:", &p) && s->nb_streams > 0) {
             rtsp_st = rt->rtsp_streams[rt->nb_rtsp_streams - 1];
@@ -1814,6 +1848,14 @@ redirect:
         AVDictionary *options = NULL;
 
         av_dict_set_int(&options, "timeout", rt->stimeout, 0);
+        if (https_tunnel) {
+            int ret = copy_tls_opts_dict(rt, &options);
+            if (ret < 0) {
+                av_dict_free(&options);
+                err = ret;
+                goto fail;
+            }
+        }
 
         ff_url_join(httpname, sizeof(httpname), https_tunnel ? "https" : "http", auth, host, port, "%s", path);
         snprintf(sessioncookie, sizeof(sessioncookie), "%08x%08x",
@@ -1822,6 +1864,7 @@ redirect:
         /* GET requests */
         if (ffurl_alloc(&rt->rtsp_hd, httpname, AVIO_FLAG_READ,
                         &s->interrupt_callback) < 0) {
+            av_dict_free(&options);
             err = AVERROR(EIO);
             goto fail;
         }
@@ -1838,6 +1881,7 @@ redirect:
         if (!rt->rtsp_hd->protocol_whitelist && s->protocol_whitelist) {
             rt->rtsp_hd->protocol_whitelist = av_strdup(s->protocol_whitelist);
             if (!rt->rtsp_hd->protocol_whitelist) {
+                av_dict_free(&options);
                 err = AVERROR(ENOMEM);
                 goto fail;
             }
@@ -1853,6 +1897,7 @@ redirect:
         /* POST requests */
         if (ffurl_alloc(&rt->rtsp_hd_out, httpname, AVIO_FLAG_WRITE,
                         &s->interrupt_callback) < 0 ) {
+            av_dict_free(&options);
             err = AVERROR(EIO);
             goto fail;
         }
@@ -1898,14 +1943,26 @@ redirect:
     } else {
         int ret;
         /* open the tcp connection */
+        AVDictionary *proto_opts = NULL;
+        if (strcmp("tls", lower_rtsp_proto) == 0) {
+            ret = copy_tls_opts_dict(rt, &proto_opts);
+            if (ret < 0) {
+                av_dict_free(&proto_opts);
+                err = ret;
+                goto fail;
+            }
+        }
+
         ff_url_join(tcpname, sizeof(tcpname), lower_rtsp_proto, NULL,
                     host, port,
                     "?timeout=%"PRId64, rt->stimeout);
         if ((ret = ffurl_open_whitelist(&rt->rtsp_hd, tcpname, AVIO_FLAG_READ_WRITE,
-                       &s->interrupt_callback, NULL, s->protocol_whitelist, s->protocol_blacklist, NULL)) < 0) {
+                       &s->interrupt_callback, &proto_opts, s->protocol_whitelist, s->protocol_blacklist, NULL)) < 0) {
+            av_dict_free(&proto_opts);
             err = ret;
             goto fail;
         }
+        av_dict_free(&proto_opts);
         rt->rtsp_hd_out = rt->rtsp_hd;
     }
     rt->seq = 0;
@@ -1970,7 +2027,7 @@ redirect:
            if (CONFIG_RTSP_MUXER)
         err = ff_rtsp_setup_output_streams(s, host);
     else
-        av_assert0(0);
+        av_unreachable("Either muxer or demuxer must be enabled");
     if (err)
         goto fail;
 

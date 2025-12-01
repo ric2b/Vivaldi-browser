@@ -16,6 +16,7 @@
  */
 
 import {abortOnIframe} from "../utils/execution.js";
+import {profile} from "../introspection/profile.js";
 
 /**
  * Patches a list of properties on the iframes' window object to abort execution
@@ -29,5 +30,8 @@ import {abortOnIframe} from "../utils/execution.js";
  * @since Adblock Plus 3.10.1
  */
 export function abortOnIframePropertyWrite(...properties) {
+  const {mark, end} = profile("abort-on-iframe-property-write");
+  mark();
   abortOnIframe(properties, false, true);
+  end();
 }

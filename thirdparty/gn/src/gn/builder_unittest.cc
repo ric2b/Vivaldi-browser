@@ -166,6 +166,7 @@ TEST_F(BuilderTest, BasicDeps) {
   b->set_output_type(Target::SHARED_LIBRARY);
   b->visibility().SetPublic();
   builder_.ItemDefined(std::unique_ptr<Item>(b));
+  scheduler().Run();
 
   // B depends only on the already-loaded C and toolchain so we shouldn't have
   // requested anything else.
@@ -253,6 +254,7 @@ TEST_F(BuilderTest, ShouldGenerate) {
   a->public_deps().push_back(LabelTargetPair(b_label));
   a->set_output_type(Target::EXECUTABLE);
   builder_.ItemDefined(std::unique_ptr<Item>(a));
+  scheduler().Run();
 
   // A should have the generate bit set since it's in the default toolchain.
   BuilderRecord* a_record = builder_.GetRecord(a_label);
@@ -290,6 +292,7 @@ TEST_F(BuilderTest, GenDeps) {
 
   Target* b = new Target(&settings2, b_label);
   b->set_output_type(Target::EXECUTABLE);
+  b->visibility().SetPublic();  // Allow 'a' to depend on 'b'
   b->gen_deps().push_back(LabelTargetPair(c_label));
   builder_.ItemDefined(std::unique_ptr<Item>(b));
 
@@ -305,6 +308,7 @@ TEST_F(BuilderTest, GenDeps) {
   Target* d = new Target(&settings2, d_label);
   d->set_output_type(Target::EXECUTABLE);
   builder_.ItemDefined(std::unique_ptr<Item>(d));
+  scheduler().Run();
 
   BuilderRecord* a_record = builder_.GetRecord(a_label);
   BuilderRecord* b_record = builder_.GetRecord(b_label);
@@ -335,12 +339,14 @@ TEST_F(BuilderTest, GenDepsCircle) {
   Target* a = new Target(&settings_, a_label);
   a->gen_deps().push_back(LabelTargetPair(b_label));
   a->set_output_type(Target::EXECUTABLE);
+  a->visibility().SetPublic();  // Allow 'b' to depend on 'a'
   builder_.ItemDefined(std::unique_ptr<Item>(a));
 
   Target* b = new Target(&settings2, b_label);
   b->private_deps().push_back(LabelTargetPair(a_label));
   b->set_output_type(Target::EXECUTABLE);
   builder_.ItemDefined(std::unique_ptr<Item>(b));
+  scheduler().Run();
 
   Err err;
   EXPECT_TRUE(builder_.CheckForBadItems(&err));

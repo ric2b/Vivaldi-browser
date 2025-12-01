@@ -420,10 +420,9 @@ class CopyTests_WithFormatParam : public CopyTests,
         if (!device.HasFeature(wgpu::FeatureName::DawnTexelCopyBufferRowAlignment)) {
             return kTextureBytesPerRowAlignment;
         }
-        wgpu::Limits limits{};
+        dawn::utils::ComboLimits limits;
         wgpu::DawnTexelCopyBufferRowAlignmentLimits alignmentLimits{};
-        limits.nextInChain = &alignmentLimits;
-        device.GetLimits(&limits);
+        device.GetLimits(limits.GetLinked(&alignmentLimits));
         return alignmentLimits.minTexelCopyBufferRowAlignment;
     }
     BufferSpec MinimumBufferSpec(uint32_t width, uint32_t height, uint32_t depth = 1) {
@@ -3515,11 +3514,12 @@ TEST_P(CopyToDepthStencilTextureAfterDestroyingBigBufferTests, DoTest) {
 
     // Ensure the underlying ID3D12Resource of bigBuffer is deleted.
     bool submittedWorkDone = false;
-    queue.OnSubmittedWorkDone(wgpu::CallbackMode::AllowProcessEvents,
-                              [&submittedWorkDone](wgpu::QueueWorkDoneStatus status) {
-                                  EXPECT_EQ(status, wgpu::QueueWorkDoneStatus::Success);
-                                  submittedWorkDone = true;
-                              });
+    queue.OnSubmittedWorkDone(
+        wgpu::CallbackMode::AllowProcessEvents,
+        [&submittedWorkDone](wgpu::QueueWorkDoneStatus status, wgpu::StringView) {
+            EXPECT_EQ(status, wgpu::QueueWorkDoneStatus::Success);
+            submittedWorkDone = true;
+        });
     while (!submittedWorkDone) {
         WaitABit();
     }
@@ -3789,11 +3789,12 @@ class T2TCopyFromDirtyHeapTests : public DawnTest {
 
     void EnsureSubmittedWorkDone() {
         bool submittedWorkDone = false;
-        queue.OnSubmittedWorkDone(wgpu::CallbackMode::AllowProcessEvents,
-                                  [&submittedWorkDone](wgpu::QueueWorkDoneStatus status) {
-                                      EXPECT_EQ(status, wgpu::QueueWorkDoneStatus::Success);
-                                      submittedWorkDone = true;
-                                  });
+        queue.OnSubmittedWorkDone(
+            wgpu::CallbackMode::AllowProcessEvents,
+            [&submittedWorkDone](wgpu::QueueWorkDoneStatus status, wgpu::StringView) {
+                EXPECT_EQ(status, wgpu::QueueWorkDoneStatus::Success);
+                submittedWorkDone = true;
+            });
         while (!submittedWorkDone) {
             WaitABit();
         }

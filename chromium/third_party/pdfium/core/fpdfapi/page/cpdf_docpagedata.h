@@ -33,7 +33,7 @@ class CPDF_StreamAcc;
 class CPDF_DocPageData final : public CPDF_Document::PageDataIface,
                                public CPDF_Font::FormFactoryIface {
  public:
-  static CPDF_DocPageData* FromDocument(const CPDF_Document* pDoc);
+  static CPDF_DocPageData* FromDocument(const CPDF_Document* doc);
 
   CPDF_DocPageData();
   ~CPDF_DocPageData() override;
@@ -41,22 +41,22 @@ class CPDF_DocPageData final : public CPDF_Document::PageDataIface,
   // CPDF_Document::PageDataIface:
   void ClearStockFont() override;
   RetainPtr<CPDF_StreamAcc> GetFontFileStreamAcc(
-      RetainPtr<const CPDF_Stream> pFontStream) override;
+      RetainPtr<const CPDF_Stream> font_stream) override;
   void MaybePurgeFontFileStreamAcc(
       RetainPtr<CPDF_StreamAcc>&& pStreamAcc) override;
   void MaybePurgeImage(uint32_t dwStreamObjNum) override;
 
   // CPDF_Font::FormFactoryIFace:
   std::unique_ptr<CPDF_Font::FormIface> CreateForm(
-      CPDF_Document* pDocument,
+      CPDF_Document* document,
       RetainPtr<CPDF_Dictionary> pPageResources,
       RetainPtr<CPDF_Stream> pFormStream) override;
 
   bool IsForceClear() const { return force_clear_; }
 
-  RetainPtr<CPDF_Font> AddFont(std::unique_ptr<CFX_Font> pFont,
+  RetainPtr<CPDF_Font> AddFont(std::unique_ptr<CFX_Font> font,
                                FX_Charset charset);
-  RetainPtr<CPDF_Font> GetFont(RetainPtr<CPDF_Dictionary> pFontDict);
+  RetainPtr<CPDF_Font> GetFont(RetainPtr<CPDF_Dictionary> font_dict);
   RetainPtr<CPDF_Font> AddStandardFont(const ByteString& fontName,
                                        const CPDF_FontEncoding* pEncoding);
   RetainPtr<CPDF_Font> GetStandardFont(const ByteString& fontName,

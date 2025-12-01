@@ -165,16 +165,17 @@ TEST_F(SpirvReaderTest, ShaderInputs) {
     ASSERT_EQ(got, Success);
     EXPECT_EQ(got, R"(
 tint_symbol_2 = struct @align(16) {
-  tint_symbol:vec4<f32> @offset(0), @location(1)
-  tint_symbol_1:vec4<f32> @offset(16), @location(2), @interpolate(linear, center)
+  tint_symbol:vec4<f32> @offset(0)
+  tint_symbol_1:vec4<f32> @offset(16)
 }
 
-%main = @fragment func(%2:vec4<f32> [@position], %3:tint_symbol_2):void {
+%main = @fragment func(%2:vec4<f32> [@position], %3:vec4<f32> [@location(1)], %4:vec4<f32> [@location(2), @interpolate(linear)]):void {
   $B1: {
-    %4:vec4<f32> = access %3, 0u
-    %5:vec4<f32> = access %3, 1u
-    %6:vec4<f32> = mul %4, %5
-    %7:vec4<f32> = add %6, %2
+    %5:tint_symbol_2 = construct %3, %4
+    %6:vec4<f32> = access %5, 0u
+    %7:vec4<f32> = access %5, 1u
+    %8:vec4<f32> = mul %6, %7
+    %9:vec4<f32> = add %8, %2
     ret
   }
 }
@@ -230,7 +231,7 @@ tint_symbol_2 = struct @align(16) {
 tint_symbol_4 = struct @align(16) {
   tint_symbol_3:f32 @offset(0), @builtin(frag_depth)
   tint_symbol:vec4<f32> @offset(16), @location(1)
-  tint_symbol_1:vec4<f32> @offset(32), @location(2), @interpolate(linear, center)
+  tint_symbol_1:vec4<f32> @offset(32), @location(2), @interpolate(linear)
 }
 
 $B1: {  # root
@@ -325,13 +326,12 @@ VertexOutputs = struct @align(16) {
 tint_symbol = struct @align(16) {
   main_position_Output:vec4<f32> @offset(0), @builtin(position)
   main_clip_distances_Output:array<f32, 1> @offset(16), @builtin(clip_distances)
-  main___point_size_Output:f32 @offset(20), @builtin(__point_size)
 }
 
 $B1: {  # root
   %main_position_Output:ptr<private, vec4<f32>, read_write> = var undef
   %main_clip_distances_Output:ptr<private, array<f32, 1>, read_write> = var undef
-  %main___point_size_Output:ptr<private, f32, read_write> = var undef
+  %main___point_size_Output:ptr<private, f32, read_write> = var 1.0f
 }
 
 %main_inner = func():VertexOutputs {
@@ -355,9 +355,8 @@ $B1: {  # root
     %10:void = call %main_inner_1
     %11:vec4<f32> = load %main_position_Output
     %12:array<f32, 1> = load %main_clip_distances_Output
-    %13:f32 = load %main___point_size_Output
-    %14:tint_symbol = construct %11, %12, %13
-    ret %14
+    %13:tint_symbol = construct %11, %12
+    ret %13
   }
 }
 )");

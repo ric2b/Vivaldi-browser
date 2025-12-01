@@ -25,6 +25,12 @@ static_library("ui") {
       "lights/razer_chroma_platform_driver_win.h",
     ]
   }
+  if (!is_ios && !is_android) {
+    sources += [
+      "webui/privacy_report_dialog.cc",
+      "webui/privacy_report_dialog.h",
+    ]
+  }
 
   public_configs = [ "//third_party/protobuf:using_proto" ]
   public_deps = [

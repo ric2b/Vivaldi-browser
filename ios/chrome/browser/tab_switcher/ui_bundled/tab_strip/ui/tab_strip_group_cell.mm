@@ -25,6 +25,9 @@ constexpr double kTitleContainerFadeAnimationSeconds = 0.25;
 constexpr double kTitleContainerExpandedRadius = 10.0;
 constexpr double kTitleContainerCollapsedRadius = 6.0;
 
+// Notification dot constraints.
+constexpr CGFloat kNotificationDotSize = 6;
+
 }  // namespace
 
 @implementation TabStripGroupCell {
@@ -40,6 +43,19 @@ constexpr double kTitleContainerCollapsedRadius = 6.0;
   // Local property for group stroke color to compare before updating the view.
   UIColor* _strokeColor;
 }
+
+#pragma mark - Public
+
++ (CGFloat)approximativeNonSharedWidthWithTitle:(NSString*)title {
+  UIFont* titleFont = [UIFont systemFontOfSize:TabStripGroupItemConstants.fontSize
+                                        weight:UIFontWeightSemibold];
+  CGFloat length = 1 +
+  [title sizeWithAttributes:@{NSFontAttributeName : titleFont}].width;
+  return length +
+         2 * TabStripGroupItemConstants.contentContainerHorizontalPadding;
+}
+
+#pragma mark - UICollectionViewCell
 
 - (instancetype)initWithFrame:(CGRect)frame {
   self = [super initWithFrame:frame];
@@ -72,7 +88,7 @@ constexpr double kTitleContainerCollapsedRadius = 6.0;
   _titleContainer.accessibilityLabel = nil;
   _titleLabel.text = nil;
   self.delegate = nil;
-  self.titleContainerBackgroundColor = nil;
+  self.contentContainerBackgroundColor = nil;
   self.collapsed = NO;
   self.hasNotificationDot = NO;
 }
@@ -117,8 +133,8 @@ constexpr double kTitleContainerCollapsedRadius = 6.0;
   _titleLabel.text = [title copy];
 }
 
-- (void)setTitleContainerBackgroundColor:(UIColor*)color {
-  _titleContainerBackgroundColor = color;
+- (void)setContentContainerBackgroundColor:(UIColor*)color {
+  _contentContainerBackgroundColor = color;
   _titleContainer.backgroundColor = color;
 }
 
@@ -227,7 +243,7 @@ constexpr double kTitleContainerCollapsedRadius = 6.0;
   _titleLabelTrailingConstraint = [_titleLabel.trailingAnchor
       constraintEqualToAnchor:_titleContainer.trailingAnchor
                      constant:-TabStripGroupItemConstants
-                                   .titleContainerHorizontalPadding];
+                                   .contentContainerHorizontalPadding];
 
   NSLayoutConstraint* titleLabelMaxWidthConstraint = [_titleLabel.widthAnchor
       constraintLessThanOrEqualToConstant:TabStripGroupItemConstants
@@ -241,7 +257,7 @@ constexpr double kTitleContainerCollapsedRadius = 6.0;
     [_titleLabel.leadingAnchor
         constraintEqualToAnchor:_titleContainer.leadingAnchor
                        constant:TabStripGroupItemConstants
-                                    .titleContainerHorizontalPadding],
+                                    .contentContainerHorizontalPadding],
     _titleLabelTrailingConstraint,
   ]];
 }
@@ -255,7 +271,7 @@ constexpr double kTitleContainerCollapsedRadius = 6.0;
 // difference between the size of the title and the size of its container.
 - (void)updateTransitionState {
   CGFloat horizontalTitlePadding =
-      TabStripGroupItemConstants.titleContainerHorizontalPadding;
+      TabStripGroupItemConstants.contentContainerHorizontalPadding;
   CGFloat titleContainerWidth = _titleContainer.bounds.size.width;
   CGFloat maxTitleContainerWidth =
       _titleLabel.frame.size.width + 2 * horizontalTitlePadding;
@@ -324,19 +340,17 @@ constexpr double kTitleContainerCollapsedRadius = 6.0;
   _notificationDotView = [[UIView alloc] init];
   _notificationDotView.backgroundColor = _titleTextColor;
   _notificationDotView.translatesAutoresizingMaskIntoConstraints = NO;
-  _notificationDotView.layer.cornerRadius =
-      TabStripGroupItemConstants.notificationDotSize / 2;
+  _notificationDotView.layer.cornerRadius = kNotificationDotSize / 2;
   [_titleContainer addSubview:_notificationDotView];
 
   _notificationDotViewTrailingConstraint = [_notificationDotView.trailingAnchor
       constraintEqualToAnchor:_titleContainer.trailingAnchor
                      constant:-TabStripGroupItemConstants
-                                   .titleContainerHorizontalPadding];
+                                   .contentContainerHorizontalPadding];
 
   [NSLayoutConstraint activateConstraints:@[
     [_notificationDotView.widthAnchor
-        constraintEqualToConstant:TabStripGroupItemConstants
-                                      .notificationDotSize],
+        constraintEqualToConstant:kNotificationDotSize],
     [_notificationDotView.heightAnchor
         constraintEqualToAnchor:_notificationDotView.widthAnchor],
     // Position the notification dot at right end of the cell.
@@ -345,7 +359,7 @@ constexpr double kTitleContainerCollapsedRadius = 6.0;
     [_notificationDotView.leadingAnchor
         constraintEqualToAnchor:_titleLabel.trailingAnchor
                        constant:TabStripGroupItemConstants
-                                    .titleContainerHorizontalMargin],
+                                    .contentContainerHorizontalMargin],
     _notificationDotViewTrailingConstraint,
   ]];
 }

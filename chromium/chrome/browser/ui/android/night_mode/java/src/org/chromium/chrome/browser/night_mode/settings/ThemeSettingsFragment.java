@@ -6,7 +6,6 @@ package org.chromium.chrome.browser.night_mode.settings;
 
 import static org.chromium.chrome.browser.preferences.ChromePreferenceKeys.UI_THEME_SETTING;
 
-import android.os.Build;
 import android.os.Bundle;
 
 import org.chromium.base.shared_preferences.SharedPreferencesManager;
@@ -25,13 +24,7 @@ import org.chromium.chrome.browser.profiles.ProfileManager;
 import org.chromium.chrome.browser.settings.ChromeBaseSettingsFragment;
 import org.chromium.components.browser_ui.settings.CustomDividerFragment;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
-import org.chromium.ui.UiUtils;
 
-// Vivaldi
-import androidx.preference.PreferenceCategory;
-
-import org.chromium.chrome.browser.profiles.ProfileManager;
-import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
 
 /** Fragment to manage the theme user settings. */
 @NullMarked
@@ -43,6 +36,7 @@ public class ThemeSettingsFragment extends ChromeBaseSettingsFragment
 
     // Vivaldi
     public static final String KEY_DARK_MODE_FOR_WEBPAGES = "dark_mode_for_webpages";
+    public static final String PREF_WEBSITE_THEME_APPEARANCE = "website_theme_appearance";
 
     private final ObservableSupplierImpl<String> mPageTitle = new ObservableSupplierImpl<>();
 
@@ -94,52 +88,11 @@ public class ThemeSettingsFragment extends ChromeBaseSettingsFragment
                 ChromeFeatureList.DARKEN_WEBSITES_CHECKBOX_IN_THEMES_SETTING)) {
             WebContentsDarkModeMessageController.notifyEventSettingsOpened(getProfile());
         }
-
-        // Note(david@vivaldi.com): Switch to handle dark mode for web pages.
-        if (ChromeFeatureList.isEnabled(
-                    ChromeFeatureList.DARKEN_WEBSITES_CHECKBOX_IN_THEMES_SETTING)) {
-            PreferenceCategory darkWebPagesCategory =
-                    new PreferenceCategory(getPreferenceManager().getContext());
-            darkWebPagesCategory.setTitle(R.string.web_pages_dark_mode);
-            getPreferenceScreen().addPreference(darkWebPagesCategory);
-            ChromeSwitchPreference darkWebPagesSwitch =
-                    new ChromeSwitchPreference(getPreferenceManager().getContext(), null);
-            darkWebPagesSwitch.setTitle(R.string.web_pages_dark_mode_switch);
-            darkWebPagesSwitch.setSummary(R.string.web_pages_dark_mode_switch_desc);
-            // Note(Nagamani): This key will be used to enable/disable dark mode for individual
-            // webpages.
-            darkWebPagesSwitch.setKey(KEY_DARK_MODE_FOR_WEBPAGES);
-            darkWebPagesSwitch.setChecked(
-                    WebContentsDarkModeController.isGlobalUserSettingsEnabled(
-                            ProfileManager.getLastUsedRegularProfile()));
-            darkWebPagesSwitch.setOnPreferenceChangeListener((preference, newValue) -> {
-                ChromeSharedPreferences.getInstance().writeBoolean(KEY_DARK_MODE_FOR_WEBPAGES,
-                        (boolean) newValue);
-                WebContentsDarkModeController.setGlobalUserSettings(
-                        ProfileManager.getLastUsedRegularProfile(), (boolean) newValue);
-                return true;
-            });
-            getPreferenceScreen().addPreference(darkWebPagesSwitch);
-        }
     }
 
     @Override
     public ObservableSupplier<String> getPageTitle() {
         return mPageTitle;
-    }
-
-    @Override
-    public void onActivityCreated(@Nullable Bundle savedInstanceState) {
-        super.onActivityCreated(savedInstanceState);
-
-        // On O_MR1, the flag View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR in this fragment is not
-        // updated to the attribute android:windowLightNavigationBar set in preference theme, so
-        // we set the flag explicitly to workaround the issue. See https://crbug.com/942551.
-        if (Build.VERSION.SDK_INT == Build.VERSION_CODES.O_MR1) {
-            UiUtils.setNavigationBarIconColor(
-                    getActivity().getWindow().getDecorView(),
-                    getResources().getBoolean(R.bool.window_light_navigation_bar));
-        }
     }
 
     @Override

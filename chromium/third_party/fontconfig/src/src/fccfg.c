@@ -70,7 +70,8 @@ unlock_config (void)
 {
     FcMutex *lock;
     lock = fc_atomic_ptr_get (&_lock);
-    FcMutexUnlock (lock);
+    if (lock)
+	FcMutexUnlock (lock);
 }
 
 static void
@@ -117,16 +118,24 @@ FcDestroyAsRuleSet (void *data)
 FcBool
 FcConfigInit (void)
 {
-    return FcConfigEnsure() ? FcTrue : FcFalse;
+    FcBool is_new = !!(_fcConfig == NULL);
+    FcBool ret;
+
+    ret = FcConfigEnsure() ? FcTrue : FcFalse;
+    if (ret && !is_new)
+	FcConfigReference (_fcConfig);
+    return ret;
 }
 
 void
 FcConfigFini (void)
 {
-    FcConfig *cfg = fc_atomic_ptr_get (&_fcConfig);
-    if (cfg && fc_atomic_ptr_cmpexch (&_fcConfig, cfg, NULL))
-	FcConfigDestroy (cfg);
-    free_lock();
+    FcConfig *cfg;
+
+    FcConfigDestroy (_fcConfig);
+    cfg = fc_atomic_ptr_get (&_fcConfig);
+    if (!cfg)
+	free_lock();
 }
 
 FcConfig *
@@ -202,10 +211,15 @@ FcConfigCreate (void)
     config->filter_func = NULL;
     config->filter_data = NULL;
     config->destroy_data_func = NULL;
+    config->default_lang = NULL;
+    config->default_langs = NULL;
+    config->prgname = NULL;
+    config->desktop_name = NULL;
 
     config->prefer_app_fonts = FcFalse;
 
     FcRefInit (&config->ref, 1);
+    FcObjectInit();
 
     return config;
 
@@ -352,6 +366,7 @@ FcConfigDestroy (FcConfig *config)
 	if (FcRefDec (&config->ref) != 1)
 	    return;
 
+	FcObjectFini();
 	(void)fc_atomic_ptr_cmpexch (&_fcConfig, config, NULL);
 
 	FcStrSetDestroy (config->configDirs);
@@ -382,6 +397,17 @@ FcConfigDestroy (FcConfig *config)
 
 	if (config->filter_data && config->destroy_data_func)
 	    config->destroy_data_func (config->filter_data);
+
+	if (config->default_lang)
+	    FcStrFree (config->default_lang);
+	if (config->default_langs) {
+	    FcRefInit (&config->default_langs->ref, 1);
+	    FcStrSetDestroy (config->default_langs);
+	}
+	if (config->prgname)
+	    FcStrFree (config->prgname);
+	if (config->desktop_name)
+	    FcStrFree (config->desktop_name);
 
 	free (config);
     }
@@ -1935,7 +1961,7 @@ FcConfigSubstituteWithPat (FcConfig   *config,
 
     s = config->subst[kind];
     if (kind == FcMatchPattern) {
-	strs = FcGetDefaultLangs();
+	strs = FcConfigGetDefaultLangs (config);
 	if (strs) {
 	    FcStrList *l = FcStrListCreate (strs);
 	    FcChar8   *lang;
@@ -1982,7 +2008,7 @@ FcConfigSubstituteWithPat (FcConfig   *config,
 	    FcLangSetDestroy (lsund);
 	}
 	if (FcPatternObjectGet (p, FC_PRGNAME_OBJECT, 0, &v) == FcResultNoMatch) {
-	    FcChar8 *prgname = FcGetPrgname();
+	    FcChar8 *prgname = FcConfigGetPrgname (config);
 	    if (prgname)
 		FcPatternObjectAddString (p, FC_PRGNAME_OBJECT, prgname);
 	}
@@ -2499,7 +2525,7 @@ FcConfigXdgDataDirs (void)
     const char *env = getenv ("XDG_DATA_DIRS");
     FcStrSet   *ret = FcStrSetCreate();
 
-    if (env) {
+    if (env && *env) {
 	FcChar8 *ee, *e = ee = FcStrCopy ((const FcChar8 *)env);
 
 	/* We don't intentionally use FC_SEARCH_PATH_SEPARATOR here because of:
@@ -2520,6 +2546,11 @@ FcConfigXdgDataDirs (void)
 		e = p + 1;
 	    }
 	    len = strlen ((const char *)s);
+	    if (len == 0) {
+		FcStrFree (s);
+		continue;
+	    }
+
 	    if (s[len - 1] == FC_DIR_SEPARATOR) {
 		do {
 		    len--;

@@ -1,10 +1,7 @@
-import json
+import importlib
+
+handler_utils = importlib.import_module(
+    "fetch.compression-dictionary.resources.handler_utils")
 
 def main(request, response):
-    response.headers.set(b"Access-Control-Allow-Origin", b"*")
-    headers = {}
-    for header in request.headers:
-        key = header.decode('utf-8')
-        value = request.headers.get(header).decode('utf-8')
-        headers[key] = value
-    return json.dumps(headers)
+    return handler_utils.create_echo_response(request, response)

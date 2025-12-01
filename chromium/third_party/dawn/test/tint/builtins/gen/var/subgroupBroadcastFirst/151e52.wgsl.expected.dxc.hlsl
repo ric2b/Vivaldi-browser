@@ -1,8 +1,8 @@
 //
 // fragment_main
 //
-RWByteAddressBuffer prevent_dce : register(u0);
 
+RWByteAddressBuffer prevent_dce : register(u0);
 float16_t subgroupBroadcastFirst_151e52() {
   float16_t arg_0 = float16_t(1.0h);
   float16_t res = WaveReadLaneFirst(arg_0);
@@ -11,13 +11,13 @@ float16_t subgroupBroadcastFirst_151e52() {
 
 void fragment_main() {
   prevent_dce.Store<float16_t>(0u, subgroupBroadcastFirst_151e52());
-  return;
 }
+
 //
 // compute_main
 //
-RWByteAddressBuffer prevent_dce : register(u0);
 
+RWByteAddressBuffer prevent_dce : register(u0);
 float16_t subgroupBroadcastFirst_151e52() {
   float16_t arg_0 = float16_t(1.0h);
   float16_t res = WaveReadLaneFirst(arg_0);
@@ -27,5 +27,5 @@ float16_t subgroupBroadcastFirst_151e52() {
 [numthreads(1, 1, 1)]
 void compute_main() {
   prevent_dce.Store<float16_t>(0u, subgroupBroadcastFirst_151e52());
-  return;
 }
+

@@ -18,7 +18,6 @@
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/debug/debugger.h"
-#include "base/debug/stack_trace.h"
 #include "base/feature_list.h"
 #include "base/i18n/icu_util.h"
 #include "base/logging.h"
@@ -86,12 +85,6 @@
 #endif
 #endif  // BUILDFLAG(IS_MAC)
 
-#if BUILDFLAG(IS_IOS_TVOS)
-#include "base/files/file_path.h"
-#include "base/path_service.h"
-#include "content/shell/common/shell_switches.h"
-#endif
-
 namespace content {
 
 namespace {
@@ -131,7 +124,6 @@ bool IsSubprocess() {
   auto type = base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
       switches::kProcessType);
   return type == switches::kGpuProcess ||
-         type == switches::kPpapiPluginProcess ||
          type == switches::kRendererProcess ||
          type == switches::kUtilityProcess || type == switches::kZygoteProcess;
 }
@@ -321,14 +313,9 @@ NO_STACK_PROTECTOR int RunContentProcess(
     // Set tvOS to single-process mode by default.
     command_line->AppendSwitch(switches::kSingleProcess);
 
-    // On tvOS, local storage is limited and data cannot be written anywhere
-    // other than the cache directory, so `base::DIR_CACHE` is used for
-    // the user data directory.
-    base::FilePath path;
-    if (base::PathService::Get(base::DIR_CACHE, &path) && !path.empty()) {
-      command_line->AppendSwitchASCII(switches::kContentShellUserDataDir,
-                                      path.MaybeAsASCII());
-    }
+    // Enable spatial navigation; we interpret remote control swipes as arrow
+    // keys.
+    command_line->AppendSwitch(switches::kEnableSpatialNavigation);
 #endif
 #endif
 

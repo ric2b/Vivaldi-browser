@@ -1,0 +1,166 @@
+// Copyright 2025 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#include "chrome/browser/ui/webui/new_tab_page/composebox/variations/composebox_fieldtrial.h"
+
+#include <string>
+
+#include "base/base64.h"
+#include "base/feature_list.h"
+#include "base/metrics/histogram_functions.h"
+#include "chrome/browser/autocomplete/aim_eligibility_service_factory.h"
+#include "chrome/browser/search_engines/template_url_service_factory.h"
+#include "chrome/grit/generated_resources.h"
+#include "components/omnibox/browser/aim_eligibility_service.h"
+#include "ui/base/l10n/l10n_util.h"
+
+namespace ntp_composebox {
+
+namespace {
+
+// Decodes a proto object from its serialized Base64 string representation.
+// Returns true if decoding and parsing succeed, false otherwise.
+bool ParseProtoFromBase64String(const std::string& input,
+                                google::protobuf::MessageLite& output) {
+  if (input.empty()) {
+    return false;
+  }
+
+  std::string decoded_input;
+  // Decode the Base64-encoded input string into decoded_input.
+  if (!base::Base64Decode(input, &decoded_input)) {
+    return false;
+  }
+
+  if (decoded_input.empty()) {
+    return false;
+  }
+
+  // Parse the decoded string into the proto object.
+  return output.ParseFromString(decoded_input);
+}
+
+// Populates and returns the NTP Composebox configuration proto.
+omnibox::NTPComposeboxConfig GetNTPComposeboxConfig() {
+  // Initialize the default config.
+  omnibox::NTPComposeboxConfig default_config;
+  default_config.mutable_entry_point()->set_num_page_load_animations(3);
+
+  auto* composebox = default_config.mutable_composebox();
+  composebox->set_close_by_escape(true);
+  composebox->set_close_by_click_outside(true);
+
+  auto* image_upload = composebox->mutable_image_upload();
+  image_upload->set_enable_webp_encoding(false);
+  image_upload->set_downscale_max_image_size(1500000);
+  image_upload->set_downscale_max_image_width(1600);
+  image_upload->set_downscale_max_image_height(1600);
+  image_upload->set_image_compression_quality(40);
+  image_upload->set_mime_types_allowed("image/*");
+
+  auto* attachment_upload = composebox->mutable_attachment_upload();
+  attachment_upload->set_max_size_bytes(200000000);
+  attachment_upload->set_mime_types_allowed(".pdf,application/pdf");
+
+  composebox->set_max_num_files(1);
+  composebox->set_input_placeholder_text(
+      l10n_util::GetStringUTF8(IDS_NTP_COMPOSE_PLACEHOLDER_TEXT));
+  composebox->set_is_pdf_upload_enabled(true);
+
+  // Attempt to parse the config proto from the feature parameter if it is set.
+  omnibox::NTPComposeboxConfig fieldtrial_config;
+  if (!kConfigParam.Get().empty()) {
+    bool parsed =
+        ParseProtoFromBase64String(kConfigParam.Get(), fieldtrial_config);
+    base::UmaHistogramBoolean(kConfigParamParseSuccessHistogram, parsed);
+    if (!parsed) {
+      return default_config;
+    }
+    // A present `MimeTypesAllowed` message will clear the image and attachment
+    // `mime_types` value.
+    if (fieldtrial_config.composebox()
+            .image_upload()
+            .has_mime_types_allowed()) {
+      image_upload->clear_mime_types_allowed();
+    }
+    if (fieldtrial_config.composebox()
+            .attachment_upload()
+            .has_mime_types_allowed()) {
+      attachment_upload->clear_mime_types_allowed();
+    }
+  }
+
+  // Merge the fieldtrial config into the default config.
+  //
+  // Note: The `MergeFrom()` method will append repeated fields from
+  // `fieldtrial_config` to `default_config`. Since the intent is to override
+  // the values of repeated fields in `default_config` with the values from
+  // `fieldtrial_config`, the repeated fields in `default_config` must be
+  // cleared before calling `MergeFrom()` iff the repeated fields have been set
+  // in `fieldtrial_config`.
+  default_config.MergeFrom(fieldtrial_config);
+  return default_config;
+}
+
+}  // namespace
+
+bool IsNtpComposeboxEnabled(Profile* profile) {
+  if (!profile) {
+    return false;
+  }
+
+  // The AimEligibilityService depends on the TemplateURLService. If the
+  // TemplateURLService does not exist for this profile, then the
+  // AimEligibilityService cannot be created.
+  if (!TemplateURLServiceFactory::GetForProfile(profile)) {
+    return false;
+  }
+
+  auto* feature_list = base::FeatureList::GetInstance();
+  if (feature_list && feature_list->IsFeatureOverridden(kNtpComposebox.name) &&
+      !base::FeatureList::IsEnabled(kNtpComposebox)) {
+    return false;
+  }
+
+  const auto* aim_eligibility_service =
+      AimEligibilityServiceFactory::GetForProfile(profile);
+  if (!aim_eligibility_service) {
+    return false;
+  }
+
+  // If the server eligibility is enabled, check overall eligibility alone.
+  // The service will control locale rollout so there's no need to check locale
+  // or the state of kNtpComposebox below.
+  if (aim_eligibility_service->IsServerEligibilityEnabled()) {
+    return aim_eligibility_service->IsAimEligible();
+  }
+
+  // If not locally eligible, return false.
+  if (!aim_eligibility_service->IsAimLocallyEligible()) {
+    return false;
+  }
+
+  // Otherwise, check the generic composebox feature.
+  return base::FeatureList::IsEnabled(kNtpComposebox);
+}
+
+BASE_FEATURE(kNtpComposebox,
+             "NtpComposebox",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+const base::FeatureParam<std::string> kConfigParam(&kNtpComposebox,
+                                                   "ConfigParam",
+                                                   "");
+
+const base::FeatureParam<bool> kSendLnsSurfaceParam(&kNtpComposebox,
+                                                    "SendLnsSurfaceParam",
+                                                    false);
+
+const base::FeatureParam<bool> kShowComposeboxZps(&kNtpComposebox,
+                                                  "ShowComposeboxZps",
+                                                  false);
+
+FeatureConfig::FeatureConfig() : config(GetNTPComposeboxConfig()) {}
+
+}  // namespace ntp_composebox

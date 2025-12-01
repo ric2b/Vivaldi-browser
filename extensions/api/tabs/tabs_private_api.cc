@@ -243,6 +243,12 @@ static const std::vector<tabs_private::TabAlertState> ConvertTabAlertState(
       case tabs::TabAlert::GLIC_ACCESSING:
         types.push_back(tabs_private::TabAlertState::kCapturing);
         break;
+      case tabs::TabAlert::GLIC_SHARING:
+        types.push_back(tabs_private::TabAlertState::kCapturing);
+        break;
+      case tabs::TabAlert::ACTOR_ACCESSING:
+        types.push_back(tabs_private::TabAlertState::kCapturing);
+        break;
     }
   }
 
@@ -429,7 +435,7 @@ void VivaldiPrivateTabObserver::OnTabResourceMetricsRefreshed() {
   info.tab_id = id;
   uint64_t memory_usage; //TabPerformanceData::memory_usage is int.
   VivaldiBrowserComponentWrapper::GetInstance()->GetTabPerformanceData(
-      web_contents(), memory_usage, info.discarded);
+      web_contents(), memory_usage);
   info.memory_usage = memory_usage;
   ::vivaldi::BroadcastEvent(
       tabs_private::OnTabResourceMetricsRefreshed::kEventName,
@@ -1174,27 +1180,17 @@ TabsPrivateGetTabPerformanceDataFunction::Run() {
   std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
-  const int tabcount = params->tab_ids.size();
-  std::vector<tabs_private::TabPerformanceData> data(tabcount);
-
-  for (int i = 0; i < tabcount; i++) {
-    content::WebContents* tab_contents =
-        VivaldiBrowserComponentWrapper::GetInstance()
-            ->GetWebContentsFromTabStrip(browser_context(),
-                                         params->tab_ids[i],
-                                         nullptr);
-    if (tab_contents) {
-      uint64_t memory_usage;
-      bool is_discarded;
-      VivaldiBrowserComponentWrapper::GetInstance()->GetTabPerformanceData(
-          tab_contents, memory_usage, is_discarded);
-      tabs_private::TabPerformanceData* pdata = &data[i];
-      pdata->tab_id = params->tab_ids[i];
-      pdata->memory_usage = memory_usage;
-      pdata->discarded = is_discarded;
-    }
+  content::WebContents* tab_contents =
+      VivaldiBrowserComponentWrapper::GetInstance()
+          ->GetWebContentsFromTabStrip(browser_context(),
+                                        params->tab_id,
+                                        nullptr);
+  uint64_t memory_usage = 0;
+  if (tab_contents) {
+    VivaldiBrowserComponentWrapper::GetInstance()->GetTabPerformanceData(
+        tab_contents, memory_usage);
   }
-  return RespondNow(ArgumentList(Results::Create(data)));
+  return RespondNow(ArgumentList(Results::Create(memory_usage)));
 }
 
 /// <summary>
@@ -1419,15 +1415,12 @@ VivaldiGuestViewContentObserver* VivaldiGuestViewContentObserver::FromTabId(
 
 void VivaldiGuestViewContentObserver::SaveZoomLevelToExtData(
     double zoom_level) {
-  std::string viv_ext_data = web_contents()->GetVivExtData();
-  std::optional<base::Value> json = GetDictValueFromVivExtData(viv_ext_data);
-  if (json) {
-    json->GetDict().Set(::vivaldi::kVivaldiTabZoom, zoom_level);
-    std::string json_string;
-    if (ValueToJSONString(*json, json_string)) {
-      web_contents()->SetVivExtData(json_string);
-    }
-  }
+  base::Value::Dict dict;
+  dict.Set(::vivaldi::kVivaldiTabZoom, zoom_level);
+
+  std::string json_string;
+  base::JSONWriter::Write(dict, &json_string);
+  web_contents()->SetVivExtData(json_string);
 }
 
 void VivaldiGuestViewContentObserver::SetShowImages(bool show_images) {
@@ -1457,19 +1450,14 @@ void VivaldiGuestViewContentObserver::SetLoadFromCacheOnly(
 
 void VivaldiGuestViewContentObserver::SetMuted(bool mute) {
   mute_ = mute;
-  std::string viv_ext_data = web_contents()->GetVivExtData();
-  std::optional<base::Value> json = GetDictValueFromVivExtData(viv_ext_data);
-  if (json) {
-    std::optional<bool> existing =
-        json->GetDict().FindBool(::vivaldi::kVivaldiTabMuted);
-    if ((existing && *existing != mute) || (!existing && mute)) {
-      json->GetDict().Set(::vivaldi::kVivaldiTabMuted, mute);
-      std::string json_string;
-      if (ValueToJSONString(*json, json_string)) {
-        web_contents()->SetVivExtData(json_string);
-      }
-    }
-  }
+
+  // Set VivExtData
+  base::Value::Dict dict;
+  dict.Set(::vivaldi::kVivaldiTabMuted, mute);
+  std::string json_string;
+  base::JSONWriter::Write(dict, &json_string);
+  web_contents()->SetVivExtData(json_string);
+
   if (mute_ == web_contents()->IsAudioMuted()) {
     // NOTE(andre@vivaldi.com) : contentsettings will not be used if muting
     // reason is set to extension. So only set muting reason to extension when

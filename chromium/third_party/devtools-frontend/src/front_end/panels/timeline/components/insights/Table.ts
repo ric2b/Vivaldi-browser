@@ -7,7 +7,6 @@ import * as i18n from '../../../../core/i18n/i18n.js';
 import type * as Trace from '../../../../models/trace/trace.js';
 import * as ComponentHelpers from '../../../../ui/components/helpers/helpers.js';
 import * as Lit from '../../../../ui/lit/lit.js';
-import type * as Overlays from '../../overlays/overlays.js';
 
 import type * as BaseInsightComponent from './BaseInsightComponent.js';
 import {EventReferenceClick} from './EventRef.js';
@@ -29,7 +28,7 @@ const {html} = Lit;
 type BaseInsightComponent = BaseInsightComponent.BaseInsightComponent<Trace.Insights.Types.InsightModel>;
 
 /**
- * @fileoverview An interactive table component.
+ * @file An interactive table component.
  *
  * On hover:
  *           desaturates the relevant events (in both the minimap and the flamegraph), and
@@ -57,7 +56,7 @@ export interface TableData {
 
 export interface TableDataRow {
   values: Array<number|string|Lit.LitTemplate>;
-  overlays?: Overlays.Overlays.TimelineOverlay[];
+  overlays?: Trace.Types.Overlays.Overlay[];
   subRows?: TableDataRow[];
 }
 

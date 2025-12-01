@@ -14,8 +14,8 @@ for fixing vulnerabilities.
 ## ChromeOS Security Model
 
 ChromeOS is a hardened operating system intended to run as part of a
-complete and verticallyintegrated hardware/software stack such as
-Chromebooks,Chromeboxes, etc. When ChromeOS isbooted in verified mode
+complete and vertically integrated hardware/software stack such as
+Chromebooks,Chromeboxes, etc. When ChromeOS is booted in verified mode
 on a supported production device, ChromeOS is not a general purpose
 operating system.
 
@@ -77,25 +77,22 @@ but will be rewarded at the Panel’s discretion. Security bugs
 will have type _bug_ rather than _vulnerability_ in our Issue
 Tracker.
 
-
 ### Social Engineering and User Interaction
 
 Security vulnerabilities may be triggered by user interaction.
 However, an attacker has to be able to control the user interaction.
 If the attacker must rely on social engineering to get a user to
 perform a certain action that the user would not otherwise perform,
-we don’t consider that a vulnerability.
+we don't consider that a vulnerability.
 
 Social engineering attacks are out of scope for our Vulnerability
 Rewards Program.
 
-
 ### Developer Mode
 
 ChromeOS can be run as a general purpose OS when Developer mode
-is configured. Anyvulnerability that can only be exploited in Developer
+is configured. Any vulnerability that can only be exploited in Developer
 mode would be considered a security bug rather than a vulnerability.
-
 
 ### Abuse Related Methodologies
 
@@ -106,7 +103,6 @@ policies on managed devices, unauthorized access to special offers, etc.
 Abuse related methodologies can be reported via the ChromeOS
 Vulnerability Rewards Program but reward will be at the discretion of
 the VRP Panel.
-
 
 ### Managed Devices
 
@@ -135,7 +131,6 @@ Third party hardware/firmware vulnerabilities impacting ChromeOS
 Flex can be reported through our VRP and will be treated like any
 other vulnerability in a third party component.
 
-
 ### Third Party/Dependent Software Components
 
 Since we are not a general purpose OS, many vulnerabilities in
@@ -150,7 +145,6 @@ vulnerabilities if they are present in code we ship.
 
 We routinely update third party packages to ensure defense-in-depth.
 
-
 ### Toolchain and Code Hardening
 
 We compile with clang and take advantage of compiler hardening
@@ -160,10 +154,9 @@ in a crash that prevents an attacker from exploiting a bug.
 We do not consider bugs that are mitigated via these techniques
 to be security bugs.
 
-
 ### Crashes and denial of service bugs
 
-We don’t consider bugs that result in a process crash, system
+We don't consider bugs that result in a process crash, system
 crash or more broadly denial of service attacks that can be restored
 with a reboot to be vulnerabilities. ChromeOS was designed with this
 in mind and offers extremely fast reboots and restores state
@@ -172,13 +165,11 @@ such as browser tabs.
 See the [Chromium Security FAQ](https://chromium.googlesource.com/chromium/src/+/HEAD/docs/security/faq.md#TOC-Are-denial-of-service-issues-considered-security-bugs-)
 for more information on denial of service bugs in Chrome.
 
-
 ### Fuzzers
 
 Fuzzer found bugs are not considered security bugs unless they
 are demonstrated to be vulnerabilities e.g. attacker reachable
 and controllable.
-
 
 ### Graphics Stack
 
@@ -199,7 +190,6 @@ consider this a vulnerability. These issues may still be considered
 security bugs since they may represent a step in an exploit
 chain that results in code execution.
 
-
 ### Exploit Chains and Device Takeover
 
 An exploit chain is composed of one or more vulnerabilities and
@@ -209,7 +199,6 @@ even in guest mode ([crbug.com/766253](https://crbug.com/766253)).
 
 An exploit chain is considered mitigated, when one of the issues
 in the chain is mitigated such that it _breaks the chain_.
-
 
 ## Security Severity Levels
 
@@ -222,7 +211,6 @@ severity guidelines.
 * [Low Severity](?tab=t.0#heading=h.me1tqhvvhaff)
 * [Service Level Objectives](?tab=t.0#bookmark=id.q2b3g8ykveiu)
 
-
 ### [Critical Severity (S0)](?tab=t.0#heading=h.369tyvc07ye6)
 
 If the vulnerability were exploited, damage could be substantial.
@@ -231,14 +219,12 @@ Vulnerabilities that allow an attacker to achieve persistent
 arbitrary code execution on the device or exfiltrate unencrypted
 user data in verified boot is rated as Critical severity.
 
-
 ### [High Severity (S1)](?tab=t.0#heading=h.k6pwverqzms)
 
 If the vulnerability were exploited, damage could be considerable.
 
 Vulnerabilities that allow an attacker to take control over a
 sandboxed process are rated as High severity.
-
 
 ### [Medium Severity (S2)](?tab=t.0#heading=h.snhrhvgk9uzq)
 
@@ -248,11 +234,9 @@ Medium severity vulnerabilities allow attackers to read or
 modify limited amounts of information, or security bugs that
 are potentially more harmful as part of an exploit chain.
 
-
 ### [Low Severity (S3)](?tab=t.0#heading=h.me1tqhvvhaff)
 
 We track these issues as bugs rather than vulnerabilities.
-
 
 ### [No Security Impact (NSI)](?tab=t.0#heading=h.fz1n9xtwvi67)
 
@@ -260,9 +244,7 @@ Some bugs are commonly reported as security bugs but are not
 actually considered security relevant on ChromeOS. These may
 be closed as “Won’t Fix”.
 
-
-###
-Service Level Objectives
+### Service Level Objectives
 
 A _Service Level Objective_ (SLO) is a definition of the desired
 performance of a service or process for a single metric. In this
@@ -274,7 +256,6 @@ case, the process is the fixing of security issues in ChromeOS.
 | S1 | **Fix backported to current milestone/s**, fix released as part of a planned weekly respin, accelerated dev/beta soak, CVE assigned if one doesn’t already exist. |
 | S2 | **Fix in ToT with no backport to current milestone/s**, fix released via regular monthly release process, full dev/beta soak, CVE assigned if one doesn’t already exist. |
 | S3 | May be disclosed before the fix is released, should get fixed or closed within the year, no CVE assigned. |
-
 
 ### Disclosure Timelines
 

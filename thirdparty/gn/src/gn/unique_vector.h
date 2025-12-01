@@ -68,7 +68,7 @@ class UniqueVectorHashSet : public UniqueVectorHashTableBase {
   // UniqueVectorKey type.
   void Insert(Node* node, size_t hash, size_t index) {
     *node = Node::Make(hash, index);
-    BaseType::UpdateAfterInsert();
+    BaseType::UpdateAfterInsert(false);
   }
 
   void Clear() { NodeClear(); }

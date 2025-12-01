@@ -9,6 +9,8 @@
 // LICENSE file in the root directory of this source tree.
 
 #include <assert.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #include <immintrin.h>
 
@@ -16,7 +18,7 @@
 #include "src/xnnpack/gemm.h"
 #include "src/xnnpack/intrinsics-polyfill.h"
 #include "src/xnnpack/math.h"
-#include "src/xnnpack/unaligned.h"
+#include "src/xnnpack/microparams.h"
 
 
 void xnn_qd8_f16_qb4w_gemm_minmax_ukernel_1x8c8__avx2(
@@ -29,8 +31,8 @@ void xnn_qd8_f16_qb4w_gemm_minmax_ukernel_1x8c8__avx2(
     xnn_float16* restrict c,
     size_t cm_stride,
     size_t cn_stride,
-    const struct xnn_f16_qb4w_minmax_params params[restrict XNN_MIN_ELEMENTS(1)],
-    const struct xnn_qd8_quantization_params quantization_params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
+    const struct xnn_f16_qb4w_minmax_params* restrict params,
+    const struct xnn_qd8_quantization_params* restrict quantization_params) XNN_OOB_READS
 {
   assert(mr != 0);
   assert(mr <= 1);
@@ -209,8 +211,6 @@ void xnn_qd8_f16_qb4w_gemm_minmax_ukernel_1x8c8__avx2(
     const __m256 vbias01234567 = _mm256_loadu_ps((const float*) w);
     w = (const float*) w + 8;
     vout0x01234567 = _mm256_fmadd_ps(vout0x01234567, vinput_scale0, vbias01234567);
-
-    
 
     vout0x01234567 = _mm256_max_ps(vout0x01234567, vmin);
 

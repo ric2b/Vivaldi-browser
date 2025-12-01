@@ -209,7 +209,7 @@ class PermissionServiceInterceptor : public blink::mojom::PermissionObserver {
   void AddPermissionStatusObserver(blink::mojom::PermissionName permission) {
     auto descriptor = blink::mojom::PermissionDescriptor::New();
     descriptor->name = permission;
-    GetForwardingInterface()->AddPageEmbeddedPermissionObserver(
+    GetForwardingInterface()->AddCombinedPermissionObserver(
         std::move(descriptor), blink::mojom::PermissionStatus::ASK,
         GetRemote());
   }
@@ -474,7 +474,7 @@ class PermissionElementStandardizedBrowserZoomTest
     auto type_attribute_value = content::EvalJs(
         web_contents(),
         content::JsReplace("document.getElementById($1).type", id));
-    EXPECT_TRUE(type_attribute_value.error.empty());
+    EXPECT_TRUE(type_attribute_value.is_ok());
     ExpectConsoleMessage("Font size of the permission element '" +
                          type_attribute_value.ExtractString() +
                          "' is too large");

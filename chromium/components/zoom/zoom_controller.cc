@@ -28,6 +28,7 @@
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "prefs/vivaldi_tab_zoom_pref.h" // nogncheck
+#include "content/public/common/url_constants.h"
 #endif
 
 using content::BrowserThread;
@@ -273,7 +274,9 @@ bool ZoomController::SetZoomLevelByClient(
     if (vivaldi::IsVivaldiRunning()) {
       bool tab_zoom = vivaldi::IsTabZoomEnabled(web_contents());
       std::string host = net::GetHostOrSpecFromURL(web_contents()->GetURL());
-      if (tab_zoom && !vivaldi::IsVivaldiApp(host)) {
+      // We want devtools to be separated from tab-zooming.
+      if (tab_zoom && !vivaldi::IsVivaldiApp(host) &&
+          !web_contents()->GetURL().SchemeIs(content::kChromeDevToolsScheme)) {
         zoom_map->SetTemporaryZoomLevel(rfh->GetGlobalId(), zoom_level);
         last_client_.reset();
         return true;

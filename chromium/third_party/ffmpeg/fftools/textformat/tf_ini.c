@@ -28,21 +28,7 @@
 
 #include "libavutil/bprint.h"
 #include "libavutil/opt.h"
-
-#define writer_w8(wctx_, b_) (wctx_)->writer->writer->writer_w8((wctx_)->writer, b_)
-#define writer_put_str(wctx_, str_) (wctx_)->writer->writer->writer_put_str((wctx_)->writer, str_)
-#define writer_printf(wctx_, fmt_, ...) (wctx_)->writer->writer->writer_printf((wctx_)->writer, fmt_, __VA_ARGS__)
-
-#define DEFINE_FORMATTER_CLASS(name)                   \
-static const char *name##_get_name(void *ctx)       \
-{                                                   \
-    return #name ;                                  \
-}                                                   \
-static const AVClass name##_class = {               \
-    .class_name = #name,                            \
-    .item_name  = name##_get_name,                  \
-    .option     = name##_options                    \
-}
+#include "tf_internal.h"
 
 /* Default output */
 
@@ -64,9 +50,9 @@ typedef struct INIContext {
 #define OFFSET(x) offsetof(INIContext, x)
 
 static const AVOption ini_options[] = {
-    {"hierarchical", "specify if the section specification should be hierarchical", OFFSET(hierarchical), AV_OPT_TYPE_BOOL, {.i64=1}, 0, 1 },
-    {"h",            "specify if the section specification should be hierarchical", OFFSET(hierarchical), AV_OPT_TYPE_BOOL, {.i64=1}, 0, 1 },
-    {NULL},
+    { "hierarchical", "specify if the section specification should be hierarchical", OFFSET(hierarchical), AV_OPT_TYPE_BOOL, { .i64 = 1 }, 0, 1 },
+    { "h",            "specify if the section specification should be hierarchical", OFFSET(hierarchical), AV_OPT_TYPE_BOOL, { .i64 = 1 }, 0, 1 },
+    { NULL },
 };
 
 DEFINE_FORMATTER_CLASS(ini);
@@ -74,9 +60,9 @@ DEFINE_FORMATTER_CLASS(ini);
 static char *ini_escape_str(AVBPrint *dst, const char *src)
 {
     int i = 0;
-    char c = 0;
+    char c;
 
-    while (c = src[i++]) {
+    while ((c = src[i++])) {
         switch (c) {
         case '\b': av_bprintf(dst, "%s", "\\b"); break;
         case '\f': av_bprintf(dst, "%s", "\\f"); break;
@@ -84,12 +70,14 @@ static char *ini_escape_str(AVBPrint *dst, const char *src)
         case '\r': av_bprintf(dst, "%s", "\\r"); break;
         case '\t': av_bprintf(dst, "%s", "\\t"); break;
         case '\\':
-        case '#' :
-        case '=' :
-        case ':' : av_bprint_chars(dst, '\\', 1);
+        case '#':
+        case '=':
+        case ':':
+            av_bprint_chars(dst, '\\', 1);
+            /* fallthrough */
         default:
             if ((unsigned char)c < 32)
-                av_bprintf(dst, "\\x00%02x", c & 0xff);
+                av_bprintf(dst, "\\x00%02x", (unsigned char)c);
             else
                 av_bprint_chars(dst, c, 1);
             break;
@@ -102,9 +90,11 @@ static void ini_print_section_header(AVTextFormatContext *wctx, const void *data
 {
     INIContext *ini = wctx->priv;
     AVBPrint *buf = &wctx->section_pbuf[wctx->level];
-    const struct AVTextFormatSection *section = wctx->section[wctx->level];
-    const struct AVTextFormatSection *parent_section = wctx->level ?
-        wctx->section[wctx->level-1] : NULL;
+    const AVTextFormatSection *section = tf_get_section(wctx, wctx->level);
+    const AVTextFormatSection *parent_section = tf_get_parent_section(wctx, wctx->level);
+
+    if (!section)
+        return;
 
     av_bprint_clear(buf);
     if (!parent_section) {
@@ -112,23 +102,23 @@ static void ini_print_section_header(AVTextFormatContext *wctx, const void *data
         return;
     }
 
-    if (wctx->nb_item[wctx->level-1])
+    if (wctx->nb_item[wctx->level - 1])
         writer_w8(wctx, '\n');
 
-    av_bprintf(buf, "%s", wctx->section_pbuf[wctx->level-1].str);
+    av_bprintf(buf, "%s", wctx->section_pbuf[wctx->level - 1].str);
     if (ini->hierarchical ||
-        !(section->flags & (AV_TEXTFORMAT_SECTION_FLAG_IS_ARRAY|AV_TEXTFORMAT_SECTION_FLAG_IS_WRAPPER))) {
+        !(section->flags & (AV_TEXTFORMAT_SECTION_FLAG_IS_ARRAY | AV_TEXTFORMAT_SECTION_FLAG_IS_WRAPPER))) {
         av_bprintf(buf, "%s%s", buf->str[0] ? "." : "", wctx->section[wctx->level]->name);
 
         if (parent_section->flags & AV_TEXTFORMAT_SECTION_FLAG_IS_ARRAY) {
-            int n = parent_section->flags & AV_TEXTFORMAT_SECTION_FLAG_NUMBERING_BY_TYPE ?
-                wctx->nb_item_type[wctx->level-1][section->id] :
-                wctx->nb_item[wctx->level-1];
-            av_bprintf(buf, ".%d", n);
+            unsigned n = parent_section->flags & AV_TEXTFORMAT_SECTION_FLAG_NUMBERING_BY_TYPE
+                ? wctx->nb_item_type[wctx->level - 1][section->id]
+                : wctx->nb_item[wctx->level - 1];
+            av_bprintf(buf, ".%u", n);
         }
     }
 
-    if (!(section->flags & (AV_TEXTFORMAT_SECTION_FLAG_IS_ARRAY|AV_TEXTFORMAT_SECTION_FLAG_IS_WRAPPER)))
+    if (!(section->flags & (AV_TEXTFORMAT_SECTION_FLAG_IS_ARRAY | AV_TEXTFORMAT_SECTION_FLAG_IS_WRAPPER)))
         writer_printf(wctx, "[%s]\n", buf->str);
 }
 
@@ -154,6 +144,6 @@ const AVTextFormatter avtextformatter_ini = {
     .print_section_header  = ini_print_section_header,
     .print_integer         = ini_print_int,
     .print_string          = ini_print_str,
-    .flags = AV_TEXTFORMAT_FLAG_SUPPORTS_OPTIONAL_FIELDS|AV_TEXTFORMAT_FLAG_SUPPORTS_MIXED_ARRAY_CONTENT,
+    .flags = AV_TEXTFORMAT_FLAG_SUPPORTS_OPTIONAL_FIELDS | AV_TEXTFORMAT_FLAG_SUPPORTS_MIXED_ARRAY_CONTENT,
     .priv_class            = &ini_class,
 };

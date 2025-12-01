@@ -21,14 +21,9 @@
 #ifndef FFTOOLS_TEXTFORMAT_AVTEXTWRITERS_H
 #define FFTOOLS_TEXTFORMAT_AVTEXTWRITERS_H
 
-#include <stddef.h>
 #include <stdint.h>
-#include "libavutil/attributes.h"
-#include "libavutil/dict.h"
 #include "libavformat/avio.h"
 #include "libavutil/bprint.h"
-#include "libavutil/rational.h"
-#include "libavutil/hash.h"
 
 typedef struct AVTextWriterContext AVTextWriterContext;
 
@@ -37,11 +32,11 @@ typedef struct AVTextWriter {
     int priv_size;                  ///< private size for the writer private class
     const char *name;
 
-    int (* init)(AVTextWriterContext *wctx);
-    void (* uninit)(AVTextWriterContext *wctx);
-    void (* writer_w8)(AVTextWriterContext *wctx, int b);
-    void (* writer_put_str)(AVTextWriterContext *wctx, const char *str);
-    void (* writer_printf)(AVTextWriterContext *wctx, const char *fmt, ...);
+    int (*init)(AVTextWriterContext *wctx);
+    int (*uninit)(AVTextWriterContext *wctx);
+    void (*writer_w8)(AVTextWriterContext *wctx, int b);
+    void (*writer_put_str)(AVTextWriterContext *wctx, const char *str);
+    void (*writer_vprintf)(AVTextWriterContext *wctx, const char *fmt, va_list vl);
 } AVTextWriter;
 
 typedef struct AVTextWriterContext {
@@ -49,13 +44,12 @@ typedef struct AVTextWriterContext {
     const AVTextWriter *writer;
     const char *name;
     void *priv;                     ///< private data for use by the writer
-
 } AVTextWriterContext;
 
 
 int avtextwriter_context_open(AVTextWriterContext **pwctx, const AVTextWriter *writer);
 
-void avtextwriter_context_close(AVTextWriterContext **pwctx);
+int avtextwriter_context_close(AVTextWriterContext **pwctx);
 
 int avtextwriter_create_stdout(AVTextWriterContext **pwctx);
 

@@ -8,7 +8,7 @@
 #include "base/base64.h"
 #include "base/rand_util.h"
 #include "build/branding_buildflags.h"
-#include "crypto/apple_keychain.h"
+#include "crypto/apple/keychain.h"
 
 std::string KeychainPassword::GetPassword(
     const std::string& service_name,

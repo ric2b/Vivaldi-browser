@@ -18,9 +18,8 @@ struct DistantSession;
 // tab UI is already visible. Receiver may also dismiss recent tabs.
 - (void)showActiveRegularTabFromRecentTabs;
 // Tells the receiver to show the history UI. Receiver may also dismiss recent
-// tabs. If `searchTerms` is not empty, it will be used to pre-populate the
-// search bar and filter results.
-- (void)showHistoryFromRecentTabsFilteredBySearchTerms:(NSString*)searchTerms;
+// tabs.
+- (void)showHistoryFromRecentTabs;
 // Tells the receiver to show the History Sync Opt-In screen. If the user has
 // signed-in just before this step for the sole purpose of enabling history sync
 // (Eg. using the Recent Tabs sync promo), `dedicatedSignInDone` will be `YES`,
@@ -28,12 +27,9 @@ struct DistantSession;
 - (void)showHistorySyncOptInAfterDedicatedSignIn:(BOOL)dedicatedSignInDone;
 // Tells the receiver to open all tabs from the given `session`.
 - (void)openAllTabsFromSession:(const synced_sessions::DistantSession*)session;
-
-@optional
-// Tells the receiver to display the tab grid. It is assumed the tab grid will
-// already be aware of the ongoing search mode and terms. If this method is not
-// implemented, the "Search Open Tabs" Suggested Action will not be displayed.
-- (void)showRegularTabGridFromRecentTabs;
+// Asks the presenter to display the reauthenticate the primary account.
+// The primary should be available.
+- (void)showPrimaryAccountReauth;
 
 // Vivaldi
 @optional
@@ -48,6 +44,18 @@ struct DistantSession;
 // Tells the receiver that Enable Sync button is tapped from empty state view of
 // synced tabs, and asks to enable history and tabs sync.
 - (void)didSelectEnableSyncFromEmptyStateView;
+
+@optional
+// Tells the receiver to display the tab grid. It is assumed the tab grid will
+// already be aware of the ongoing search mode and terms. If this method is not
+// implemented, the "Search Open Tabs" Suggested Action will not be displayed.
+- (void)showRegularTabGridFromRecentTabs;
+
+// Tells the receiver to show the history UI. Receiver may also dismiss recent
+// tabs. If `searchTerms` is not empty, it will be used to pre-populate the
+// search bar and filter results.
+- (void)showHistoryFromRecentTabsFilteredBySearchTerms:(NSString*)searchTerms;
+
 // End Vivaldi
 
 @end

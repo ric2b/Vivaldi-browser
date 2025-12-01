@@ -60,6 +60,7 @@
 #include "app/vivaldi_apptools.h"
 #include "app/vivaldi_constants.h"
 #include "base/files/file_util.h"
+#include "browser/features/vivaldi_features.h"
 #include "browser/startup_vivaldi_browser.h"
 #include "browser/vivaldi_browser_finder.h"
 #include "browser/vivaldi_webcontents_util.h"
@@ -75,9 +76,9 @@
 #include "prefs/vivaldi_gen_prefs.h"
 #include "ui/content/vivaldi_tab_check.h"
 #include "ui/devtools/devtools_connector.h"
+#include "ui/views/controls/textfield/textfield.h"
 #include "ui/vivaldi_browser_window.h"
 #include "ui/vivaldi_ui_utils.h"
-
 
 #if defined(USE_AURA)
 #include "ui/aura/client/cursor_client.h"
@@ -88,7 +89,6 @@
 #if BUILDFLAG(ENABLE_PAINT_PREVIEW)
 #include "components/paint_preview/browser/paint_preview_client.h"
 #endif
-
 
 using content::RenderProcessHost;
 using content::StoragePartition;
@@ -101,6 +101,39 @@ using vivaldi::IsVivaldiRunning;
 namespace extensions {
 
 namespace {
+
+// This class was just made to access GetCommandForKeyEvent which is a protected
+// member of Textfield.
+class TextfieldInputChecker : public views::Textfield {
+  public:
+   ui::TextEditCommand GetCommandForKeyEvent(const ui::KeyEvent& event) {
+     return Textfield::GetCommandForKeyEvent(event);
+   }
+};
+
+// Couldn't find this anywhere else. This function currently only translates the
+// key events we need to use for GetFixedAcceleratorForCommandId and is used
+// for keyboard handling in VivaldiWebViewGuest.
+bool KeyEventIsEditMenuCommand(blink::WebKeyboardEvent event) {
+  const bool control =
+      event.GetModifiers() & (ui::EF_COMMAND_DOWN | ui::EF_CONTROL_DOWN);
+  const bool alt = event.GetModifiers() & (ui::EF_ALT_DOWN | ui::EF_ALTGR_DOWN);
+
+  switch (event.windows_key_code) {
+    case ui::VKEY_Z:
+    case ui::VKEY_Y:
+    case ui::VKEY_A:
+    case ui::VKEY_X:
+    case ui::VKEY_C:
+    case ui::VKEY_V:
+      if (control && !alt) {
+        return true;
+      }
+      return false;
+    default:
+      return false;
+  }
+}
 
 bool IsPanelSensitiveUrl(const GURL& url) {
   // Http and https pages only can be displayed in the incognito window
@@ -366,6 +399,7 @@ void WebViewGuest::SetContentsBounds(content::WebContents* source,
 bool WebViewGuest::IsVivaldiRegularTab() {
   if (IsVivaldiWebPanel()) return false;
   if (IsVivaldiWebPageWidget()) return false;
+  if (IsVivaldiEditorView()) return false;
 
   // Try getting web contents, and tab id out of that...
   content::WebContents *contents = web_contents();
@@ -385,6 +419,22 @@ bool WebViewGuest::IsVivaldiWebPanel() {
 
 bool WebViewGuest::IsVivaldiWebPageWidget() {
   return name_.compare("vivaldi-webpage-widget") == 0;
+}
+
+bool WebViewGuest::IsVivaldiEditorView() {
+  if (base::FeatureList::IsEnabled(vivaldi_features::kNoteEditor)) {
+    return (name_.compare("vivaldi-richtexteditor") == 0) ||
+           (name_.compare("vivaldi-markdowneditor") == 0);
+  }
+  return (name_.compare("vivaldi-richtexteditor") == 0);
+}
+
+bool WebViewGuest::IsVivaldiReader() {
+  return name_.compare("vivaldi-readerview") == 0;
+}
+
+bool WebViewGuest::IsVivaldiRichTextEditor() {
+  return name_.compare("vivaldi-richtexteditor") == 0;
 }
 
 void WebViewGuest::ShowPageInfo(gfx::Point pos) {
@@ -703,6 +753,28 @@ bool WebViewGuest::ShortcutFoundInPrefs(std::string shortcut_text) {
   return false;
 }
 
+// In case we're editing text we'll let the shortcut through. Browser priority
+// will not affect text editing (i.e. shift+end will select text to the end of
+// line whether it's assigned in the browser or not).
+bool WebViewGuest::IsTextfieldEditCommand(
+    const input::NativeWebKeyboardEvent& native_web_keyboard_event) {
+  blink::WebKeyboardEvent web_keyboard_event(native_web_keyboard_event);
+  TextfieldInputChecker textfield;
+  ui::KeyEvent ui_event(
+      ui::EventType::kKeyPressed,
+      static_cast<ui::KeyboardCode>(web_keyboard_event.windows_key_code),
+      ::vivaldi::WebEventModifiersToEventFlags(web_keyboard_event.GetModifiers()),
+      //ui::WebEventModifiersToEventFlags(web_keyboard_event.GetModifiers()),
+      web_keyboard_event.TimeStamp());
+
+  if (textfield.GetCommandForKeyEvent(ui_event) ==
+      ui::TextEditCommand::INVALID_COMMAND) {
+    return false;
+  }
+
+  return true;
+}
+
 // Website has shortcut priority set to 'browser' and shortcut matches browser
 // shortcut.
 bool WebViewGuest::ShouldForwardShortcutToBrowser(
@@ -737,6 +809,15 @@ bool WebViewGuest::ShouldForwardShortcutToBrowser(
          return false;
        }
     }
+  }
+
+  if (KeyEventIsEditMenuCommand(event)) {
+    return false;
+  }
+
+  if (web_contents()->IsFocusedElementEditable() &&
+      IsTextfieldEditCommand(event)) {
+    return false;
   }
 
   const PrefService::Preference* browser_priority_keys =
@@ -1065,9 +1146,8 @@ bool WebViewGuest::VivaldiCreateWebContents(
         if (auto* src_string = create_params.FindString("src")) {
           GURL popup_url = guest_site = GURL(*src_string);
 
-          scoped_refptr<content::SiteInstance> site_instance =
-              ProcessManager::Get(context)->GetSiteInstanceForURL(popup_url);
-          WebContents::CreateParams params(context, std::move(site_instance));
+          WebContents::CreateParams params(
+              context, content::SiteInstance::CreateForURL(profile, popup_url));
           params.guest_delegate = this;
           new_contents = WebContents::Create(params);
           extension_host_ = std::make_unique<::vivaldi::VivaldiExtensionHost>(

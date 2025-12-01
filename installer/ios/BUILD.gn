@@ -109,36 +109,6 @@ sign_bundle("sign_widget_kit_extension") {
   ]
 }
 
-if (ios_enable_content_widget_extension) {
-  sign_bundle("sign_content_widget_extension") {
-    bindir = "$root_out_dir/ios_clang_arm64_app_ext_13_4/obj/ios/chrome/content_widget_extension/appex"
-    gendir = "$root_out_dir/ios_clang_arm64_app_ext_13_4/gen/ios/chrome/content_widget_extension/appex"
-
-    binary = "$bindir/content_widget_extension"
-    entitlements = "$gendir/content_widget_extension.appex.entitlements"
-    app = "${vivaldi_profiles}/content_widget_extension.appex"
-    plists =[
-      "$gendir/appex_generate_info_plist.plist",
-      "$gendir/appex_partial_info.plist",
-    ]
-  }
-}
-
-if (ios_enable_search_widget_extension) {
-  sign_bundle("sign_search_widget_extension") {
-    bindir = "$root_out_dir/ios_clang_arm64_app_ext_13_4/obj/ios/chrome/search_widget_extension/appex"
-    gendir = "$root_out_dir/ios_clang_arm64_app_ext_13_4/gen/ios/chrome/search_widget_extension/appex"
-
-    binary = "$bindir/search_widget_extension"
-    entitlements = "$gendir/search_widget_extension.appex.entitlements"
-    app = "${vivaldi_profiles}/search_widget_extension.appex"
-    plists =[
-      "$gendir/appex_generate_info_plist.plist",
-      "$gendir/appex_partial_info.plist",
-    ]
-  }
-}
-
 sign_bundle("sign_push_notification_service_extension") {
   bindir = "$root_out_dir/ios_clang_arm64_app_ext/obj/ios/chrome/push_notification_service_extension/appex"
   gendir = "$root_out_dir/ios_clang_arm64_app_ext/gen/ios/chrome/push_notification_service_extension/appex"
@@ -203,16 +173,4 @@ sign_bundle("sign_ios") {
     ":sign_share_extension",
     ":sign_push_notification_service_extension",
   ]
-
-  if (ios_enable_content_widget_extension) {
-    deps += [
-      ":sign_content_widget_extension",
-    ]
-  }
-
-  if (ios_enable_search_widget_extension) {
-    deps += [
-      ":sign_search_widget_extension",
-    ]
-  }
 }

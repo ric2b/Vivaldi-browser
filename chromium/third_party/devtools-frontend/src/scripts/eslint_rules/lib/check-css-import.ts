@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 /**
- * @fileoverview Prevent usage of customElements.define() and use the helper
+ * @file Prevent usage of customElements.define() and use the helper
  * function instead
  */
 
@@ -28,7 +28,7 @@ export default createRule({
   },
   defaultOptions: [],
   create: function(context) {
-    const filename = context.getFilename();
+    const filename = context.filename;
     return {
       ImportDeclaration(node) {
         const importPath = path.normalize(`${node.source.value}`);

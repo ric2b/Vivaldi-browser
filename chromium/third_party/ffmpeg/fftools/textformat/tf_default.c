@@ -27,21 +27,7 @@
 #include "avtextformat.h"
 #include "libavutil/bprint.h"
 #include "libavutil/opt.h"
-
-#define writer_w8(wctx_, b_) (wctx_)->writer->writer->writer_w8((wctx_)->writer, b_)
-#define writer_put_str(wctx_, str_) (wctx_)->writer->writer->writer_put_str((wctx_)->writer, str_)
-#define writer_printf(wctx_, fmt_, ...) (wctx_)->writer->writer->writer_printf((wctx_)->writer, fmt_, __VA_ARGS__)
-
-#define DEFINE_FORMATTER_CLASS(name)                   \
-static const char *name##_get_name(void *ctx)       \
-{                                                   \
-    return #name ;                                  \
-}                                                   \
-static const AVClass name##_class = {               \
-    .class_name = #name,                            \
-    .item_name  = name##_get_name,                  \
-    .option     = name##_options                    \
-}
+#include "tf_internal.h"
 
 /* Default output */
 
@@ -56,11 +42,11 @@ typedef struct DefaultContext {
 #define OFFSET(x) offsetof(DefaultContext, x)
 
 static const AVOption default_options[] = {
-    { "noprint_wrappers", "do not print headers and footers", OFFSET(noprint_wrappers), AV_OPT_TYPE_BOOL, {.i64=0}, 0, 1 },
-    { "nw",               "do not print headers and footers", OFFSET(noprint_wrappers), AV_OPT_TYPE_BOOL, {.i64=0}, 0, 1 },
-    { "nokey",          "force no key printing",     OFFSET(nokey),          AV_OPT_TYPE_BOOL, {.i64=0}, 0, 1 },
-    { "nk",             "force no key printing",     OFFSET(nokey),          AV_OPT_TYPE_BOOL, {.i64=0}, 0, 1 },
-    {NULL},
+    { "noprint_wrappers", "do not print headers and footers", OFFSET(noprint_wrappers), AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1 },
+    { "nw",               "do not print headers and footers", OFFSET(noprint_wrappers), AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1 },
+    { "nokey",            "force no key printing",            OFFSET(nokey),            AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1 },
+    { "nk",               "force no key printing",            OFFSET(nokey),            AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1 },
+    { NULL },
 };
 
 DEFINE_FORMATTER_CLASS(default);
@@ -68,9 +54,10 @@ DEFINE_FORMATTER_CLASS(default);
 /* lame uppercasing routine, assumes the string is lower case ASCII */
 static inline char *upcase_string(char *dst, size_t dst_size, const char *src)
 {
-    int i;
-    for (i = 0; src[i] && i < dst_size-1; i++)
-        dst[i] = av_toupper(src[i]);
+    unsigned i;
+
+    for (i = 0; src[i] && i < dst_size - 1; i++)
+        dst[i] = (char)av_toupper(src[i]);
     dst[i] = 0;
     return dst;
 }
@@ -79,16 +66,18 @@ static void default_print_section_header(AVTextFormatContext *wctx, const void *
 {
     DefaultContext *def = wctx->priv;
     char buf[32];
-    const struct AVTextFormatSection *section = wctx->section[wctx->level];
-    const struct AVTextFormatSection *parent_section = wctx->level ?
-        wctx->section[wctx->level-1] : NULL;
+    const AVTextFormatSection *section = tf_get_section(wctx, wctx->level);
+    const AVTextFormatSection *parent_section = tf_get_parent_section(wctx, wctx->level);
+
+    if (!section)
+        return;
 
     av_bprint_clear(&wctx->section_pbuf[wctx->level]);
     if (parent_section &&
-        !(parent_section->flags & (AV_TEXTFORMAT_SECTION_FLAG_IS_WRAPPER|AV_TEXTFORMAT_SECTION_FLAG_IS_ARRAY))) {
+        !(parent_section->flags & (AV_TEXTFORMAT_SECTION_FLAG_IS_WRAPPER | AV_TEXTFORMAT_SECTION_FLAG_IS_ARRAY))) {
         def->nested_section[wctx->level] = 1;
         av_bprintf(&wctx->section_pbuf[wctx->level], "%s%s:",
-                   wctx->section_pbuf[wctx->level-1].str,
+                   wctx->section_pbuf[wctx->level - 1].str,
                    upcase_string(buf, sizeof(buf),
                                  av_x_if_null(section->element_name, section->name)));
     }
@@ -96,20 +85,24 @@ static void default_print_section_header(AVTextFormatContext *wctx, const void *
     if (def->noprint_wrappers || def->nested_section[wctx->level])
         return;
 
-    if (!(section->flags & (AV_TEXTFORMAT_SECTION_FLAG_IS_WRAPPER|AV_TEXTFORMAT_SECTION_FLAG_IS_ARRAY)))
+    if (!(section->flags & (AV_TEXTFORMAT_SECTION_FLAG_IS_WRAPPER | AV_TEXTFORMAT_SECTION_FLAG_IS_ARRAY)))
         writer_printf(wctx, "[%s]\n", upcase_string(buf, sizeof(buf), section->name));
 }
 
 static void default_print_section_footer(AVTextFormatContext *wctx)
 {
     DefaultContext *def = wctx->priv;
-    const struct AVTextFormatSection *section = wctx->section[wctx->level];
+    const AVTextFormatSection *section = tf_get_section(wctx, wctx->level);
+
     char buf[32];
+
+    if (!section)
+        return;
 
     if (def->noprint_wrappers || def->nested_section[wctx->level])
         return;
 
-    if (!(section->flags & (AV_TEXTFORMAT_SECTION_FLAG_IS_WRAPPER|AV_TEXTFORMAT_SECTION_FLAG_IS_ARRAY)))
+    if (!(section->flags & (AV_TEXTFORMAT_SECTION_FLAG_IS_WRAPPER | AV_TEXTFORMAT_SECTION_FLAG_IS_ARRAY)))
         writer_printf(wctx, "[/%s]\n", upcase_string(buf, sizeof(buf), section->name));
 }
 

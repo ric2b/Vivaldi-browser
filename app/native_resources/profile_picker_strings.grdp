@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<grit-part>
+  <message name="IDS_PROFILE_PICKER_GUEST_MODE" desc="Guest Mode profile-picker button">Guest mode</message>
+  <message name="IDS_PROFILE_PICKER_SHOW_ON_STARTUP" desc="Profile-picker checkbox label">Show on startup</message>
+  <message name="IDS_PROFILE_PICKER_INTRO_TEXT" desc="Profile-picker intro text">With Vivaldi profiles you can separate all your Vivaldi stuff. Create profiles for friends and family, or split between work and fun.</message>
+  <message name="IDS_PROFILE_PICKER_WHOIS_USING" desc="Profile-picker title">Who’s using Vivaldi?</message>
+  <message name="IDS_PROFILE_PICKER_EDIT" desc="Profile-picker edit in menu">Edit...</message>
+  <message name="IDS_PROFILE_MORE_ACTIONS" desc="Profile-picker more actions button text">More actions</message>
+  <message name="IDS_PROFILE_DELETE" desc="Profile-picker delete in menu">Delete</message>
+  <message name="IDS_PROFILE_DELETE_LONG" desc="Profile-picker delete profile long version">Delete Profile</message>
+  <message name="IDS_PROFILE_SAVE_BUTTON" desc="Profile-picker save button">Save</message>
+  <message name="IDS_PROFILE_SELECT_CUSTOM_AVATAR" desc="Profile-picker select avatar dialog caption">Select custom avatar image</message>
+  <message name="IDS_PROFILE_CONFIRM_DELETE_PROFILE" desc="Profile-picker delete profile confirmation question">Are you sure you want to delete the profile “__1”?</message>
+  <message name="IDS_PROFILE_CANCEL_BUTTON" desc="Profile-picker cancel button text">Cancel</message>
+</grit-part>

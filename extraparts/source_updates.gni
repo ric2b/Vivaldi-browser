@@ -33,6 +33,9 @@ foreach(_target, _main_dll_targets) {
       "//vivaldi/components:adverse_adblocking",
       "//vivaldi/extensions:extensions_client"
     ]
+    configs += [
+      "//vivaldi/gn/config:release_kind"
+    ]
   }
 }
 
@@ -56,6 +59,9 @@ if (is_android) {
     sources += [
       "//vivaldi/extraparts/vivaldi_main_delegate.cpp",
       "//vivaldi/extraparts/vivaldi_main_delegate.h",
+    ]
+    configs += [
+      "//vivaldi/gn/config:release_kind"
     ]
   }
 }

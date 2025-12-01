@@ -4,6 +4,8 @@
 
 #import "ios/chrome/browser/content_suggestions/ui_bundled/shop_card/shop_card_price_tracking_view.h"
 
+#import "base/metrics/user_metrics.h"
+#import "base/metrics/user_metrics_action.h"
 #import "base/strings/sys_string_conversions.h"
 #import "components/url_formatter/elide_url.h"
 #import "ios/chrome/browser/content_suggestions/ui_bundled/shop_card/shop_card_data.h"
@@ -209,7 +211,7 @@ const CGFloat kVerticalStackSpacing = 6.0f;
 - (void)addProductImageEmptyGray {
   _productAndFaviconContainer = [[UIView alloc] init];
   _productImage = [[UIImageView alloc] init];
-  _productImage.backgroundColor = [UIColor colorNamed:kTertiaryBackgroundColor];
+  _productImage.backgroundColor = [UIColor colorNamed:kGrey100Color];
   _productImage.contentMode = UIViewContentModeScaleAspectFill;
   _productImage.translatesAutoresizingMaskIntoConstraints = NO;
   _productImage.layer.borderWidth = 0;
@@ -296,6 +298,8 @@ const CGFloat kVerticalStackSpacing = 6.0f;
 
 // Initiates price tracking.
 - (void)trackItem {
+  base::RecordAction(
+      base::UserMetricsAction("IOS.MagicStack.ShopCard.PriceTracking.Track"));
   [self.commandHandler trackShopCardItem:_item];
 }
 

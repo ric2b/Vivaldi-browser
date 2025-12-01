@@ -20,6 +20,7 @@ import $ from "../$.js";
 import {$$, $closest, hideElement, isVisible} from "../utils/dom.js";
 import {raceWinner} from "../introspection/race.js";
 import {toRegExp} from "../utils/general.js";
+import {profile} from "../introspection/profile.js";
 
 let {getComputedStyle, MutationObserver, WeakSet} = $(window);
 
@@ -40,6 +41,7 @@ let {getComputedStyle, MutationObserver, WeakSet} = $(window);
  * @since Adblock Plus 3.9
  */
 export function hideIfLabelledBy(search, selector, searchSelector = null) {
+  const {mark, end} = profile("hide-if-labelled-by");
   let sameSelector = searchSelector == null;
 
   let searchRegExp = toRegExp(search);
@@ -47,6 +49,7 @@ export function hideIfLabelledBy(search, selector, searchSelector = null) {
   let matched = new WeakSet();
 
   let callback = () => {
+    mark();
     for (const {element, rootParents} of $$(selector, true)) {
       let closest = sameSelector ?
                     element :
@@ -88,6 +91,7 @@ export function hideIfLabelledBy(search, selector, searchSelector = null) {
         fallback();
       }
     }
+    end();
   };
 
   let mo = new MutationObserver(callback);

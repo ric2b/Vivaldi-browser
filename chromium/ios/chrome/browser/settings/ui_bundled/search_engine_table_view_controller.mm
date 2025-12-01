@@ -42,8 +42,12 @@
 // Vivaldi
 #import "app/vivaldi_apptools.h"
 #import "ios/chrome/browser/settings/ui_bundled/settings_root_table_constants.h"
+#import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/common/ui/favicon/favicon_attributes.h"
 #import "ios/chrome/common/ui/favicon/favicon_constants.h"
+#import "ios/favicon/vivaldi_favicon_loader_factory.h"
+#import "ios/favicon/vivaldi_favicon_loader.h"
+#import "ios/ui/settings/search_engine/editor/vivaldi_search_engine_editor_coordinator.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
 using vivaldi::IsVivaldiRunning;
@@ -72,7 +76,13 @@ const char kUmaSelectDefaultSearchEngine[] =
 
 }  // namespace
 
+#if defined(VIVALDI_BUILD)
+@interface SearchEngineTableViewController () <
+  SearchEngineObserving,
+  VivaldiSearchEngineEditorCoordinatorDelegate> {
+#else
 @interface SearchEngineTableViewController () <SearchEngineObserving> {
+#endif // End Vivaldi
   // Whether Settings have been dismissed.
   BOOL _settingsAreDismissed;
 
@@ -81,6 +91,9 @@ const char kUmaSelectDefaultSearchEngine[] =
   // private tab search engine settings button or standard tab search engine
   // settings.
   BOOL _isPrivate;
+  Browser* _browser;
+  // Coordinator for the editor
+  VivaldiSearchEngineEditorCoordinator* _editorCoordinator;
   // End Vivaldi
 
 }
@@ -118,6 +131,10 @@ const char kUmaSelectDefaultSearchEngine[] =
   // FaviconLoader is a keyed service that uses LargeIconService to retrieve
   // favicon images.
   raw_ptr<FaviconLoader> _faviconLoader;
+
+  // Vivaldi
+  raw_ptr<ios::VivaldiFaviconLoader> _vivaldiFaviconLoader;
+  // End Vivaldi
 }
 
 #pragma mark - Initialization
@@ -138,7 +155,10 @@ const char kUmaSelectDefaultSearchEngine[] =
     _regionalCapabilitiesService =
         ios::RegionalCapabilitiesServiceFactory::GetForProfile(profile);
 
-    if (!IsVivaldiRunning()) {
+    if (IsVivaldiRunning()) {
+      _vivaldiFaviconLoader =
+          ios::VivaldiFaviconLoaderFactory::GetForProfile(profile);
+    } else {
     [self setTitle:l10n_util::GetNSString(IDS_IOS_SEARCH_ENGINE_SETTING_TITLE)];
     } // End Vivaldi
 
@@ -275,7 +295,7 @@ const char kUmaSelectDefaultSearchEngine[] =
     [model addSectionWithIdentifier:SectionIdentifierFirstList];
 
     if (!IsVivaldiRunning()) {
-    if (_regionalCapabilitiesService->IsInEeaCountry()) {
+    if (_regionalCapabilitiesService->IsInSearchEngineChoiceScreenRegion()) {
       TableViewTextHeaderFooterItem* header =
           [[TableViewTextHeaderFooterItem alloc] initWithType:ItemTypeHeader];
       header.subtitle =
@@ -339,6 +359,10 @@ const char kUmaSelectDefaultSearchEngine[] =
   _regionalCapabilitiesService = nullptr;
   _faviconLoader = nullptr;
 
+  if (IsVivaldiRunning()) {
+    [self stopSearchEngineEditor];
+  }  // End Vivaldi
+
   _settingsAreDismissed = YES;
 }
 
@@ -352,6 +376,10 @@ const char kUmaSelectDefaultSearchEngine[] =
 }
 
 - (BOOL)shouldHideToolbar {
+  if (IsVivaldiRunning()) {
+    return YES;
+  }  // End Vivaldi
+
   return NO;
 }
 
@@ -360,10 +388,6 @@ const char kUmaSelectDefaultSearchEngine[] =
 }
 
 - (BOOL)editButtonEnabled {
-  if (vivaldi::IsVivaldiRunning()) {
-    return NO;
-  }  // End Vivaldi
-
   // The custom search engine can only be deleted when they are not selected
   // (so in the second section).
   return [self.tableViewModel hasItemForItemType:ItemTypeCustomEngine
@@ -522,13 +546,20 @@ const char kUmaSelectDefaultSearchEngine[] =
 
   if (vivaldi::IsVivaldiRunning()) {
     for (TemplateURL* url : urls) {
-      if (url->is_active() != TemplateURLData::ActiveStatus::kFalse)
-        _firstList.push_back(url);
+      if ((url->is_active() != TemplateURLData::ActiveStatus::kFalse) &&
+          url->starter_pack_id() <= 0) {
+          _firstList.push_back(url);
+      }
     }
   } else {
 
   // Classify TemplateURLs.
   for (TemplateURL* url : urls) {
+    // Starter pack is not supported on iOS.
+    if (url->starter_pack_id() != 0) {
+      continue;
+    }
+
     if ([self isPrepopulatedOrDefaultSearchEngine:url]) {
       _firstList.push_back(url);
     } else {
@@ -568,26 +599,6 @@ const char kUmaSelectDefaultSearchEngine[] =
   if (templateURL->prepopulate_id() > 0) {
     item = [[SettingsSearchEngineItem alloc]
         initWithType:ItemTypePrepopulatedEngine];
-
-    if (IsVivaldiRunning()) {
-      // Try loading from bundle first, if there's no icon found then try
-      // getting the favicon from URL.
-      GURL itemURL = GURL(templateURL->url_ref().ReplaceSearchTerms(
-          TemplateURLRef::SearchTermsArgs(std::u16string()),
-              _templateURLService->search_terms_data()));
-      __weak __typeof(self) weakSelf = self;
-      _faviconLoader->FaviconForIconUrl(
-            templateURL->favicon_url(), kDesiredMediumFaviconSizePt,
-            kMinFaviconSizePt,
-           ^(FaviconAttributes* attributes) {
-             if (attributes && attributes.faviconImage) {
-               [weakSelf faviconReceivedFor:item faviconAttributes:attributes];
-             } else {
-               [self loadFallBackFaviconForItem:item forURL:itemURL];
-             }
-          });
-    } // End Vivaldi
-
   } else {
     item = [[SettingsSearchEngineItem alloc] initWithType:ItemTypeCustomEngine];
   }
@@ -597,7 +608,20 @@ const char kUmaSelectDefaultSearchEngine[] =
 
   // Note(prio@vivaldi.com) - Skip chromium favicon fetching method.
   // Also skip their default search engine check logic.
-  if (!IsVivaldiRunning()) {
+  if (IsVivaldiRunning()) {
+    if ([self isItem:item equalForTemplateURL:[self defaultSearchEngine]]) {
+      [item setAccessoryType:UITableViewCellAccessoryCheckmark];
+    }
+    __weak __typeof(self) weakSelf = self;
+    _vivaldiFaviconLoader->GetFaviconForIconUrl(
+        templateURL->favicon_url(), kDesiredMediumFaviconSizePt,
+        kMinFaviconSizePt, ios::VivaldiFaviconOptions::kCacheFirstThenFresh,
+        ^(FaviconAttributes* attributes) {
+          if (attributes && attributes.faviconImage) {
+            [weakSelf faviconReceivedFor:item faviconAttributes:attributes];
+          }
+        });
+  } else {
   if ([self isItem:item
           equalForTemplateURL:_templateURLService
                                   ->GetDefaultSearchProvider()]) {
@@ -609,10 +633,6 @@ const char kUmaSelectDefaultSearchEngine[] =
       _faviconLoader, ^(FaviconAttributes* attributes) {
         [weakSelf faviconReceivedFor:item faviconAttributes:attributes];
       });
-  } else {
-    if ([self isItem:item equalForTemplateURL:[self defaultSearchEngine]]) {
-      [item setAccessoryType:UITableViewCellAccessoryCheckmark];
-    }
   } // End Vivaldi
 
   return item;
@@ -644,6 +664,14 @@ const char kUmaSelectDefaultSearchEngine[] =
   NSInteger secondSectionIdentifier = [self.tableViewModel
       sectionForSectionIdentifier:SectionIdentifierSecondList];
 
+  // Note: @(prio@vivaldi.com) -
+  // We show all engines including the custom ones in first list.
+  if (IsVivaldiRunning()) {
+     secondSectionIdentifier =
+        [self.tableViewModel
+            sectionForSectionIdentifier:SectionIdentifierFirstList];
+  } // End Vivaldi
+
   // Remove search engines from `_templateURLService` and `_secondList`.
   for (NSIndexPath* path : indexPaths) {
     TableViewItem* item = [self.tableViewModel itemAtIndexPath:path];
@@ -654,7 +682,15 @@ const char kUmaSelectDefaultSearchEngine[] =
     // engine (which cannot be removed as long as it is selected),
     // or prepopulated search engine.
     CHECK_EQ(path.section, secondSectionIdentifier);
+
+    // Note: @(prio@vivaldi.com) -
+    // We show all engines including the custom ones in first list.
+    if (IsVivaldiRunning()) {
+      std::erase(_firstList, engineItem.templateURL);
+    } else {
     std::erase(_secondList, engineItem.templateURL);
+    } // End Vivaldi
+
     _templateURLService->Remove(engineItem.templateURL);
   }
 
@@ -673,6 +709,19 @@ const char kUmaSelectDefaultSearchEngine[] =
             deleteRowsAtIndexPaths:indexPaths
                   withRowAnimation:UITableViewRowAnimationAutomatic];
 
+        if (IsVivaldiRunning()) {
+          // Remove first section if it's empty.
+          if (strongSelf->_firstList.empty() &&
+              [model
+                  hasSectionForSectionIdentifier:SectionIdentifierFirstList]) {
+            NSInteger section =
+                [model sectionForSectionIdentifier:SectionIdentifierFirstList];
+            [model removeSectionWithIdentifier:SectionIdentifierFirstList];
+            [strongSelf.tableView
+                  deleteSections:[NSIndexSet indexSetWithIndex:section]
+                withRowAnimation:UITableViewRowAnimationFade];
+          }
+        } else {
         // Remove second section if it's empty.
         if (strongSelf->_secondList.empty() &&
             [model
@@ -684,6 +733,7 @@ const char kUmaSelectDefaultSearchEngine[] =
                 deleteSections:[NSIndexSet indexSetWithIndex:section]
               withRowAnimation:UITableViewRowAnimationFade];
         }
+      } // End Vivaldi
 
         _updatingBackend = NO;
       }
@@ -694,10 +744,13 @@ const char kUmaSelectDefaultSearchEngine[] =
         }
 
         // Update editing status.
+        if (!IsVivaldiRunning()) {
         if (![strongSelf editButtonEnabled]) {
           [strongSelf setEditing:NO animated:YES];
         }
         [strongSelf updateUIForEditState];
+        } // End Vivaldi
+
       }];
 }
 
@@ -749,9 +802,11 @@ const char kUmaSelectDefaultSearchEngine[] =
 
 #pragma mark - VIVALDI
 - (instancetype)initWithProfile:(ProfileIOS*)profile
-                           isPrivate:(BOOL)isPrivate {
+                        browser:(Browser*)browser
+                      isPrivate:(BOOL)isPrivate {
   self = [self initWithProfile:profile];
   if (self) {
+    _browser = browser;
     _isPrivate = isPrivate;
     [self updateTitleForPage];
     [self reloadData];
@@ -869,18 +924,89 @@ const char kUmaSelectDefaultSearchEngine[] =
   [self reloadData];
 }
 
-// Asynchronously loads favicon for given url. This method is trigerred when
-// no favicon is returned from the bundle.
-- (void)loadFallBackFaviconForItem:(SettingsSearchEngineItem*)item
-                            forURL:(GURL)itemURL {
-  __weak __typeof(self) weakSelf = self;
-  _faviconLoader->FaviconForPageUrl(
-      itemURL, kDesiredMediumFaviconSizePt, kMinFaviconSizePt,
-      /*fallback_to_google_server=*/NO,
-       ^(FaviconAttributes* attributes) {
-        [weakSelf faviconReceivedFor:item
-                   faviconAttributes:attributes];
-      });
+#pragma mark - Context Menu
+
+- (UIContextMenuConfiguration*)tableView:(UITableView*)tableView
+    contextMenuConfigurationForRowAtIndexPath:(NSIndexPath*)indexPath
+                                        point:(CGPoint)point {
+  return [self contextMenuForIndexPath:indexPath];
+}
+
+- (UIContextMenuConfiguration*)contextMenuForIndexPath:(NSIndexPath*)indexPath {
+  TableViewModel* model = self.tableViewModel;
+  TableViewItem* selectedItem = [model itemAtIndexPath:indexPath];
+  SettingsSearchEngineItem* engineItem =
+      base::apple::ObjCCastStrict<SettingsSearchEngineItem>(selectedItem);
+  const TemplateURL* templateURL = engineItem.templateURL;
+
+  BOOL isDefault = NO;
+  for (int i = 0; i < TemplateURLService::kDefaultSearchTypeCount; i++) {
+    const TemplateURL* default_provider =
+        _templateURLService->GetDefaultSearchProvider(
+            TemplateURLService::DefaultSearchType(i));
+    if (templateURL == default_provider) {
+      isDefault = YES;
+      break;
+    }
+  }
+
+  UIAction* editAction = [UIAction
+      actionWithTitle:
+          l10n_util::GetNSString(
+              IDS_VIVALDI_SEARCH_ENGINE_SETTINGS_CONTEXT_EDIT_ENGINE_TITLE)
+                image:nil
+           identifier:nil
+              handler:^(__kindof UIAction* _Nonnull action) {
+                [self showSearchEngineEditorFor:templateURL];
+              }];
+
+  NSMutableArray<UIMenuElement*>* actions =
+      [NSMutableArray arrayWithObject:editAction];
+
+  if (!isDefault) {
+    UIAction* deleteAction = [UIAction
+        actionWithTitle:
+            l10n_util::GetNSString(
+                IDS_VIVALDI_SEARCH_ENGINE_SETTINGS_CONTEXT_DELETE_ENGINE_TITLE)
+                  image:nil
+             identifier:nil
+                handler:^(__kindof UIAction* _Nonnull action) {
+                  [self deleteItemAtIndexPaths:@[ indexPath ]];
+                }];
+    deleteAction.attributes = UIMenuElementAttributesDestructive;
+    [actions addObject:deleteAction];
+  }
+
+  return [UIContextMenuConfiguration
+      configurationWithIdentifier:nil
+                  previewProvider:nil
+                   actionProvider:^UIMenu* _Nullable(
+                       NSArray<UIMenuElement*>* _Nonnull suggestedActions) {
+                     return [UIMenu menuWithTitle:@"" children:actions];
+                   }];
+}
+
+- (void)showSearchEngineEditorFor:(const TemplateURL*)templateURL {
+  _editorCoordinator = [[VivaldiSearchEngineEditorCoordinator alloc]
+      initWithBaseNavigationController:self.navigationController
+                               browser:_browser
+                             isEditing:YES
+                           editingItem:templateURL];
+  _editorCoordinator.delegate = self;
+  [_editorCoordinator start];
+}
+
+- (void)stopSearchEngineEditor {
+  _editorCoordinator.delegate = nil;
+  [_editorCoordinator stop];
+  _editorCoordinator = nil;
+}
+
+#pragma mark - VivaldiSearchEngineEditorCoordinatorDelegate
+
+- (void)searchEngineEditorShouldDismiss:
+    (VivaldiSearchEngineEditorCoordinator*)coordinator {
+  [self stopSearchEngineEditor];
 }
 
 @end

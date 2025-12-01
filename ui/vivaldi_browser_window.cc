@@ -15,10 +15,10 @@
 #include "base/json/json_reader.h"
 #include "base/memory/raw_ref.h"
 #include "base/memory/ref_counted.h"
+#include "base/notimplemented.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
 #include "browser/sessions/vivaldi_session_utils.h"
-#include "browser/vivaldi_runtime_feature.h"
 #include "build/build_config.h"
 #include "chrome/browser/apps/platform_apps/audio_focus_web_contents_observer.h"
 #include "chrome/browser/browser_process.h"
@@ -45,6 +45,7 @@
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_list_observer.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_features.h"
 #include "chrome/browser/ui/browser_window_state.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_context.h"
 #include "chrome/browser/ui/find_bar/find_bar.h"
@@ -61,6 +62,7 @@
 #include "chrome/browser/ui/views/extensions/extension_keybinding_registry_views.h"
 #include "chrome/browser/ui/views/eye_dropper/eye_dropper.h"
 #include "chrome/browser/ui/views/page_action/page_action_icon_view.h"
+#include "chrome/browser/ui/views/page_info/page_info_bubble_specification.h"
 #include "chrome/browser/ui/views/page_info/page_info_bubble_view.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
@@ -345,7 +347,7 @@ class VivaldiBrowserWindow::InterfaceHelper final
 
   autofill::AutofillBubbleBase* ShowSaveAutofillAiDataBubble(
       content::WebContents* web_contents,
-      autofill_ai::SaveOrUpdateAutofillAiDataController* controller)
+      autofill::SaveOrUpdateAutofillAiDataController* controller)
       override {
     return GetAutofillBubbleHandler()->ShowSaveAutofillAiDataBubble(
         web_contents, controller);
@@ -427,7 +429,8 @@ class VivaldiBrowserWindow::InterfaceHelper final
   // ExtensionFunctionDispatcher::Delegate overrides
 
   extensions::WindowController* GetExtensionWindowController() const override {
-    return window_->browser()->extension_window_controller();
+    return extensions::BrowserExtensionWindowController::From(
+        window_->browser());
   }
 
   content::WebContents* GetAssociatedWebContents() const override {
@@ -1778,14 +1781,6 @@ bool VivaldiBrowserWindow::IsToolbarVisible() const {
   return false;
 }
 
-bool VivaldiBrowserWindow::IsDownloadShelfVisible() const {
-  return false;
-}
-
-DownloadShelf* VivaldiBrowserWindow::GetDownloadShelf() {
-  return nullptr;
-}
-
 views::View* VivaldiBrowserWindow::GetTopContainer() {
   return GetContentsView();
 }
@@ -1807,11 +1802,13 @@ void VivaldiBrowserWindow::VivaldiShowWebsiteSettingsAt(
 #endif
   views::BubbleDialogDelegateView* bubble =
       PageInfoBubbleView::CreatePageInfoBubble(
-          nullptr, anchor_rect, GetNativeWindow(), web_contents, url,
-          base::DoNothing(),
-          base::BindOnce(&VivaldiBrowserWindow::OnWebsiteSettingsStatClosed,
-                         weak_ptr_factory_.GetWeakPtr()),
-          false);
+          PageInfoBubbleSpecification::Builder(nullptr, GetNativeWindow(),
+                                               web_contents, url)
+              .AddAnchorRect(anchor_rect)
+              .AddPageInfoClosingCallback(base::BindOnce(
+                  &VivaldiBrowserWindow::OnWebsiteSettingsStatClosed,
+                  weak_ptr_factory_.GetWeakPtr()))
+              .Build());
   bubble->SetAnchorRect(gfx::Rect(pos, gfx::Size()));
   bubble->GetWidget()->Show();
   ReportWebsiteSettingsState(true);
@@ -2343,47 +2340,6 @@ std::unique_ptr<content::EyeDropper> VivaldiBrowserWindow::OpenEyeDropper(
     content::RenderFrameHost* frame,
     content::EyeDropperListener* listener) {
   return ShowEyeDropper(frame, listener);
-}
-
-user_education::FeaturePromoController*
-VivaldiBrowserWindow::GetFeaturePromoControllerImpl() {
-  return nullptr;
-}
-
-bool VivaldiBrowserWindow::IsFeaturePromoQueued(
-    const base::Feature& iph_feature) const {
-  return false;
-}
-
-bool VivaldiBrowserWindow::IsFeaturePromoActive(
-    const base::Feature& iph_feature) const {
-  return false;
-}
-
-user_education::FeaturePromoResult VivaldiBrowserWindow::CanShowFeaturePromo(
-    const base::Feature& iph_feature) const {
-  return user_education::FeaturePromoResult::Failure::kFeatureDisabled;
-}
-
-bool VivaldiBrowserWindow::AbortFeaturePromo(const base::Feature& iph_feature) {
-  return false;
-}
-
-user_education::FeaturePromoHandle
-VivaldiBrowserWindow::CloseFeaturePromoAndContinue(
-    const base::Feature& iph_feature) {
-  return {};
-}
-
-bool VivaldiBrowserWindow::NotifyFeaturePromoFeatureUsed(
-    const base::Feature& feature,
-    FeaturePromoFeatureUsedAction action) {
-  return false;
-}
-
-user_education::DisplayNewBadge VivaldiBrowserWindow::MaybeShowNewBadgeFor(
-    const base::Feature& feature) {
-  return user_education::DisplayNewBadge();
 }
 
 void VivaldiBrowserWindow::DraggableRegionsChanged(

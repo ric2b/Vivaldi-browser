@@ -35,10 +35,15 @@ struct HiddenIndexInfo {
   int eDistinct;           /* Value to return from sqlite3_vtab_distinct() */
   u32 mIn;                 /* Mask of terms that are <col> IN (...) */
   u32 mHandleIn;           /* Terms that vtab will handle as <col> IN (...) */
-  sqlite3_value *aRhs[1];  /* RHS values for constraints. MUST BE LAST
-                           ** because extra space is allocated to hold up
-                           ** to nTerm such values */
+  sqlite3_value *aRhs[FLEXARRAY];  /* RHS values for constraints. MUST BE LAST
+                                   ** Extra space is allocated to hold up
+                                   ** to nTerm such values */
 };
+
+/* Size (in bytes) of a HiddenIndeInfo object sufficient to hold as
+** many as N constraints */
+#define SZ_HIDDENINDEXINFO(N) \
+                  (offsetof(HiddenIndexInfo,aRhs) + (N)*sizeof(sqlite3_value*))
 
 /* Forward declaration of methods */
 static int whereLoopResize(sqlite3*, WhereLoop*, int);
@@ -1104,6 +1109,8 @@ static SQLITE_NOINLINE void constructAutomaticIndex(
   }
 
   /* Construct the Index object to describe this index */
+  assert( nKeyCol <= pTable->nCol + MAX(0, pTable->nCol - BMS + 1) );
+  /* ^-- This guarantees that the number of index columns will fit in the u16 */
   pIdx = sqlite3AllocateIndexObject(pParse->db, nKeyCol+HasRowid(pTable),
                                     0, &zNotUsed);
   if( pIdx==0 ) goto end_auto_index_create;
@@ -1515,8 +1522,8 @@ static sqlite3_index_info *allocateIndexInfo(
   */
   pIdxInfo = sqlite3DbMallocZero(pParse->db, sizeof(*pIdxInfo)
                            + (sizeof(*pIdxCons) + sizeof(*pUsage))*nTerm
-                           + sizeof(*pIdxOrderBy)*nOrderBy + sizeof(*pHidden)
-                           + sizeof(sqlite3_value*)*nTerm );
+                           + sizeof(*pIdxOrderBy)*nOrderBy
+                           + SZ_HIDDENINDEXINFO(nTerm) );
   if( pIdxInfo==0 ){
     sqlite3ErrorMsg(pParse, "out of memory");
     return 0;
@@ -3152,11 +3159,8 @@ static int whereLoopAddBtreeIndex(
     assert( pNew->u.btree.nBtm==0 );
     opMask = WO_EQ|WO_IN|WO_GT|WO_GE|WO_LT|WO_LE|WO_ISNULL|WO_IS;
   }
-  if( pProbe->bUnordered || pProbe->bLowQual ){
-    if( pProbe->bUnordered ) opMask &= ~(WO_GT|WO_GE|WO_LT|WO_LE);
-    if( pProbe->bLowQual && pSrc->fg.isIndexedBy==0 ){ 
-      opMask &= ~(WO_EQ|WO_IN|WO_IS);
-    }
+  if( pProbe->bUnordered ){
+    opMask &= ~(WO_GT|WO_GE|WO_LT|WO_LE);
   }
 
   assert( pNew->u.btree.nEq<pProbe->nColumn );
@@ -3598,6 +3602,7 @@ static int whereUsablePartialIndex(
     if( (!ExprHasProperty(pExpr, EP_OuterON) || pExpr->w.iJoin==iTab)
      && ((jointype & JT_OUTER)==0 || ExprHasProperty(pExpr, EP_OuterON))
      && sqlite3ExprImpliesExpr(pParse, pExpr, pWhere, iTab)
+     && !sqlite3ExprImpliesExpr(pParse, pExpr, pWhere, -1)
      && (pTerm->wtFlags & TERM_VNULL)==0
     ){
       return 1;
@@ -4093,7 +4098,7 @@ static int whereLoopAddBtree(
            && (HasRowid(pTab) || pWInfo->pSelect!=0 || sqlite3FaultSim(700))
         ){
           WHERETRACE(0x200,
-             ("-> %s a covering index according to bitmasks\n",
+             ("-> %s is a covering index according to bitmasks\n",
              pProbe->zName, m==0 ? "is" : "is not"));
           pNew->wsFlags = WHERE_IDX_ONLY | WHERE_INDEXED;
         }
@@ -6710,10 +6715,7 @@ WhereInfo *sqlite3WhereBegin(
   ** field (type Bitmask) it must be aligned on an 8-byte boundary on
   ** some architectures. Hence the ROUND8() below.
   */
-  nByteWInfo = ROUND8P(sizeof(WhereInfo));
-  if( nTabList>1 ){
-    nByteWInfo = ROUND8P(nByteWInfo + (nTabList-1)*sizeof(WhereLevel));
-  }
+  nByteWInfo = SZ_WHEREINFO(nTabList);
   pWInfo = sqlite3DbMallocRawNN(db, nByteWInfo + sizeof(WhereLoop));
   if( db->mallocFailed ){
     sqlite3DbFree(db, pWInfo);
@@ -6930,7 +6932,8 @@ WhereInfo *sqlite3WhereBegin(
     }
 
     /* TUNING:  Assume that a DISTINCT clause on a subquery reduces
-    ** the output size by a factor of 8 (LogEst -30).
+    ** the output size by a factor of 8 (LogEst -30).  Search for
+    ** tag-20250414a to see other cases.
     */
     if( (pWInfo->wctrlFlags & WHERE_WANT_DISTINCT)!=0 ){
       WHERETRACE(0x0080,("nRowOut reduced from %d to %d due to DISTINCT\n",

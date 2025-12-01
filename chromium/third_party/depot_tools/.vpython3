@@ -88,3 +88,10 @@ wheel: <
   name: "infra/python/wheels/hjson-py2_py3"
   version: "version:3.1.0"
 >
+
+# Used by:
+#   tools/win/DebugVisualizers/PRESUBMIT.py
+wheel: <
+  name: "infra/python/wheels/lxml/${vpython_platform}"
+  version: "version:4.9.3"
+>

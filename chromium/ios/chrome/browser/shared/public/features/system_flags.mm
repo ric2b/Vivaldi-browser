@@ -40,6 +40,7 @@ NSString* const kWhatsNewPromoStatus = @"WhatsNewPromoStatus";
 NSString* const kClearApplicationGroup = @"ClearApplicationGroup";
 NSString* const kNextPromoForDisplayOverride = @"NextPromoForDisplayOverride";
 NSString* const kFirstRunRecency = @"FirstRunRecency";
+NSString* const kIgnoreDeviceLocaleConditions = @"IgnoreDeviceLocaleConditions";
 NSString* const kForceExperienceForDeviceSwitcherExperimentalSettings =
     @"ForceExperienceForDeviceSwitcher";
 NSString* const kForceExperienceForShopperExperimentalSettings =
@@ -115,6 +116,11 @@ bool ShouldForceContentNotificationsPromo() {
 bool ShouldForceFeedSigninPromo() {
   return [[NSUserDefaults standardUserDefaults]
       boolForKey:@"ForceFeedSigninPromo"];
+}
+
+bool ShouldIgnoreDeviceLocaleConditions() {
+  return [[NSUserDefaults standardUserDefaults]
+      boolForKey:kIgnoreDeviceLocaleConditions];
 }
 
 bool ShouldIgnoreTileAblationConditions() {

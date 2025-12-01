@@ -233,8 +233,8 @@ export const getMessageForElement = (element: Element): ConsoleViewMessage|undef
  * Combines the error description (essentially the `Error#stack` property value)
  * with the `issueSummary`.
  *
- * @param description the `description` property of the `Error` remote object.
- * @param issueSummary the optional `issueSummary` of the `exceptionMetaData`.
+ * @param description - the `description` property of the `Error` remote object.
+ * @param issueSummary - the optional `issueSummary` of the `exceptionMetaData`.
  * @returns the enriched description.
  * @see https://goo.gle/devtools-reduce-network-noise-design
  */
@@ -653,7 +653,7 @@ export class ConsoleViewMessage implements ConsoleViewportElement {
       const stackTableState =
           expand ? i18nString(UIStrings.stackMessageExpanded) : i18nString(UIStrings.stackMessageCollapsed);
       UI.ARIAUtils.setLabel(contentElement, `${messageElement.textContent} ${stackTableState}`);
-      UI.ARIAUtils.alert(stackTableState);
+      UI.ARIAUtils.LiveAnnouncer.alert(stackTableState);
       UI.ARIAUtils.setExpanded(clickableElement, expand);
       this.traceExpanded = expand;
     };
@@ -705,10 +705,11 @@ export class ConsoleViewMessage implements ConsoleViewportElement {
     clickableElement.tabIndex = -1;
     clickableElement.appendChild(messageElement);
     const stackTraceElement = contentElement.createChild('div');
-    const stackTracePreview = Components.JSPresentationUtils.buildStackTracePreviewContents(
-        target, this.linkifier, {stackTrace, tabStops: undefined, widthConstrained: true});
-    stackTraceElement.appendChild(stackTracePreview.element);
-    for (const linkElement of stackTracePreview.links) {
+    const stackTracePreview = new Components.JSPresentationUtils.StackTracePreviewContent(
+        undefined, target ?? undefined, this.linkifier, {stackTrace, widthConstrained: true});
+    stackTracePreview.markAsRoot();
+    stackTracePreview.show(stackTraceElement);
+    for (const linkElement of stackTracePreview.linkElements) {
       this.selectableChildren.push({element: linkElement, forceSelect: () => linkElement.focus()});
     }
     stackTraceElement.classList.add('hidden-stack-trace');
@@ -982,21 +983,26 @@ export class ConsoleViewMessage implements ConsoleViewportElement {
         async(errorObj: SDK.RemoteObject.RemoteObject, includeCausedByPrefix: boolean): Promise<void> => {
       const error = SDK.RemoteObject.RemoteError.objectAsError(errorObj);
       const [details, cause] = await Promise.all([error.exceptionDetails(), error.cause()]);
-      const errorElementType = includeCausedByPrefix ? 'div' : 'span';
-      let errorElement = this.tryFormatAsError(error.errorStack, details, errorElementType);
+      let errorElement = this.tryFormatAsError(error.errorStack, details);
       if (!errorElement) {
-        errorElement = document.createElement(errorElementType);
+        errorElement = document.createElement('span');
         errorElement.append(this.linkifyStringAsFragment(error.errorStack));
       }
+
       if (includeCausedByPrefix) {
-        errorElement.prepend('Caused by: ');
+        const causeElement = document.createElement('div');
+        causeElement.append('Caused by: ', errorElement);
+        result.appendChild(causeElement);
+      } else {
+        result.appendChild(errorElement);
       }
-      result.appendChild(errorElement);
 
       if (cause && cause.subtype === 'error') {
         await formatErrorStack(cause, /* includeCausedByPrefix */ true);
       } else if (cause && cause.type === 'string') {
-        result.append(`Caused by: ${cause.value}`);
+        const stringCauseElement = document.createElement('div');
+        stringCauseElement.append(`Caused by: ${cause.value}`);
+        result.append(stringCauseElement);
       }
     };
 
@@ -1741,9 +1747,7 @@ export class ConsoleViewMessage implements ConsoleViewportElement {
     return scriptLocationLink;
   }
 
-  private tryFormatAsError(
-      string: string, exceptionDetails?: Protocol.Runtime.ExceptionDetails,
-      formattedResultType: 'div'|'span' = 'span'): HTMLElement|null {
+  private tryFormatAsError(string: string, exceptionDetails?: Protocol.Runtime.ExceptionDetails): HTMLElement|null {
     const runtimeModel = this.message.runtimeModel();
     if (!runtimeModel) {
       return null;
@@ -1763,7 +1767,7 @@ export class ConsoleViewMessage implements ConsoleViewportElement {
     }
 
     const debuggerModel = runtimeModel.debuggerModel();
-    const formattedResult = document.createElement(formattedResultType);
+    const formattedResult = document.createElement('span');
 
     for (let i = 0; i < linkInfos.length; ++i) {
       const newline = i < linkInfos.length - 1 ? '\n' : '';
@@ -2263,12 +2267,12 @@ export class ConsoleTableMessageView extends ConsoleViewMessage {
 
 /**
  * The maximum length before strings are considered too long for syntax highlighting.
- * @const
+ * @constant
  */
 const MaxLengthToIgnoreHighlighter = 10000;
 
 /**
- * @const
+ * @constant
  */
 export const MaxLengthForLinks = 40;
 

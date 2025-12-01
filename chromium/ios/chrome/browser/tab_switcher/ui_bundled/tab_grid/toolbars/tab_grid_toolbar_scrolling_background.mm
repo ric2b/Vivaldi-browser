@@ -8,14 +8,20 @@
 
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/toolbars/tab_grid_toolbar_background.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+// End Vivaldi
+
 @implementation TabGridToolbarScrollingBackground {
   TabGridToolbarBackground* _incognitoTabsBackground;
   TabGridToolbarBackground* _regularTabsBackground;
-  TabGridToolbarBackground* _remoteTabsBackground;
+  TabGridToolbarBackground* _tabGroupsBackground;
 
   // Vivaldi
+  TabGridToolbarBackground* _remoteTabsBackground;
   TabGridToolbarBackground* _closedTabsBackground;
   // End Vivaldi
+
 }
 
 - (instancetype)init {
@@ -36,19 +42,32 @@
         [[TabGridToolbarBackground alloc] initWithFrame:self.frame];
     _regularTabsBackground.translatesAutoresizingMaskIntoConstraints = NO;
 
+    _tabGroupsBackground =
+        [[TabGridToolbarBackground alloc] initWithFrame:self.frame];
+    _tabGroupsBackground.translatesAutoresizingMaskIntoConstraints = NO;
+
+    // Vivaldi
     _remoteTabsBackground =
         [[TabGridToolbarBackground alloc] initWithFrame:self.frame];
     _remoteTabsBackground.translatesAutoresizingMaskIntoConstraints = NO;
 
-    // Vivaldi
     _closedTabsBackground =
         [[TabGridToolbarBackground alloc] initWithFrame:self.frame];
     _closedTabsBackground.translatesAutoresizingMaskIntoConstraints = NO;
     // End Vivaldi
 
     UIStackView* gridsStack = [[UIStackView alloc] initWithArrangedSubviews:@[
-      _incognitoTabsBackground, _regularTabsBackground, _remoteTabsBackground
+      _incognitoTabsBackground, _regularTabsBackground, _tabGroupsBackground
     ]];
+
+    if (vivaldi::IsVivaldiRunning()) {
+      gridsStack = [[UIStackView alloc] initWithArrangedSubviews:@[
+        _incognitoTabsBackground, _regularTabsBackground,
+        _tabGroupsBackground,  _remoteTabsBackground,
+        _closedTabsBackground
+      ]];
+    } // End Vivaldi
+
     gridsStack.translatesAutoresizingMaskIntoConstraints = NO;
     gridsStack.distribution = UIStackViewDistributionEqualSpacing;
 
@@ -66,11 +85,13 @@
       [_regularTabsBackground.widthAnchor
           constraintEqualToAnchor:self.widthAnchor],
 
-      [_remoteTabsBackground.widthAnchor
+      [_tabGroupsBackground.widthAnchor
           constraintEqualToAnchor:self.widthAnchor]
 
       // Vivaldi
-      , [_closedTabsBackground.widthAnchor
+      , [_remoteTabsBackground.widthAnchor
+          constraintEqualToAnchor:self.widthAnchor],
+      [_closedTabsBackground.widthAnchor
           constraintEqualToAnchor:self.widthAnchor]
       // End Vivaldi
     ]];
@@ -94,14 +115,19 @@
       [_regularTabsBackground
           setScrolledToEdgeBackgroundViewHidden:scrolledToEdge];
       break;
-    case TabGridPageRemoteTabs:
     case TabGridPageTabGroups:
+      [_tabGroupsBackground setScrolledOverContentBackgroundViewHidden:
+                                scrolledBackgroundViewHidden];
+      [_tabGroupsBackground
+          setScrolledToEdgeBackgroundViewHidden:scrolledToEdge];
+      break;
+      // Vivaldi
+    case TabGridPageRemoteTabs:
       [_remoteTabsBackground setScrolledOverContentBackgroundViewHidden:
                                  scrolledBackgroundViewHidden];
       [_remoteTabsBackground
           setScrolledToEdgeBackgroundViewHidden:scrolledToEdge];
       break;
-      // Vivaldi
     case TabGridPageClosedTabs:
       [_closedTabsBackground setScrolledOverContentBackgroundViewHidden:
                                  scrolledBackgroundViewHidden];

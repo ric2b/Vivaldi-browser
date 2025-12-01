@@ -3940,9 +3940,9 @@ g.test('tanInterval')
 // prettier-ignore
 const kTanhIntervalCases = {
   f32: [
-    { input: -1, expected: [reinterpretU64AsF64(0xbfe8_5efd_1000_0000n), reinterpretU64AsF64(0xbfe8_5ef8_9000_0000n)] },  // ~-0.7615...
-    { input: 0, expected: [reinterpretU64AsF64(0xbe8c_0000_b000_0000n), reinterpretU64AsF64(0x3e8c_0000_b000_0000n)] },  // ~0
-    { input: 1, expected: [reinterpretU64AsF64(0x3fe8_5ef8_9000_0000n), reinterpretU64AsF64(0x3fe8_5efd_1000_0000n)] },  // ~0.7615...
+    { input: -1, expected: [reinterpretU64AsF64(0xbfe8_5f0f_b8b_588e3n), reinterpretU64AsF64(0xbfe8_5ee5_a74a_771dn)] },  // ~-0.7615...
+    { input: 0, expected: [reinterpretU64AsF64(0xbee4_f8b5_88e3_68f1n), reinterpretU64AsF64(0x3ee4_f8b5_88e3_68f1n)] },  // ~0
+    { input: 1, expected: [reinterpretU64AsF64(0x3fe8_5ee5_a74a_771dn), reinterpretU64AsF64(0x3fe8_5f0f_b8b5_88e3n)] },  // ~0.7615...
   ] as ScalarToIntervalCase[],
   f16: [
     { input: -1, expected: [reinterpretU64AsF64(0xbfe8_9600_0000_0000n), reinterpretU64AsF64(0xbfe8_2e00_0000_0000n)] },  // ~-0.7615...
@@ -3974,6 +3974,7 @@ g.test('tanhInterval')
     const trait = FP[t.params.trait];
     const expected = trait.toInterval(t.params.expected);
     const got = trait.tanhInterval(t.params.input);
+
     t.expect(
       objectEquals(expected, got),
       `${t.params.trait}.tanhInterval(${t.params.input}) returned ${got}. Expected ${expected}`

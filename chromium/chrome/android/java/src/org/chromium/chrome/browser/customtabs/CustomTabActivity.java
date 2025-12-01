@@ -8,6 +8,8 @@ import static androidx.annotation.VisibleForTesting.PRIVATE;
 import static androidx.browser.customtabs.CustomTabsIntent.COLOR_SCHEME_DARK;
 import static androidx.browser.customtabs.CustomTabsIntent.COLOR_SCHEME_LIGHT;
 
+import static org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarButtonVariant.PRICE_INSIGHTS;
+
 import android.app.Activity;
 import android.app.ActivityManager;
 import android.content.Context;
@@ -50,13 +52,13 @@ import org.chromium.chrome.browser.customtabs.content.CustomTabActivityNavigatio
 import org.chromium.chrome.browser.customtabs.content.CustomTabActivityTabProvider;
 import org.chromium.chrome.browser.customtabs.features.CustomTabNavigationBarController;
 import org.chromium.chrome.browser.customtabs.features.toolbar.CustomTabHistoryIphController;
+import org.chromium.chrome.browser.customtabs.features.toolbar.CustomTabToolbar;
 import org.chromium.chrome.browser.firstrun.FirstRunSignInProcessor;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.history.HistoryManager;
 import org.chromium.chrome.browser.history.HistoryManagerUtils;
 import org.chromium.chrome.browser.history.HistoryTabHelper;
 import org.chromium.chrome.browser.infobar.InfoBarContainer;
-import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
 import org.chromium.chrome.browser.night_mode.NightModeStateProvider;
 import org.chromium.chrome.browser.page_info.ChromePageInfo;
 import org.chromium.chrome.browser.page_info.ChromePageInfoHighlight;
@@ -80,6 +82,8 @@ import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
 import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
+import org.chromium.chrome.browser.dom_distiller.DomDistillerTabUtils;
+import org.chromium.components.dom_distiller.core.DomDistillerUrlUtils;
 
 import org.vivaldi.browser.bookmarks.VivaldiBookmarkAddEditActivity;
 
@@ -97,20 +101,11 @@ public class CustomTabActivity extends BaseCustomTabActivity {
 
     private CustomTabsOpenTimeRecorder mOpenTimeRecorder;
 
-    /**
-     * The last MotionEvent object blocked due to the activity being in paused state. We're
-     * interested in MotionEvent#ACTION_DOWN which is likely the very first event received when
-     * multi-window mode is entered. We inject this one after the activity is resumed (or it regains
-     * the focus) in order to recover the corresponding user gesture which otherwise would have gone
-     * missing.
-     */
-    private MotionEvent mBlockedEvent;
-
     private static final boolean sBlockTouchesDuringEnterAnimation =
             ChromeFeatureList.sCctBlockTouchesDuringEnterAnimation.isEnabled();
     private boolean mIsEnterAnimationCompleted;
     private @Nullable AuxiliarySearchController mAuxiliarySearchController;
-
+    private CustomTabActivityTimeoutHandler mTimeoutHandler;
     private final CustomTabActivityTabProvider.Observer mTabChangeObserver =
             new CustomTabActivityTabProvider.Observer() {
                 @Override
@@ -179,10 +174,12 @@ public class CustomTabActivity extends BaseCustomTabActivity {
     @Override
     public void performPreInflationStartup() {
         super.performPreInflationStartup();
+        var savedInstanceState = getSavedInstanceState();
+        mTimeoutHandler = new CustomTabActivityTimeoutHandler(this::finish, getIntent());
+
         // If the activity is being recreated, #onEnterAnimationComplete() doesn't get called.
         // So, we need to manually set mIsEnterAnimationCompleted to true. See crbug.com/399194973.
         if (sBlockTouchesDuringEnterAnimation) {
-            var savedInstanceState = getSavedInstanceState();
             if (savedInstanceState != null) {
                 mIsEnterAnimationCompleted = true;
             }
@@ -205,6 +202,8 @@ public class CustomTabActivity extends BaseCustomTabActivity {
                         && mEdgeToEdgeControllerSupplier.get().isPageOptedIntoEdgeToEdge();
         CustomTabNavigationBarController.update(
                 getWindow(), getIntentDataProvider(), this, drawEdgeToEdge);
+
+        mTimeoutHandler.restoreInstanceState(savedInstanceState);
     }
 
     @Override
@@ -333,6 +332,12 @@ public class CustomTabActivity extends BaseCustomTabActivity {
     }
 
     @Override
+    public void onResume() {
+        if (mTimeoutHandler != null) mTimeoutHandler.onResume();
+        super.onResume();
+    }
+
+    @Override
     public void onPause() {
         super.onPause();
 
@@ -345,7 +350,14 @@ public class CustomTabActivity extends BaseCustomTabActivity {
     }
 
     @Override
+    public void onSaveInstanceState(@NonNull Bundle outState) {
+        if (mTimeoutHandler != null) mTimeoutHandler.onSaveInstanceState(outState);
+        super.onSaveInstanceState(outState);
+    }
+
+    @Override
     protected void onUserLeaveHint() {
+        if (mTimeoutHandler != null) mTimeoutHandler.onUserLeaveHint();
         if (mOpenTimeRecorder != null) mOpenTimeRecorder.onUserLeaveHint();
         super.onUserLeaveHint();
     }
@@ -419,6 +431,10 @@ public class CustomTabActivity extends BaseCustomTabActivity {
             return true;
         } else if (id == R.id.price_insights_menu_id) {
             getBaseCustomTabRootUiCoordinator().runPriceInsightsAction();
+            RecordUserAction.record("CustomTabsMenuPriceInsights");
+            CustomTabToolbar toolbar = findViewById(R.id.toolbar);
+            toolbar.maybeRecordHistogramForAdaptiveToolbarButtonFallbackUi(PRICE_INSIGHTS);
+            return true;
         } else if (id == R.id.open_history_menu_id) {
             // The menu is visible only when the app-specific history is enabled. Assert that.
             assert HistoryManager.isAppSpecificHistoryEnabled();
@@ -433,7 +449,15 @@ public class CustomTabActivity extends BaseCustomTabActivity {
                 historyIph.notifyUserEngaged();
             }
             return true;
+        } else if (id == R.id.simplified_view_id || // Vivaldi VAB-11445
+                id == R.id.simplified_view_id_check) {
+            Tab tab = getTabModelSelector().getCurrentTab();
+            if (DomDistillerUrlUtils.isDistilledPage(tab.getUrl())) {
+                mBackPressManager.getCallback().handleOnBackPressed();
+            } else {
+                DomDistillerTabUtils.distillCurrentPageAndView(tab.getWebContents());
         }
+        } // End Vivaldi VAB-11445
         return super.onMenuOrKeyboardAction(id, fromMenu, triggeringMotion);
     }
 
@@ -445,7 +469,7 @@ public class CustomTabActivity extends BaseCustomTabActivity {
         if (sBlockTouchesDuringEnterAnimation && !mIsEnterAnimationCompleted) {
             return true;
         }
-        if (sPreventTouches && shouldPreventTouch(ev)) {
+        if (sPreventTouches && shouldPreventTouch()) {
             // Discard the events which may be trickling down from an overlay activity above.
             return true;
         }
@@ -465,26 +489,9 @@ public class CustomTabActivity extends BaseCustomTabActivity {
     }
 
     @VisibleForTesting(otherwise = PRIVATE)
-    boolean shouldPreventTouch(MotionEvent ev) {
+    boolean shouldPreventTouch() {
         if (ApplicationStatus.getStateForActivity(this) == ActivityState.RESUMED) return false;
-        mBlockedEvent = ev;
         return true;
-    }
-
-    @Override
-    public void onWindowFocusChanged(boolean hasFocus) {
-        super.onWindowFocusChanged(hasFocus);
-        // No need to do the following from Q and onward where multi-resume state is supported
-        // in split screen mode.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) return;
-
-        if (hasFocus
-                && mBlockedEvent != null
-                && MultiWindowUtils.getInstance().isInMultiWindowMode(this)) {
-            mBlockedEvent.setAction(MotionEvent.ACTION_DOWN);
-            super.dispatchTouchEvent(mBlockedEvent); // Inject the blocked event
-            mBlockedEvent = null;
-        }
     }
 
     /**

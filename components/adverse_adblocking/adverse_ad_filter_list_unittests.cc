@@ -9,6 +9,7 @@
 #include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/browser/password_manager/account_password_store_factory.h"
 #include "chrome/browser/password_manager/profile_password_store_factory.h"
+#include "chrome/browser/signin/chrome_signin_client.h"
 #include "chrome/test/base/testing_browser_process.h"
 
 #include "components/adverse_adblocking/adverse_ad_filter_list_factory.h"
@@ -35,9 +36,9 @@ class VivaldiSubresourceFilterTest : public AdverseAdFilterTestHarness {
     SystemNetworkContextManager::RegisterPrefs(local_state_.registry());
     ChromeContentBrowserClient::RegisterLocalStatePrefs(
         local_state_.registry());
+    ChromeSigninClient::RegisterLocalStatePrefs(local_state_.registry());
     safe_browsing::RegisterLocalStatePrefs(local_state_.registry());
     vivaldi::RegisterLocalStatePrefs(local_state_.registry());
-    TestingBrowserProcess::GetGlobal()->SetLocalState(&local_state_);
     AdverseAdFilterTestHarness::SetUp();
 
     VivaldiSubresourceFilterAdblockingThrottleManager::
@@ -51,7 +52,6 @@ class VivaldiSubresourceFilterTest : public AdverseAdFilterTestHarness {
                                        ::password_manager::TestPasswordStore>));
   }
   void TearDown() override {
-    TestingBrowserProcess::GetGlobal()->SetLocalState(nullptr);
     AdverseAdFilterTestHarness::TearDown();
     browser_content_client_.reset();
     content::SetContentClient(NULL);

@@ -31,7 +31,7 @@ provides two NonClientFrameView subclasses - GlassBrowserFrameView and
 OpaqueBrowserFrameView which are swapped in the BrowserFrame's NonClientView
 when DWM is toggled.
 
-Browser View
+## Browser View
 
 The BrowserView object contains all of the elements that are common between the
 frames that are part of the presentation of the browser window - the tab strip,

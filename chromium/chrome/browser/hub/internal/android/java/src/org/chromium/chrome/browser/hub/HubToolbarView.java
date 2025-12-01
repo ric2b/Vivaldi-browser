@@ -4,11 +4,9 @@
 
 package org.chromium.chrome.browser.hub;
 
-
 import static org.chromium.build.NullUtil.assumeNonNull;
 import static org.chromium.chrome.browser.hub.HubAnimationConstants.PANE_COLOR_BLEND_ANIMATION_DURATION_MS;
 import static org.chromium.chrome.browser.hub.HubAnimationConstants.PANE_FADE_ANIMATION_DURATION_MS;
-import static org.chromium.chrome.browser.hub.HubAnimationConstants.getPaneColorBlendInterpolator;
 import static org.chromium.ui.util.ColorBlendAnimationFactory.createMultiColorBlendAnimation;
 
 import android.animation.Animator;
@@ -21,17 +19,14 @@ import android.content.res.Resources;
 import android.graphics.ColorFilter;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffColorFilter;
-import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Handler;
 import android.support.annotation.Px;
 import android.util.AttributeSet;
 import android.view.Gravity;
-import android.view.TouchDelegate;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
@@ -42,34 +37,40 @@ import androidx.annotation.ColorInt;
 import androidx.annotation.StringRes;
 import androidx.appcompat.content.res.AppCompatResources;
 import androidx.core.widget.ImageViewCompat;
-import androidx.core.widget.TextViewCompat;
 
 import com.google.android.material.tabs.TabLayout;
 import com.google.android.material.tabs.TabLayout.OnTabSelectedListener;
 import com.google.android.material.tabs.TabLayout.Tab;
 
 import org.chromium.base.Callback;
+import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.hub.HubToolbarProperties.PaneButtonLookup;
-import org.chromium.components.omnibox.OmniboxFeatures;
+import org.chromium.chrome.browser.toolbar.menu_button.MenuButton;
 import org.chromium.ui.animation.AnimationHandler;
+import org.chromium.ui.interpolators.Interpolators;
 
 import java.util.List;
 
 // Vivaldi
+import static org.chromium.build.NullUtil.assertNonNull;
 import android.widget.RelativeLayout;
+import org.chromium.build.BuildConfig;
 
 /** Toolbar for the Hub. May contain a single or multiple rows, of which this view is the parent. */
 @NullMarked
 public class HubToolbarView extends RelativeLayout { // Vivaldi
-    private Button mActionButton;
     private TabLayout mPaneSwitcher;
     private LinearLayout mMenuButtonContainer;
     private ImageButton mMenuButton;
+    private MenuButton mMenuButtonWrapper;
     private View mSearchBoxLayout;
     private EditText mSearchBoxTextView;
     private ImageView mSearchLoupeView;
+    private ImageButton mBackButton;
+    private @Nullable View mSpacer;
     private FrameLayout mPaneSwitcherCard;
 
     private Callback<Integer> mToolbarOverviewColorSetter;
@@ -78,6 +79,7 @@ public class HubToolbarView extends RelativeLayout { // Vivaldi
     private boolean mApplyDelayForSearchBoxAnimation;
     private final AnimationHandler mHubSearchAnimatorHandler;
     private final Handler mHandler;
+    private @Nullable ObservableSupplier<Boolean> mXrSpaceModeObservableSupplier;
 
     /** Default {@link LinearLayout} constructor called by inflation. */
     public HubToolbarView(Context context, AttributeSet attributeSet) {
@@ -90,7 +92,6 @@ public class HubToolbarView extends RelativeLayout { // Vivaldi
     @Override
     protected void onFinishInflate() {
         super.onFinishInflate();
-        mActionButton = findViewById(R.id.toolbar_action_button);
         mPaneSwitcher = findViewById(R.id.pane_switcher);
         ViewGroup slidingTabIndicator = (ViewGroup) mPaneSwitcher.getChildAt(0);
         // Unclip children here to get unbounded ripple to work.
@@ -98,47 +99,28 @@ public class HubToolbarView extends RelativeLayout { // Vivaldi
         slidingTabIndicator.setClipChildren(false);
         mMenuButtonContainer = findViewById(R.id.menu_button_container);
         mMenuButton = mMenuButtonContainer.findViewById(R.id.menu_button);
+        mMenuButtonWrapper = mMenuButtonContainer.findViewById(R.id.menu_button_wrapper);
         mPaneSwitcherCard = findViewById(R.id.pane_switcher_card);
 
         // SearchBoxLayout is GONE by default, and enabled via the mediator.
         mSearchBoxLayout = findViewById(R.id.search_box);
         mSearchBoxTextView = findViewById(R.id.search_box_text);
         mSearchLoupeView = findViewById(R.id.search_loupe);
-
-        setTouchDelegate(getToolbarActionButtonDelegate());
+        mBackButton = findViewById(R.id.toolbar_back_button);
+        mSpacer = findViewById(R.id.margin_spacer);
+        updateSpacerVisibility();
     }
 
     void setMenuButtonVisible(boolean visible) {
         // Note(david@vivaldi.com): In Vivaldi the menu button is part of the top toolbar layout.
         // Due to this we must access it via its parent.
-        mMenuButtonContainer =
-                ((View) getParent().getParent()).findViewById(R.id.menu_button_container);
-        mMenuButtonContainer.setVisibility(visible ? View.VISIBLE : View.INVISIBLE);
-    }
-
-    void setActionButton(@Nullable FullButtonData buttonData) {
-        ApplyButtonData.apply(buttonData, mActionButton);
-        mActionButton.setText(null);
-        mActionButton.setCompoundDrawablePadding(0);
-
-        if (HubUtils.isGtsUpdateEnabled()) {
-            int paddingLR =
-                    getResources()
-                            .getDimensionPixelSize(R.dimen.hub_toolbar_action_button_padding_lr);
-            mActionButton.setPadding(paddingLR, 0, paddingLR, 0);
-
-            int buttonSize =
-                    getResources().getDimensionPixelSize(R.dimen.hub_toolbar_action_button_size);
-            FrameLayout.LayoutParams params =
-                    (FrameLayout.LayoutParams) mActionButton.getLayoutParams();
-            params.leftMargin =
-                    getResources()
-                            .getDimensionPixelSize(R.dimen.hub_toolbar_action_button_left_margin);
-            params.width = buttonSize;
-            params.height = buttonSize;
-            params.gravity = Gravity.START | Gravity.CENTER_VERTICAL;
-            mActionButton.setLayoutParams(params);
-        }
+        if (BuildConfig.IS_VIVALDI) {
+            View menuButtonContainer
+                    = ((View) getParent().getParent()).findViewById(R.id.menu_button_container);
+            assertNonNull(menuButtonContainer);
+            menuButtonContainer.setVisibility(visible ? View.VISIBLE : View.INVISIBLE);
+        } else
+        mMenuButtonWrapper.setVisibility(visible ? View.VISIBLE : View.INVISIBLE);
     }
 
     void setPaneSwitcherButtonData(
@@ -238,9 +220,7 @@ public class HubToolbarView extends RelativeLayout { // Vivaldi
 
     void setColorMixer(HubColorMixer mixer) {
         registerColorBlends(mixer);
-        if (OmniboxFeatures.sAndroidHubSearch.isEnabled()) {
-            registerSearchBoxColorBlends(mixer);
-        }
+        registerSearchBoxColorBlends(mixer);
     }
 
     private void registerColorBlends(HubColorMixer mixer) {
@@ -250,25 +230,8 @@ public class HubToolbarView extends RelativeLayout { // Vivaldi
         mixer.registerBlend(
                 new SingleHubViewColorBlend(
                         PANE_COLOR_BLEND_ANIMATION_DURATION_MS,
-                        colorScheme -> HubColors.getBackgroundColor(context, colorScheme),
+                        colorScheme -> getBackgroundColor(context, colorScheme),
                         this::setBackgroundColor));
-
-        if (isGtsUpdateEnabled) {
-            mixer.registerBlend(
-                    new SingleHubViewColorBlend(
-                            PANE_COLOR_BLEND_ANIMATION_DURATION_MS,
-                            colorScheme ->
-                                    HubColors.getToolbarActionButtonIconColor(context, colorScheme),
-                            color -> updateActionButtonIconColorInternal(context, color)));
-
-            mixer.registerBlend(
-                    new SingleHubViewColorBlend(
-                            PANE_COLOR_BLEND_ANIMATION_DURATION_MS,
-                            colorScheme ->
-                                    HubColors.getToolbarActionButtonBackgroundColor(
-                                            context, colorScheme),
-                            this::updateActionButtonColorInternal));
-        }
 
         mixer.registerBlend(
                 new SingleHubViewColorBlend(
@@ -307,7 +270,7 @@ public class HubToolbarView extends RelativeLayout { // Vivaldi
                                                 interpolatedIconColor,
                                                 interpolatedSelectedIconColor);
                                     });
-                    animation.setInterpolator(getPaneColorBlendInterpolator());
+                    animation.setInterpolator(Interpolators.LINEAR_INTERPOLATOR);
                     return animation;
                 };
         mixer.registerBlend(multiColorBlend);
@@ -317,12 +280,19 @@ public class HubToolbarView extends RelativeLayout { // Vivaldi
                         PANE_COLOR_BLEND_ANIMATION_DURATION_MS,
                         colorScheme -> HubColors.getIconColor(context, colorScheme),
                         interpolatedColor -> {
-                            if (!isGtsUpdateEnabled) {
-                                updateActionButtonIconColorInternal(context, interpolatedColor);
-                            }
                             ColorStateList menuButtonColor =
                                     ColorStateList.valueOf(interpolatedColor);
                             ImageViewCompat.setImageTintList(mMenuButton, menuButtonColor);
+                        }));
+
+        mixer.registerBlend(
+                new SingleHubViewColorBlend(
+                        PANE_COLOR_BLEND_ANIMATION_DURATION_MS,
+                        colorScheme -> HubColors.getIconColor(context, colorScheme),
+                        interpolatedColor -> {
+                            ColorStateList backButtonColor =
+                                    HubColors.getButtonColorStateList(context, interpolatedColor);
+                            ImageViewCompat.setImageTintList(mBackButton, backButtonColor);
                         }));
 
         // We don't want to pass a method reference. Lambdas will ensure we run the most recent
@@ -384,15 +354,6 @@ public class HubToolbarView extends RelativeLayout { // Vivaldi
         ColorStateList selectableIconList =
                 HubColors.getSelectableIconList(selectedIconColor, iconColor);
         mPaneSwitcher.setTabIconTint(selectableIconList);
-    }
-
-    private void updateActionButtonIconColorInternal(Context context, @ColorInt int color) {
-        ColorStateList actionButtonColor = HubColors.getActionButtonColor(context, color);
-        TextViewCompat.setCompoundDrawableTintList(mActionButton, actionButtonColor);
-    }
-
-    private void updateActionButtonColorInternal(@ColorInt int color) {
-        mActionButton.setBackgroundTintList(ColorStateList.valueOf(color));
     }
 
     private void updateSearchLoupeColor(@ColorInt int color) {
@@ -461,14 +422,42 @@ public class HubToolbarView extends RelativeLayout { // Vivaldi
         mSearchLoupeView.setOnClickListener(v -> searchBarListener.run());
     }
 
+    /**
+     * In the event there is no back button and the GTS update is enabled, we need to show a spacer
+     * view so that that new tab button is vertically aligned with the tabs in the tab switcher.
+     * Once the back button launches we can remove this spacer.
+     */
+    private void updateSpacerVisibility() {
+        if (mSpacer == null || !HubUtils.isGtsUpdateEnabled()) return;
+
+        boolean shouldShowSpacer = mBackButton.getVisibility() == View.GONE;
+        mSpacer.setVisibility(shouldShowSpacer ? View.VISIBLE : View.GONE);
+    }
+
+    void setBackButtonVisible(boolean visible) {
+        if (!ChromeFeatureList.sHubBackButton.isEnabled()) {
+            updateSpacerVisibility();
+            return;
+        }
+
+        mBackButton.setVisibility(visible ? View.VISIBLE : View.GONE);
+        updateSpacerVisibility();
+    }
+
+    void setBackButtonEnabled(boolean enabled) {
+        mBackButton.setEnabled(enabled);
+    }
+
+    void setBackButtonListener(Runnable backButtonListener) {
+        mBackButton.setOnClickListener(v -> backButtonListener.run());
+    }
+
     void setToolbarColorOverviewListener(Callback<Integer> colorSetter) {
         mToolbarOverviewColorSetter = colorSetter;
     }
 
     void updateIncognitoElements(boolean isIncognito) {
-        if (OmniboxFeatures.sAndroidHubSearch.isEnabled()) {
-            updateSearchBoxElements(isIncognito);
-        }
+        updateSearchBoxElements(isIncognito);
     }
 
     private @Nullable View getButtonView(int index) {
@@ -528,26 +517,6 @@ public class HubToolbarView extends RelativeLayout { // Vivaldi
         return slideFadeHubSearchBoxAnimator;
     }
 
-    private TouchDelegate getToolbarActionButtonDelegate() {
-        Rect rect = new Rect();
-        mActionButton.getHitRect(rect);
-
-        int touchSize =
-                mActionButton
-                        .getContext()
-                        .getResources()
-                        .getDimensionPixelSize(R.dimen.min_touch_target_size);
-        int halfWidthDelta = Math.max((touchSize - mActionButton.getWidth()) / 2, 0);
-        int halfHeightDelta = Math.max((touchSize - mActionButton.getHeight()) / 2, 0);
-
-        rect.left -= halfWidthDelta;
-        rect.right += halfWidthDelta;
-        rect.top -= halfHeightDelta;
-        rect.bottom += halfHeightDelta;
-
-        return new TouchDelegate(rect, mActionButton);
-    }
-
     private GradientDrawable buildBackgroundDrawableForTab() {
         int radius = getResources().getDimensionPixelSize(R.dimen.hub_pane_switcher_tab_radius);
         GradientDrawable hoverDrawable = new GradientDrawable();
@@ -555,5 +524,16 @@ public class HubToolbarView extends RelativeLayout { // Vivaldi
         hoverDrawable.setShape(GradientDrawable.RECTANGLE);
         hoverDrawable.setCornerRadius(radius);
         return hoverDrawable;
+    }
+
+    private @ColorInt int getBackgroundColor(Context context, @HubColorScheme int colorScheme) {
+        boolean isXrFullSpaceMode =
+                mXrSpaceModeObservableSupplier != null && mXrSpaceModeObservableSupplier.get();
+        return HubColors.getBackgroundColor(context, colorScheme, isXrFullSpaceMode);
+    }
+
+    public void setXrSpaceModeObservableSupplier(
+            @Nullable ObservableSupplier<Boolean> xrSpaceModeObservableSupplier) {
+        mXrSpaceModeObservableSupplier = xrSpaceModeObservableSupplier;
     }
 }

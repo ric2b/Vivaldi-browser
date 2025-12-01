@@ -20,6 +20,7 @@
 #include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
 #include "base/no_destructor.h"
+#include "base/notimplemented.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/current_thread.h"
 #include "base/task/thread_pool.h"
@@ -53,6 +54,7 @@
 #include "content/public/browser/web_drag_dest_delegate.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
+#include "ipc/constants.mojom.h"
 #include "net/base/filename_util.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/mojom/drag/drag.mojom.h"
@@ -693,7 +695,7 @@ WebContentsViewAura::WebContentsViewAura(
       delegate_(std::move(delegate)),
       drag_dest_delegate_(nullptr),
       current_rvh_for_drag_(ChildProcessHost::kInvalidUniqueID,
-                            MSG_ROUTING_NONE),
+                            IPC::mojom::kRoutingIdNone),
       drag_in_progress_(false),
       init_rwhv_with_null_parent_for_testing_(false) {}
 
@@ -1099,9 +1101,6 @@ void WebContentsViewAura::OnCapturerCountChanged() {
 }
 
 void WebContentsViewAura::FullscreenStateChanged(bool is_fullscreen) {}
-
-void WebContentsViewAura::UpdateWindowControlsOverlay(
-    const gfx::Rect& bounding_rect) {}
 
 BackForwardTransitionAnimationManager*
 WebContentsViewAura::GetBackForwardTransitionAnimationManager() {
@@ -1561,8 +1560,12 @@ aura::client::DragUpdateInfo WebContentsViewAura::OnDragUpdated(
 }
 
 void WebContentsViewAura::OnDragExited() {
-  if (web_contents_->ShouldIgnoreInputEvents())
+  if (web_contents_->ShouldIgnoreInputEvents()) {
+    // Don't compute the results of exiting, but clean up the flag to avoid
+    // hanging the renderer process. See crbug.com/434130454.
+    drag_in_progress_ = false;
     return;
+  }
   CompleteDragExit();
 }
 
@@ -1588,9 +1591,9 @@ void WebContentsViewAura::CompleteDragExit() {
   current_drag_data_.reset();
 }
 
-void WebContentsViewAura::OnDropExit(
-    base::ScopedClosureRunner end_drag_runner) {
+void WebContentsViewAura::OnDropExit() {
   drag_in_progress_ = false;
+  auto end_drag_runner = std::move(end_drag_runner_);
 }
 
 // PerformDropCallback() is called once the user releases the mouse button
@@ -1645,11 +1648,10 @@ void WebContentsViewAura::PerformDropCallback(
     std::unique_ptr<ui::OSExchangeData> data,
     base::WeakPtr<RenderWidgetHostViewBase> target,
     std::optional<gfx::PointF> transformed_pt) {
-  // Exit callback to make sure |drag_in_pregress_| is flipped on exit and
+  // Exit callback to make sure |drag_in_progress_| is flipped on exit and
   // |end_drag_runner_| is run after OnGotVirtualFilesAsTempFiles finishes.
   base::ScopedClosureRunner drop_exit_cleanup(base::BindOnce(
-      &WebContentsViewAura::OnDropExit, weak_ptr_factory_.GetWeakPtr(),
-      std::move(end_drag_runner_)));
+      &WebContentsViewAura::OnDropExit, weak_ptr_factory_.GetWeakPtr()));
 
   if (!target) {
     return;

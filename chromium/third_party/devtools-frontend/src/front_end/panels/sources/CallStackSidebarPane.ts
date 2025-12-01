@@ -37,7 +37,7 @@ import type * as Protocol from '../../generated/protocol.js';
 import * as Bindings from '../../models/bindings/bindings.js';
 import * as Persistence from '../../models/persistence/persistence.js';
 import * as SourceMapScopes from '../../models/source_map_scopes/source_map_scopes.js';
-import type * as Workspace from '../../models/workspace/workspace.js';
+import * as Workspace from '../../models/workspace/workspace.js';
 import * as IconButton from '../../ui/components/icon_button/icon_button.js';
 import * as UI from '../../ui/legacy/legacy.js';
 import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
@@ -241,34 +241,20 @@ export class CallStackSidebarPane extends UI.View.SimpleView implements UI.Conte
       UI.Tooltip.Tooltip.install(this.callFrameWarningsElement, Array.from(uniqueWarnings).join('\n'));
     }
 
-    let debuggerModel = details.debuggerModel;
-    let asyncStackTraceId = details.asyncStackTraceId;
-    let asyncStackTrace: Protocol.Runtime.StackTrace|undefined|null = details.asyncStackTrace;
     let previousStackTrace: Protocol.Runtime.CallFrame[]|SDK.DebuggerModel.CallFrame[] = details.callFrames;
-    for (let {maxAsyncStackChainDepth} = this; maxAsyncStackChainDepth > 0; --maxAsyncStackChainDepth) {
-      if (!asyncStackTrace) {
-        if (!asyncStackTraceId) {
-          break;
-        }
-        if (asyncStackTraceId.debuggerId) {
-          const dm = await SDK.DebuggerModel.DebuggerModel.modelForDebuggerId(asyncStackTraceId.debuggerId);
-          if (!dm) {
-            break;
-          }
-          debuggerModel = dm;
-        }
-        asyncStackTrace = await debuggerModel.fetchAsyncStackTrace(asyncStackTraceId);
-        if (!asyncStackTrace) {
-          break;
-        }
-      }
+    let {maxAsyncStackChainDepth} = this;
+    let asyncStackTrace: Protocol.Runtime.StackTrace|null = null;
+    for await (asyncStackTrace of details.debuggerModel.iterateAsyncParents(details)) {
       const title = UI.UIUtils.asyncStackTraceLabel(asyncStackTrace.description, previousStackTrace);
       items.push(...await Item.createItemsForAsyncStack(
-          title, debuggerModel, asyncStackTrace.callFrames, this.locationPool, this.refreshItem.bind(this)));
+          title, details.debuggerModel, asyncStackTrace.callFrames, this.locationPool, this.refreshItem.bind(this)));
       previousStackTrace = asyncStackTrace.callFrames;
-      asyncStackTraceId = asyncStackTrace.parentId;
-      asyncStackTrace = asyncStackTrace.parent;
+
+      if (--maxAsyncStackChainDepth <= 0) {
+        break;
+      }
     }
+
     this.showMoreMessageElement.classList.toggle('hidden', !asyncStackTrace);
     this.items.replaceAll(items);
     for (const item of this.items) {
@@ -494,7 +480,7 @@ export class CallStackSidebarPane extends UI.View.SimpleView implements UI.Conte
       return;
     }
 
-    for (const {text, callback, jslogContext} of Bindings.IgnoreListManager.IgnoreListManager.instance()
+    for (const {text, callback, jslogContext} of Workspace.IgnoreListManager.IgnoreListManager.instance()
              .getIgnoreListURLContextMenuItems(uiSourceCode)) {
       menuSection.appendItem(text, callback, {jslogContext});
     }
@@ -647,7 +633,7 @@ export class Item {
 
   private async update(liveLocation: Bindings.LiveLocation.LiveLocation): Promise<void> {
     const uiLocation = await liveLocation.uiLocation();
-    this.isIgnoreListed = await liveLocation.isIgnoreListed();
+    this.isIgnoreListed = Boolean(uiLocation?.isIgnoreListed());
     this.linkText = uiLocation ? uiLocation.linkText() : '';
     this.uiLocation = uiLocation;
     this.updateDelegate(this);

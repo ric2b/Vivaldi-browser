@@ -29,7 +29,6 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "extensions/buildflags/buildflags.h"
-#include "ipc/ipc_channel_proxy.h"
 #include "pdf/buildflags.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -48,6 +47,10 @@
 #endif  // !BUILDFLAG(IS_ANDROID)
 
 #include "app/vivaldi_apptools.h"
+// Vivaldi: For editor frames...
+#if !BUILDFLAG(IS_ANDROID)
+#include "extensions/api/guest_view/vivaldi_guest_view_utils.h"
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
@@ -328,6 +331,15 @@ bool PageSpecificContentSettingsDelegate::IsBlockedOnSystemLevel(
 
 bool PageSpecificContentSettingsDelegate::IsFrameAllowlistedForJavaScript(
     content::RenderFrameHost* render_frame_host) {
+
+
+  // Vivaldi: allowlist specific webview frames inside vivaldi extension
+#if !BUILDFLAG(IS_ANDROID)
+  if (IsVivaldiEditorFrame(render_frame_host)) {
+    return true;
+  }
+#endif  // !BUILDFLAG(IS_ANDROID)
+
 #if BUILDFLAG(ENABLE_PDF)
   // OOPIF PDF viewer only.
   if (!chrome_pdf::features::IsOopifPdfEnabled()) {
@@ -350,6 +362,15 @@ bool PageSpecificContentSettingsDelegate::IsFrameAllowlistedForJavaScript(
 #endif  // BUILDFLAG(ENABLE_PDF)
 
   return false;
+}
+
+bool PageSpecificContentSettingsDelegate::IsPiPWindow(
+    content::WebContents* web_contents) {
+  DCHECK(web_contents);
+  content::WebContents* child_web_contents =
+      PictureInPictureWindowManager::GetInstance()->GetChildWebContents();
+
+  return child_web_contents == web_contents;
 }
 
 void PageSpecificContentSettingsDelegate::PrimaryPageChanged(

@@ -3,8 +3,8 @@
 // This source code is licensed under the BSD-style license found in the
 // LICENSE file in the root directory of this source tree.
 
-#ifndef THIRD_PARTY_XNNPACK_TEST_SUBGRAPH_SUBGRAPH_TESTER_H_
-#define THIRD_PARTY_XNNPACK_TEST_SUBGRAPH_SUBGRAPH_TESTER_H_
+#ifndef XNNPACK_TEST_SUBGRAPH_SUBGRAPH_TESTER_H_
+#define XNNPACK_TEST_SUBGRAPH_SUBGRAPH_TESTER_H_
 
 #include <cassert>
 #include <cstddef>
@@ -117,7 +117,8 @@ struct TensorShape {
 
 class SubgraphTester {
  public:
-  explicit SubgraphTester(uint32_t external_value_ids);
+  explicit SubgraphTester(uint32_t external_value_ids,
+                          uint32_t flags = xnn_test_runtime_flags());
 
   SubgraphTester& AddInternalDynamicTensorF32(const TensorShape& shape,
                                               uint32_t* id_out,
@@ -139,11 +140,20 @@ class SubgraphTester {
   }
 
   template <typename T>
-  SubgraphTester& ReshapeExternalTensor(const std::vector<size_t>& dims,
-                                        T* data, uint32_t external_id) {
+  SubgraphTester& AddDynamicTensor(const TensorShape& shape,
+                                   uint32_t external_id,
+                                   xnn_quantization_params quantization,
+                                   uint32_t flags = 0) {
+    return AddDynamicTensor(shape, external_id, xnn_datatype_of<T>(),
+                            quantization, flags);
+  }
+
+  template <typename T>
+  SubgraphTester& ReshapeExternalTensor(const TensorShape& shape, T* data,
+                                        uint32_t external_id) {
     assert(external_id < subgraph_->external_value_ids);
     const xnn_status status = xnn_reshape_external_value(
-        runtime_.get(), external_id, dims.size(), dims.data());
+        runtime_.get(), external_id, shape.Rank(), shape.Dims());
     EXPECT_EQ(status, xnn_status_success);
     external_tensors_[external_id] = data;
 
@@ -166,14 +176,14 @@ class SubgraphTester {
   }
 
   template <typename T>
-  inline SubgraphTester& AddStaticTensor(const std::vector<size_t>& dims,
+  inline SubgraphTester& AddStaticTensor(const TensorShape& shape,
                                          uint32_t external_id, T* data,
                                          uint32_t flags = 0) {
-    return AddStaticTensor(dims, external_id, data, {0, 1.0f}, flags);
+    return AddStaticTensor(shape, external_id, data, {0, 1.0f}, flags);
   }
 
   template <typename T>
-  inline SubgraphTester& AddStaticTensor(const std::vector<size_t>& dims,
+  inline SubgraphTester& AddStaticTensor(const TensorShape& shape,
                                          uint32_t external_id, T* data,
                                          xnn_quantization_params quantization,
                                          uint32_t flags = 0) {
@@ -182,11 +192,11 @@ class SubgraphTester {
     if (xnn_datatype_is_quantized(xnn_datatype_of<T>())) {
       status = xnn_define_quantized_tensor_value(
           subgraph_.get(), xnn_datatype_of<T>(), quantization.zero_point,
-          quantization.scale, dims.size(), dims.data(), data, external_id,
+          quantization.scale, shape.Rank(), shape.Dims(), data, external_id,
           flags, &id_out);
     } else {
       status = xnn_define_tensor_value(subgraph_.get(), xnn_datatype_of<T>(),
-                                       dims.size(), dims.data(), data,
+                                       shape.Rank(), shape.Dims(), data,
                                        external_id, flags, &id_out);
     }
     EXPECT_EQ(status, xnn_status_success);
@@ -195,16 +205,16 @@ class SubgraphTester {
     return *this;
   }
 
-  SubgraphTester& AddStaticTensorF32(const std::vector<size_t>& dims,
+  SubgraphTester& AddStaticTensorF32(const TensorShape& shape,
                                      uint32_t external_id, float* data,
                                      uint32_t flags = 0) {
-    return AddStaticTensor(dims, external_id, data, flags);
+    return AddStaticTensor(shape, external_id, data, flags);
   }
 
-  SubgraphTester& AddStaticTensorF16(const std::vector<size_t>& dims,
+  SubgraphTester& AddStaticTensorF16(const TensorShape& shape,
                                      uint32_t external_id, xnn_float16* data,
                                      uint32_t flags = 0) {
-    return AddStaticTensor(dims, external_id, data, flags);
+    return AddStaticTensor(shape, external_id, data, flags);
   }
 
   SubgraphTester& AddDynamicTensorQS8(int32_t zero_point, float scale,
@@ -220,17 +230,17 @@ class SubgraphTester {
                                                 uint32_t flags = 0);
 
   SubgraphTester& AddStaticChannelwiseQuantizedTensor(
-      const std::vector<size_t>& dims, size_t channel_dim,
-      xnn_datatype datatype, const float* scale, uint32_t external_id,
-      uint32_t flags = 0, void* data = nullptr);
+      const TensorShape& shape, size_t channel_dim, xnn_datatype datatype,
+      const float* scale, uint32_t external_id, uint32_t flags = 0,
+      void* data = nullptr);
 
-  SubgraphTester& AddStaticTensorQS8(const std::vector<size_t>& dims,
+  SubgraphTester& AddStaticTensorQS8(const TensorShape& shape,
                                      size_t channel_dim, TensorType tensor_type,
                                      const float* scale, uint32_t external_id,
                                      uint32_t flags = 0,
                                      int8_t* data = nullptr);
 
-  SubgraphTester& AddStaticTensorF32(const std::vector<size_t>& dims,
+  SubgraphTester& AddStaticTensorF32(const TensorShape& shape,
                                      TensorType tensor_type,
                                      uint32_t external_id, uint32_t flags = 0,
                                      float* data = nullptr);
@@ -278,9 +288,10 @@ class SubgraphTester {
   }
 
   SubgraphTester& AddInputTensorF32(const TensorShape& shape,
-    uint32_t external_id);
-    SubgraphTester& AddInputOutputTensorF32(const TensorShape& shape,
-                                      uint32_t external_id);
+                                    uint32_t external_id);
+
+  SubgraphTester& AddInputOutputTensorF32(const TensorShape& shape,
+                                          uint32_t external_id);
 
   SubgraphTester& AddInputTensorQS8(int32_t zero_point, float scale,
                                     const TensorShape& shape,
@@ -352,6 +363,8 @@ class SubgraphTester {
 
   SubgraphTester& AddReshape(const std::vector<size_t>& new_dims,
                              uint32_t input_id, uint32_t output_id);
+  SubgraphTester& AddBroadcast(const std::vector<size_t>& new_dims,
+                               uint32_t input_id, uint32_t output_id);
 
   SubgraphTester& AddResizeBilinear(size_t new_height, size_t new_width,
                                     uint32_t input_id, uint32_t output_id,
@@ -381,7 +394,8 @@ class SubgraphTester {
                             uint32_t output_id);
 
   SubgraphTester& AddUnary(xnn_unary_operator op, xnn_unary_params* params,
-                           uint32_t input_id, uint32_t output_id);
+                           uint32_t input_id, uint32_t output_id,
+                           uint32_t flags = 0);
 
   SubgraphTester& AddConvolution2D(ConvolutionParams params, uint32_t input_id,
                                    uint32_t filter_id, uint32_t bias_id,
@@ -486,7 +500,12 @@ class SubgraphTester {
   SubgraphTester& AddSoftmax(uint32_t input_id, uint32_t output_id,
                              uint32_t flags = 0);
 
-  SubgraphTester& Optimize();
+  // This (xnn_subgraph_optimize) is normally called by xnn_create_runtime,
+  // which passes the runtime flags to xnn_subgraph_optimize. When we call it
+  // "standalone", we need to pass the same flags. Unfortunately, while we can
+  // make the defaults with `CreateRuntime` below consistent, we rely on the
+  // caller to maintain this consistency.
+  SubgraphTester& Optimize(uint32_t flags = xnn_test_runtime_flags());
 
   SubgraphTester& RewriteForNchw();
 
@@ -507,7 +526,8 @@ class SubgraphTester {
     return CreateRuntime(nullptr, nullptr, threadpool, flags);
   }
 
-  SubgraphTester& InvokeRuntime();
+  xnn_status InvokeRuntime();
+  xnn_status Status() const { return status_; }
 
   xnn_layout_type GetLayout(uint32_t value_id) const {
     return subgraph_->values[value_id].layout;
@@ -559,10 +579,12 @@ class SubgraphTester {
           -std::numeric_limits<int8_t>::max(),
           std::numeric_limits<int8_t>::max());
 
+  xnn_status status_ = xnn_status_success;
+
  private:
   std::vector<xnnpack::Buffer<char>> static_data_;
 };
 
 }  // namespace xnnpack
 
-#endif  // THIRD_PARTY_XNNPACK_TEST_SUBGRAPH_SUBGRAPH_TESTER_H_
+#endif  // XNNPACK_TEST_SUBGRAPH_SUBGRAPH_TESTER_H_

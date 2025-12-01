@@ -154,8 +154,7 @@ bool ParkableStringManager::OnMemoryDump(
   dump->AddScalar("on_disk_free_chunks", "bytes",
                   data_allocator().free_chunks_size());
 
-  pmd->AddSuballocation(dump->guid(),
-                        WTF::Partitions::kAllocatedObjectPoolName);
+  pmd->AddSuballocation(dump->guid(), Partitions::kAllocatedObjectPoolName);
   return true;
 }
 
@@ -191,9 +190,7 @@ scoped_refptr<ParkableStringImpl> ParkableStringManager::Add(
     // Otherwise the lookups below would not correctly deduplicate strings.
     std::unique_ptr<ParkableStringImpl::SecureDigest> expected_digest =
         ParkableStringImpl::HashString(string_impl.get());
-    base::span<const uint8_t> expected_span(*expected_digest);
-    base::span<const uint8_t> provided_span(*digest);
-    CHECK_EQ(expected_span, provided_span);
+    CHECK(*expected_digest == *digest);
 #endif  // DCHECK_IS_ON()
   }
   DCHECK(digest.get());

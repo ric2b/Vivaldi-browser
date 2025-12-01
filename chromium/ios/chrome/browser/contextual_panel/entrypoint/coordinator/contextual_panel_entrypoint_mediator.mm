@@ -183,6 +183,21 @@
                                                   centered:centered];
 }
 
+- (void)didCompleteTransitionToSmallEntrypoint {
+  web::WebState* activeWebState = _webStateList->GetActiveWebState();
+  if (!activeWebState || activeWebState->IsBeingDestroyed()) {
+    return;
+  }
+  // Notify the configuration item that it transitioned to a small entrypoint.
+  ContextualPanelTabHelper* contextualPanelTabHelper =
+      ContextualPanelTabHelper::FromWebState(activeWebState);
+  ContextualPanelItemConfiguration* config =
+      contextualPanelTabHelper->GetFirstCachedConfig().get();
+  if (config) {
+    config->DidTransitionToSmallEntrypoint();
+  }
+}
+
 #pragma mark - ContextualPanelTabHelperObserving
 
 - (void)contextualPanel:(ContextualPanelTabHelper*)tabHelper
@@ -294,7 +309,7 @@
   _transitionToEntrypointLoudMomentTimer = nullptr;
   _transitionToDefaultEntrypointTimer = nullptr;
   [self dismissEntrypointIPHAnimated:animated];
-  [self.delegate enableFullscreen];
+  [self cleanupAndTransitionToSmallEntrypoint];
 }
 
 // Updates the entrypoint state whenever the active tab changes or new data is
@@ -375,8 +390,7 @@
 
   _transitionToDefaultEntrypointTimer = std::make_unique<base::OneShotTimer>();
   _transitionToDefaultEntrypointTimer->Start(
-      FROM_HERE,
-      base::Seconds(LargeContextualPanelEntrypointDisplayedInSeconds()),
+      FROM_HERE, config->GetLargeEntrypointDisplayedDuration(),
       base::BindOnce(^{
         [weakSelf cleanupAndTransitionToSmallEntrypoint];
       }));
@@ -440,8 +454,7 @@
   __weak ContextualPanelEntrypointMediator* weakSelf = self;
   _transitionToDefaultEntrypointTimer = std::make_unique<base::OneShotTimer>();
   _transitionToDefaultEntrypointTimer->Start(
-      FROM_HERE,
-      base::Seconds(LargeContextualPanelEntrypointDisplayedInSeconds()),
+      FROM_HERE, config->GetLargeEntrypointDisplayedDuration(),
       base::BindOnce(^{
         [weakSelf dismissEntrypointIPHAnimated:YES];
         [weakSelf.delegate enableFullscreen];

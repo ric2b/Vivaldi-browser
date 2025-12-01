@@ -983,7 +983,7 @@ TEST_P(ResizeRealtimeTest, TestInternalResizeDownUpChangeBitRateScreen) {
   cfg_.g_w = 352;
   cfg_.g_h = 288;
   change_bitrate_ = true;
-  frame_change_bitrate_ = 120;
+  frame_change_bitrate_ = 200;
   set_scale_mode_ = false;
   set_scale_mode2_ = false;
   set_scale_mode3_ = false;
@@ -994,7 +994,7 @@ TEST_P(ResizeRealtimeTest, TestInternalResizeDownUpChangeBitRateScreen) {
   // Disable dropped frames.
   cfg_.rc_dropframe_thresh = 0;
   // Starting bitrate low.
-  cfg_.rc_target_bitrate = 100;
+  cfg_.rc_target_bitrate = 30;
   cfg_.rc_resize_mode = RESIZE_DYNAMIC;
   cfg_.g_forced_max_frame_width = 1280;
   cfg_.g_forced_max_frame_height = 1280;

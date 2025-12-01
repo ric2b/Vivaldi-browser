@@ -3,7 +3,6 @@ include_rules = [
   "+chrome/android/java/src/org/chromium/chrome/browser/ChromeTabbedActivity.java",
   "+chrome/android/java/src/org/chromium/chrome/browser/privacy_sandbox/TrackingProtectionSnackbarController.java",
   "+chrome/browser/android/lifecycle",
-  "+components/image_fetcher",
   "+chrome/browser/ui/android/appmenu/java/src/org/chromium/chrome/browser/ui/appmenu/AppMenuDelegate.java",
   "+chrome/android/java/src/org/chromium/chrome/browser/ssl/ChromeSecurityStateModelDelegate.java",
   "+chrome/browser/commerce/android/java",
@@ -20,6 +19,7 @@ include_rules = [
   "+chrome/browser/ui/messages/android/java",
   "+chrome/browser/xsurface/android",
   "+components/android_autofill/browser/java/src/org/chromium/components/autofill",
+  "+components/android_autofill/browser/test_support/java/src/org/chromium/components/autofill/TestViewStructure.java",
   "+components/autofill/android/java/src/org/chromium/components/autofill",
   "+components/background_task_scheduler/android",
   "+components/bookmarks/common/android",
@@ -32,8 +32,9 @@ include_rules = [
   "+components/content_relationship_verification/android/java/src/org/chromium/components/content_relationship_verification",
   "+components/data_sharing/test_support/android/java/src/org/chromium/components/data_sharing",
   "+components/data_sharing/public/android/java/src/org/chromium/components/data_sharing",
-  "+components/dom_distiller/core",
+  "+components/dom_distiller",
   "+components/feature_engagement/public/android",
+  "+components/image_fetcher",
   "+components/offline_items_collection/core/android/java/src",
   "+components/omnibox/browser/android/java/src/org/chromium/components/omnibox",
   "+components/payments/content/android/ui/java/src/org/chromium/components/payments/ui",
@@ -52,4 +53,6 @@ include_rules = [
   "+content/public/android/java/src/org/chromium/content_public",
   "+content/public/android/java/src/org/chromium/content/browser/RenderCoordinatesImpl.java",
   "+content/public/android/java/src/org/chromium/content/browser/webcontents/WebContentsImpl.java",
+
+  "+google_apis/gaia/android/java",
 ]

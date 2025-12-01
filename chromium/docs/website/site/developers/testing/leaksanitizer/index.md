@@ -72,8 +72,6 @@ Add the args to the resulting editor:
 
 > is_debug = false # Release build.
 
-> enable_nacl = false # Not necessary, but makes things faster.
-
 And then build:
 
 > ninja -C out/lsan base_unittests

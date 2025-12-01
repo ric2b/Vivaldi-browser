@@ -14,9 +14,9 @@
 #import "base/check_op.h"
 #import "base/ios/block_types.h"
 #import "base/strings/sys_string_conversions.h"
+#import "browser/features/vivaldi_features.h"
 #import "components/prefs/pref_service.h"
 #import "components/url_formatter/url_fixer.h"
-#import "ios/chrome/browser/features/vivaldi_features.h"
 #import "ios/chrome/browser/keyboard/ui_bundled/UIKeyCommand+Chrome.h"
 #import "ios/chrome/browser/shared/coordinator/alert/action_sheet_coordinator.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
@@ -41,9 +41,9 @@
 #import "ios/ui/helpers/vivaldi_global_helpers.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
 #import "ios/ui/notes/cells/note_parent_folder_item.h"
-#import "ios/ui/notes/markdown/markdown_keyboard_view_provider.h"
-#import "ios/ui/notes/markdown/markdown_keyboard_view.h"
 #import "ios/ui/notes/markdown/markdown_command_delegate.h"
+#import "ios/ui/notes/markdown/markdown_keyboard_view.h"
+#import "ios/ui/notes/markdown/markdown_keyboard_view_provider.h"
 #import "ios/ui/notes/markdown/markdown_toolbar_view.h"
 #import "ios/ui/notes/markdown/vivaldi_markdown_constants.h"
 #import "ios/ui/notes/markdown/vivaldi_notes_web_view_creation_util.h"
@@ -54,8 +54,8 @@
 #import "ios/ui/notes/note_ui_constants.h"
 #import "ios/ui/notes/note_utils_ios.h"
 #import "prefs/vivaldi_pref_names.h"
-#import "ui/base/l10n/l10n_util_mac.h"
 #import "ui/base/l10n/l10n_util.h"
+#import "ui/base/l10n/l10n_util_mac.h"
 #import "ui/gfx/image/image.h"
 #import "url/gurl.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
@@ -377,7 +377,7 @@ NSString* vMarkdownToggleOff = @"markdown_toggle_off";
     doneItem, spaceButton,
     spaceButton, self.toggleButton];
   self.doneItem = doneItem;
-  if(!IsViewMarkdownAsHTMLEnabled())
+  if (!vivaldi_features::IsViewMarkdownAsHTMLEnabled())
     [self.toggleButton setHidden: YES];
 }
 
@@ -441,7 +441,7 @@ NSString* vMarkdownToggleOff = @"markdown_toggle_off";
 }
 
 -(void)setupMarkdownWebView {
-  if (!IsViewMarkdownAsHTMLEnabled() || !self.webView) {
+  if (!vivaldi_features::IsViewMarkdownAsHTMLEnabled() || !self.webView) {
     return;
   }
 
@@ -702,7 +702,7 @@ NSString* vMarkdownToggleOff = @"markdown_toggle_off";
 }
 
 - (void)injectMarkdownWebView {
-  if (!IsViewMarkdownAsHTMLEnabled() || !self.webView) {
+  if (!vivaldi_features::IsViewMarkdownAsHTMLEnabled() || !self.webView) {
     return;
   }
   NSURL* url =
@@ -889,7 +889,7 @@ NSString* vMarkdownToggleOff = @"markdown_toggle_off";
   } completion: ^(BOOL finished){
     [self.webView setNeedsLayout];
     [self.webView layoutIfNeeded];
-    if (IsViewMarkdownAsHTMLEnabled() && self.webView &&
+    if (vivaldi_features::IsViewMarkdownAsHTMLEnabled() && self.webView &&
         ![VivaldiGlobalHelpers isDeviceTablet]) {
       // Adjust the height of the editor inside the webview (VIB-959)
       CGFloat height = self.webView.bounds.size.height;
@@ -976,7 +976,7 @@ NSString* vMarkdownToggleOff = @"markdown_toggle_off";
   [self cancel];
   [self removeKeyboardObservers];
   [self.delegate noteEditorWantsDismissal:self];
-  if (IsViewMarkdownAsHTMLEnabled()) {
+  if (vivaldi_features::IsViewMarkdownAsHTMLEnabled()) {
     [self setWebViewHidden:YES];
   }
 }

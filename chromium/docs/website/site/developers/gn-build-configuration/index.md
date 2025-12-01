@@ -108,15 +108,6 @@ symbol_level = 0
 Alternately you can set symbol_level=1 which will build almost as fast as
 symbol_level=0 but will give you additional information in call stacks.
 
-### Disable Native Client
-
-Most developers don't normally need to test Native Client capabilities and can
-speed up the build by disabling it.
-
-```
-enable_nacl = false
-```
-
 ### Remove WebCore symbols
 
 WebCore has lots of templates that account for a large portion of the debugging

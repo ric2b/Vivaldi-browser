@@ -19,6 +19,7 @@ import android.net.http.SslCertificate;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.Looper;
 import android.os.Message;
 import android.os.SystemClock;
 import android.print.PrintDocumentAdapter;
@@ -57,7 +58,6 @@ import android.webkit.WebViewRenderProcessClient;
 import android.widget.TextView;
 
 import androidx.annotation.IntDef;
-import androidx.annotation.RequiresApi;
 
 import org.chromium.android_webview.AwBrowserContext;
 import org.chromium.android_webview.AwBrowserContextStore;
@@ -69,7 +69,6 @@ import org.chromium.android_webview.AwThreadUtils;
 import org.chromium.android_webview.ManifestMetadataUtil;
 import org.chromium.android_webview.R;
 import org.chromium.android_webview.common.Lifetime;
-import org.chromium.android_webview.gfx.AwDrawFnImpl;
 import org.chromium.android_webview.renderer_priority.RendererPriority;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.TraceEvent;
@@ -737,6 +736,9 @@ class WebViewChromium
                 //    already started using a different thread as the UI thread.
                 checkThread();
             } else {
+                RecordHistogram.recordBooleanHistogram(
+                        "Android.WebView.Startup.WebViewInitCalledOnAndroidMainLooper",
+                        Looper.getMainLooper() == Looper.myLooper());
                 // For older apps, only the view methods that relate to the view hierarchy must come
                 // from a single thread. Other calls, including the constructor itself, can come
                 // from any thread, and will be posted to the UI thread if necessary.
@@ -888,17 +890,17 @@ class WebViewChromium
                     sRecordWholeDocumentEnabledByApi
                             || mAppTargetSdkVersion < Build.VERSION_CODES.LOLLIPOP);
 
-            AwBrowserContext browserContext = null;
+            final AwBrowserContext browserContext;
             // Temporary workaround for setting the profile at WebView startup.
             Integer appProfileNameTagKey =
                     ManifestMetadataUtil.getAppMultiProfileProfileNameTagKey();
             if (appProfileNameTagKey != null
                     && mWebView.getTag(appProfileNameTagKey) instanceof String profileName) {
                 browserContext = AwBrowserContextStore.getNamedContext(profileName, true);
-            }
-
-            if (browserContext == null) {
-                browserContext = mFactory.getDefaultBrowserContextOnUiThread();
+            } else {
+                browserContext =
+                        AwBrowserContextStore.getNamedContext(
+                                AwBrowserContext.getDefaultContextName(), true);
             }
 
             mAwContents =
@@ -907,7 +909,7 @@ class WebViewChromium
                             mWebView,
                             mContext,
                             new InternalAccessAdapter(),
-                            new WebViewNativeDrawFunctorFactory(),
+                            mFactory.getWebViewDelegate()::drawWebViewFunctor,
                             mContentsClientAdapter,
                             mWebSettings.getAwSettings(),
                             new AwContents.DependencyFactory());
@@ -2250,7 +2252,6 @@ class WebViewChromium
         }
     }
 
-    @RequiresApi(Build.VERSION_CODES.Q)
     @Override
     public WebViewRenderProcess getWebViewRenderProcess() {
         try (TraceEvent event =
@@ -2261,7 +2262,6 @@ class WebViewChromium
         }
     }
 
-    @RequiresApi(Build.VERSION_CODES.Q)
     @Override
     public void setWebViewRenderProcessClient(
             Executor executor, WebViewRenderProcessClient webViewRenderProcessClient) {
@@ -2281,7 +2281,6 @@ class WebViewChromium
         }
     }
 
-    @RequiresApi(Build.VERSION_CODES.Q)
     @Override
     public WebViewRenderProcessClient getWebViewRenderProcessClient() {
         SharedWebViewRendererClientAdapter adapter =
@@ -2567,7 +2566,6 @@ class WebViewChromium
         try (TraceEvent event = TraceEvent.scoped("WebView.APICall.Framework.ZOOM_BY")) {
             recordWebViewApiCall(ApiCall.ZOOM_BY);
             mFactory.startYourEngines(true);
-            // This is an L API and therefore we can enforce stricter threading constraints.
             checkThread();
             mAwContents.zoomBy(factor);
             return true;
@@ -3399,7 +3397,6 @@ class WebViewChromium
     }
 
     // Overrides method added to WebViewProvider.ViewDelegate interface
-    // (not called in M and below)
     @Override
     public Handler getHandler(Handler originalHandler) {
         try (TraceEvent event = TraceEvent.scoped("WebView.APICall.Framework.GET_HANDLER")) {
@@ -3409,7 +3406,6 @@ class WebViewChromium
     }
 
     // Overrides method added to WebViewProvider.ViewDelegate interface
-    // (not called in M and below)
     @Override
     public View findFocus(View originalFocusedView) {
         try (TraceEvent event = TraceEvent.scoped("WebView.APICall.Framework.FIND_FOCUS")) {
@@ -3582,22 +3578,6 @@ class WebViewChromium
             recordWebViewApiCall(ApiCall.CREATE_PRINT_DOCUMENT_ADAPTER);
             checkThread();
             return new AwPrintDocumentAdapter(mAwContents.getPdfExporter(), documentName);
-        }
-    }
-
-    // AwContents.NativeDrawFunctorFactory implementation ----------------------------------
-    private class WebViewNativeDrawFunctorFactory implements AwContents.NativeDrawFunctorFactory {
-        @Override
-        public AwContents.NativeDrawGLFunctor createGLFunctor(long context) {
-            return new DrawGLFunctor(context, mFactory.getWebViewDelegate());
-        }
-
-        @Override
-        public AwDrawFnImpl.DrawFnAccess getDrawFnAccess() {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                return mFactory.getWebViewDelegate()::drawWebViewFunctor;
-            }
-            return null;
         }
     }
 

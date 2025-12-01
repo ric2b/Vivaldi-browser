@@ -260,8 +260,8 @@ input[type='radio'] {
   accent-color: var(--sys-color-primary-bright);
   color: var(--sys-color-on-primary);
 
-  &:focus {
-    box-shadow: var(--legacy-focus-ring-active-shadow);
+  &:focus-visible {
+    outline: var(--sys-size-2) solid var(--sys-color-state-focus-ring);
   }
 }
 
@@ -506,25 +506,6 @@ dt-icon-label {
   flex: none;
 }
 
-.full-widget-dimmed-banner a {
-  color: inherit;
-}
-
-.full-widget-dimmed-banner {
-  color: var(--sys-color-token-subtle);
-  background-color: var(--sys-color-cdt-base-container);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  text-align: center;
-  padding: 20px;
-  position: absolute;
-  inset: 0;
-  font-size: 13px;
-  overflow: auto;
-  z-index: 500;
-}
-
 .dot::before {
   content: var(--image-file-empty);
   width: 6px;
@@ -543,6 +524,19 @@ dt-icon-label {
 
 .purple::before {
   background-color: var(--sys-color-purple-bright);
+}
+
+.new-badge {
+  width: fit-content;
+  height: var(--sys-size-7);
+  line-height: var(--sys-size-7);
+  border-radius: var(--sys-shape-corner-extra-small);
+  padding: 0 var(--sys-size-3);
+  background-color: var(--sys-color-primary);
+  color: var(--sys-color-on-primary);
+  font-weight: var(--ref-typeface-weight-bold);
+  font-size: 9px;
+  text-align: center;
 }
 
 .expandable-inline-button {
@@ -1193,6 +1187,7 @@ devtools-toolbar {
 
 .webkit-html-comment {
   color: var(--sys-color-token-comment);
+  word-break: break-all;
 }
 
 .webkit-html-tag {

@@ -95,7 +95,7 @@ export class DeviceModeView extends UI.Widget.VBox {
   private handleHeight?: number;
 
   constructor() {
-    super(true);
+    super({useShadowDom: true});
 
     this.blockElementToWidth = new WeakMap();
 
@@ -574,9 +574,8 @@ export class Ruler extends UI.Widget.VBox {
   private renderedScale!: number|undefined;
   private renderedZoomFactor!: number|undefined;
   constructor(horizontal: boolean, applyCallback: (arg0: number) => void) {
-    super();
+    super({jslog: `${VisualLogging.deviceModeRuler().track({click: true})}`});
     this.element.classList.add('device-mode-ruler');
-    this.element.setAttribute('jslog', `${VisualLogging.deviceModeRuler().track({click: true})}`);
     this.contentElementInternal =
         this.element.createChild('div', 'device-mode-ruler-content').createChild('div', 'device-mode-ruler-inner');
     this.horizontal = horizontal;

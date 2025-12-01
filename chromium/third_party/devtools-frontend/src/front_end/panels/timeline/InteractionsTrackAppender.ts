@@ -45,9 +45,9 @@ export class InteractionsTrackAppender implements TrackAppender {
   /**
    * Appends into the flame chart data the data corresponding to the
    * interactions track.
-   * @param trackStartLevel the horizontal level of the flame chart events where
+   * @param trackStartLevel - the horizontal level of the flame chart events where
    * the track's events will start being appended.
-   * @param expanded wether the track should be rendered expanded.
+   * @param expanded - wether the track should be rendered expanded.
    * @returns the first available level to append more data after having
    * appended the track's events.
    */
@@ -65,7 +65,7 @@ export class InteractionsTrackAppender implements TrackAppender {
    * flame chart data. A group has a predefined style and a reference
    * to the definition of the legacy track (which should be removed
    * in the future).
-   * @param currentLevel the flame chart level at which the header is
+   * @param currentLevel - the flame chart level at which the header is
    * appended.
    */
   #appendTrackHeaderAtLevel(currentLevel: number, expanded?: boolean): void {
@@ -81,7 +81,7 @@ export class InteractionsTrackAppender implements TrackAppender {
    * Adds into the flame chart data the trace events dispatched by the
    * performance.measure API. These events are taken from the UserInteractions
    * handler.
-   * @param currentLevel the flame chart level from which interactions will
+   * @param currentLevel - the flame chart level from which interactions will
    * be appended.
    * @returns the next level after the last occupied by the appended
    * interactions (the first available level to append more data).
@@ -115,11 +115,11 @@ export class InteractionsTrackAppender implements TrackAppender {
     decorationsForEvent.push(
         {
           type: PerfUI.FlameChart.FlameChartDecorationType.CANDY,
+          // Where the striping starts is hard. The problem is the whole interaction, isolating the part of it *responsible* for
+          // making the interaction 200ms is hard and our decoration won't do it perfectly. To simplify we just flag all the overage.
+          // AKA the first 200ms of the interaction aren't flagged. A downside is we often flag a lot of render delay.
+          // It'd be fair to shift the candystriping segment earlier in the interaction... Let's see what the feedback is like.
           startAtTime: Trace.Handlers.ModelHandlers.UserInteractions.LONG_INTERACTION_THRESHOLD,
-          // Interaction events have whiskers, so we do not want to candy stripe
-          // the entire duration. The box represents processing duration, so we only
-          // candystripe up to the end of processing.
-          endAtTime: entry.processingEnd,
         },
         {
           type: PerfUI.FlameChart.FlameChartDecorationType.WARNING_TRIANGLE,

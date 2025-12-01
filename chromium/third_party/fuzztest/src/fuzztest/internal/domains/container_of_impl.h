@@ -172,9 +172,16 @@ class ContainerOfImplBase
     if constexpr (container_has_memory_dict) {
       if (can_use_memory_dict) {
         if (action-- == 0) {
+          auto old_val = val;
           bool mutated = MemoryDictionaryMutation(
               val, prng, metadata.cmp_tables, temporary_dict_, GetManualDict(),
               permanent_dict_, permanent_dict_candidate_, max_size());
+          // Applying memory dictionary may violate the inner domain - fail the
+          // mutation if so.
+          if (mutated && !ValidateCorpusValue(val).ok()) {
+            val = std::move(old_val);
+            mutated = false;
+          }
           // If dict failed, fall back to changing an element.
           if (!mutated) {
             Self().MutateElement(val, prng, metadata, only_shrink,
@@ -468,6 +475,17 @@ Please verify that the inner domain can provide enough values.
     Grow(val, prng, 1, kFailuresAllowed);
   }
 
+  auto GetRandomInnerValue(absl::BitGenRef prng) {
+    constexpr int kMaxMutations = 100;
+    const int num_mutations = absl::Zipf(prng, /*hi=*/kMaxMutations);
+    auto element = this->inner_.Init(prng);
+    for (int i = 0; i < num_mutations; ++i) {
+      this->inner_.Mutate(element, prng, domain_implementor::MutationMetadata(),
+                          /*only_shrink=*/false);
+    }
+    return element;
+  }
+
   // Try to grow `val` by `n` elements.
   void Grow(corpus_type& val, absl::BitGenRef prng, size_t n,
             size_t failures_allowed) {
@@ -574,6 +592,17 @@ class SequenceContainerOfImplBase
   void GrowOne(corpus_type& val, absl::BitGenRef prng) {
     val.insert(ChoosePosition(val, IncludeEnd::kYes, prng),
                this->inner_.Init(prng));
+  }
+
+  auto GetRandomInnerValue(absl::BitGenRef prng) {
+    constexpr int kMaxMutations = 100;
+    int num_mutations = absl::Zipf<int>(prng, /*hi=*/kMaxMutations);
+    auto element = this->inner_.Init(prng);
+    for (int i = 0; i < num_mutations; ++i) {
+      this->inner_.Mutate(element, prng, domain_implementor::MutationMetadata(),
+                          /*only_shrink=*/false);
+    }
+    return element;
   }
 
   void MutateElement(corpus_type&, absl::BitGenRef prng,

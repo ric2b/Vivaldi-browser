@@ -14,9 +14,6 @@
   void VivaldiAppendLanguageSettings() {
     AppendLanguageSettings();
   }
-  void VivaldiAppendSearchProvider() {
-    AppendSearchProvider();
-  }
   void VivaldiAppendLinkToTextItems() {
     AppendLinkToTextItems();
   }
@@ -26,11 +23,6 @@
   }
   const extensions::Extension* VivaldiGetExtension() const {
     return GetExtension();
-  }
-  static bool VivaldiMenuItemMatchesParams(
-                                    const content::ContextMenuParams& params,
-                                    const extensions::MenuItem* item) {
-    return MenuItemMatchesParams(params, item);
   }
 
 // };

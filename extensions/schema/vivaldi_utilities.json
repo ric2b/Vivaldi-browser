@@ -2213,6 +2213,27 @@
             }
           ]
         }
+      },
+      {
+        "name": "openPrivacyReportDialog",
+        "type": "function",
+        "description": "Opens privacy report dialog",
+        "parameters": []
+      },
+      {
+        "name": "updatePrimarySelection",
+        "type": "function",
+        "description": "Writes text to the primary selection buffer. This buffer is only used on Linux and allows pasting with middle mouse button.",
+        "parameters": [
+          {
+            "name": "text",
+            "type": "string"
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": []
+        }
       }
     ],
     "events": [

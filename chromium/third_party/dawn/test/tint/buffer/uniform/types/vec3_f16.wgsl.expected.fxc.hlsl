@@ -1,23 +1,25 @@
 SKIP: INVALID
 
+
 cbuffer cbuffer_u : register(b0) {
   uint4 u[1];
 };
 RWByteAddressBuffer s : register(u1);
+vector<float16_t, 4> tint_bitcast_to_f16(uint2 src) {
+  uint2 v = src;
+  uint2 mask = (65535u).xx;
+  uint2 shift = (16u).xx;
+  float2 t_low = f16tof32((v & mask));
+  float2 t_high = f16tof32(((v >> shift) & mask));
+  float16_t v_1 = float16_t(t_low.x);
+  float16_t v_2 = float16_t(t_high.x);
+  float16_t v_3 = float16_t(t_low.y);
+  return vector<float16_t, 4>(v_1, v_2, v_3, float16_t(t_high.y));
+}
 
 [numthreads(1, 1, 1)]
 void main() {
-  uint2 ubo_load = u[0].xy;
-  vector<float16_t, 2> ubo_load_xz = vector<float16_t, 2>(f16tof32(ubo_load & 0xFFFF));
-  float16_t ubo_load_y = f16tof32(ubo_load[0] >> 16);
-  vector<float16_t, 3> x = vector<float16_t, 3>(ubo_load_xz[0], ubo_load_y, ubo_load_xz[1]);
+  vector<float16_t, 3> x = tint_bitcast_to_f16(u[0u].xy).xyz;
   s.Store<vector<float16_t, 3> >(0u, x);
-  return;
 }
-FXC validation failure:
-<scrubbed_path>(9,10-18): error X3000: syntax error: unexpected token 'float16_t'
-<scrubbed_path>(10,3-11): error X3000: unrecognized identifier 'float16_t'
-<scrubbed_path>(10,13-22): error X3000: unrecognized identifier 'ubo_load_y'
 
-
-tint executable returned error: exit status 1

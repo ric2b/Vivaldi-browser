@@ -35,9 +35,8 @@ import org.robolectric.annotation.Config;
 
 import org.chromium.base.MathUtils;
 import org.chromium.base.test.BaseRobolectricTestRunner;
-import org.chromium.base.test.util.Features;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.theme.SurfaceColorUpdateUtils;
 import org.chromium.chrome.browser.toolbar.top.ToggleTabStackButton;
 import org.chromium.chrome.browser.ui.theme.BrandedColorScheme;
 import org.chromium.components.browser_ui.styles.SemanticColorUtils;
@@ -47,12 +46,6 @@ import java.util.ArrayList;
 
 /** Unit tests for {@link NewBackgroundTabAnimationHostView}. */
 @RunWith(BaseRobolectricTestRunner.class)
-// TODO(crbug.com/419289558): Re-enable color surface feature flags
-@Features.DisableFeatures({
-    ChromeFeatureList.ANDROID_SURFACE_COLOR_UPDATE,
-    ChromeFeatureList.GRID_TAB_SWITCHER_SURFACE_COLOR_UPDATE,
-    ChromeFeatureList.GRID_TAB_SWITCHER_UPDATE
-})
 public class NewBackgroundTabAnimationHostViewUnitTest {
     @Rule public final MockitoRule mMockitoRule = MockitoJUnit.rule();
 
@@ -107,7 +100,8 @@ public class NewBackgroundTabAnimationHostViewUnitTest {
                 /* isNtp= */ false,
                 /* isIncognito= */ false,
                 /* isTopToolbar= */ false,
-                /* backgroundColor= */ Color.WHITE,
+                /* backgroundColor= */ SurfaceColorUpdateUtils.getDefaultThemeColor(
+                        mActivity, /* isIncognito= */ false),
                 /* tabCount= */ 12,
                 /* toolbarHeight= */ 30,
                 /* statusBarHeight= */ 5,
@@ -115,7 +109,8 @@ public class NewBackgroundTabAnimationHostViewUnitTest {
                 /* ntpToolbarTransitionPercentage= */ 1f);
 
         assertDefaultSettings(
-                /* buttonColor= */ Color.WHITE,
+                /* buttonColor= */ SurfaceColorUpdateUtils.getDefaultThemeColor(
+                        mActivity, /* isIncognito= */ false),
                 BrandedColorScheme.APP_DEFAULT,
                 /* tabCount= */ 12,
                 /* topMargin= */ 25,
@@ -128,7 +123,8 @@ public class NewBackgroundTabAnimationHostViewUnitTest {
                 /* isNtp= */ false,
                 /* isIncognito= */ false,
                 /* isTopToolbar= */ false,
-                /* backgroundColor= */ Color.WHITE,
+                /* backgroundColor= */ SurfaceColorUpdateUtils.getDefaultThemeColor(
+                        mActivity, /* isIncognito= */ false),
                 /* tabCount= */ 12,
                 /* toolbarHeight= */ 7,
                 /* statusBarHeight= */ 10,
@@ -143,7 +139,8 @@ public class NewBackgroundTabAnimationHostViewUnitTest {
                 /* isNtp= */ true,
                 /* isIncognito= */ false,
                 /* isTopToolbar= */ false,
-                /* backgroundColor= */ Color.WHITE,
+                /* backgroundColor= */ SurfaceColorUpdateUtils.getDefaultThemeColor(
+                        mActivity, /* isIncognito= */ false),
                 /* tabCount= */ 56,
                 /* toolbarHeight= */ 94,
                 /* statusBarHeight= */ 10,
@@ -151,7 +148,7 @@ public class NewBackgroundTabAnimationHostViewUnitTest {
                 /* ntpToolbarTransitionPercentage= */ 1f);
 
         assertDefaultSettings(
-                Color.WHITE,
+                SurfaceColorUpdateUtils.getDefaultThemeColor(mActivity, /* isIncognito= */ false),
                 BrandedColorScheme.APP_DEFAULT,
                 /* tabCount= */ 56,
                 /* topMargin= */ 84,
@@ -280,7 +277,8 @@ public class NewBackgroundTabAnimationHostViewUnitTest {
                 /* isNtp= */ false,
                 /* isIncognito= */ false,
                 /* isTopToolbar= */ false,
-                /* backgroundColor= */ Color.WHITE,
+                /* backgroundColor= */ SurfaceColorUpdateUtils.getDefaultThemeColor(
+                        mActivity, /* isIncognito= */ false),
                 /* tabCount= */ 0,
                 /* toolbarHeight= */ 0,
                 /* statusBarHeight= */ 0,
@@ -295,7 +293,8 @@ public class NewBackgroundTabAnimationHostViewUnitTest {
                 /* isNtp= */ false,
                 /* isIncognito= */ true,
                 /* isTopToolbar= */ false,
-                /* backgroundColor= */ Color.WHITE,
+                /* backgroundColor= */ SurfaceColorUpdateUtils.getDefaultThemeColor(
+                        mActivity, /* isIncognito= */ true),
                 /* tabCount= */ 0,
                 /* toolbarHeight= */ 0,
                 /* statusBarHeight= */ 0,

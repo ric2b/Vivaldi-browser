@@ -233,6 +233,7 @@ export class DOMNode {
     return [
       Protocol.DOM.PseudoType.ViewTransition,
       Protocol.DOM.PseudoType.ViewTransitionGroup,
+      Protocol.DOM.PseudoType.ViewTransitionGroupChildren,
       Protocol.DOM.PseudoType.ViewTransitionImagePair,
       Protocol.DOM.PseudoType.ViewTransitionOld,
       Protocol.DOM.PseudoType.ViewTransitionNew,
@@ -361,6 +362,7 @@ export class DOMNode {
     return [
       ...this.#pseudoElements.get(Protocol.DOM.PseudoType.ViewTransition) || [],
       ...this.#pseudoElements.get(Protocol.DOM.PseudoType.ViewTransitionGroup) || [],
+      ...this.#pseudoElements.get(Protocol.DOM.PseudoType.ViewTransitionGroupChildren) || [],
       ...this.#pseudoElements.get(Protocol.DOM.PseudoType.ViewTransitionImagePair) || [],
       ...this.#pseudoElements.get(Protocol.DOM.PseudoType.ViewTransitionOld) || [],
       ...this.#pseudoElements.get(Protocol.DOM.PseudoType.ViewTransitionNew) || [],
@@ -546,8 +548,8 @@ export class DOMNode {
     return response.getError() ? null : this.childrenInternal;
   }
 
-  async getOuterHTML(): Promise<string|null> {
-    const {outerHTML} = await this.#agent.invoke_getOuterHTML({nodeId: this.id});
+  async getOuterHTML(includeShadowDOM = false): Promise<string|null> {
+    const {outerHTML} = await this.#agent.invoke_getOuterHTML({nodeId: this.id, includeShadowDOM});
     return outerHTML;
   }
 
@@ -797,8 +799,15 @@ export class DOMNode {
           if (!response.getError()) {
             this.#domModelInternal.markUndoableState();
           }
+          const pastedNode = this.#domModelInternal.nodeForId(response.nodeId);
+          if (pastedNode) {
+            // For every marker in this.#markers, set a marker in the copied node.
+            for (const [name, value] of this.#markers) {
+              pastedNode.setMarker(name, value);
+            }
+          }
           if (callback) {
-            callback(response.getError() || null, this.#domModelInternal.nodeForId(response.nodeId));
+            callback(response.getError() || null, pastedNode);
           }
         });
   }
@@ -1614,9 +1623,10 @@ export class DOMModel extends SDKModel<EventTypes> {
 
   async getContainerForNode(
       nodeId: Protocol.DOM.NodeId, containerName?: string, physicalAxes?: Protocol.DOM.PhysicalAxes,
-      logicalAxes?: Protocol.DOM.LogicalAxes, queriesScrollState?: boolean): Promise<DOMNode|null> {
+      logicalAxes?: Protocol.DOM.LogicalAxes, queriesScrollState?: boolean,
+      queriesAnchored?: boolean): Promise<DOMNode|null> {
     const {nodeId: containerNodeId} = await this.agent.invoke_getContainerForNode(
-        {nodeId, containerName, physicalAxes, logicalAxes, queriesScrollState});
+        {nodeId, containerName, physicalAxes, logicalAxes, queriesScrollState, queriesAnchored});
     if (!containerNodeId) {
       return null;
     }

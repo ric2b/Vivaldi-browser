@@ -31,6 +31,8 @@ class QuotaOverrideHandle;
 
 namespace content {
 class AttributionManager;
+class DevToolsAgentHostClient;
+class DevToolsAgentHostImpl;
 class RenderFrameHostImpl;
 class StoragePartition;
 
@@ -221,6 +223,9 @@ class StorageHandler
   void OnReportSent(const AttributionReport&,
                     bool is_debug_report,
                     const SendResult&) override;
+  void OnDebugReportSent(const AttributionDebugReport&,
+                         int status,
+                         base::Time) override;
 
   // content::SharedStorageRuntimeManager::SharedStorageObserverInterface
   GlobalRenderFrameHostId AssociatedFrameHostId() const override;
@@ -242,7 +247,6 @@ class StorageHandler
       SharedStorageRuntimeManager::SharedStorageObserverInterface::AccessMethod
           method,
       int operation_id,
-      int worklet_ordinal_id,
       const base::UnguessableToken& worklet_devtools_token,
       GlobalRenderFrameHostId main_frame_id,
       const std::string& owner_origin) override;

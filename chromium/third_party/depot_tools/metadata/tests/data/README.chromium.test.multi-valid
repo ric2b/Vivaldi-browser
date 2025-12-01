@@ -8,6 +8,7 @@ License: Apache-2.0, MIT
 License File: LICENSE
 Security Critical: yes
 Shipped: yes
+Update Mechanism: Autoroll
 CPEPrefix: unknown
 This line should be ignored because CPEPrefix is a one-liner field.
 Description:
@@ -28,6 +29,7 @@ Version: 1.0.12
 Date: 2020-12-03
 License: MIT
 License File: LICENSE
+Update Mechanism: Manual(https://crbug.com/1234)
 Security Critical: yes
 Shipped: yes
 
@@ -37,6 +39,7 @@ Name: Test-C README for Chromium metadata
 Short Name: metadata-test-valid-again
 URL: https://www.example.com/metadata
 Version: 1.0.12
+Update Mechanism: Static(https://crbug.com/1234)
 Date: 2020-12-03
 License: Apache-2.0
 License File: LICENSE

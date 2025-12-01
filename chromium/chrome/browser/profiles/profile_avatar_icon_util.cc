@@ -24,7 +24,6 @@
 #include "base/path_service.h"
 #include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -380,6 +379,58 @@ class CircleImageSource : public gfx::CanvasImageSource {
   const SkColor color_;
 };
 
+// CanvasImageSource that combines a background image with user's avatar,
+// the avatar is positioned and resized in terms of the background image DIPs,
+// it also is cropped in a circle.
+class AvatarEmbeddedImageSource : public gfx::CanvasImageSource {
+ public:
+  AvatarEmbeddedImageSource(const gfx::Image& image,
+                            const gfx::Image& avatar,
+                            const gfx::Point& avatar_position,
+                            size_t avatar_size)
+      : gfx::CanvasImageSource(image.Size()),
+        image_(image),
+        avatar_(avatar),
+        avatar_position_(avatar_position),
+        avatar_size_(avatar_size) {
+    CHECK(!image_.IsEmpty());
+  }
+
+  AvatarEmbeddedImageSource(const AvatarEmbeddedImageSource&) = delete;
+  AvatarEmbeddedImageSource& operator=(const AvatarEmbeddedImageSource&) =
+      delete;
+
+  ~AvatarEmbeddedImageSource() override = default;
+
+  // gfx::CanvasImageSource:
+  void Draw(gfx::Canvas* canvas) override {
+    // Draw the background image first.
+    canvas->DrawImageInt(image_.AsImageSkia(), 0, 0);
+
+    // Setting a clippath makes subsequent avatar drawing cropped in a circle.
+    SkPath avatar_bound = SkPath().addOval(
+        SkRect::MakeXYWH(avatar_position_.x(), avatar_position_.y(),
+                         /*w=*/avatar_size_, /*h=*/avatar_size_));
+    canvas->ClipPath(avatar_bound, /*do_anti_alias=*/true);
+
+    // Finally draw the avatar, above the background and cropped.
+    // Note that some testing profiles do not have an avatar.
+    if (!avatar_.IsEmpty()) {
+      gfx::ImageSkia avatar = gfx::ImageSkiaOperations::CreateResizedImage(
+          avatar_.AsImageSkia(),
+          skia::ImageOperations::ResizeMethod::RESIZE_BEST,
+          gfx::Size(avatar_size_, avatar_size_));
+      canvas->DrawImageInt(avatar, avatar_position_.x(), avatar_position_.y());
+    }
+  }
+
+ private:
+  const gfx::Image image_;
+  const gfx::Image avatar_;
+  const gfx::Point avatar_position_;
+  const size_t avatar_size_;
+};
+
 }  // namespace
 
 namespace profiles {
@@ -402,12 +453,13 @@ constexpr SkColor kAvatarBubbleGaiaBackgroundColor =
 constexpr SkColor kUserManagerBackgroundColor = SkColorSetRGB(0xee, 0xee, 0xee);
 
 #ifdef VIVALDI_BUILD
-constexpr char kDefaultUrlPrefix[] = "chrome://theme/IDR_PROFILE_VIVALDI_AVATAR_";
-constexpr char kOldDefaultUrlPrefix[] = "chrome://theme/IDR_PROFILE_AVATAR_";
+constexpr std::string_view kDefaultUrlPrefix = "chrome://theme/IDR_PROFILE_VIVALDI_AVATAR_";
+constexpr std::string_view kOldDefaultUrlPrefix = "chrome://theme/IDR_PROFILE_AVATAR_";
 // Number of our avatars to show in Chromiums creation dialog.
 constexpr size_t kVivaldiAvatarsOnCreate = 15;
 #else
-constexpr char kDefaultUrlPrefix[] = "chrome://theme/IDR_PROFILE_AVATAR_";
+constexpr std::string_view kDefaultUrlPrefix =
+    "chrome://theme/IDR_PROFILE_AVATAR_";
 #endif  // VIVALDI_BUILD
 constexpr base::FilePath::CharType kGAIAPictureFileName[] =
     FILE_PATH_LITERAL("Google Profile Picture.png");
@@ -438,15 +490,10 @@ constexpr size_t kPlaceholderAvatarIndex = 0;
 #endif
 
 ui::ImageModel GetGuestAvatar(int size) {
-  int color_id = ui::kColorMenuIcon;
-  const gfx::VectorIcon* vector_icon = &kUserAccountAvatarRefreshIcon;
-  if (base::FeatureList::IsEnabled(switches::kEnableImprovedGuestProfileMenu)) {
-    // Guest profiles generally use the default theme, no need to go through the
-    // `ThemeService`.
-    color_id = ui::kColorSysPrimary;
-    vector_icon = &kAccountBoxIcon;
-  }
-  return ui::ImageModel::FromVectorIcon(*vector_icon, color_id, size);
+  // Guest profiles generally use the default theme, no need to go through the
+  // `ThemeService`.
+  return ui::ImageModel::FromVectorIcon(kAccountBoxIcon, ui::kColorSysPrimary,
+                                        size);
 }
 
 gfx::Image GetSizedAvatarIcon(const gfx::Image& image,
@@ -496,11 +543,12 @@ ui::ImageModel GetSizedAvatarImageModel(const ui::ImageModel& image, int size) {
 }
 
 #if !BUILDFLAG(IS_ANDROID)
-gfx::ImageSkia GetAvatarWithDottedRing(const ui::ImageModel& image,
-                                       int size,
-                                       bool has_padding,
-                                       bool has_background,
-                                       ui::ColorProvider* color_provider) {
+gfx::ImageSkia GetAvatarWithDottedRing(
+    const ui::ImageModel& image,
+    int size,
+    bool has_padding,
+    bool has_background,
+    const ui::ColorProvider& color_provider) {
   DCHECK(!image.IsEmpty());
 
   const AvatarWithDottedRingParams& params =
@@ -515,7 +563,7 @@ gfx::ImageSkia GetAvatarWithDottedRing(const ui::ImageModel& image,
 
   // Shrink the avatar to fit inside the dotted ring.
   gfx::ImageSkia sized_avatar_image =
-      GetSizedAvatarImageModel(image, avatar_size).Rasterize(color_provider);
+      GetSizedAvatarImageModel(image, avatar_size).Rasterize(&color_provider);
   // Crop to a circle.
   sized_avatar_image = CircleImageSource::CropCircle(sized_avatar_image);
   // Add padding.
@@ -524,13 +572,13 @@ gfx::ImageSkia GetAvatarWithDottedRing(const ui::ImageModel& image,
   // Add background color.
   if (has_background) {
     padded_image = AddBackgroundToImage(
-        padded_image, color_provider->GetColor(ui::kColorBubbleBackground));
+        padded_image, color_provider.GetColor(ui::kColorBubbleBackground));
   }
   // Add dotted ring.
   return gfx::ImageSkia(
       std::make_unique<ImageWithDottedCircleSource>(
           padded_image, avatar_ring_radius, avatar_ring_stroke,
-          color_provider->GetColor(ui::kColorSysStateInactiveRing)),
+          color_provider.GetColor(ui::kColorSysStateInactiveRing)),
       gfx::Size(size, size));
 }
 #endif  // !BUILDFLAG(IS_ANDROID)
@@ -933,14 +981,14 @@ bool IsDefaultAvatarIconIndex(size_t index) {
   return index < kDefaultAvatarIconsCount;
 }
 
-bool IsDefaultAvatarIconUrl(const std::string& url, size_t* icon_index) {
+bool IsDefaultAvatarIconUrl(std::string_view url, size_t* icon_index) {
   DCHECK(icon_index);
 #ifdef VIVALDI_BUILD
   // We need to handle the Chromium old urls
   if (base::StartsWith(url, kOldDefaultUrlPrefix, base::CompareCase::SENSITIVE)) {
     int int_value = -1;
     if (base::StringToInt(
-            base::MakeStringPiece(url.begin() + strlen(kOldDefaultUrlPrefix),
+            std::string_view(url.begin() + kOldDefaultUrlPrefix.length(),
                                   url.end()),
             &int_value)) {
       if (int_value < 0 ||
@@ -955,9 +1003,7 @@ bool IsDefaultAvatarIconUrl(const std::string& url, size_t* icon_index) {
     return false;
 
   int int_value = -1;
-  if (base::StringToInt(base::MakeStringPiece(
-                            url.begin() + strlen(kDefaultUrlPrefix), url.end()),
-                        &int_value)) {
+  if (base::StringToInt(url.substr(kDefaultUrlPrefix.size()), &int_value)) {
     if (int_value < 0 ||
         int_value >= static_cast<int>(kDefaultAvatarIconsCount))
       return false;
@@ -1175,6 +1221,16 @@ gfx::ImageSkia AddBackgroundToImage(const gfx::ImageSkia& image,
   return gfx::ImageSkia(
       std::make_unique<ImageWithBackgroundSource>(image, background_color),
       image.size());
+}
+
+ui::ImageModel EmbedAvatarOntoImage(int resource_id,
+                                    const gfx::Image& avatar,
+                                    const gfx::Point& avatar_position,
+                                    size_t avatar_size) {
+  return ui::ImageModel::FromImageSkia(
+      gfx::CanvasImageSource::MakeImageSkia<AvatarEmbeddedImageSource>(
+          ui::ResourceBundle::GetSharedInstance().GetImageNamed(resource_id),
+          avatar, avatar_position, avatar_size));
 }
 
 }  // namespace profiles

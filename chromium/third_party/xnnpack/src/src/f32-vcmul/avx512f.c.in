@@ -8,6 +8,8 @@ $assert BATCH_TILE % SIMD_SIZE == 0
 $assert BATCH_TILE >= SIMD_SIZE
 $SIMD_TILE = BATCH_TILE // SIMD_SIZE
 #include <assert.h>
+#include <stddef.h>
+#include <stdint.h>
 
 $if AVX >= 1:
   #include <immintrin.h>
@@ -15,6 +17,7 @@ $else:
   #include <xmmintrin.h>
 
 #include "src/xnnpack/common.h"
+#include "src/xnnpack/microparams.h"
 #include "src/xnnpack/vbinary.h"
 
 $ISA = {512: "avx512f", 1: "fma3", 0: "sse"}[AVX]
@@ -23,7 +26,7 @@ void xnn_f32_vcmul_ukernel__${ISA}_u${BATCH_TILE}(
     const float* input_a,
     const float* input_b,
     float* output,
-    const struct xnn_f32_default_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
+    const struct xnn_f32_default_params* restrict params) XNN_OOB_READS
 {
   assert(batch != 0);
   assert(batch % sizeof(float) == 0);

@@ -19,6 +19,7 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
+#include "ipc/constants.mojom.h"
 #include "net/cookies/site_for_cookies.h"
 
 using content::BrowserThread;
@@ -55,7 +56,7 @@ void RequestFilterManager::ProxySet::RemoveProxy(Proxy* proxy) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   auto proxy_it = proxies_.find(proxy);
-  CHECK(proxy_it != proxies_.end(), base::NotFatalUntil::M130);
+  CHECK(proxy_it != proxies_.end());
   proxies_.erase(proxy_it);
 }
 
@@ -154,8 +155,9 @@ bool RequestFilterManager::ProxyURLLoaderFactory(
   RequestFilterProxyingURLLoaderFactory::StartProxying(
       browser_context,
       frame ? frame->GetProcess()->GetID().value() : render_process_id,
-      frame ? frame->GetRoutingID() : MSG_ROUTING_NONE,
-      frame ? frame->GetRenderViewHost()->GetRoutingID() : MSG_ROUTING_NONE,
+      frame ? frame->GetRoutingID() : IPC::mojom::kRoutingIdNone,
+      frame ? frame->GetRenderViewHost()->GetRoutingID()
+            : IPC::mojom::kRoutingIdNone,
       &request_handler_, &request_id_generator_, std::move(navigation_id),
       factory_builder, std::move(header_client_receiver),
       std::move(forwarding_header_client), proxies_.get(), type,
@@ -250,8 +252,8 @@ void RequestFilterManager::ProxyWebTransport(
   StartWebRequestProxyingWebTransport(
       render_process_host, frame_routing_id, url, initiator_origin,
       std::move(handshake_client),
-      request_id_generator_.Generate(MSG_ROUTING_NONE, 0), &request_handler_,
-      *proxies_.get(), std::move(callback));
+      request_id_generator_.Generate(IPC::mojom::kRoutingIdNone, 0),
+      &request_handler_, *proxies_.get(), std::move(callback));
 }
 
 struct RequestFilterManager::RequestHandler::PendingRequest {

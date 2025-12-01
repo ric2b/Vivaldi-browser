@@ -32,8 +32,9 @@ Test various validation behaviors when a resolveTarget is provided.
 `
   )
   .paramsSimple([
-    // control case should be valid
+    // control cases should be valid
     { _valid: true },
+    { bindTextureResource: true, _valid: true },
     // a single sampled resolve source should cause a validation error.
     { colorAttachmentSamples: 1, _valid: false },
     // a multisampled resolve target should cause a validation error.
@@ -78,6 +79,7 @@ Test various validation behaviors when a resolveTarget is provided.
   ] as const)
   .fn(t => {
     const {
+      bindTextureResource = false,
       colorAttachmentFormat = 'rgba8unorm',
       resolveTargetFormat = 'rgba8unorm',
       otherAttachmentFormat = 'rgba8unorm',
@@ -139,6 +141,8 @@ Test various validation behaviors when a resolveTarget is provided.
             storeOp: 'discard',
             resolveTarget: resolveTargetInvalid
               ? vtu.getErrorTextureView(t)
+              : bindTextureResource
+              ? resolveTarget
               : resolveTarget.createView({
                   dimension: resolveTargetViewArrayLayerCount === 1 ? '2d' : '2d-array',
                   mipLevelCount: resolveTargetViewMipCount,

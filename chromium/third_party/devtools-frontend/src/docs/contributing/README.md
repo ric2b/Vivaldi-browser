@@ -5,11 +5,13 @@
 This page assumes a working Chromium DevTools [checkout and build](../get_the_code.md).
 
 1.   [Quick Start](#Quick-Start)
-2.   [Design Documents](./design.md)
-3.   [Contributing changes](./changes.md)
-4.   [Issues Guidelines](./issues.md)
-5.   [Settings, Experiments, and Features](./settings-experiments-features.md)
-5.   [Legal Stuff](#Legal-Stuff)
+2.   [IDE Setup](#IDE-Setup)
+3.   [Design Documents](./design.md)
+4.   [Contributing changes](./changes.md)
+5.   [Issues Guidelines](./issues.md)
+6.   [Settings, Experiments, and Features](./settings-experiments-features.md)
+7.   [Infrastructure](./infrastructure.md)
+8.   [Legal Stuff](#Legal-Stuff)
 
 
 ## Quick Start
@@ -295,6 +297,28 @@ button. This will start a final run of tests and land it after a green run.
     *   `git cl web` will open that URL in your browser.
 
 
+## IDE Setup
+
+### VS Code
+
+When using the standalone checkout, we already provide out of the box setup for
+Visual Studio Code, so most things will work out of the box. Below are a few
+steps that you should still check regardless (especially when you're not using
+the standalone checkout).
+
+#### Select the correct TypeScript version
+
+Open any `.ts` file in your VS code, hit Ctrl+Shift+P (on Windows/Linux) or
+Cmd+Shift+P (on macOS), and choose **TypeScript: Select TypeScript Version...**
+from the command palette. In the drop down select **Use Workspace Version**.
+
+![](./images/quickstart-vscode-tsversion.png "Select TypeScript Version")
+
+This will ensure that you have proper type definitions, even when the VS Code
+installation doesn't provide them (for whatever reason). And it also ensures
+that type definitions are consistent between what is used during the build and
+what is used within your IDE.
+
 ## Legal stuff
 
 All contributors must have valid Gerrit/Google accounts (which means you must
@@ -309,7 +333,7 @@ send it to us as described on that page.
 
 ### First-time contributors
 
-Add your or your organization's name and contact info to the [`AUTHORS`](./AUTHORS)
+Add your or your organization's name and contact info to the [`AUTHORS`](../../AUTHORS)
 file for Chromium DevTools. Please include this as part of your first patch and
 not as a separate standalone patch.
 
@@ -320,11 +344,11 @@ contribution can be accepted:
 
 -   Definition: The "author" is the email address that owns the code review
     request on <https://chromium-review.googlesource.com>
--   Ensure the author is already listed in the [`AUTHORS`](./AUTHORS).
+-   Ensure the author is already listed in the [`AUTHORS`](../../AUTHORS).
     In some cases, the author's company might have a wildcard rule
     (e.g. `*@google.com`).
 -   If the author or their company is not listed, the CL should include a new
-    [`AUTHORS`](./AUTHORS) entry.
+    [`AUTHORS`](../../AUTHORS) entry.
     -    Ensure the new entry is reviewed by a reviewer who works for Google.
     -    Contributor License Agreement can be verified by Googlers at http://go/cla.
     -    If there is a corporate CLA for the author's company, it must list the

@@ -14,6 +14,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/run_until.h"
+#include "base/test/scoped_feature_list.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/actions/chrome_action_id.h"
@@ -34,6 +35,7 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/lens/lens_features.h"
 #include "components/omnibox/browser/location_bar_model_impl.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/common/omnibox_features.h"
@@ -85,10 +87,11 @@ class LocationBarViewBrowserTest : public InProcessBrowserTest {
     return browser_view->GetLocationBarView();
   }
 
-  PageActionIconView* GetZoomView() {
-    return BrowserView::GetBrowserViewForBrowser(browser())
-        ->toolbar_button_provider()
-        ->GetPageActionIconView(PageActionIconType::kZoom);
+  views::View* GetZoomView() {
+    auto* toolbar_button_provider =
+        BrowserView::GetBrowserViewForBrowser(browser())
+            ->toolbar_button_provider();
+    return toolbar_button_provider->GetPageActionView(kActionZoomNormal);
   }
 
   ContentSettingImageView& GetContentSettingImageView(
@@ -108,7 +111,7 @@ IN_PROC_BROWSER_TEST_F(LocationBarViewBrowserTest, LocationBarDecoration) {
       browser()->tab_strip_model()->GetActiveWebContents();
   zoom::ZoomController* zoom_controller =
       zoom::ZoomController::FromWebContents(web_contents);
-  PageActionIconView* zoom_view = GetZoomView();
+  auto* zoom_view = GetZoomView();
 
   ASSERT_TRUE(zoom_view);
   EXPECT_FALSE(zoom_view->GetVisible());
@@ -152,7 +155,7 @@ IN_PROC_BROWSER_TEST_F(LocationBarViewBrowserTest, BubblesCloseOnHide) {
       browser()->tab_strip_model()->GetActiveWebContents();
   zoom::ZoomController* zoom_controller =
       zoom::ZoomController::FromWebContents(web_contents);
-  PageActionIconView* zoom_view = GetZoomView();
+  auto* zoom_view = GetZoomView();
 
   ASSERT_TRUE(zoom_view);
   EXPECT_FALSE(zoom_view->GetVisible());
@@ -427,8 +430,9 @@ class LocationBarViewPageActionMigrationTest
   LocationBarViewPageActionMigrationTest() {
     scoped_feature_list_.InitWithFeaturesAndParameters(
         {{::features::kPageActionsMigration,
-          {{::features::kPageActionsMigrationLensOverlay.name, "true"}}}},
-        {});
+          {{::features::kPageActionsMigrationLensOverlay.name, "true"}}},
+         {lens::features::kLensOverlayOmniboxEntryPoint, {}}},
+        {omnibox::kAiModeOmniboxEntryPoint});
   }
   ~LocationBarViewPageActionMigrationTest() override = default;
 
@@ -447,7 +451,7 @@ class LocationBarViewPageActionMigrationTest
 #if BUILDFLAG(IS_OZONE_WAYLAND)
 #define MAYBE_LocationBarFocusOrder DISABLED_LocationBarFocusOrder
 #else
-#define MAYBE_LocationBarFocusOrder ocationBarFocusOrder
+#define MAYBE_LocationBarFocusOrder LocationBarFocusOrder
 #endif
 
 // Tests that shifting focus from the omnibox will focus the migrated page
@@ -457,7 +461,7 @@ IN_PROC_BROWSER_TEST_F(LocationBarViewPageActionMigrationTest,
   actions::ActionItem* const lens_action =
       actions::ActionManager::Get().FindAction(
           kActionSidePanelShowLensOverlayResults);
-  ASSERT_NE(nullptr, lens_action);
+  ASSERT_NE(lens_action, nullptr);
   lens_action->SetVisible(true);
   lens_action->SetEnabled(true);
   browser()
@@ -472,7 +476,6 @@ IN_PROC_BROWSER_TEST_F(LocationBarViewPageActionMigrationTest,
   views::View* const bookmark_page_action_view =
       GetLocationBarView()->page_action_icon_controller()->GetIconView(
           PageActionIconType::kBookmarkStar);
-  ASSERT_TRUE(lens_overlay_page_action_view->GetVisible());
   ASSERT_TRUE(bookmark_page_action_view->GetVisible());
 
   views::FocusManager* const focus_manager =
@@ -480,21 +483,24 @@ IN_PROC_BROWSER_TEST_F(LocationBarViewPageActionMigrationTest,
 
   GetLocationBarView()->FocusLocation(true);
   OmniboxViewViews* const omnibox = GetLocationBarView()->omnibox_view();
-  ASSERT_EQ(omnibox, focus_manager->GetFocusedView());
+  ASSERT_EQ(focus_manager->GetFocusedView(), omnibox);
 
   FocusNextView(focus_manager);
-  EXPECT_EQ(lens_overlay_page_action_view, focus_manager->GetFocusedView());
+  EXPECT_EQ(focus_manager->GetFocusedView(), lens_overlay_page_action_view);
 
   FocusNextView(focus_manager);
-  EXPECT_EQ(bookmark_page_action_view, focus_manager->GetFocusedView());
+  EXPECT_EQ(focus_manager->GetFocusedView(), bookmark_page_action_view);
 }
 
 class LocationBarViewPageActionHideWhileEditingTests
     : public InProcessBrowserTest {
  public:
   LocationBarViewPageActionHideWhileEditingTests() {
-    scoped_feature_list_.InitWithFeaturesAndParameters(
-        {{::features::kPageActionsMigration, {}}}, {});
+    scoped_feature_list_.InitAndEnableFeatureWithParameters(
+        ::features::kPageActionsMigration,
+        {
+            {features::kPageActionsMigrationZoom.name, "true"},
+        });
   }
 
   void SetUpOnMainThread() override {

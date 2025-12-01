@@ -1,0 +1,32 @@
+{
+  "fonts": [],
+  "tests": [
+    {
+      "method": "pattern",
+      "query": {
+        "family": "Adwaita Mono"
+      },
+      "result": {
+        "family": ["Adwaita Mono", "monospace"]
+      }
+    },
+    {
+      "method": "pattern",
+      "query": {
+        "family": "Adwaita Sans"
+      },
+      "result": {
+        "family": ["Adwaita Sans", "sans-serif"]
+      }
+    },
+    {
+      "method": "pattern",
+      "query": {
+        "family": "Foo Serif"
+      },
+      "result": {
+        "family": ["Foo Serif", "serif"]
+      }
+    }
+  ]
+}

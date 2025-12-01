@@ -44,6 +44,10 @@ declare_args() {
   # implementors must provide their own demuxers and decoders.
   media_use_ffmpeg = true
 
+  # Enable usage of Symphonia within the media library. Used experimentally
+  # for software decoding. Currently only enabled on linux builds.
+  media_use_symphonia = is_linux
+
   # Enable usage of libvpx within the media library. Used for software based
   # decoding of VP9 and VP8A type content.
   media_use_libvpx = true
@@ -71,7 +75,9 @@ declare_args() {
 
   # Enables AC3/EAC3 audio handling in chromium. This includes demuxing,
   # on-device decoding and bitstream passthrough as supported by device.
-  enable_platform_ac3_eac3_audio = proprietary_codecs && is_cast_media_device
+  enable_platform_ac3_eac3_audio =
+      proprietary_codecs &&
+      (is_cast_media_device || (is_ios && target_platform == "tvos"))
 
   # Enables AC4 audio handling in chromium. This includes demuxing,
   # on-device decoding and bitstream passthrough as supported by device.
@@ -111,7 +117,7 @@ declare_args() {
   enable_dav1d_decoder = use_blink
 
   # Enable browser managed persistent metadata storage for EME persistent
-  # session and persistent usage record session.
+  # session.
   enable_media_drm_storage = is_android || is_castos
 
   # Enable HLS manifest parser and demuxer.
@@ -347,6 +353,11 @@ declare_args() {
   # Currently it is available on Win, Mac and Linux, since it requires the audio
   # service to run in a separate process.
   chrome_wide_echo_cancellation_supported = is_win || is_mac || is_linux
+}
+
+declare_args() {
+  system_loopback_as_aec_reference_supported =
+      (is_win || is_mac) && chrome_wide_echo_cancellation_supported
 }
 
 # Do not expand this list without double-checking with OWNERS, this is a list of

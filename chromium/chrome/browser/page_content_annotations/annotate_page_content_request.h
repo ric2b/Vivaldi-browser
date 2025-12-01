@@ -5,12 +5,18 @@
 #ifndef CHROME_BROWSER_PAGE_CONTENT_ANNOTATIONS_PAGE_CONTENT_ANNOTATIONS_ANNOTATE_PAGE_CONTENT_REQUEST_H_
 #define CHROME_BROWSER_PAGE_CONTENT_ANNOTATIONS_PAGE_CONTENT_ANNOTATIONS_ANNOTATE_PAGE_CONTENT_REQUEST_H_
 
-#include "chrome/browser/content_extraction/inner_text.h"
+#include "base/memory/raw_ptr.h"
+#include "chrome/browser/page_content_annotations/page_content_extraction_types.h"
+#include "components/content_extraction/content/browser/inner_text.h"
 #include "components/optimization_guide/content/browser/page_content_proto_provider.h"
 #include "components/optimization_guide/proto/features/common_quality_data.pb.h"
 #include "content/public/browser/web_contents.h"
 #include "pdf/buildflags.h"
 #include "third_party/blink/public/mojom/content_extraction/ai_page_content.mojom.h"
+
+namespace optimization_guide {
+class PageContextEligibility;
+}  // namespace optimization_guide
 
 namespace page_content_annotations {
 
@@ -37,6 +43,10 @@ class AnnotatedPageContentRequest {
 
   void OnFirstContentfulPaintInPrimaryMainFrame();
 
+  // Returns the cached APC for `page` and whether it is eligible for
+  // server upload. Will return nullopt if not available.
+  std::optional<ExtractedPageContentResult> GetCachedContentAndEligibility();
+
  private:
   void ResetForNewNavigation();
 
@@ -60,6 +70,10 @@ class AnnotatedPageContentRequest {
   void OnPdfDocumentLoadComplete();
 #endif  // BUILDFLAG(ENABLE_PDF)
 
+  void OnPageContextEligibilityAPILoaded(
+      optimization_guide::PageContextEligibility* page_context_eligibility);
+
+  raw_ptr<optimization_guide::PageContextEligibility> page_context_eligibility_;
   const raw_ptr<content::WebContents> web_contents_;
   const blink::mojom::AIPageContentOptionsPtr request_;
   const base::TimeDelta delay_;
@@ -83,6 +97,8 @@ class AnnotatedPageContentRequest {
 
   bool waiting_for_load_ = false;
   bool waiting_for_fcp_ = false;
+
+  std::optional<ExtractedPageContentResult> cached_content_;
 
   base::WeakPtrFactory<AnnotatedPageContentRequest> weak_factory_{this};
 };

@@ -29,10 +29,13 @@ const {apply, ownKeys} = bound(Reflect);
 const worldEnvDefined = "world" in libEnvironment;
 const isIsolatedWorld = worldEnvDefined && libEnvironment.world === "ISOLATED";
 const isMainWorld = worldEnvDefined && libEnvironment.world === "MAIN";
-const isChrome = typeof chrome === "object" && !!chrome.runtime;
-const isOtherThanChrome = typeof browser === "object" && !!browser.runtime;
+
+// Chrome is starting to support browser as well
+// https://groups.google.com/a/chromium.org/g/chromium-extensions/c/gK1Sd57p4go/m/ZLsLz7GSAwAJ
+const chromeObjAvailable = typeof chrome === "object" && !!chrome.runtime;
+const browserObjAvailable = typeof browser === "object" && !!browser.runtime;
 const isExtensionContext = !isMainWorld &&
-  (isIsolatedWorld || isChrome || isOtherThanChrome);
+  (isIsolatedWorld || chromeObjAvailable || browserObjAvailable);
 const copyIfExtension = value => isExtensionContext ?
   value :
   create(value, getOwnPropertyDescriptors(value));
@@ -95,23 +98,23 @@ const variables = freeze({
 });
 
 const startsCapitalized = new RegExp("^[A-Z]");
-
+const extensionApi = (
+  isExtensionContext && (
+    (chromeObjAvailable && chrome) ||
+    (browserObjAvailable && browser)
+  )
+) || void 0;
 // all default classes/namespaces that must be secured upfront when
 // the environment is not executing in an isolated world
 export default new Proxy(new Map([
   // custom environment variables
-  ["chrome", (
-    isExtensionContext && (
-      (isChrome && chrome) ||
-      (isOtherThanChrome && browser)
-    )
-  ) || void 0],
+  ["chrome", extensionApi],
+  ["browser", extensionApi],
   ["isExtensionContext", isExtensionContext],
   ["variables", variables],
   // secured references and classes
   ["console", copyIfExtension(console)],
   ["document", globalThis.document],
-  ["performance", copyIfExtension(performance)],
   ["JSON", copyIfExtension(JSON)],
   ["Map", Map],
   ["Math", copyIfExtension(Math)],

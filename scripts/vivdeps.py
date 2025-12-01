@@ -178,7 +178,7 @@ class VivaldiBaseDeps(gclient.GitDependency):
         custom_hooks=None,
         deps_file=os.path.join(self._root_dir, "DEPS"),
         should_process=True,
-        should_recurse=False,
+        should_recurse=True,
         relative=None,
         condition=None,
         print_outbuf=True,
@@ -220,14 +220,17 @@ class VivaldiBaseDeps(gclient.GitDependency):
         self._gcs_root = GcsRoot(self.root_dir)
     return self._gcs_root
 
-  def Load(self, recurse=False):
+  def Load(self, recurse=False, recurse_deps=[]):
     self.ParseDepsFile()
     if recurse and isinstance(self, ChromiumDeps):
       for subname, deps_file  in self.recursedeps.items():
-        if subname == "src-internal":
+        if any(x in subname for x in ["internal", "clank"]):
           continue
         if subname.startswith("src/"):
           subname=subname[4:]
+        if(recurse_deps and subname not in recurse_deps):
+          continue
+
         sub_dep = ChromiumDeps(root_dir=os.path.join(self.root_dir, subname),
                                variables=dict(self.get_vars()),
                               preloaded_content=(self._preloaded_subdeps or {}).get(subname, None))
@@ -308,8 +311,6 @@ class VivaldiBaseDeps(gclient.GitDependency):
 
 
     for subname, sub_deps in self._sub_deps.items():
-      if subname in exclude_modules:
-        continue
       sub_deps.UpdateModules(cipd_list=cipd_list, exclude_modules=exclude_modules, cipd_only=cipd_only)
 
   def GetModuleList(self, prefix=None):

@@ -18,6 +18,8 @@
 import $ from "../$.js";
 
 import {hideElement, initQueryAndApply} from "../utils/dom.js";
+import {formatArguments} from "../utils/general.js";
+import {waitUntilEvent} from "../utils/execution.js";
 import {profile} from "../introspection/profile.js";
 import {raceWinner} from "../introspection/race.js";
 import {getDebugger} from "../introspection/log.js";
@@ -36,64 +38,97 @@ const {ELEMENT_NODE} = Node;
  * use to restrict the scope of the MO.
  * It is important that the selector is as specific as possible to avoid to
  * match too many nodes.
+ * @param {string} waitUntil Optional parameter that can be used to delay
+ * the running of the snippet until the given state is reached.
+ * Accepts: loading, interactive, complete, load or any event name
  *
  * @since Adblock Plus 3.9.0
  */
-export function hideIfMatchesXPath(query, scopeQuery) {
+export function hideIfMatchesXPath(query, scopeQuery, waitUntil) {
   const {mark, end} = profile("hide-if-matches-xpath");
+  const formattedArguments = formatArguments(arguments);
   const debugLog = getDebugger("hide-if-matches-xpath");
 
-  const startHidingMutationObserver = scopeNode => {
-    const queryAndApply = initQueryAndApply(`xpath(${query})`);
-    const seenMap = new WeakSet();
-    const callback = () => {
-      mark();
-      queryAndApply(node => {
-        if (seenMap.has(node))
-          return false;
+  const mainLogic = () => {
+    const startHidingMutationObserver = scopeNode => {
+      const queryAndApply = initQueryAndApply(`xpath(${query})`);
+      const seenMap = new WeakSet();
+      const hideNode = node => {
         seenMap.add(node);
         win();
+        // Hide the node
         if ($(node).nodeType === ELEMENT_NODE)
           hideElement(node);
         else
           $(node).textContent = "";
-        debugLog("success", "Matched: ", node, " for selector: ", query);
-      });
-      end();
+        debugLog("success",
+                 "Matched: ",
+                 node,
+                 "\nFILTER: hide-if-matches-xpath",
+                 formattedArguments);
+      };
+
+      const callback = () => {
+        mark();
+        queryAndApply(node => {
+          if (seenMap.has(node))
+            return false;
+
+          if (scopeQuery) {
+            const scopeQueryAndApply = initQueryAndApply(`xpath(${scopeQuery})`);
+            scopeQueryAndApply(matchingScopeNode => {
+              if (matchingScopeNode.contains(node)) {
+                // the node has an ancestor that matches the scopeQuery
+                hideNode(node);
+              }
+              else {
+                // the node has not an ancestor that matches the scopeQuery
+                return false;
+              }
+            });
+          }
+          else {
+            hideNode(node);
+          }
+        });
+        end();
+      };
+      const mo = new MutationObserver(callback);
+      const win = raceWinner(
+        "hide-if-matches-xpath",
+        () => mo.disconnect()
+      );
+      mo.observe(
+        scopeNode, {characterData: true, childList: true, subtree: true});
+      callback();
     };
-    const mo = new MutationObserver(callback);
-    const win = raceWinner(
-      "hide-if-matches-xpath",
-      () => mo.disconnect()
-    );
-    mo.observe(
-      scopeNode, {characterData: true, childList: true, subtree: true});
-    callback();
+
+    if (scopeQuery) {
+      // This is a performance optimization: we only observe DOM subtrees
+      // instead of the whole document, if a scope query is given.
+      let count = 0;
+      let scopeMutationObserver;
+      const scopeQueryAndApply = initQueryAndApply(`xpath(${scopeQuery})`);
+      const findMutationScopeNodes = () => {
+        scopeQueryAndApply(scopeNode => {
+          // Start a Mutation Observer for each found node
+          startHidingMutationObserver(scopeNode);
+          count++;
+        });
+        if (count > 0)
+          scopeMutationObserver.disconnect();
+      };
+      scopeMutationObserver = new MutationObserver(findMutationScopeNodes);
+      scopeMutationObserver.observe(
+        document, {characterData: true, childList: true, subtree: true}
+      );
+      findMutationScopeNodes();
+    }
+    else {
+      // If no scope query has been specified, observe the document
+      startHidingMutationObserver(document);
+    }
   };
 
-  if (scopeQuery) {
-    // This is a performance optimization: we only observe DOM subtrees
-    // instead of the whole document, if a scope query is given.
-    let count = 0;
-    let scopeMutationObserver;
-    const scopeQueryAndApply = initQueryAndApply(`xpath(${scopeQuery})`);
-    const findMutationScopeNodes = () => {
-      scopeQueryAndApply(scopeNode => {
-        // Start a Mutation Observer for each found node
-        startHidingMutationObserver(scopeNode);
-        count++;
-      });
-      if (count > 0)
-        scopeMutationObserver.disconnect();
-    };
-    scopeMutationObserver = new MutationObserver(findMutationScopeNodes);
-    scopeMutationObserver.observe(
-      document, {characterData: true, childList: true, subtree: true}
-    );
-    findMutationScopeNodes();
-  }
-  else {
-    // If no scope query has been specified, observe the document
-    startHidingMutationObserver(document);
-  }
+  waitUntilEvent(debugLog, mainLogic, waitUntil);
 }

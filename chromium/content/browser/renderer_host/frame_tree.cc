@@ -12,6 +12,7 @@
 #include <utility>
 
 #include "base/containers/contains.h"
+#include "base/debug/crash_logging.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
@@ -41,6 +42,7 @@
 #include "content/common/content_navigation_policy.h"
 #include "content/common/content_switches_internal.h"
 #include "content/common/features.h"
+#include "ipc/constants.mojom.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/frame/frame_owner_element_type.h"
 #include "third_party/blink/public/common/frame/frame_policy.h"
@@ -391,7 +393,7 @@ FrameTreeNode* FrameTree::AddFrame(
     bool was_discarded,
     blink::FrameOwnerElementType owner_type,
     bool is_dummy_frame_for_inner_tree) {
-  CHECK_NE(new_routing_id, MSG_ROUTING_NONE);
+  CHECK_NE(new_routing_id, IPC::mojom::kRoutingIdNone);
   // Normally this path is for blink adding a child local frame. But fenced
   // frames add a dummy child frame that never gets a corresponding
   // RenderFrameImpl in any renderer process, and therefore its `frame_remote`
@@ -1098,8 +1100,8 @@ void FrameTree::FocusOuterFrameTrees() {
   }
 }
 
-void FrameTree::Discard() {
-  const auto attempt_discard = [this]() {
+void FrameTree::Discard(base::OnceClosure on_discarded_cb) {
+  const auto attempt_discard = [this](base::OnceClosure on_discarded_cb) {
     // A speculative pending-commit rfh should not be cancelled or deleted. In
     // this case ignore the discard request and allow the navigation to complete
     // as normal.
@@ -1110,13 +1112,14 @@ void FrameTree::Discard() {
     }
 
     root()->set_was_discarded();
-    root()->current_frame_host()->DiscardFrame();
+    root()->current_frame_host()->DiscardFrame(std::move(on_discarded_cb));
     NavigationControllerImpl& navigation_controller = controller();
     navigation_controller.SetNeedsReload();
     navigation_controller.GetBackForwardCache().Flush();
     return true;
   };
-  base::UmaHistogramBoolean("Discarding.DiscardFrameTree", attempt_discard());
+  base::UmaHistogramBoolean("Discarding.DiscardFrameTree",
+                            attempt_discard(std::move(on_discarded_cb)));
 }
 
 }  // namespace content

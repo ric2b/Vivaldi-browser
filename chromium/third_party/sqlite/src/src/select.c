@@ -154,7 +154,7 @@ Select *sqlite3SelectNew(
   pNew->addrOpenEphm[0] = -1;
   pNew->addrOpenEphm[1] = -1;
   pNew->nSelectRow = 0;
-  if( pSrc==0 ) pSrc = sqlite3DbMallocZero(pParse->db, sizeof(*pSrc));
+  if( pSrc==0 ) pSrc = sqlite3DbMallocZero(pParse->db, SZ_SRCLIST_1);
   pNew->pSrc = pSrc;
   pNew->pWhere = pWhere;
   pNew->pGroupBy = pGroupBy;
@@ -319,10 +319,33 @@ int sqlite3JoinType(Parse *pParse, Token *pA, Token *pB, Token *pC){
 */
 int sqlite3ColumnIndex(Table *pTab, const char *zCol){
   int i;
-  u8 h = sqlite3StrIHash(zCol);
-  Column *pCol;
-  for(pCol=pTab->aCol, i=0; i<pTab->nCol; pCol++, i++){
-    if( pCol->hName==h && sqlite3StrICmp(pCol->zCnName, zCol)==0 ) return i;
+  u8 h;
+  const Column *aCol;
+  int nCol;
+
+  h = sqlite3StrIHash(zCol);
+  aCol = pTab->aCol;
+  nCol = pTab->nCol;
+
+  /* See if the aHx gives us a lucky match */
+  i = pTab->aHx[h % sizeof(pTab->aHx)];
+  assert( i<nCol );
+  if( aCol[i].hName==h
+   && sqlite3StrICmp(aCol[i].zCnName, zCol)==0
+  ){
+    return i;
+  }
+
+  /* No lucky match from the hash table.  Do a full search. */
+  i = 0;
+  while( 1 /*exit-by-break*/ ){
+    if( aCol[i].hName==h
+     && sqlite3StrICmp(aCol[i].zCnName, zCol)==0
+    ){
+      return i;
+    }
+    i++;
+    if( i>=nCol ) break;
   }
   return -1;
 }
@@ -1514,8 +1537,8 @@ static void selectInnerLoop(
 ** X extra columns.
 */
 KeyInfo *sqlite3KeyInfoAlloc(sqlite3 *db, int N, int X){
-  int nExtra = (N+X)*(sizeof(CollSeq*)+1) - sizeof(CollSeq*);
-  KeyInfo *p = sqlite3DbMallocRawNN(db, sizeof(KeyInfo) + nExtra);
+  int nExtra = (N+X)*(sizeof(CollSeq*)+1);
+  KeyInfo *p = sqlite3DbMallocRawNN(db, SZ_KEYINFO(0) + nExtra);
   if( p ){
     p->aSortFlags = (u8*)&p->aColl[N+X];
     p->nKeyField = (u16)N;
@@ -1523,7 +1546,7 @@ KeyInfo *sqlite3KeyInfoAlloc(sqlite3 *db, int N, int X){
     p->enc = ENC(db);
     p->db = db;
     p->nRef = 1;
-    memset(&p[1], 0, nExtra);
+    memset(p->aColl, 0, nExtra);
   }else{
     return (KeyInfo*)sqlite3OomFault(db);
   }
@@ -4835,7 +4858,8 @@ static void constInsert(
       return;  /* Already present.  Return without doing anything. */
     }
   }
-  if( sqlite3ExprAffinity(pColumn)==SQLITE_AFF_BLOB ){
+  assert( SQLITE_AFF_NONE<SQLITE_AFF_BLOB );
+  if( sqlite3ExprAffinity(pColumn)<=SQLITE_AFF_BLOB ){
     pConst->bHasAffBlob = 1;
   }
 
@@ -4910,7 +4934,8 @@ static int propagateConstantExprRewriteOne(
     if( pColumn==pExpr ) continue;
     if( pColumn->iTable!=pExpr->iTable ) continue;
     if( pColumn->iColumn!=pExpr->iColumn ) continue;
-    if( bIgnoreAffBlob && sqlite3ExprAffinity(pColumn)==SQLITE_AFF_BLOB ){
+    assert( SQLITE_AFF_NONE<SQLITE_AFF_BLOB );
+    if( bIgnoreAffBlob && sqlite3ExprAffinity(pColumn)<=SQLITE_AFF_BLOB ){
       break;
     }
     /* A match is found.  Add the EP_FixedCol property */
@@ -5563,7 +5588,7 @@ int sqlite3IndexedByLookup(Parse *pParse, SrcItem *pFrom){
 ** above that generates the code for a compound SELECT with an ORDER BY clause
 ** uses a merge algorithm that requires the same collating sequence on the
 ** result columns as on the ORDER BY clause.  See ticket
-** http://www.sqlite.org/src/info/6709574d2a
+** http://sqlite.org/src/info/6709574d2a
 **
 ** This transformation is only needed for EXCEPT, INTERSECT, and UNION.
 ** The UNION ALL operator works fine with multiSelectOrderBy() even when
@@ -5624,7 +5649,7 @@ static int convertCompoundSelectToSubquery(Walker *pWalker, Select *p){
 #ifndef SQLITE_OMIT_WINDOWFUNC
   p->pWinDefn = 0;
 #endif
-  p->selFlags &= ~SF_Compound;
+  p->selFlags &= ~(u32)SF_Compound;
   assert( (p->selFlags & SF_Converted)==0 );
   p->selFlags |= SF_Converted;
   assert( pNew->pPrior!=0 );
@@ -6040,7 +6065,7 @@ static int selectExpander(Walker *pWalker, Select *p){
   pEList = p->pEList;
   if( pParse->pWith && (p->selFlags & SF_View) ){
     if( p->pWith==0 ){
-      p->pWith = (With*)sqlite3DbMallocZero(db, sizeof(With));
+      p->pWith = (With*)sqlite3DbMallocZero(db, SZ_WITH(1) );
       if( p->pWith==0 ){
         return WRC_Abort;
       }
@@ -7228,14 +7253,14 @@ static int countOfViewOptimization(Parse *pParse, Select *p){
   pExpr = 0;
   pSub = sqlite3SubqueryDetach(db, pFrom);
   sqlite3SrcListDelete(db, p->pSrc);
-  p->pSrc = sqlite3DbMallocZero(pParse->db, sizeof(*p->pSrc));
+  p->pSrc = sqlite3DbMallocZero(pParse->db, SZ_SRCLIST_1);
   while( pSub ){
     Expr *pTerm;
     pPrior = pSub->pPrior;
     pSub->pPrior = 0;
     pSub->pNext = 0;
     pSub->selFlags |= SF_Aggregate;
-    pSub->selFlags &= ~SF_Compound;
+    pSub->selFlags &= ~(u32)SF_Compound;
     pSub->nSelectRow = 0;
     sqlite3ParserAddCleanup(pParse, sqlite3ExprListDeleteGeneric, pSub->pEList);
     pTerm = pPrior ? sqlite3ExprDup(db, pCount, 0) : pCount;
@@ -7250,7 +7275,7 @@ static int countOfViewOptimization(Parse *pParse, Select *p){
     pSub = pPrior;
   }
   p->pEList->a[0].pExpr = pExpr;
-  p->selFlags &= ~SF_Aggregate;
+  p->selFlags &= ~(u32)SF_Aggregate;
 
 #if TREETRACE_ENABLED
   if( sqlite3TreeTrace & 0x200 ){
@@ -7457,7 +7482,7 @@ int sqlite3Select(
       testcase( pParse->earlyCleanup );
       p->pOrderBy = 0;
     }
-    p->selFlags &= ~SF_Distinct;
+    p->selFlags &= ~(u32)SF_Distinct;
     p->selFlags |= SF_NoopOrderBy;
   }
   sqlite3SelectPrep(pParse, p, 0);
@@ -7496,7 +7521,7 @@ int sqlite3Select(
     ** and leaving this flag set can cause errors if a compound sub-query
     ** in p->pSrc is flattened into this query and this function called
     ** again as part of compound SELECT processing.  */
-    p->selFlags &= ~SF_UFSrcCheck;
+    p->selFlags &= ~(u32)SF_UFSrcCheck;
   }
 
   if( pDest->eDest==SRT_Output ){
@@ -7985,7 +8010,7 @@ int sqlite3Select(
    && p->pWin==0
 #endif
   ){
-    p->selFlags &= ~SF_Distinct;
+    p->selFlags &= ~(u32)SF_Distinct;
     pGroupBy = p->pGroupBy = sqlite3ExprListDup(db, pEList, 0);
     if( pGroupBy ){
       for(i=0; i<pGroupBy->nExpr; i++){
@@ -8094,6 +8119,12 @@ int sqlite3Select(
     if( pWInfo==0 ) goto select_end;
     if( sqlite3WhereOutputRowCount(pWInfo) < p->nSelectRow ){
       p->nSelectRow = sqlite3WhereOutputRowCount(pWInfo);
+      if( pDest->eDest<=SRT_DistQueue && pDest->eDest>=SRT_DistFifo ){
+        /* TUNING: For a UNION CTE, because UNION is implies DISTINCT,
+        ** reduce the estimated output row count by 8 (LogEst 30). 
+        ** Search for tag-20250414a to see other cases */
+        p->nSelectRow -= 30;
+      }
     }
     if( sDistinct.isTnct && sqlite3WhereIsDistinct(pWInfo) ){
       sDistinct.eTnctType = sqlite3WhereIsDistinct(pWInfo);
@@ -8467,6 +8498,10 @@ int sqlite3Select(
         if( iOrderByCol ){
           Expr *pX = p->pEList->a[iOrderByCol-1].pExpr;
           Expr *pBase = sqlite3ExprSkipCollateAndLikely(pX);
+          while( ALWAYS(pBase!=0) && pBase->op==TK_IF_NULL_ROW ){
+            pX = pBase->pLeft;
+            pBase = sqlite3ExprSkipCollateAndLikely(pX);
+          }
           if( ALWAYS(pBase!=0)
            && pBase->op!=TK_AGG_COLUMN
            && pBase->op!=TK_REGISTER

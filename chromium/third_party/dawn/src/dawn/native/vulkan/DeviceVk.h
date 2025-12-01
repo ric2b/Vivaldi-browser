@@ -53,6 +53,7 @@ namespace dawn::native::vulkan {
 
 class BufferUploader;
 class FencedDeleter;
+class FramebufferCache;
 class RenderPassCache;
 class ResourceMemoryAllocator;
 
@@ -76,6 +77,7 @@ class Device final : public DeviceBase {
     uint32_t GetGraphicsQueueFamily() const;
 
     MutexProtected<FencedDeleter>& GetFencedDeleter() const;
+    FramebufferCache* GetFramebufferCache() const;
     RenderPassCache* GetRenderPassCache() const;
     MutexProtected<ResourceMemoryAllocator>& GetResourceMemoryAllocator() const;
     external_semaphore::Service* GetExternalSemaphoreService() const;
@@ -99,11 +101,11 @@ class Device final : public DeviceBase {
 
     MaybeError TickImpl() override;
 
-    MaybeError CopyFromStagingToBufferImpl(BufferBase* source,
-                                           uint64_t sourceOffset,
-                                           BufferBase* destination,
-                                           uint64_t destinationOffset,
-                                           uint64_t size) override;
+    MaybeError CopyFromStagingToBuffer(BufferBase* source,
+                                       uint64_t sourceOffset,
+                                       BufferBase* destination,
+                                       uint64_t destinationOffset,
+                                       uint64_t size) override;
     MaybeError CopyFromStagingToTextureImpl(const BufferBase* source,
                                             const TexelCopyBufferLayout& src,
                                             const TextureCopy& dst,
@@ -155,8 +157,7 @@ class Device final : public DeviceBase {
     ResultOrError<Ref<ShaderModuleBase>> CreateShaderModuleImpl(
         const UnpackedPtr<ShaderModuleDescriptor>& descriptor,
         const std::vector<tint::wgsl::Extension>& internalExtensions,
-        ShaderModuleParseResult* parseResult,
-        std::unique_ptr<OwnedCompilationMessages>* compilationMessages) override;
+        ShaderModuleParseResult* parseResult) override;
     ResultOrError<Ref<SwapChainBase>> CreateSwapChainImpl(
         Surface* surface,
         SwapChainBase* previousSwapChain,
@@ -202,6 +203,7 @@ class Device final : public DeviceBase {
         mDescriptorAllocatorsPendingDeallocation;
     std::unique_ptr<MutexProtected<FencedDeleter>> mDeleter;
     std::unique_ptr<MutexProtected<ResourceMemoryAllocator>> mResourceMemoryAllocator;
+    std::unique_ptr<FramebufferCache> mFramebufferCache;
     std::unique_ptr<RenderPassCache> mRenderPassCache;
 
     std::unique_ptr<external_memory::Service> mExternalMemoryService;
@@ -215,8 +217,6 @@ class Device final : public DeviceBase {
     Ref<PipelineCache> mMonolithicPipelineCache;
 
     Ref<QuerySetBase> mEmptyPassQuerySet;
-
-    bool mSupportsMappableStorageBuffer = false;
 
     MaybeError ImportExternalImage(const ExternalImageDescriptorVk* descriptor,
                                    ExternalMemoryHandle memoryHandle,

@@ -996,12 +996,12 @@ void av1_init_tile_thread_data(AV1_PRIMARY *ppi, int is_first_pass) {
                              "Failed to allocate SMS tree");
         }
 
-        for (int x = 0; x < 2; x++)
-          for (int y = 0; y < 2; y++)
-            AOM_CHECK_MEM_ERROR(
-                &ppi->error, td->hash_value_buffer[x][y],
-                (uint32_t *)aom_malloc(AOM_BUFFER_SIZE_FOR_BLOCK_HASH *
-                                       sizeof(*td->hash_value_buffer[0][0])));
+        for (int x = 0; x < 2; x++) {
+          AOM_CHECK_MEM_ERROR(
+              &ppi->error, td->hash_value_buffer[x],
+              (uint32_t *)aom_malloc(AOM_BUFFER_SIZE_FOR_BLOCK_HASH *
+                                     sizeof(*td->hash_value_buffer[x])));
+        }
 
         // Allocate frame counters in thread data.
         AOM_CHECK_MEM_ERROR(&ppi->error, td->counts,
@@ -1589,14 +1589,12 @@ static inline void prepare_enc_workers(AV1_COMP *cpi, AVxWorkerHook hook,
       thread_data->td->mb.obmc_buffer = thread_data->td->obmc_buffer;
 
       for (int x = 0; x < 2; x++) {
-        for (int y = 0; y < 2; y++) {
-          memcpy(thread_data->td->hash_value_buffer[x][y],
-                 cpi->td.mb.intrabc_hash_info.hash_value_buffer[x][y],
-                 AOM_BUFFER_SIZE_FOR_BLOCK_HASH *
-                     sizeof(*thread_data->td->hash_value_buffer[0][0]));
-          thread_data->td->mb.intrabc_hash_info.hash_value_buffer[x][y] =
-              thread_data->td->hash_value_buffer[x][y];
-        }
+        memcpy(thread_data->td->hash_value_buffer[x],
+               cpi->td.mb.intrabc_hash_info.hash_value_buffer[x],
+               AOM_BUFFER_SIZE_FOR_BLOCK_HASH *
+                   sizeof(*thread_data->td->hash_value_buffer[x]));
+        thread_data->td->mb.intrabc_hash_info.hash_value_buffer[x] =
+            thread_data->td->hash_value_buffer[x];
       }
       // Keep these conditional expressions in sync with the corresponding ones
       // in accumulate_counters_enc_workers().

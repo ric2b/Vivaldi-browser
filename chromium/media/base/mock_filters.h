@@ -106,7 +106,7 @@ class MockPipeline : public Pipeline {
   }
   MOCK_METHOD2(OnResume, void(base::TimeDelta, PipelineStatusCallback&));
   MOCK_METHOD2(OnEnabledAudioTracksChanged,
-               void(const std::vector<MediaTrack::Id>&, base::OnceClosure));
+               void(std::optional<MediaTrack::Id>, base::OnceClosure));
   MOCK_METHOD2(OnSelectedVideoTrackChanged,
                void(std::optional<MediaTrack::Id>, base::OnceClosure));
   MOCK_METHOD0(OnExternalVideoFrameRequest, void());
@@ -195,7 +195,7 @@ class MockDemuxer : public Demuxer {
   MOCK_METHOD(void,
               OnTracksChanged,
               (DemuxerStream::Type,
-               const std::vector<MediaTrack::Id>&,
+               std::optional<MediaTrack::Id>,
                base::TimeDelta,
                TrackChangeCB),
               (override));
@@ -872,6 +872,7 @@ class MockMediaClient : public media::MediaClient {
   MOCK_METHOD1(IsDecoderSupportedVideoType, bool(const media::VideoType& type));
   MOCK_METHOD1(IsEncoderSupportedVideoType, bool(const media::VideoType& type));
   MOCK_METHOD1(IsSupportedBitstreamAudioCodec, bool(media::AudioCodec codec));
+  MOCK_METHOD0(ShouldSuppressAudioTracks, bool());
   MOCK_METHOD1(GetAudioRendererAlgorithmParameters,
                std::optional<::media::AudioRendererAlgorithmParameters>(
                    media::AudioParameters audio_parameters));

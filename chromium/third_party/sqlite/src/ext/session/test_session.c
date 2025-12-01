@@ -34,7 +34,7 @@ struct TestStreamInput {
 static int dbHandleFromObj(Tcl_Interp *interp, Tcl_Obj *pObj, sqlite3 **pDb){
   Tcl_CmdInfo info;
   if( 0==Tcl_GetCommandInfo(interp, Tcl_GetString(pObj), &info) ){
-    Tcl_AppendResult(interp, "no such handle: ", Tcl_GetString(pObj), 0);
+    Tcl_AppendResult(interp, "no such handle: ", Tcl_GetString(pObj), NULL);
     return TCL_ERROR;
   }
 
@@ -130,7 +130,7 @@ static int SQLITE_TCLAPI test_sql_exec_changeset(
   rc = sql_exec_changeset(db, zSql, &nChangeset, &pChangeset);
   if( rc!=SQLITE_OK ){
     Tcl_ResetResult(interp);
-    Tcl_AppendResult(interp, "error in sql_exec_changeset()", 0);
+    Tcl_AppendResult(interp, "error in sql_exec_changeset()", NULL);
     return TCL_ERROR;
   }
 
@@ -166,7 +166,7 @@ static int test_session_error(Tcl_Interp *interp, int rc, char *zErr){
   extern const char *sqlite3ErrName(int);
   Tcl_SetObjResult(interp, Tcl_NewStringObj(sqlite3ErrName(rc), -1));
   if( zErr ){
-    Tcl_AppendResult(interp, " - ", zErr, 0);
+    Tcl_AppendResult(interp, " - ", zErr, NULL);
     sqlite3_free(zErr);
   }
   return TCL_ERROR;
@@ -435,7 +435,7 @@ static int SQLITE_TCLAPI test_sqlite3session(
   }
 
   if( 0==Tcl_GetCommandInfo(interp, Tcl_GetString(objv[2]), &info) ){
-    Tcl_AppendResult(interp, "no such handle: ", Tcl_GetString(objv[2]), 0);
+    Tcl_AppendResult(interp, "no such handle: ", Tcl_GetString(objv[2]), NULL);
     return TCL_ERROR;
   }
   db = *(sqlite3 **)info.objClientData;
@@ -832,7 +832,7 @@ static int SQLITE_TCLAPI testSqlite3changesetApply(
     return TCL_ERROR;
   }
   if( 0==Tcl_GetCommandInfo(interp, Tcl_GetString(objv[1]), &info) ){
-    Tcl_AppendResult(interp, "no such handle: ", Tcl_GetString(objv[1]), 0);
+    Tcl_AppendResult(interp, "no such handle: ", Tcl_GetString(objv[1]), NULL);
     return TCL_ERROR;
   }
   db = *(sqlite3 **)info.objClientData;
@@ -924,7 +924,7 @@ static int SQLITE_TCLAPI test_sqlite3changeset_apply_replace_all(
     return TCL_ERROR;
   }
   if( 0==Tcl_GetCommandInfo(interp, Tcl_GetString(objv[1]), &info) ){
-    Tcl_AppendResult(interp, "no such handle: ", Tcl_GetString(objv[2]), 0);
+    Tcl_AppendResult(interp, "no such handle: ", Tcl_GetString(objv[2]), NULL);
     return TCL_ERROR;
   }
   db = *(sqlite3 **)info.objClientData;
@@ -1459,6 +1459,9 @@ struct TestChangegroup {
 typedef struct TestChangeIter TestChangeIter;
 struct TestChangeIter {
   sqlite3_changeset_iter *pIter;
+
+  /* If this iter uses streaming. */
+  TestStreamInput in;
 };
 
 
@@ -1551,7 +1554,7 @@ static int SQLITE_TCLAPI test_changegroup_cmd(
       TestChangeIter *pIter = 0;
       const char *zIter = Tcl_GetString(objv[2]);
       if( 0==Tcl_GetCommandInfo(interp, zIter, &cmdInfo) ){
-        Tcl_AppendResult(interp, "no such iter: ", Tcl_GetString(objv[2]), 0);
+        Tcl_AppendResult(interp, "no such iter: ", Tcl_GetString(objv[2]), NULL);
         return TCL_ERROR;
       }
 
@@ -1681,6 +1684,7 @@ static int SQLITE_TCLAPI test_sqlite3changeset_start(
   sqlite3_changeset_iter *pIter = 0;
   int flags = 0;
   int rc = SQLITE_OK;
+  int nAlloc = 0;                 /* Bytes of space to allocate */
 
   static int iCmd = 1;
   char zCmd[64];
@@ -1696,18 +1700,36 @@ static int SQLITE_TCLAPI test_sqlite3changeset_start(
     return TCL_ERROR;
   }
 
-  flags = isInvert ? SQLITE_CHANGESETSTART_INVERT : 0;
   pChangeset = (void *)Tcl_GetByteArrayFromObj(objv[objc-1], &nChangeset);
-  rc = sqlite3changeset_start_v2(&pIter, (int)nChangeset, pChangeset, flags);
+  flags = isInvert ? SQLITE_CHANGESETSTART_INVERT : 0;
+
+  nAlloc = sizeof(TestChangeIter);
+  if( test_tcl_integer(interp, SESSION_STREAM_TCL_VAR) ){
+    nAlloc += nChangeset;
+  }
+  pNew = (TestChangeIter*)ckalloc(nAlloc);
+  memset(pNew, 0, nAlloc);
+  if( test_tcl_integer(interp, SESSION_STREAM_TCL_VAR) ){
+    pNew->in.nStream = test_tcl_integer(interp, SESSION_STREAM_TCL_VAR);
+    pNew->in.nData = nChangeset;
+    pNew->in.aData = (unsigned char*)&pNew[1];
+    memcpy(pNew->in.aData, pChangeset, nChangeset);
+  }
+
+  if( pNew->in.nStream ){
+    void *pCtx = (void*)&pNew->in;
+    rc = sqlite3changeset_start_v2_strm(&pIter, testStreamInput, pCtx, flags);
+  }else{
+    rc = sqlite3changeset_start_v2(&pIter, (int)nChangeset, pChangeset, flags);
+  }
   if( rc!=SQLITE_OK ){
     char *zErr = sqlite3_mprintf(
         "error in sqlite3changeset_start_v2() - %d", rc
     );
     Tcl_AppendResult(interp, zErr, (char*)0);
+    ckfree(pNew);
     return TCL_ERROR;
   }
-
-  pNew = (TestChangeIter*)ckalloc(sizeof(TestChangeIter));
   pNew->pIter = pIter;
 
   sprintf(zCmd, "csiter%d", iCmd++);

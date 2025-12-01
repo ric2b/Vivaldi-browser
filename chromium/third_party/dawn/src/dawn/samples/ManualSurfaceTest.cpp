@@ -265,7 +265,8 @@ void DoRender(WindowData* data) {
     wgpu::CommandBuffer commands = encoder.Finish();
     queue.Submit(1, &commands);
 
-    data->surface.Present();
+    wgpu::Status presentStatus = data->surface.Present();
+    DAWN_ASSERT(presentStatus == wgpu::Status::Success);
 }
 
 std::ostream& operator<<(std::ostream& o, const wgpu::SurfaceConfiguration& desc) {
@@ -409,7 +410,9 @@ int main(int argc, const char* argv[]) {
 
     wgpu::InstanceDescriptor instanceDescriptor{};
     instanceDescriptor.nextInChain = &toggles;
-    instanceDescriptor.capabilities.timedWaitAnyEnable = true;
+    static constexpr auto kTimedWaitAny = wgpu::InstanceFeatureName::TimedWaitAny;
+    instanceDescriptor.requiredFeatureCount = 1;
+    instanceDescriptor.requiredFeatures = &kTimedWaitAny;
     instance = wgpu::CreateInstance(&instanceDescriptor);
 
     // Choose an adapter we like.

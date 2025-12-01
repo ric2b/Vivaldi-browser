@@ -50,6 +50,18 @@
   }
 }
 
+.delete-button {
+  display: flex;
+  pointer-events: auto;
+  position: absolute;
+  right: 0;
+  top: -5px;
+  border-radius: 50%;
+  padding: 0;
+  border: none;
+  background: var(--color-background-inverted);
+}
+
 .ai-label-loading,
 .ai-label-error {
   gap: var(--sys-size-6);
@@ -105,6 +117,7 @@
   font-family: var(--default-font-family);
   font-size: var(--sys-typescale-body2-size);
   font-weight: var(--ref-typeface-weight-medium);
+  outline: 2px solid var(--color-background);
 }
 
 

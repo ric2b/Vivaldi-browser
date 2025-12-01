@@ -19,6 +19,12 @@
 #import "ios/chrome/browser/tips_manager/model/tips_manager_ios.h"
 #import "ios/chrome/browser/tips_manager/model/tips_manager_ios_factory.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "components/prefs/pref_service.h"
+#import "prefs/vivaldi_pref_names.h"
+// End Vivaldi
+
 using translate_infobar_overlays::PlaceholderRequestCancelHandler;
 
 namespace {
@@ -39,7 +45,14 @@ base::RepeatingCallback<bool(OverlayRequest*)> ConfigAndInfoBarMatcher(
 TranslateOverlayTabHelper::TranslateOverlayTabHelper(web::WebState* web_state)
     : translate_step_observer_(this),
       translate_infobar_observer_(web_state, this),
+
+#if defined(VIVALDI_BUILD)
+      web_state_observer_(web_state, this),
+      web_state_(web_state) {
+#else
       web_state_observer_(web_state, this) {
+#endif // End Vivaldi
+
   banner_queue_ = OverlayRequestQueue::FromWebState(
       web_state, OverlayModality::kInfobarBanner);
   inserter_ = InfobarOverlayRequestInserter::FromWebState(web_state);
@@ -87,6 +100,28 @@ void TranslateOverlayTabHelper::TranslateDidFinish(infobars::InfoBar* infobar,
                                                    bool success) {
   static_cast<InfoBarIOS*>(infobar)->set_accepted(success);
 
+  if (vivaldi::IsVivaldiRunning()) {
+    PrefService* prefs = GetPrefs();
+    bool banner_disabled =
+        prefs &&
+        prefs->GetBoolean(vivaldiprefs::kVivaldiTranslateInfobarBannerDisabled);
+
+    bool skip_banner;
+    if (banner_disabled) {
+      // If banners are disabled by pref, only show for translation errors.
+      skip_banner = success;
+    } else {
+      skip_banner = false;
+    }
+
+    if (skip_banner) {
+      for (auto& observer : observers_) {
+        observer.TranslationFinished(this, success);
+      }
+      return;
+    }
+  } // End Vivaldi
+
   size_t insert_index = 0;
   bool placeholder_found = GetIndexOfMatchingRequest(
       banner_queue_, &insert_index,
@@ -112,6 +147,10 @@ void TranslateOverlayTabHelper::UpdateForWebStateDestroyed() {
   DCHECK(banner_queue_);
   banner_queue_ = nullptr;
   inserter_ = nullptr;
+
+  // Vivaldi
+  web_state_ = nullptr;
+  // End Vivaldi
 }
 
 #pragma mark - TranslateStepObserver
@@ -239,3 +278,14 @@ void TranslateOverlayTabHelper::WebStateDestroyedObserver::WebStateDestroyed(
   web_state_scoped_observation_.Reset();
   tab_helper_->UpdateForWebStateDestroyed();
 }
+
+// Vivaldi
+PrefService* TranslateOverlayTabHelper::GetPrefs() {
+  if (!web_state_) {
+    return nullptr;
+  }
+  ProfileIOS* profile =
+      ProfileIOS::FromBrowserState(web_state_->GetBrowserState());
+  return profile->GetOriginalProfile()->GetPrefs();
+}
+// End Vivaldu

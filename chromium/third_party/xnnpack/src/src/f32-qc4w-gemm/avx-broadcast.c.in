@@ -9,10 +9,14 @@ $assert FMA in [0, 3]
 $assert NR % 8 == 0
 $ABC = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 #include <assert.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #include <immintrin.h>
 
+#include "src/xnnpack/common.h"
 #include "src/xnnpack/gemm.h"
+#include "src/xnnpack/microparams.h"
 $if AVX == 1:
   #include "src/xnnpack/unaligned.h"
 
@@ -29,7 +33,7 @@ void xnn_${DATATYPE_SPEC}_gemm${"inc" if INC else ""}_minmax_ukernel_${MR}x${NR}
     float* restrict c,
     size_t cm_stride,
     size_t cn_stride,
-    const struct xnn_f32_qc4w_minmax_params params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f32_qc4w_minmax_params* restrict params)
 {
   assert(mr != 0);
   assert(mr <= ${MR});

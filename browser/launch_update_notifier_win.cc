@@ -25,7 +25,6 @@
 #include "app/vivaldi_apptools.h"
 #include "app/vivaldi_constants.h"
 #include "base/vivaldi_switches.h"
-#include "browser/vivaldi_runtime_feature.h"
 #include "installer/util/vivaldi_install_util.h"
 #include "prefs/vivaldi_pref_names.h"
 #include "update_notifier/update_notifier_switches.h"
@@ -118,9 +117,6 @@ void LaunchUpdateNotifier(Profile* profile) {
     }
     return;
   }
-
-  // Ensure that the old obsolete preference is removed from the profile.
-  profile->GetPrefs()->ClearPref(vivaldiprefs::kAutoUpdateEnabled);
 
   base::ThreadPool::PostTask(FROM_HERE,
                              {base::WithBaseSyncPrimitives(),

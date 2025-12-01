@@ -26,6 +26,18 @@ chromium-metrics-reviews@google.com.
 
 <enums>
 
+<!-- The ComposeboxUserAction enum used for Composebox UMA histograms. -->
+
+<!-- LINT.IfChange(LensComposeboxUserAction) -->
+
+<enum name="ComposeboxUserAction">
+  <summary>The user action in the user took on the composebox.</summary>
+  <int value="0" label="Focused"/>
+  <int value="1" label="Query Issued"/>
+</enum>
+
+<!-- LINT.ThenChange(//components/lens/lens_composebox_user_action.h:LensComposeboxUserAction) -->
+
 <!-- LINT.IfChange(LensOverlayContextMenuOption) -->
 
 <enum name="LensOverlayContextMenuOption">
@@ -77,6 +89,8 @@ chromium-metrics-reviews@google.com.
   <int value="29" label="Network issue"/>
   <int value="30" label="Escape key press on preselection toast"/>
   <int value="31" label="Search with camera requested"/>
+  <int value="32" label="FRE promo next button"/>
+  <int value="33" label="Reader mode activated"/>
 </enum>
 
 <!-- LINT.ThenChange(//components/lens/lens_overlay_dismissal_source.h:LensOverlayDismissalSource) -->
@@ -110,6 +124,9 @@ chromium-metrics-reviews@google.com.
   <int value="9" label="Omnibox Page Action"/>
   <int value="10" label="Omnibox Contextual Suggestion"/>
   <int value="11" label="Homework action chip"/>
+  <int value="12" label="AI Hub"/>
+  <int value="13" label="FRE Promo"/>
+  <int value="14" label="Content area text context menu"/>
 </enum>
 
 <!-- LINT.ThenChange(//components/lens/lens_overlay_invocation_source.h:LensOverlayInvocationSource) -->
@@ -126,6 +143,15 @@ chromium-metrics-reviews@google.com.
 
 <!-- LINT.ThenChange(//components/lens/lens_overlay_new_tab_source.h:LensOverlayNewTabSource) -->
 
+<!-- LINT.IfChange(LensOverlaySelectionCloseButtonEvent) -->
+
+<enum name="LensOverlaySelectionCloseButtonEvent">
+  <int value="0" label="Shown"/>
+  <int value="1" label="Used"/>
+</enum>
+
+<!-- LINT.ThenChange(//chrome/browser/resources/lens/overlay/metrics_utils.ts:LensOverlaySelectionCloseButtonEvent) -->
+
 <!-- LINT.IfChange(LensOverlaySidePanelMenuOption) -->
 
 <enum name="LensOverlaySidePanelMenuOption">
@@ -141,16 +167,6 @@ chromium-metrics-reviews@google.com.
 </enum>
 
 <!-- LINT.ThenChange(//components/lens/lens_overlay_side_panel_menu_option.h:LensOverlaySidePanelMenuOption) -->
-
-<!-- LINT.IfChange(LensOverlaySpeedbumpMenuSelection) -->
-
-<enum name="LensOverlaySpeedbumpMenuSelection">
-  <summary>The selected item in the lens speedbump menu.</summary>
-  <int value="0" label="SearchYourScreen"/>
-  <int value="1" label="SearchWithCamera"/>
-</enum>
-
-<!-- LINT.ThenChange(//components/lens/lens_overlay_metrics.h:LensOverlaySpeedbumpMenuSelection) -->
 
 <!-- LINT.IfChange(LensOverlayTextDirectiveResult) -->
 
@@ -187,6 +203,7 @@ chromium-metrics-reviews@google.com.
   <int value="15" label="Copy as image action"/>
   <int value="16" label="Save as image action"/>
   <int value="17" label="Math selection"/>
+  <int value="18" label="Full screenshot region selection"/>
 </enum>
 
 <!-- LINT.ThenChange(//chrome/browser/lens/core/mojom/lens.mojom:UserAction) -->

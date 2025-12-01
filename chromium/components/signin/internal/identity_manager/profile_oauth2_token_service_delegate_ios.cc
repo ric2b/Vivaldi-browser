@@ -210,7 +210,8 @@ void ProfileOAuth2TokenServiceIOSDelegate::LoadCredentialsInternal(
     UpdateAuthError(primary_account_id,
                     GoogleServiceAuthError::FromInvalidGaiaCredentialsReason(
                         GoogleServiceAuthError::InvalidGaiaCredentialsReason::
-                            CREDENTIALS_MISSING));
+                            CREDENTIALS_MISSING),
+                    /*fire_auth_error_changed=*/false);
     FireRefreshTokenAvailable(primary_account_id);
     set_load_credentials_state(
         signin::LoadCredentialsState::
@@ -234,9 +235,6 @@ void ProfileOAuth2TokenServiceIOSDelegate::ReloadCredentials(
                     CoreAccountId::FromGaiaId(account.GetGaiaId()), account);
               });
   for (const auto& [new_account_id, new_account] : new_accounts) {
-    DCHECK(!new_account.GetGaiaId().empty());
-    DCHECK(!new_account.GetEmail().empty());
-
     // Account must to be seeded before adding an account to ensure that
     // the GAIA ID is available if any client of this token service starts
     // a fetch access token operation when it receives a
@@ -287,7 +285,8 @@ void ProfileOAuth2TokenServiceIOSDelegate::ReloadCredentials(
 
 void ProfileOAuth2TokenServiceIOSDelegate::UpdateCredentialsInternal(
     const CoreAccountId& account_id,
-    const std::string& refresh_token) {
+    const std::string& refresh_token,
+    const std::vector<uint8_t>& wrapped_binding_key) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   NOTREACHED() << "Unexpected call to UpdateCredentials when using shared "
                   "authentication.";
@@ -385,8 +384,6 @@ ProfileOAuth2TokenServiceIOSDelegate::GetAccountsOnDevice() const {
   // separate AccountTrackerService instance.
   std::vector<AccountInfo> account_infos;
   for (const auto& account : provider_->GetAccountsOnDevice()) {
-    CHECK(!account.GetGaiaId().empty());
-    CHECK(!account.GetEmail().empty());
     AccountInfo account_info;
     account_info.account_id = CoreAccountId::FromGaiaId(account.GetGaiaId());
     account_info.gaia = account.GetGaiaId();
@@ -411,8 +408,6 @@ bool ProfileOAuth2TokenServiceIOSDelegate::RefreshTokenIsAvailableOnDevice(
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
   for (const auto& account : provider_->GetAccountsOnDevice()) {
-    CHECK(!account.GetGaiaId().empty());
-    CHECK(!account.GetEmail().empty());
     if (account.GetGaiaId().ToString() == account_id.ToString()) {
       return true;
     }
@@ -441,7 +436,6 @@ void ProfileOAuth2TokenServiceIOSDelegate::AddOrUpdateAccount(
   accounts_.insert(account_id);
   UpdateAuthError(account_id, error,
                   /*fire_auth_error_changed=*/false);
-  FireAuthErrorChanged(account_id, error);
   FireRefreshTokenAvailable(account_id);
 }
 

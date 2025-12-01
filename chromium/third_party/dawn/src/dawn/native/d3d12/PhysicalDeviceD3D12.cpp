@@ -144,8 +144,13 @@ bool PhysicalDevice::AreTimestampQueriesSupported() const {
     return true;
 }
 
+bool PhysicalDevice::SupportsBufferMapExtendedUsages() const {
+    return GetDeviceInfo().isUMA && GetDeviceInfo().isCacheCoherentUMA;
+}
+
 void PhysicalDevice::InitializeSupportedFeaturesImpl() {
     EnableFeature(Feature::TextureCompressionBC);
+    EnableFeature(Feature::TextureCompressionBCSliced3D);
     EnableFeature(Feature::DawnMultiPlanarFormats);
     EnableFeature(Feature::Depth32FloatStencil8);
     EnableFeature(Feature::IndirectFirstInstance);
@@ -167,16 +172,21 @@ void PhysicalDevice::InitializeSupportedFeaturesImpl() {
     EnableFeature(Feature::MultiDrawIndirect);
     EnableFeature(Feature::ClipDistances);
     EnableFeature(Feature::FlexibleTextureViews);
+    EnableFeature(Feature::TextureFormatsTier1);
+    EnableFeature(Feature::TextureComponentSwizzle);
+    EnableFeature(Feature::ChromiumExperimentalPrimitiveId);
+    EnableFeature(Feature::DawnLoadResolveTexture);
+    EnableFeature(Feature::DawnPartialLoadResolveTexture);
 
     if (AreTimestampQueriesSupported()) {
         EnableFeature(Feature::TimestampQuery);
         EnableFeature(Feature::ChromiumExperimentalTimestampQueryInsidePasses);
     }
 
+#if defined(DAWN_USE_BUILT_DXC)
     // ShaderF16 features require DXC version being 1.4 or higher, shader model supporting 6.2 or
     // higher, and native supporting F16 shader ops.
-    if (GetBackend()->IsDXCAvailableAndVersionAtLeast(1, 4, 1, 4) &&
-        mDeviceInfo.highestSupportedShaderModel >= 62 && mDeviceInfo.supportsNative16BitShaderOps) {
+    if (mDeviceInfo.highestSupportedShaderModel >= 62 && mDeviceInfo.supportsNative16BitShaderOps) {
         EnableFeature(Feature::ShaderF16);
     }
 
@@ -184,9 +194,10 @@ void PhysicalDevice::InitializeSupportedFeaturesImpl() {
     // See crbug.com/391680973
     const bool kForceDisableSubgroups = gpu_info::IsIntelGen9(GetVendorId(), GetDeviceId());
     // Subgroups feature requires SM >= 6.0 and capabilities flags.
-    if (!kForceDisableSubgroups && GetBackend()->IsDXCAvailable() && mDeviceInfo.supportsWaveOps) {
+    if (!kForceDisableSubgroups && mDeviceInfo.supportsWaveOps) {
         EnableFeature(Feature::Subgroups);
     }
+#endif
 
     D3D12_FEATURE_DATA_FORMAT_SUPPORT bgra8unormFormatInfo = {};
     bgra8unormFormatInfo.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
@@ -204,7 +215,7 @@ void PhysicalDevice::InitializeSupportedFeaturesImpl() {
     EnableFeature(Feature::SharedTextureMemoryDXGISharedHandle);
     EnableFeature(Feature::SharedFenceDXGISharedHandle);
 
-    if (GetDeviceInfo().isUMA && GetDeviceInfo().isCacheCoherentUMA) {
+    if (SupportsBufferMapExtendedUsages()) {
         EnableFeature(Feature::BufferMapExtendedUsages);
     }
 }
@@ -295,16 +306,20 @@ MaybeError PhysicalDevice::InitializeSupportedLimitsImpl(CombinedLimits* limits)
     // Allocate half of the UAVs to storage buffers, and half to storage textures.
     limits->v1.maxStorageTexturesPerShaderStage = maxUAVsPerStage / 2;
     limits->v1.maxStorageBuffersPerShaderStage = maxUAVsPerStage - maxUAVsPerStage / 2;
-    limits->v1.maxStorageTexturesInFragmentStage = limits->v1.maxStorageTexturesPerShaderStage;
-    limits->v1.maxStorageBuffersInFragmentStage = limits->v1.maxStorageBuffersPerShaderStage;
-    limits->v1.maxStorageTexturesInVertexStage = limits->v1.maxStorageTexturesPerShaderStage;
-    limits->v1.maxStorageBuffersInVertexStage = limits->v1.maxStorageBuffersPerShaderStage;
+    limits->compat.maxStorageTexturesInFragmentStage = limits->v1.maxStorageTexturesPerShaderStage;
+    limits->compat.maxStorageBuffersInFragmentStage = limits->v1.maxStorageBuffersPerShaderStage;
+    limits->compat.maxStorageTexturesInVertexStage = limits->v1.maxStorageTexturesPerShaderStage;
+    limits->compat.maxStorageBuffersInVertexStage = limits->v1.maxStorageBuffersPerShaderStage;
     limits->v1.maxSampledTexturesPerShaderStage = maxSRVsPerStage;
     limits->v1.maxSamplersPerShaderStage = maxSamplersPerStage;
 
     limits->v1.maxColorAttachments = D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT;
     // This is maxColorAttachments times 16, the color format with the largest cost.
     limits->v1.maxColorAttachmentBytesPerSample = D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT * 16;
+
+    // We want to support a minimum of 10 and 8 for these limits (see https://crbug.com/440381283).
+    limits->v1.maxDynamicUniformBuffersPerPipelineLayout = 10;
+    limits->v1.maxDynamicStorageBuffersPerPipelineLayout = 8;
 
     // https://docs.microsoft.com/en-us/windows/win32/direct3d12/root-signature-limits
     // In DWORDS. Descriptor tables cost 1, Root constants cost 1, Root descriptors cost 2.
@@ -333,6 +348,19 @@ MaybeError PhysicalDevice::InitializeSupportedLimitsImpl(CombinedLimits* limits)
         2 * limits->v1.maxDynamicUniformBuffersPerPipelineLayout -
         3 * limits->v1.maxDynamicStorageBuffersPerPipelineLayout;
 
+    // Report kMaxSupportedImmediateDataBytes if availableRootSignatureSlots is enough.
+    // Otherwise, reserve all available slots for immediates.
+    constexpr uint32_t kMaxSupportedImmediateDataSlots =
+        kMaxSupportedImmediateDataBytes / kImmediateConstantElementByteSize;
+    uint32_t maxImmediateDataSlots =
+        std::min(availableRootSignatureSlots, kMaxSupportedImmediateDataSlots);
+    availableRootSignatureSlots -= maxImmediateDataSlots;
+    limits->v1.maxImmediateSize = maxImmediateDataSlots * kImmediateConstantElementByteSize;
+
+    // TODO(crbug.com/440381283): We used to allocate more root signature space toward other limits
+    // here, but the logic above effectively hardcodes limits very close to the max so this doesn't
+    // actually do much. If we free up space by moving things (e.g. immediates) out of the root
+    // signature, then revisit this.
     while (availableRootSignatureSlots >= 2) {
         // Start by incrementing maxDynamicStorageBuffersPerPipelineLayout since the
         // default is just 4 and developers likely want more. This scheme currently
@@ -351,10 +379,12 @@ MaybeError PhysicalDevice::InitializeSupportedLimitsImpl(CombinedLimits* limits)
         }
     }
 
-    DAWN_ASSERT(2 * limits->v1.maxBindGroups +
-                    2 * limits->v1.maxDynamicUniformBuffersPerPipelineLayout +
-                    3 * limits->v1.maxDynamicStorageBuffersPerPipelineLayout <=
-                kMaxRootSignatureSize - kReservedSlots);
+    DAWN_ASSERT(limits->v1.maxImmediateSize >= 32);
+    DAWN_ASSERT(
+        2 * limits->v1.maxBindGroups + 2 * limits->v1.maxDynamicUniformBuffersPerPipelineLayout +
+            3 * limits->v1.maxDynamicStorageBuffersPerPipelineLayout +
+            limits->v1.maxImmediateSize / kImmediateConstantElementByteSize + kReservedSlots <=
+        kMaxRootSignatureSize);
 
     // https://docs.microsoft.com/en-us/windows/win32/direct3dhlsl/sm5-attributes-numthreads
     limits->v1.maxComputeWorkgroupSizeX = D3D12_CS_THREAD_GROUP_MAX_X;
@@ -548,25 +578,20 @@ void PhysicalDevice::CleanUpDebugLayerFilters() {
 
 void PhysicalDevice::SetupBackendAdapterToggles(dawn::platform::Platform* platform,
                                                 TogglesState* adapterToggles) const {
-    // Check for use_dxc toggle
 #ifdef DAWN_USE_BUILT_DXC
-    // Default to using DXC. If shader model < 6.0, though, we must use FXC.
     if (GetDeviceInfo().highestSupportedShaderModel < 60) {
+        // If shader model < 6.0, though, we must use FXC.
         adapterToggles->ForceSet(Toggle::UseDXC, false);
     }
-
-    bool useDxc = platform->IsFeatureEnabled(dawn::platform::Features::kWebGPUUseDXC);
+    const bool useDxc = platform->IsFeatureEnabled(dawn::platform::Features::kWebGPUUseDXC);
     adapterToggles->Default(Toggle::UseDXC, useDxc);
 #else
-    // Default to using FXC
-    if (!GetBackend()->IsDXCAvailable()) {
-        adapterToggles->ForceSet(Toggle::UseDXC, false);
-    }
+    adapterToggles->ForceSet(Toggle::UseDXC, false);
     adapterToggles->Default(Toggle::UseDXC, false);
 #endif
 
-    uint32_t deviceId = GetDeviceId();
-    uint32_t vendorId = GetVendorId();
+    const uint32_t deviceId = GetDeviceId();
+    const uint32_t vendorId = GetVendorId();
 
     // On Intel Gen12 D3D driver < 32.0.101.5762, using shader model 6.6 will cause unexpected
     // result when adding/subtracting I32/U32 vector/scalar with vector/scalar in constant
@@ -606,6 +631,12 @@ void PhysicalDevice::SetupBackendAdapterToggles(dawn::platform::Platform* platfo
 
 void PhysicalDevice::SetupBackendDeviceToggles(dawn::platform::Platform* platform,
                                                TogglesState* deviceToggles) const {
+#ifdef DAWN_USE_BUILT_DXC
+    const bool dxcAvailable = true;
+#else
+    const bool dxcAvailable = false;
+#endif
+
     const bool useResourceHeapTier2 = (GetDeviceInfo().resourceHeapTier >= 2);
     deviceToggles->Default(Toggle::UseD3D12ResourceHeapTier2, useResourceHeapTier2);
     deviceToggles->Default(Toggle::UseD3D12RenderPass, GetDeviceInfo().supportsRenderPass);
@@ -668,16 +699,14 @@ void PhysicalDevice::SetupBackendDeviceToggles(dawn::platform::Platform* platfor
     // Native support of packed 4x8 integer dot product required shader model 6.4 or higher, and
     // DXC 1.4 or higher.
     if (!(GetAppliedShaderModelUnderToggles(*deviceToggles) >= 64) ||
-        !deviceToggles->IsEnabled(Toggle::UseDXC) ||
-        !GetBackend()->IsDXCAvailableAndVersionAtLeast(1, 4, 1, 4)) {
+        !deviceToggles->IsEnabled(Toggle::UseDXC) || !dxcAvailable) {
         deviceToggles->ForceSet(Toggle::PolyFillPacked4x8DotProduct, true);
     }
 
     // Native support of pack/unpack 4x8 intrinsics required shader model 6.6 or higher, and
     // DXC 1.4 or higher.
     if (!(GetAppliedShaderModelUnderToggles(*deviceToggles) >= 66) ||
-        !deviceToggles->IsEnabled(Toggle::UseDXC) ||
-        !GetBackend()->IsDXCAvailableAndVersionAtLeast(1, 6, 1, 6)) {
+        !deviceToggles->IsEnabled(Toggle::UseDXC) || !dxcAvailable) {
         deviceToggles->ForceSet(Toggle::D3D12PolyFillPackUnpack4x8, true);
     }
 
@@ -755,6 +784,14 @@ void PhysicalDevice::SetupBackendDeviceToggles(dawn::platform::Platform* platfor
         deviceToggles->Default(Toggle::UseBlitForBufferToStencilTextureCopy, true);
     }
 
+    // Workaround for the depth-stencil texture fails to be cleared if the clear value is specified
+    // in the D3D12_RENDER_PASS_BEGINNING_ACCESS structure of BeginRenderPass on Intel ACM and ARL.
+    // See https://issues.chromium.org/issues/430338408.
+    if (gpu_info::IsIntelGen12HP(vendorId, deviceId) ||
+        gpu_info::IsIntelXeLPG(vendorId, deviceId)) {
+        deviceToggles->ForceSet(Toggle::UseD3D12RenderPass, false);
+    }
+
     // Currently these workarounds are needed on Intel Gen9.5 and Gen11 GPUs, as well as
     // AMD GPUS.
     // See http://crbug.com/1237175, http://crbug.com/dawn/1628, and http://crbug.com/dawn/2032
@@ -830,9 +867,11 @@ void PhysicalDevice::SetupBackendDeviceToggles(dawn::platform::Platform* platfor
         deviceToggles->Default(Toggle::UsePackedDepth24UnormStencil8Format, true);
     }
 
-    // Use the Tint IR backend by default if the corresponding platform feature is enabled.
-    deviceToggles->Default(Toggle::UseTintIR,
-                           platform->IsFeatureEnabled(platform::Features::kWebGPUUseTintIR));
+    // Enable the integer range analysis for shader robustness by default if the corresponding
+    // platform feature is enabled.
+    deviceToggles->Default(
+        Toggle::EnableIntegerRangeAnalysisInRobustness,
+        platform->IsFeatureEnabled(platform::Features::kWebGPUEnableRangeAnalysisForRobustness));
 }
 
 ResultOrError<Ref<DeviceBase>> PhysicalDevice::CreateDeviceImpl(
@@ -856,13 +895,6 @@ MaybeError PhysicalDevice::ResetInternalDeviceForTestingImpl() {
 }
 
 void PhysicalDevice::PopulateBackendProperties(UnpackedPtr<AdapterInfo>& info) const {
-    if (auto* subgroupProperties = info.Get<AdapterPropertiesSubgroups>()) {
-        subgroupProperties->subgroupMinSize = mDeviceInfo.waveLaneCountMin;
-        // Currently the WaveLaneCountMax queried from D3D12 API is not reliable and the meaning is
-        // unclear. Use 128 instead, which is the largest possible size. Reference:
-        // https://github.com/Microsoft/DirectXShaderCompiler/wiki/Wave-Intrinsics#:~:text=UINT%20WaveLaneCountMax
-        subgroupProperties->subgroupMaxSize = 128u;
-    }
     if (auto* memoryHeapProperties = info.Get<AdapterPropertiesMemoryHeaps>()) {
         // https://microsoft.github.io/DirectX-Specs/d3d/D3D12GPUUploadHeaps.html describes
         // the properties of D3D12 Default/Upload/Readback heaps.

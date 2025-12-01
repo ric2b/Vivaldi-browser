@@ -8,7 +8,6 @@ import static org.chromium.build.NullUtil.assertNonNull;
 import static org.chromium.ui.accessibility.KeyboardFocusUtil.setFocusOnFirstFocusableDescendant;
 
 import android.animation.Animator;
-import android.animation.AnimatorListenerAdapter;
 import android.animation.AnimatorSet;
 import android.animation.ObjectAnimator;
 import android.annotation.SuppressLint;
@@ -40,13 +39,16 @@ import org.chromium.chrome.browser.omnibox.NewTabPageDelegate;
 import org.chromium.chrome.browser.omnibox.UrlBarData;
 import org.chromium.chrome.browser.omnibox.status.StatusCoordinator;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tabmodel.IncognitoStateProvider;
 import org.chromium.chrome.browser.theme.SurfaceColorUpdateUtils;
+import org.chromium.chrome.browser.theme.ThemeColorProvider;
 import org.chromium.chrome.browser.theme.ThemeUtils;
 import org.chromium.chrome.browser.toolbar.R;
 import org.chromium.chrome.browser.toolbar.ToolbarDataProvider;
 import org.chromium.chrome.browser.toolbar.ToolbarProgressBar;
 import org.chromium.chrome.browser.toolbar.ToolbarTabController;
 import org.chromium.chrome.browser.toolbar.back_button.BackButtonCoordinator;
+import org.chromium.chrome.browser.toolbar.extensions.ExtensionToolbarCoordinator;
 import org.chromium.chrome.browser.toolbar.menu_button.MenuButtonCoordinator;
 import org.chromium.chrome.browser.toolbar.optional_button.ButtonData;
 import org.chromium.chrome.browser.toolbar.optional_button.ButtonData.ButtonSpec;
@@ -59,11 +61,11 @@ import org.chromium.components.browser_ui.styles.SemanticColorUtils;
 import org.chromium.components.browser_ui.widget.animation.CancelAwareAnimatorListener;
 import org.chromium.components.feature_engagement.Tracker;
 import org.chromium.ui.base.DeviceFormFactor;
-import org.chromium.ui.interpolators.Interpolators;
 import org.chromium.ui.widget.ChromeImageButton;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 
 // Vivaldi
 import android.app.Activity;
@@ -81,15 +83,11 @@ import org.chromium.url.GURL;
 @SuppressLint("Instantiatable")
 @NullMarked
 public class ToolbarTablet extends ToolbarLayout {
-    private static final int ICON_FADE_IN_ANIMATION_DELAY_MS = 75;
-    private static final int ICON_FADE_ANIMATION_DURATION_MS = 150;
-
     private ImageButton mHomeButton;
     private ImageButton mBackButton;
     private ChromeImageButton mForwardButton;
     private ImageButton mReloadButton;
     private ImageButton mBookmarkButton;
-    private ImageButton mSaveOfflineButton;
     private @Nullable View mIncognitoIndicator;
 
     private boolean mIsInTabSwitcherMode;
@@ -112,6 +110,7 @@ public class ToolbarTablet extends ToolbarLayout {
     private @Nullable ObservableSupplier<Integer> mTabCountSupplier;
     private @Nullable TabletCaptureStateToken mLastCaptureStateToken;
     private @DrawableRes int mBookmarkButtonImageRes;
+    private @Nullable ExtensionToolbarCoordinator mExtensionToolbarCoordinator;
 
     /** Vivaldi **/
     public @Nullable ChromeImageButton mPanelButton;
@@ -170,7 +169,6 @@ public class ToolbarTablet extends ToolbarLayout {
         // End Vivaldi
 
         mBookmarkButton = findViewById(R.id.bookmark_button);
-        mSaveOfflineButton = findViewById(R.id.save_offline_button);
         setIncognitoIndicatorVisibility();
 
         // Initialize values needed for showing/hiding toolbar buttons when the activity size
@@ -326,8 +324,6 @@ public class ToolbarTablet extends ToolbarLayout {
             @BrandedColorScheme int brandedColorScheme) {
         ImageViewCompat.setImageTintList(mHomeButton, activityFocusTint);
         ImageViewCompat.setImageTintList(mForwardButton, activityFocusTint);
-        // The tint of the |mSaveOfflineButton| should not be affected by an activity focus change.
-        ImageViewCompat.setImageTintList(mSaveOfflineButton, tint);
 
         // Vivaldi
         if (mModelSelectorButton != null)
@@ -386,8 +382,11 @@ public class ToolbarTablet extends ToolbarLayout {
         getMenuButtonCoordinator().updateButtonBackground(toolbarIconRippleId);
 
         mBookmarkButton.setBackgroundResource(omniboxIconRippleId);
-        mSaveOfflineButton.setBackgroundResource(omniboxIconRippleId);
         mLocationBar.updateButtonBackground(omniboxIconRippleId);
+
+        if (mExtensionToolbarCoordinator != null) {
+            mExtensionToolbarCoordinator.updateMenuButtonBackground(toolbarIconRippleId);
+        }
     }
 
     @Override
@@ -464,7 +463,11 @@ public class ToolbarTablet extends ToolbarLayout {
             ObservableSupplier<Tracker> trackerSupplier,
             ToolbarProgressBar progressBar,
             @Nullable ReloadButtonCoordinator reloadButtonCoordinator,
-            @Nullable BackButtonCoordinator backButtonCoordinator) {
+            @Nullable BackButtonCoordinator backButtonCoordinator,
+            @Nullable HomeButtonDisplay homeButtonDisplay,
+            @Nullable ExtensionToolbarCoordinator extensionToolbarCoordinator,
+            ThemeColorProvider themeColorProvider,
+            IncognitoStateProvider incognitoStateProvider) {
         super.initialize(
                 toolbarDataProvider,
                 tabController,
@@ -475,11 +478,17 @@ public class ToolbarTablet extends ToolbarLayout {
                 trackerSupplier,
                 progressBar,
                 reloadButtonCoordinator,
-                backButtonCoordinator);
+                backButtonCoordinator,
+                homeButtonDisplay,
+                extensionToolbarCoordinator,
+                themeColorProvider,
+                incognitoStateProvider);
         mHistoryDelegate = historyDelegate;
         mReloadButtonCoordinator = assertNonNull(reloadButtonCoordinator);
         mBackButtonCoordinator = assertNonNull(backButtonCoordinator);
         menuButtonCoordinator.setVisibility(true);
+        mExtensionToolbarCoordinator = extensionToolbarCoordinator;
+
         mTabController = tabController; // Vivaldi
     }
 
@@ -603,7 +612,7 @@ public class ToolbarTablet extends ToolbarLayout {
     }
 
     @Override
-    void hideOptionalButton() {
+    protected void hideOptionalButton() {
         if (mOptionalButton == null || mOptionalButton.getVisibility() == View.GONE) {
             return;
         }
@@ -682,94 +691,27 @@ public class ToolbarTablet extends ToolbarLayout {
     private void runToolbarButtonsVisibilityAnimation(boolean visible) {
         if (mButtonVisibilityAnimators != null) mButtonVisibilityAnimators.cancel();
 
-        mButtonVisibilityAnimators =
-                visible ? buildShowToolbarButtonsAnimation() : buildHideToolbarButtonsAnimation();
-        mButtonVisibilityAnimators.start();
-    }
-
-    private AnimatorSet buildShowToolbarButtonsAnimation() {
         Collection<Animator> animators = new ArrayList<>();
+        animators.add(createLocationBarButtonAnimator(visible));
+        animators.add(mReloadButtonCoordinator.getFadeAnimator(visible));
+        animators.add(mBackButtonCoordinator.getFadeAnimator(visible));
+        animators.addAll(createLocationBarButtonsWhenUnfocusedAnimators(visible));
 
-        animators.add(mLocationBar.createShowButtonAnimatorForTablet(mForwardButton));
-
-        final var reloadButtonAnimator = mReloadButtonCoordinator.getFadeAnimator(true);
-        reloadButtonAnimator.setInterpolator(Interpolators.LINEAR_OUT_SLOW_IN_INTERPOLATOR);
-        reloadButtonAnimator.setStartDelay(ICON_FADE_IN_ANIMATION_DELAY_MS);
-        reloadButtonAnimator.setDuration(ICON_FADE_ANIMATION_DURATION_MS);
-        animators.add(reloadButtonAnimator);
-
-        final var backButtonAnimator = mBackButtonCoordinator.getFadeAnimator(true);
-        backButtonAnimator.setInterpolator(Interpolators.LINEAR_OUT_SLOW_IN_INTERPOLATOR);
-        backButtonAnimator.setStartDelay(ICON_FADE_IN_ANIMATION_DELAY_MS);
-        backButtonAnimator.setDuration(ICON_FADE_ANIMATION_DURATION_MS);
-        animators.add(backButtonAnimator);
-
-        // Add animators for location bar.
-        animators.addAll(
-                mLocationBar.getShowButtonsWhenUnfocusedAnimatorsForTablet(
-                        getStartPaddingDifferenceForButtonVisibilityAnimation()));
-
-        AnimatorSet set = new AnimatorSet();
-        set.playTogether(animators);
-
-        set.addListener(
-                new AnimatorListenerAdapter() {
-                    @Override
-                    public void onAnimationStart(Animator animation) {
-                        keepControlsShownForAnimation();
-                        mForwardButton.setVisibility(View.VISIBLE);
-                        mReloadButtonCoordinator.setVisibility(true);
-                        mBackButtonCoordinator.setVisibility(true);
-
-                        // Set the padding at the start of the animation so the toolbar buttons
-                        // don't jump when the animation ends.
-                        setStartPaddingBasedOnButtonVisibility(true);
-                        setIncognitoIndicatorVisibility();
-                    }
-
-                    @Override
-                    public void onAnimationEnd(Animator animation) {
-                        mButtonVisibilityAnimators = null;
-                        allowBrowserControlsHide();
-                    }
-                });
-
-        return set;
-    }
-
-    private AnimatorSet buildHideToolbarButtonsAnimation() {
-        Collection<Animator> animators = new ArrayList<>();
-
-        ObjectAnimator hideButtonAnimator =
-                mLocationBar.createHideButtonAnimatorForTablet(mForwardButton);
-        if (hideButtonAnimator != null) {
-            animators.add(hideButtonAnimator);
-        }
-
-        final var reloadButtonAnimator = mReloadButtonCoordinator.getFadeAnimator(false);
-        reloadButtonAnimator.setInterpolator(Interpolators.FAST_OUT_LINEAR_IN_INTERPOLATOR);
-        reloadButtonAnimator.setDuration(ICON_FADE_ANIMATION_DURATION_MS);
-        animators.add(reloadButtonAnimator);
-
-        final var backButtonAnimator = mBackButtonCoordinator.getFadeAnimator(false);
-        backButtonAnimator.setInterpolator(Interpolators.FAST_OUT_LINEAR_IN_INTERPOLATOR);
-        backButtonAnimator.setDuration(ICON_FADE_ANIMATION_DURATION_MS);
-        animators.add(backButtonAnimator);
-
-        // Add animators for location bar.
-        animators.addAll(
-                mLocationBar.getHideButtonsWhenUnfocusedAnimatorsForTablet(
-                        getStartPaddingDifferenceForButtonVisibilityAnimation()));
-
-        AnimatorSet set = new AnimatorSet();
-        set.playTogether(animators);
-
-        set.addListener(
+        mButtonVisibilityAnimators = new AnimatorSet();
+        mButtonVisibilityAnimators.playTogether(animators);
+        mButtonVisibilityAnimators.addListener(
                 new CancelAwareAnimatorListener() {
                     @Override
                     public void onStart(Animator animator) {
                         keepControlsShownForAnimation();
-
+                        if (visible) {
+                            mForwardButton.setVisibility(View.VISIBLE);
+                            mReloadButtonCoordinator.setVisibility(true);
+                            mBackButtonCoordinator.setVisibility(true);
+                            // Set the padding at the start of the show animation so the toolbar
+                            // buttons don't jump when the animation ends.
+                            setStartPaddingBasedOnButtonVisibility(true);
+                        }
                         setIncognitoIndicatorVisibility();
                     }
 
@@ -781,20 +723,33 @@ public class ToolbarTablet extends ToolbarLayout {
 
                     @Override
                     public void onEnd(Animator animator) {
-                        mForwardButton.setVisibility(View.GONE);
-                        mReloadButtonCoordinator.setVisibility(false);
-                        mBackButtonCoordinator.setVisibility(false);
-
-                        // Set the padding at the end of the animation so the toolbar buttons
-                        // don't jump when the animation starts.
-                        setStartPaddingBasedOnButtonVisibility(false);
-
+                        if (!visible) {
+                            mForwardButton.setVisibility(View.GONE);
+                            mReloadButtonCoordinator.setVisibility(false);
+                            mBackButtonCoordinator.setVisibility(false);
+                            // Set the padding at the end of the hide animation so the toolbar
+                            // buttons don't jump when the animation starts.
+                            setStartPaddingBasedOnButtonVisibility(false);
+                        }
                         mButtonVisibilityAnimators = null;
                         allowBrowserControlsHide();
                     }
                 });
+        mButtonVisibilityAnimators.start();
+    }
 
-        return set;
+    private ObjectAnimator createLocationBarButtonAnimator(boolean shouldShow) {
+        return shouldShow
+                ? mLocationBar.createShowButtonAnimatorForTablet(mForwardButton)
+                : mLocationBar.createHideButtonAnimatorForTablet(mForwardButton);
+    }
+
+    private List<Animator> createLocationBarButtonsWhenUnfocusedAnimators(boolean shouldShow) {
+        int startPaddingDifference = getStartPaddingDifferenceForButtonVisibilityAnimation();
+        return shouldShow
+                ? mLocationBar.getShowButtonsWhenUnfocusedAnimatorsForTablet(startPaddingDifference)
+                : mLocationBar.getHideButtonsWhenUnfocusedAnimatorsForTablet(
+                        startPaddingDifference);
     }
 
     private int getDimensionPixelSize(@DimenRes int dimenId) {

@@ -10,9 +10,13 @@ $assert ACTIVATION in ["LINEAR", "MINMAX"]
 $assert ACTIVATION != "LINEAR" or not WASM
 $ABC = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 #include <assert.h>
+#include <stddef.h>
+#include <stdint.h>
 
+#include "src/xnnpack/common.h"
 #include "src/xnnpack/dwconv.h"
 #include "src/xnnpack/math.h"
+#include "src/xnnpack/microparams.h"
 
 
 $MIN_F32 = "__builtin_wasm_min_f32" if WASM else "math_min_f32"
@@ -30,7 +34,7 @@ void xnn_f32_dwconv${SUFFIX}_ukernel_${KERNEL_TILE}p${CHANNEL_TILE}c__${"wasm" i
     size_t input_offset,
     size_t input_pixel_stride,
     const float* zero,
-    const ${PARAMS} params[restrict XNN_MIN_ELEMENTS(1)])
+    const ${PARAMS}* restrict params)
 {
   assert(channels != 0);
   assert(output_width != 0);

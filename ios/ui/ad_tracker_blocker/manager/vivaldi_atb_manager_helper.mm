@@ -241,7 +241,7 @@ using l10n_util::GetNSStringF;
 
   [map setObject:
            [VivaldiATBManagerHelper
-               createEntryWithTitle:@"Indian List"
+               createEntryWithTitle:@"EasyList Italy"
                            stringId:IDS_VIVALDI_IOS_SOURCE_MAP_ORIGIN_ITALIAN]
           forKey:@"364fff45-270d-4a62-a449-982856057678"];
 
@@ -305,7 +305,7 @@ using l10n_util::GetNSStringF;
           [VivaldiATBManagerHelper
               createEntryWithTitle:@"EasyList Portuguese"
                           stringId:IDS_VIVALDI_IOS_SOURCE_MAP_ORIGIN_PORTUGUESE]
-         forKey:@"3eae7230-473c-4ccd-a15f-f08e4bb86f71"];
+         forKey:@"b1d9732d-c0f3-4c74-8596-e1518b42b356"];
 
   [map setObject:[VivaldiATBManagerHelper
                   createEntryWithTitle:@"ROLIST"

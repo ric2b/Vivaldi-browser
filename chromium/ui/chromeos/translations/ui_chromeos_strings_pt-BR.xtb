@@ -320,7 +320,7 @@
 <translation id="3557414470514932909">Movendo o arquivo <ph name="FILE_NAME" /> para a lixeira</translation>
 <translation id="3567221313191587603">Selecione um arquivo e ative a opção <ph name="OFFLINE_CHECKBOX_NAME" /> para acessá-lo off-line.</translation>
 <translation id="357479282490346887">Lituano</translation>
-<translation id="3587482841069643663">Tudo</translation>
+<translation id="3587482841069643663">Todas</translation>
 <translation id="3592251141500063301">Não foi possível disponibilizar <ph name="FILE_NAME" /> off-line</translation>
 <translation id="3601151620448429694"><ph name="NETWORK_NAME" /> · <ph name="CARRIER_NAME" /></translation>
 <translation id="3603385196401704894">Francês canadense</translation>
@@ -787,7 +787,7 @@
 <translation id="7075931588889865715">Tailandês com teclado TIS 820-2531</translation>
 <translation id="708278670402572152">Desconectar para ativar a verificação</translation>
 <translation id="7086590977277044826">Tâmil com teclado InScript</translation>
-<translation id="7088615885725309056">Mais antigo</translation>
+<translation id="7088615885725309056">Mais antiga</translation>
 <translation id="7103992300314999525">Macedônio</translation>
 <translation id="7104338189998813914">Ocorreu um problema ao acessar sua conta do OneDrive</translation>
 <translation id="7106346894903675391">Adquirir mais espaço de armazenamento...</translation>

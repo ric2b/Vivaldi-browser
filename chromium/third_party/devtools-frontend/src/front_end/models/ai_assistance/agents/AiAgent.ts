@@ -93,11 +93,8 @@ export interface ActionResponse {
   canceled: boolean;
 }
 
-export interface QueryResponse {
+export interface QueryingResponse {
   type: ResponseType.QUERYING;
-  query?: string;
-  imageInput?: Host.AidaClient.Part;
-  imageId?: string;
 }
 
 export interface UserQuery {
@@ -108,7 +105,7 @@ export interface UserQuery {
 }
 
 export type ResponseData = AnswerResponse|SuggestionsResponse|ErrorResponse|ActionResponse|SideEffectResponse|
-    ThoughtResponse|TitleResponse|QueryResponse|ContextResponse|UserQuery;
+    ThoughtResponse|TitleResponse|QueryingResponse|ContextResponse|UserQuery;
 
 export type FunctionCallResponseData =
     TitleResponse|ThoughtResponse|ActionResponse|SideEffectResponse|SuggestionsResponse;
@@ -147,6 +144,30 @@ export interface ConversationSuggestion {
   title: string;
   jslogContext?: string;
 }
+
+export const enum ExternalRequestResponseType {
+  ANSWER = 'answer',
+  NOTIFICATION = 'notification',
+  ERROR = 'error',
+}
+
+export interface ExternalRequestAnswer {
+  type: ExternalRequestResponseType.ANSWER;
+  message: string;
+  devToolsLogs: object[];
+}
+
+export interface ExternalRequestNotification {
+  type: ExternalRequestResponseType.NOTIFICATION;
+  message: string;
+}
+
+export interface ExternalRequestError {
+  type: ExternalRequestResponseType.ERROR;
+  message: string;
+}
+
+export type ExternalRequestResponse = ExternalRequestAnswer|ExternalRequestNotification|ExternalRequestError;
 
 export abstract class ConversationContext<T> {
   abstract getOrigin(): string;
@@ -259,8 +280,8 @@ export abstract class AiAgent<T> {
    * Used in the debug mode and evals.
    */
   readonly #structuredLog: Array<{
-    request: Host.AidaClient.AidaRequest,
-    aidaResponse: Host.AidaClient.AidaResponse,
+    request: Host.AidaClient.DoConversationRequest,
+    aidaResponse: Host.AidaClient.DoConversationResponse,
   }> = [];
 
   /**
@@ -268,7 +289,14 @@ export abstract class AiAgent<T> {
    * historical conversations.
    */
   #origin?: string;
-  #context?: ConversationContext<T>;
+
+  /**
+   * `context` does not change during `AiAgent.run()`, ensuring that calls to JS
+   * have the correct `context`. We don't want element selection by the user to
+   * change the `context` during an `AiAgent.run()`.
+   */
+  protected context?: ConversationContext<T>;
+
   #id: string = crypto.randomUUID();
   #history: Host.AidaClient.Content[] = [];
 
@@ -308,9 +336,13 @@ export abstract class AiAgent<T> {
     this.#facts.clear();
   }
 
+  preambleFeatures(): string[] {
+    return [];
+  }
+
   buildRequest(
       part: Host.AidaClient.Part|Host.AidaClient.Part[],
-      role: Host.AidaClient.Role.USER|Host.AidaClient.Role.ROLE_UNSPECIFIED): Host.AidaClient.AidaRequest {
+      role: Host.AidaClient.Role.USER|Host.AidaClient.Role.ROLE_UNSPECIFIED): Host.AidaClient.DoConversationRequest {
     const parts = Array.isArray(part) ? part : [part];
     const currentMessage: Host.AidaClient.Content = {
       parts,
@@ -332,7 +364,7 @@ export abstract class AiAgent<T> {
     const userTier = Host.AidaClient.convertToUserTierEnum(this.userTier);
     const preamble = userTier === Host.AidaClient.UserTier.TESTERS ? this.preamble : undefined;
     const facts = Array.from(this.#facts);
-    const request: Host.AidaClient.AidaRequest = {
+    const request: Host.AidaClient.DoConversationRequest = {
       client: Host.AidaClient.CLIENT_NAME,
       current_message: currentMessage,
       preamble,
@@ -349,7 +381,8 @@ export abstract class AiAgent<T> {
         disable_user_content_logging: !(this.#serverSideLoggingEnabled ?? false),
         string_session_id: this.#sessionId,
         user_tier: userTier,
-        client_version: Root.Runtime.getChromeVersion(),
+        client_version:
+            Root.Runtime.getChromeVersion() + this.preambleFeatures().map(feature => `+${feature}`).join(''),
       },
 
       functionality_type: enableAidaFunctionCalling ? Host.AidaClient.FunctionalityType.AGENTIC_CHAT :
@@ -396,6 +429,10 @@ export abstract class AiAgent<T> {
     this.#functionDeclarations.set(name, declaration as FunctionDeclaration<Record<string, unknown>, ReturnType>);
   }
 
+  protected clearDeclaredFunctions(): void {
+    this.#functionDeclarations.clear();
+  }
+
   protected formatParsedAnswer({answer}: ParsedAnswer): string {
     return answer;
   }
@@ -405,8 +442,8 @@ export abstract class AiAgent<T> {
    * function call.
    */
   protected functionCallEmulationEnabled = false;
-  protected emulateFunctionCall(_aidaResponse: Host.AidaClient.AidaResponse): Host.AidaClient.AidaFunctionCallResponse|
-      'no-function-call'|'wait-for-completion' {
+  protected emulateFunctionCall(_aidaResponse: Host.AidaClient.DoConversationResponse):
+      Host.AidaClient.AidaFunctionCallResponse|'no-function-call'|'wait-for-completion' {
     throw new Error('Unexpected emulateFunctionCall. Only StylingAgent implements function call emulation');
   }
 
@@ -418,13 +455,14 @@ export abstract class AiAgent<T> {
           multimodalInput?: MultimodalInput): AsyncGenerator<ResponseData, void, void> {
     await options.selected?.refresh();
 
-    // First context set on the agent determines its origin from now on.
-    if (options.selected && this.#origin === undefined && options.selected) {
-      this.#origin = options.selected.getOrigin();
-    }
-    // Remember if the context that is set.
-    if (options.selected && !this.#context) {
-      this.#context = options.selected;
+    if (options.selected) {
+      // First context set on the agent determines its origin from now on.
+      if (this.#origin === undefined) {
+        this.#origin = options.selected.getOrigin();
+      }
+      if (options.selected.isOriginAllowed(this.#origin)) {
+        this.context = options.selected;
+      }
     }
 
     const enhancedQuery = await this.enhanceQuery(initialQuery, options.selected, multimodalInput?.type);
@@ -665,12 +703,12 @@ export abstract class AiAgent<T> {
   }
 
   async *
-      #aidaFetch(request: Host.AidaClient.AidaRequest, options?: {signal?: AbortSignal}):
+      #aidaFetch(request: Host.AidaClient.DoConversationRequest, options?: {signal?: AbortSignal}):
           AsyncGenerator<AidaFetchResult, void, void> {
-    let aidaResponse: Host.AidaClient.AidaResponse|undefined = undefined;
+    let aidaResponse: Host.AidaClient.DoConversationResponse|undefined = undefined;
     let rpcId: Host.AidaClient.RpcGlobalId|undefined;
 
-    for await (aidaResponse of this.#aidaClient.fetch(request, options)) {
+    for await (aidaResponse of this.#aidaClient.doConversation(request, options)) {
       if (aidaResponse.functionCalls?.length) {
         debugLog('functionCalls.length', aidaResponse.functionCalls.length);
         yield {

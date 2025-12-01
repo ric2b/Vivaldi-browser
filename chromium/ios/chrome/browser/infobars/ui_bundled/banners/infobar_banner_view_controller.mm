@@ -20,6 +20,15 @@
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "components/prefs/pref_service.h"
+#import "ios/chrome/browser/shared/model/application_context/application_context.h"
+#import "ios/chrome/browser/shared/model/prefs/pref_names.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
+
 namespace {
 // Banner View constants.
 const CGFloat kBannerViewCornerRadius = 13.0;
@@ -586,15 +595,45 @@ constexpr base::TimeDelta kLongPressTimeDuration = base::Milliseconds(400);
     // Don't allow the banner to be dragged down past its original position.
     CGFloat newYPosition =
         self.view.center.y + touchLocation.y - self.startingTouch.y;
+
+    if (IsVivaldiRunning() &&
+        GetApplicationContext()
+            ->GetLocalState()->GetBoolean(prefs::kBottomOmnibox)) {
+      // For bottom banners, allow dragging down from original position
+      if (newYPosition > self.originalCenter.y) {
+        self.view.center = CGPointMake(self.view.center.x, newYPosition);
+      }
+    } else { // For top banners, allow dragging up from original position
+
     if (newYPosition < self.originalCenter.y) {
       self.view.center = CGPointMake(self.view.center.x, newYPosition);
     }
   }
 
+  } // End Vivaldi
+
   if (gesture.state == UIGestureRecognizerStateEnded) {
     [self
         animateBannerToOriginalStateWithDuration:kSelectBannerAnimationDuration
                                       completion:nil];
+#if defined(VIVALDI_BUILD)
+    // Check if drag threshold exceeded based on banner position
+    BOOL dragExceededThreshold = NO;
+    if (IsVivaldiRunning() &&
+        GetApplicationContext()
+            ->GetLocalState()->GetBoolean(prefs::kBottomOmnibox)) {
+      // For bottom banners, check if dragged down enough
+      dragExceededThreshold = (self.view.center.y - self.originalCenter.y >
+                                  -kChangeInPositionForDismissal);
+    } else {
+      // For top banners, check if dragged up enough
+      dragExceededThreshold = (self.view.center.y - self.originalCenter.y -
+                                  kChangeInPositionForDismissal < 0);
+    }
+
+    if (dragExceededThreshold || self.shouldDismissAfterTouchesEnded) {
+      if (dragExceededThreshold) {
+#else
     // If dragged up by more than kChangeInPositionForDismissal at the time
     // the gesture ended, OR `self.shouldDismissAfterTouchesEnded` is YES.
     // Dismiss the banner.
@@ -603,6 +642,8 @@ constexpr base::TimeDelta kLongPressTimeDuration = base::Milliseconds(400);
                                     0);
     if (dragUpExceededThreshold || self.shouldDismissAfterTouchesEnded) {
       if (dragUpExceededThreshold) {
+#endif // End Vivaldi
+
         [self.metricsRecorder
             recordBannerDismissType:MobileMessagesBannerDismissType::SwipedUp];
         [self.delegate dismissInfobarBannerForUserInteraction:YES];
@@ -768,6 +809,8 @@ constexpr base::TimeDelta kLongPressTimeDuration = base::Milliseconds(400);
   [self.delegate dismissInfobarBannerForUserInteraction:YES];
   return NO;
 }
+
+#pragma mark - UIAccessibility
 
 - (NSString*)accessibilityLabel {
   if ([self.bannerAccessibilityLabel length]) {

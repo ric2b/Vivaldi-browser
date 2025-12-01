@@ -34,6 +34,7 @@
 #include "components/sessions/core/session_service_commands.h"
 #include "components/sessions/vivaldi_session_service_commands.h"
 #include "components/datasource/vivaldi_image_store.h"
+#include "components/prefs/pref_service.h"
 #include "components/tabs/tab_helpers.h"
 #include "content/public/browser/navigation_entry.h"
 #include "extensions/browser/extension_function_dispatcher.h"

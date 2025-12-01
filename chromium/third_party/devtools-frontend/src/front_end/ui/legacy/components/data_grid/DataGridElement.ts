@@ -38,7 +38,7 @@ const DUMMY_COLUMN_ID = 'dummy';  // SortableDataGrid.create requires at least o
  *
  * @attr striped
  * @attr displayName
- * @prop filters
+ * @property filters
  */
 class DataGridElement extends HTMLElement {
   static readonly observedAttributes = ['striped', 'name', 'inline'];
@@ -462,6 +462,18 @@ class DataGridElementNode extends SortableDataGridNode<DataGridElementNode> {
     }
     if (targetInConfigRow instanceof HTMLElement) {
       targetInConfigRow?.dispatchEvent(new MouseEvent(event.type, {bubbles: true, composed: true}));
+    }
+  }
+
+  override createCells(element: Element): void {
+    const configCells = [...this.#configElement.querySelectorAll('td')];
+    const hasCollspan = configCells.some(cell => cell.hasAttribute('colspan'));
+    if (!hasCollspan) {
+      super.createCells(element);
+    } else {
+      for (const cell of configCells) {
+        element.appendChild(cell.cloneNode(true));
+      }
     }
   }
 

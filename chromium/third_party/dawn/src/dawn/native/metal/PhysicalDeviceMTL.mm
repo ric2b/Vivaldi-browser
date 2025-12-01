@@ -29,6 +29,7 @@
 
 #include "dawn/common/CoreFoundationRef.h"
 #include "dawn/common/GPUInfo.h"
+#include "dawn/common/GPUInfo_autogen.h"
 #include "dawn/common/Log.h"
 #include "dawn/common/NSRef.h"
 #include "dawn/common/Platform.h"
@@ -133,17 +134,10 @@ MaybeError GetDeviceIORegistryPCIInfo(id<MTLDevice> device, PCIIDs* ids) {
         return DAWN_INTERNAL_ERROR("Failed to create the matching dict for the device");
     }
 
-    // Work around a breaking deprecation of kIOMasterPortDefault to kIOMainPortDefault. Both values
-    // are equivalent with NULL (given mach_port_t is an unsigned int they probably mean 0) as noted
-    // by the IOKitLib.h comments so use that directly.
-    // TODO(chromium:1400252): Use kIOMainPortDefault once the minimum supported version includes
-    // macOS 12.0
-    constexpr mach_port_t kIOMainPort = 0;
-
     // IOServiceGetMatchingService will consume the reference on the matching dictionary,
     // so we don't need to release the dictionary.
     IORef<io_registry_entry_t> acceleratorEntry =
-        AcquireIORef(IOServiceGetMatchingService(kIOMainPort, matchingDict.Detach()));
+        AcquireIORef(IOServiceGetMatchingService(kIOMainPortDefault, matchingDict.Detach()));
 
     if (acceleratorEntry == IO_OBJECT_NULL) {
         return DAWN_INTERNAL_ERROR("Failed to get the IO registry entry for the accelerator");
@@ -401,6 +395,9 @@ void PhysicalDevice::SetupBackendDeviceToggles(dawn::platform::Platform* platfor
         // TODO(crbug.com/dawn/342): Investigate emulation -- possibly expensive.
         deviceToggles->Default(Toggle::MetalDisableSamplerCompare, !haveSamplerCompare);
 
+        // TODO(crbug.com/363031535): Enable by default when possible
+        deviceToggles->Default(Toggle::MetalUseArgumentBuffers, false);
+
         bool haveBaseVertexBaseInstance = true;
 #if DAWN_PLATFORM_IS(IOS) && !DAWN_PLATFORM_IS(TVOS) && \
     (!defined(__IPHONE_16_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_16_0)
@@ -441,6 +438,12 @@ void PhysicalDevice::SetupBackendDeviceToggles(dawn::platform::Platform* platfor
         deviceToggles->Default(Toggle::MetalRenderR8RG8UnormSmallMipToTempTexture, true);
     }
 
+    // chromium:419804339: Module constant hoisting is not supported for values containing f16
+    // types on Intel.
+    if (gpu_info::IsIntel(vendorId)) {
+        deviceToggles->Default(Toggle::MetalDisableModuleConstantF16, true);
+    }
+
     // On some Intel GPUs vertex only render pipeline get wrong depth result if no fragment
     // shader provided. Create a placeholder fragment shader module to work around this issue.
     if (gpu_info::IsIntel(vendorId)) {
@@ -464,18 +467,18 @@ void PhysicalDevice::SetupBackendDeviceToggles(dawn::platform::Platform* platfor
     // encoders on macOS 11.0+, we need to add mock blit command to blit encoder when encoding
     // writeTimestamp as workaround by enabling the toggle
     // "metal_use_mock_blit_encoder_for_write_timestamp".
-        deviceToggles->Default(Toggle::MetalUseMockBlitEncoderForWriteTimestamp, true);
+    deviceToggles->Default(Toggle::MetalUseMockBlitEncoderForWriteTimestamp, true);
 
     // On macOS 15.0+, we can use sampleTimestamps:gpuTimestamp: from MTLDevice to capture CPU and
     // GPU timestamps to estimate GPU timestamp period at device creation, but this API call will
     // cause GPU overheating on Intel GPUs due to a driver bug keeping the GPU running at the
     // maximum clock. Disable timestamp sampling to avoid overheating user's devices.
     // See https://crbug.com/342701242 for more details.
-        if (@available(macos 15.0, *)) {
-            if (gpu_info::IsIntel(deviceId)) {
-                deviceToggles->Default(Toggle::MetalDisableTimestampPeriodEstimation, true);
-            }
+    if (@available(macos 15.0, *)) {
+        if (gpu_info::IsIntel(deviceId)) {
+            deviceToggles->Default(Toggle::MetalDisableTimestampPeriodEstimation, true);
         }
+    }
 
 #if DAWN_PLATFORM_IS(MACOS)
     if (gpu_info::IsIntel(vendorId)) {
@@ -532,6 +535,12 @@ void PhysicalDevice::SetupBackendDeviceToggles(dawn::platform::Platform* platfor
             Toggle::MetalUseBothDepthAndStencilAttachmentsForCombinedDepthStencilFormats, true);
     }
 #endif
+
+    // Enable the integer range analysis for shader robustness by default if the corresponding
+    // platform feature is enabled.
+    deviceToggles->Default(
+        Toggle::EnableIntegerRangeAnalysisInRobustness,
+        platform->IsFeatureEnabled(platform::Features::kWebGPUEnableRangeAnalysisForRobustness));
 }
 
 MaybeError PhysicalDevice::InitializeImpl() {
@@ -633,7 +642,11 @@ void PhysicalDevice::InitializeSupportedFeaturesImpl() {
     // Memoryless storage mode and programmable blending are available only from the Apple2
     // family of GPUs on.
     if ([*mDevice supportsFamily:MTLGPUFamilyApple2]) {
+        // Programmable blending doesn't seem to work as expected on the iOS simulator.
+        // NOTE: TARGET_OS_SIMULATOR can be defined but set to false for MacOS builds.
+#if !defined(TARGET_OS_SIMULATOR) || !TARGET_OS_SIMULATOR
         EnableFeature(Feature::FramebufferFetch);
+#endif
         EnableFeature(Feature::TransientAttachments);
     }
 
@@ -658,6 +671,7 @@ void PhysicalDevice::InitializeSupportedFeaturesImpl() {
     EnableFeature(Feature::ClipDistances);
     EnableFeature(Feature::Float32Blendable);
     EnableFeature(Feature::FlexibleTextureViews);
+    EnableFeature(Feature::TextureFormatsTier1);
 
     // The function subgroupBroadcast(f16) fails for some edge cases on intel gen-9 devices.
     // See crbug.com/391680973
@@ -680,6 +694,9 @@ void PhysicalDevice::InitializeSupportedFeaturesImpl() {
 
     if ([*mDevice supportsFamily:MTLGPUFamilyApple7]) {
         EnableFeature(Feature::ChromiumExperimentalSubgroupMatrix);
+        // TODO(342172182): This may be available in more places?
+        // (mwyrzykowski says "Apple7 and all Macs")
+        EnableFeature(Feature::ChromiumExperimentalPrimitiveId);
     }
 
     EnableFeature(Feature::SharedTextureMemoryIOSurface);
@@ -699,6 +716,10 @@ void PhysicalDevice::InitializeSupportedFeaturesImpl() {
         EnableFeature(Feature::BufferMapExtendedUsages);
     }
 #endif
+
+    if ([*mDevice supportsFamily:MTLGPUFamilyMac2]) {
+        EnableFeature(Feature::TextureComponentSwizzle);
+    }
 }
 
 void PhysicalDevice::InitializeVendorArchitectureImpl() {
@@ -752,7 +773,7 @@ MaybeError PhysicalDevice::InitializeSupportedLimitsImpl(CombinedLimits* limits)
     };
 
     struct LimitsForFamily {
-        uint32_t MTLDeviceLimits::*limit;
+        uint32_t MTLDeviceLimits::* limit;
         ityp::array<MTLGPUFamily, uint32_t, 9> values;
     };
 
@@ -875,10 +896,10 @@ MaybeError PhysicalDevice::InitializeSupportedLimitsImpl(CombinedLimits* limits)
     // - maxBindGroups
     // - maxVertexBufferArrayStride
 
-    limits->v1.maxStorageBuffersInFragmentStage = limits->v1.maxStorageBuffersPerShaderStage;
-    limits->v1.maxStorageTexturesInFragmentStage = limits->v1.maxStorageTexturesPerShaderStage;
-    limits->v1.maxStorageBuffersInVertexStage = limits->v1.maxStorageBuffersPerShaderStage;
-    limits->v1.maxStorageTexturesInVertexStage = limits->v1.maxStorageTexturesPerShaderStage;
+    limits->compat.maxStorageBuffersInFragmentStage = limits->v1.maxStorageBuffersPerShaderStage;
+    limits->compat.maxStorageTexturesInFragmentStage = limits->v1.maxStorageTexturesPerShaderStage;
+    limits->compat.maxStorageBuffersInVertexStage = limits->v1.maxStorageBuffersPerShaderStage;
+    limits->compat.maxStorageTexturesInVertexStage = limits->v1.maxStorageTexturesPerShaderStage;
 
     // The memory allocation must be in a single virtual memory (VM) region.
     limits->hostMappedPointerLimits.hostMappedPointerAlignment = 4096;
@@ -893,10 +914,6 @@ FeatureValidationResult PhysicalDevice::ValidateFeatureSupportedWithTogglesImpl(
 }
 
 void PhysicalDevice::PopulateBackendProperties(UnpackedPtr<AdapterInfo>& info) const {
-    if (auto* subgroupProperties = info.Get<AdapterPropertiesSubgroups>()) {
-        subgroupProperties->subgroupMinSize = 4;
-        subgroupProperties->subgroupMaxSize = 64;
-    }
     if (auto* memoryHeapProperties = info.Get<AdapterPropertiesMemoryHeaps>()) {
         if ([*mDevice hasUnifiedMemory]) {
             auto* heapInfo = new MemoryHeapInfo[1];

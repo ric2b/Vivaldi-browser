@@ -43,8 +43,8 @@ constexpr auto kActionTypeStrings = std::to_array<const char*>({
 
 }  // namespace
 
-CPDF_Action::CPDF_Action(RetainPtr<const CPDF_Dictionary> pDict)
-    : dict_(std::move(pDict)) {}
+CPDF_Action::CPDF_Action(RetainPtr<const CPDF_Dictionary> dict)
+    : dict_(std::move(dict)) {}
 
 CPDF_Action::CPDF_Action(const CPDF_Action& that) = default;
 
@@ -72,12 +72,12 @@ CPDF_Action::Type CPDF_Action::GetType() const {
   return Type::kUnknown;
 }
 
-CPDF_Dest CPDF_Action::GetDest(CPDF_Document* pDoc) const {
+CPDF_Dest CPDF_Action::GetDest(CPDF_Document* doc) const {
   Type type = GetType();
   if (type != Type::kGoTo && type != Type::kGoToR && type != Type::kGoToE) {
     return CPDF_Dest(nullptr);
   }
-  return CPDF_Dest::Create(pDoc, dict_->GetDirectObjectFor("D"));
+  return CPDF_Dest::Create(doc, dict_->GetDirectObjectFor("D"));
 }
 
 WideString CPDF_Action::GetFilePath() const {
@@ -106,13 +106,13 @@ WideString CPDF_Action::GetFilePath() const {
       pWinDict->GetByteStringFor(pdfium::stream::kF).AsStringView());
 }
 
-ByteString CPDF_Action::GetURI(const CPDF_Document* pDoc) const {
+ByteString CPDF_Action::GetURI(const CPDF_Document* doc) const {
   if (GetType() != Type::kURI) {
     return ByteString();
   }
 
   ByteString csURI = dict_->GetByteStringFor("URI");
-  RetainPtr<const CPDF_Dictionary> pURI = pDoc->GetRoot()->GetDictFor("URI");
+  RetainPtr<const CPDF_Dictionary> pURI = doc->GetRoot()->GetDictFor("URI");
   if (pURI) {
     auto result = csURI.Find(":");
     if (!result.has_value() || result.value() == 0) {
@@ -217,9 +217,9 @@ CPDF_Action CPDF_Action::GetSubAction(size_t iIndex) const {
     return CPDF_Action(pArray->GetDictAt(iIndex));
   }
 
-  if (const CPDF_Dictionary* pDict = pNext->AsDictionary()) {
+  if (const CPDF_Dictionary* dict = pNext->AsDictionary()) {
     if (iIndex == 0) {
-      return CPDF_Action(pdfium::WrapRetain(pDict));
+      return CPDF_Action(pdfium::WrapRetain(dict));
     }
   }
   return CPDF_Action(nullptr);

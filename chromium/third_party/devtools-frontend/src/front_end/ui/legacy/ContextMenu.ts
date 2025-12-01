@@ -46,6 +46,7 @@ export class Item {
   private readonly typeInternal: string;
   protected readonly label: string|undefined;
   protected accelerator?: Host.InspectorFrontendHostAPI.AcceleratorDescriptor;
+  protected featureName?: string;
   protected readonly previewFeature: boolean;
   protected disabled: boolean|undefined;
   private readonly checked: boolean|undefined;
@@ -61,7 +62,7 @@ export class Item {
       contextMenu: ContextMenu|null, type: 'checkbox'|'item'|'separator'|'subMenu', label?: string,
       isPreviewFeature?: boolean, disabled?: boolean, checked?: boolean,
       accelerator?: Host.InspectorFrontendHostAPI.AcceleratorDescriptor, tooltip?: Platform.UIString.LocalizedString,
-      jslogContext?: string) {
+      jslogContext?: string, featureName?: string) {
     this.typeInternal = type;
     this.label = label;
     this.previewFeature = Boolean(isPreviewFeature);
@@ -76,6 +77,7 @@ export class Item {
       this.idInternal = contextMenu ? contextMenu.nextId() : 0;
     }
     this.jslogContext = jslogContext;
+    this.featureName = featureName;
   }
 
   id(): number {
@@ -114,6 +116,7 @@ export class Item {
           subItems: undefined,
           tooltip: this.#tooltip,
           jslogContext: this.jslogContext,
+          featureName: this.featureName,
         };
         if (this.customElement) {
           result.element = this.customElement;
@@ -193,10 +196,11 @@ export class Section {
     additionalElement?: Element,
     tooltip?: Platform.UIString.LocalizedString,
     jslogContext?: string,
+    featureName?: string,
   }): Item {
     const item = new Item(
         this.contextMenu, 'item', label, options?.isPreviewFeature, options?.disabled, undefined, options?.accelerator,
-        options?.tooltip, options?.jslogContext);
+        options?.tooltip, options?.jslogContext, options?.featureName);
     if (options?.additionalElement) {
       item.customElement = options?.additionalElement;
     }
@@ -221,7 +225,7 @@ export class Section {
     return item;
   }
 
-  appendAction(actionId: string, label?: string, optional?: boolean): void {
+  appendAction(actionId: string, label?: string, optional?: boolean, jslogContext?: string, feature?: string): void {
     if (optional && !ActionRegistry.instance().hasAction(actionId)) {
       return;
     }
@@ -231,7 +235,8 @@ export class Section {
     }
     const result = this.appendItem(label, action.execute.bind(action), {
       disabled: !action.enabled(),
-      jslogContext: actionId,
+      jslogContext: jslogContext ?? actionId,
+      featureName: feature,
     });
     const shortcut = ShortcutRegistry.instance().shortcutTitleForAction(actionId);
     const keyAndModifier = ShortcutRegistry.instance().keyAndModifiersForAction(actionId);
@@ -243,8 +248,8 @@ export class Section {
     }
   }
 
-  appendSubMenuItem(label: string, disabled?: boolean, jslogContext?: string): SubMenu {
-    const item = new SubMenu(this.contextMenu, label, disabled, jslogContext);
+  appendSubMenuItem(label: string, disabled?: boolean, jslogContext?: string, featureName?: string): SubMenu {
+    const item = new SubMenu(this.contextMenu, label, disabled, jslogContext, featureName);
     item.init();
     this.items.push(item);
     return item;
@@ -257,10 +262,11 @@ export class Section {
     additionalElement?: Element,
     tooltip?: Platform.UIString.LocalizedString,
     jslogContext?: string,
+    featureName?: string,
   }): Item {
     const item = new Item(
         this.contextMenu, 'checkbox', label, options?.experimental, options?.disabled, options?.checked, undefined,
-        options?.tooltip, options?.jslogContext);
+        options?.tooltip, options?.jslogContext, options?.featureName);
     this.items.push(item);
     if (this.contextMenu) {
       this.contextMenu.setHandler(item.id(), handler);
@@ -276,8 +282,10 @@ export class SubMenu extends Item {
   readonly sections: Map<string, Section>;
   private readonly sectionList: Section[];
 
-  constructor(contextMenu: ContextMenu|null, label?: string, disabled?: boolean, jslogContext?: string) {
-    super(contextMenu, 'subMenu', label, undefined, disabled, undefined, undefined, undefined, jslogContext);
+  constructor(
+      contextMenu: ContextMenu|null, label?: string, disabled?: boolean, jslogContext?: string, featureName?: string) {
+    super(
+        contextMenu, 'subMenu', label, undefined, disabled, undefined, undefined, undefined, jslogContext, featureName);
     this.sections = new Map();
     this.sectionList = [];
   }
@@ -363,6 +371,7 @@ export class SubMenu extends Item {
       id: undefined,
       checked: undefined,
       jslogContext: this.jslogContext,
+      featureName: this.featureName,
     };
 
     const nonEmptySections = this.sectionList.filter(section => Boolean(section.items.length));
@@ -640,15 +649,26 @@ export class ContextMenu extends SubMenu {
 
   private itemSelected(id: number): void {
     this.invokeHandler(id);
+    // Collect all features used along the way when searching for the clicked item.
+    // I.e. a 'feature' on a submenu should be counted as 'used' if its submenu items are clicked.
+    const featuresUsed: string[] = [];
     if (this.openHostedMenu) {
       const itemWithId = (items: Host.InspectorFrontendHostAPI.ContextMenuDescriptor[],
                           id: number): Host.InspectorFrontendHostAPI.ContextMenuDescriptor|null => {
         for (const item of items) {
           if (item.id === id) {
+            if (item.featureName) {
+              featuresUsed.push(item.featureName);
+            }
+
             return item;
           }
           const subitem = item.subItems && itemWithId(item.subItems, id);
           if (subitem) {
+            // Record submenu feature.
+            if (item.featureName) {
+              featuresUsed.push(item.featureName);
+            }
             return subitem;
           }
         }
@@ -657,6 +677,10 @@ export class ContextMenu extends SubMenu {
       const item = itemWithId(this.openHostedMenu, id);
       if (item?.jslogContext) {
         void VisualLogging.logClick(item, new MouseEvent('click'));
+      }
+      if (item && featuresUsed.length > 0) {
+        featuresUsed.map(
+            feature => Host.InspectorFrontendHost.InspectorFrontendHostInstance.recordNewBadgeUsage(feature));
       }
     }
 
@@ -682,7 +706,7 @@ export class ContextMenu extends SubMenu {
    * will be loaded when showing the context menu. If the `target` was already appended
    * before, it just ignores this call.
    *
-   * @param target an object for which we can have registered menu item providers.
+   * @param target - an object for which we can have registered menu item providers.
    */
   appendApplicableItems(target: unknown): void {
     if (this.pendingTargets.includes(target)) {
@@ -713,12 +737,12 @@ export class ContextMenu extends SubMenu {
  * @attr disabled - Whether the menu button is disabled
  * @attr jslogContext - The jslog context for the button.
  *
- * @prop {Function} populateMenuCall - Callback function to populate the menu.
- * @prop {Boolean} softMenu - Reflects the `"soft-menu"` attribute.
- * @prop {Boolean} keepOpen -Reflects the `"keep-open"` attribute.
- * @prop {String} iconName - Reflects the `"icon-name"` attribute.
- * @prop {Boolean} disabled - Reflects the `"disabled"` attribute.
- * @prop {String} jslogContext - Reflects the `"jslogContext"` attribute.
+ * @property populateMenuCall - Callback function to populate the menu.
+ * @property softMenu - Reflects the `"soft-menu"` attribute.
+ * @property keepOpen -Reflects the `"keep-open"` attribute.
+ * @property iconName - Reflects the `"icon-name"` attribute.
+ * @property disabled - Reflects the `"disabled"` attribute.
+ * @prop jslogContext - Reflects the `"jslogContext"` attribute.
  */
 export class MenuButton extends HTMLElement {
   static readonly observedAttributes = ['icon-name', 'disabled'];
@@ -728,7 +752,7 @@ export class MenuButton extends HTMLElement {
 
   /**
    * Sets the callback function used to populate the context menu when the button is clicked.
-   * @param {Function} populateCall - A function that takes a `ContextMenu` instance and adds items to it.
+   * @param populateCall - A function that takes a `ContextMenu` instance and adds items to it.
    */
   set populateMenuCall(populateCall: (arg0: ContextMenu) => void) {
     this.#populateMenuCall = populateCall;
@@ -796,7 +820,7 @@ export class MenuButton extends HTMLElement {
    * Creates and shows the `ContextMenu`. It calls the `populateMenuCall`
    * callback to fill the menu with items before displaying it relative to the button.
    * Manages the `aria-expanded` state.
-   * @param {Event} event - The event that triggered the menu
+   * @param event - The event that triggered the menu
    */
   #openMenu(event: Event): void {
     this.#triggerTimeoutId = undefined;
@@ -821,7 +845,7 @@ export class MenuButton extends HTMLElement {
   /**
    * Handles the click event on the button. It clears any pending trigger timeout
    * and immediately calls the `openMenu` method to show the context menu.
-   * @param {Event} event - The click event.
+   * @param event - The click event.
    */
   #triggerContextMenu(event: MouseEvent): void {
     const triggerTimeout = 50;
@@ -846,16 +870,15 @@ export class MenuButton extends HTMLElement {
     }
 
     // clang-format off
-    render(
-      html`
-              <devtools-button
-                .disabled=${this.disabled}
-                .iconName=${this.iconName}
-                .variant=${Buttons.Button.Variant.ICON}
-                .title=${this.title}
-                aria-haspopup='menu'
-                @click=${this.#triggerContextMenu}></devtools-button>`,
-      this.#shadow, { host: this });
+    render(html`
+        <devtools-button .disabled=${this.disabled}
+                         .iconName=${this.iconName}
+                         .variant=${Buttons.Button.Variant.ICON}
+                         .title=${this.title}
+                         aria-haspopup='menu'
+                         @click=${this.#triggerContextMenu}>
+        </devtools-button>`,
+        this.#shadow, { host: this });
     // clang-format on
   }
 }

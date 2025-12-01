@@ -118,6 +118,10 @@ bool IsFeatureSupported(WGPUFeatureName feature) {
         case WGPUFeatureName_ChromiumExperimentalSubgroupMatrix:
         case WGPUFeatureName_CoreFeaturesAndLimits:
         case WGPUFeatureName_DawnDeviceAllocatorControl:
+        case WGPUFeatureName_TextureFormatsTier1:
+        case WGPUFeatureName_TextureFormatsTier2:
+        case WGPUFeatureName_TextureComponentSwizzle:
+        case WGPUFeatureName_ChromiumExperimentalPrimitiveId:
             return true;
     }
 

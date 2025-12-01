@@ -106,7 +106,9 @@ class EventManager final : NonMovable {
 
 struct QueueAndSerial {
     WeakRef<QueueBase> queue;
-    ExecutionSerial completionSerial;
+    std::atomic<ExecutionSerial> completionSerial;
+
+    QueueAndSerial(QueueBase* q, ExecutionSerial serial);
 
     // Returns the most recently completed serial on |queue|. Otherwise, returns |completionSerial|.
     ExecutionSerial GetCompletedSerial() const;
@@ -133,6 +135,7 @@ class EventManager::TrackedEvent : public RefCounted {
 
     bool IsReadyToComplete() const;
 
+    QueueAndSerial* GetIfQueueAndSerial() { return std::get_if<QueueAndSerial>(&mCompletionData); }
     const QueueAndSerial* GetIfQueueAndSerial() const {
         return std::get_if<QueueAndSerial>(&mCompletionData);
     }
@@ -200,15 +203,16 @@ class EventManager::TrackedEvent : public RefCounted {
     wgpu::CallbackMode mCallbackMode;
     FutureID mFutureID = kNullFutureID;
 
-#if DAWN_ENABLE_ASSERTS
-    std::atomic<bool> mCurrentlyBeingWaited = false;
-#endif
-
   private:
     CompletionData mCompletionData;
     const bool mIsProgressing = true;
-    // Callback has been called.
-    std::atomic<bool> mCompleted = false;
+    // Whether the callback has been called. Note that this is a MutexProtected<bool> because for
+    // spontaneous events, multiple threads may call |EnsureComplete| and that function should only
+    // return after the actual callback is completed. Without the lock, previous to this change we
+    // just had an std::atomic<bool>, two threads could race, and the thread that does not run the
+    // callback can make forward progress even though the callback hasn't completed on the other
+    // thread yet.
+    MutexProtected<bool> mCompleted;
 };
 
 }  // namespace dawn::native

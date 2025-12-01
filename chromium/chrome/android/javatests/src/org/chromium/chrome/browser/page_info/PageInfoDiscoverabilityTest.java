@@ -31,7 +31,9 @@ import org.chromium.base.test.params.ParameterSet;
 import org.chromium.base.test.params.ParameterizedRunner;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.chrome.browser.browsing_data.BrowsingDataBridge;
 import org.chromium.chrome.browser.browsing_data.BrowsingDataType;
 import org.chromium.chrome.browser.browsing_data.TimePeriod;
@@ -51,6 +53,7 @@ import org.chromium.chrome.test.batch.BlankCTATabInitialStateRule;
 import org.chromium.components.content_settings.ContentSettingValues;
 import org.chromium.components.content_settings.ContentSettingsType;
 import org.chromium.components.location.LocationUtils;
+import org.chromium.components.omnibox.OmniboxFeatureList;
 import org.chromium.components.permissions.PermissionDialogController;
 import org.chromium.components.search_engines.TemplateUrlService;
 import org.chromium.content_public.browser.ContentFeatureList;
@@ -137,6 +140,10 @@ public class PageInfoDiscoverabilityTest {
                                     false));
             parameters.add(
                     new ParameterSet()
+                            .name("RequestType.kLocalNetworkAccess")
+                            .value(ContentSettingsType.LOCAL_NETWORK_ACCESS, true));
+            parameters.add(
+                    new ParameterSet()
                             .name("RequestType.kMicStream")
                             .value(ContentSettingsType.MEDIASTREAM_MIC, true));
             parameters.add(
@@ -172,6 +179,10 @@ public class PageInfoDiscoverabilityTest {
                     new ParameterSet()
                             .name("RequestType.kTopLevelStorageAccess")
                             .value(ContentSettingsType.TOP_LEVEL_STORAGE_ACCESS, false));
+            parameters.add(
+                    new ParameterSet()
+                            .name("RequestType.kWindowManagement")
+                            .value(ContentSettingsType.WINDOW_MANAGEMENT, true));
 
             return parameters;
         }
@@ -333,6 +344,8 @@ public class PageInfoDiscoverabilityTest {
     @MediumTest
     @Feature({"PageInfoDiscoverability"})
     @ParameterAnnotations.UseMethodParameter(RequestTypeTestParams.class)
+    @EnableFeatures(OmniboxFeatureList.OMNIBOX_MOBILE_PARITY_UPDATE)
+    @DisabledTest(message = "Flaky - crbug.com/422700100")
     public void testPermissionRequestTypes(
             @ContentSettingsType.EnumType int contentSettingsType, boolean isInSiteSettings) {
         if (contentSettingsType == ContentSettingsType.BLUETOOTH_CHOOSER_DATA) {

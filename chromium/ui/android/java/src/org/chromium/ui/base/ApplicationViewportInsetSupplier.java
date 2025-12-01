@@ -10,7 +10,7 @@ import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
-import org.chromium.ui.InsetObserver;
+import org.chromium.ui.insets.InsetObserver;
 import org.chromium.ui.mojom.VirtualKeyboardMode;
 
 /**

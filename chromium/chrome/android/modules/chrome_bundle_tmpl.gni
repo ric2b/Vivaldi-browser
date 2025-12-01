@@ -29,7 +29,6 @@ template("chrome_bundle") {
 
   assert(_is_trichrome == defined(invoker.static_library_provider))
 
-  if (_is_monochrome || _is_trichrome) {
   # Put //chrome Java code and resources into a dedicated split to isolate
   # renderer processes from needing to load it.
   _base_target_gen_dir =
@@ -52,7 +51,6 @@ template("chrome_bundle") {
     }
   }
   _module_descs += [ _chrome_module_desc ]
-  }
 
   # TODO(crbug.com/40148088): Isolated splits cause various bugs with resource
   # access. For now, move all resources to the base module.

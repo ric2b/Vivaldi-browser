@@ -17,6 +17,7 @@
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/notimplemented.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -2031,7 +2032,6 @@ bool RenderWidgetHostViewAura::AddGrammarFragments(
 
 #endif
 
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS)
 void RenderWidgetHostViewAura::GetActiveTextInputControlLayoutBounds(
     std::optional<gfx::Rect>* control_bounds,
     std::optional<gfx::Rect>* selection_bounds) {
@@ -2054,7 +2054,6 @@ void RenderWidgetHostViewAura::GetActiveTextInputControlLayoutBounds(
     }
   }
 }
-#endif
 
 #if BUILDFLAG(IS_WIN)
 void RenderWidgetHostViewAura::SetActiveCompositionForAccessibility(
@@ -2281,6 +2280,15 @@ void RenderWidgetHostViewAura::OnMouseEvent(ui::MouseEvent* event) {
       return;
     }
     last_mouse_move_location_ = event->location();
+  }
+
+  // Stylus Handwriting applies exclusively to pen input. On Windows, mouse
+  // events get fired right before the pen makes contact. This serves as an
+  // indication that the user is using a pen to interact with the browser and is
+  // likely to perform handwriting. As such, we instantiate the handwriting
+  // singleton. Also, see crbug.com/40854538 for more context.
+  if (event->pointer_details().pointer_type == ui::EventPointerType::kPen) {
+    StylusHandwritingControllerWin::Initialize();
   }
 #endif
   last_pointer_type_ = ui::EventPointerType::kMouse;
@@ -3226,12 +3234,6 @@ void RenderWidgetHostViewAura::OnSelectionBoundsChanged(
 void RenderWidgetHostViewAura::OnTextSelectionChanged(
     TextInputManager* text_input_manager,
     RenderWidgetHostViewBase* updated_view) {
-#if BUILDFLAG(IS_LINUX)
-  if (vivaldi::IsVivaldiRunning() &&
-      vivaldi::clipboard::SuppressWrite(ui::ClipboardBuffer::kSelection)) {
-    return;
-  }
-#endif  // IS_LINUX
 
   if (!GetTextInputManager())
     return;
@@ -3256,6 +3258,18 @@ void RenderWidgetHostViewAura::OnTextSelectionChanged(
   if (ui::Clipboard::IsSupportedClipboardBuffer(
           ui::ClipboardBuffer::kSelection)) {
     if (vivaldi::IsVivaldiRunning()) {
+#if BUILDFLAG(IS_LINUX)
+      // Selection changes from both UI (this) and document arrive here. We need
+      // to test for UI and possibly reject a selection change from being
+      // written to the selection buffer further down as a change will happen
+      // when we switch tabs and focus is on the url field. Allowing those
+      // changes to trigger a buffer update breaks with what a user expects.
+      if (updated_view == this &&
+          vivaldi::clipboard::SuppressWrite(ui::ClipboardBuffer::kSelection)) {
+        return;
+      }
+#endif  // IS_LINUX
+
       // NOTE(espen@vivaldi.com): OnTextSelectionChanged gets broadcasted to all
       // observers whenever a selection change. A view keeps observing as long as
       // it holds a visible selection. The original code (chrome 54) does not test
@@ -3265,7 +3279,7 @@ void RenderWidgetHostViewAura::OnTextSelectionChanged(
       if (focused_view != updated_view) {
         return;
       }
-    }
+    }  // Vivaldi::IsVivaldiRunning()
 
     const TextInputManager::TextSelection* selection =
         GetTextInputManager()->GetTextSelection(focused_view);

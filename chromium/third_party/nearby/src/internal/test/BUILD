@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+
 licenses(["notice"])
 
 cc_library(
@@ -57,6 +60,8 @@ cc_library(
     visibility = ["//visibility:public"],
     deps = [
         "//internal/base",
+        "//internal/base:file_path",
+        "//internal/base:files",
         "//internal/network:types",
         "//internal/platform:comm",
         "//internal/platform:types",
@@ -92,6 +97,8 @@ cc_test(
     shard_count = 8,
     deps = [
         ":test",
+        "//internal/base:file_path",
+        "//internal/base:files",
         "//internal/network:types",
         "//internal/network:url",
         "//internal/platform:types",

@@ -37,6 +37,7 @@ limitations under the License.
 #include "mlir/Pass/PassManager.h"
 #include "xla/backends/gpu/codegen/fusion_emitter.h"
 #include "xla/codegen/emitters/computation_partitioner.h"
+#include "xla/codegen/emitters/ir/xla_ops.h"
 #include "xla/hlo/analysis/indexing_map.h"
 #include "xla/hlo/ir/hlo_instruction.h"
 #include "xla/hlo/ir/hlo_instructions.h"
@@ -65,10 +66,12 @@ class EmitterBase : public KernelFusionInterface {
 
   // Visible for testing. `buffer_assignment` is optional for testing (assigns
   // a different buffer to each tensor).
-  absl::StatusOr<mlir::OwningOpRef<mlir::ModuleOp>> CreateMLIRModule(
+  virtual absl::StatusOr<mlir::OwningOpRef<mlir::ModuleOp>> CreateMLIRModule(
       mlir::MLIRContext& context, const HloFusionInstruction& fusion,
       const std::string& entry_function_name,
       const BufferAssignment* buffer_assignment) const;
+
+  static mlir::DialectRegistry GetDialectRegistry();
 
  protected:
   // Returns the set of instructions that will be isolated in the partitioned,
@@ -94,16 +97,8 @@ class EmitterBase : public KernelFusionInterface {
       mlir::func::FuncOp entry_function,
       const HloFusionInstruction& fusion) const = 0;
 
-  // Evaluates the epilogue of the fusion. Returns the results for each epilogue
-  // root.
-  absl::flat_hash_map<const HloInstruction*, mlir::ValueRange> EmitEpilogue(
-      int epilogue_index, const emitters::PartitionedComputations& computations,
-      mlir::func::FuncOp entry_fn,
-      const absl::flat_hash_map<const HloInstruction*,
-                                llvm::SmallVector<mlir::Value>>& injected,
-      mlir::ValueRange output_indices,
-      mlir::ImplicitLocOpBuilder& builder) const;
-
+  mlir::Value EmitWorkGroupId(mlir::ImplicitLocOpBuilder& builder,
+                              WorkGroupDimension dim) const;
   mlir::Value EmitBlockId(mlir::ImplicitLocOpBuilder& builder, int dim) const;
   mlir::Value EmitThreadId(mlir::ImplicitLocOpBuilder& builder, int dim) const;
   llvm::SmallVector<mlir::Value> EmitThreadAndBlockIds(
@@ -117,9 +112,6 @@ class EmitterBase : public KernelFusionInterface {
                         mlir::func::FuncOp entry_function,
                         const HloFusionInstruction& fusion) const;
 };
-
-// Adds passes that simplify arithmetic operations and remove dead code.
-void AddXlaGpuOpsOptimizationPasses(mlir::OpPassManager& pm);
 
 // Adds passes that transform XLA_GPU and SCF loops, e.g. peel, pipeline,
 // vectorize.

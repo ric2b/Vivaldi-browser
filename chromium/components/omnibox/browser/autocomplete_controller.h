@@ -44,6 +44,7 @@
 #include "components/omnibox/recent_typed_history_provider.h"
 
 class ClipboardProvider;
+class ContextualSearchProvider;
 class DocumentProvider;
 class FeaturedSearchProvider;
 class HistoryFuzzyProvider;
@@ -276,6 +277,9 @@ class AutocompleteController : public AutocompleteProviderListener,
     return voice_suggest_provider_;
   }
   OpenTabProvider* open_tab_provider() const { return open_tab_provider_; }
+  ContextualSearchProvider* contextual_search_provider() const {
+    return contextual_search_provider_;
+  }
 
   const AutocompleteInput& input() const { return input_; }
   const AutocompleteResult& result() const { return published_result_; }
@@ -322,11 +326,7 @@ class AutocompleteController : public AutocompleteProviderListener,
   // Look at vivaldi wiki to have more information about why
   // some providers are disabled.
 
-#if !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID)
-  bool VivaldiShouldRunProviderForDesktop(AutocompleteProvider* provider) const;
-#else
-  bool VivaldiShouldRunProviderForMobile(AutocompleteProvider* provider) const;
-#endif
+  bool VivaldiShouldRunProvider(AutocompleteProvider* provider) const;
 
  private:
   friend class FakeAutocompleteController;
@@ -341,9 +341,16 @@ class AutocompleteController : public AutocompleteProviderListener,
   FRIEND_TEST_ALL_PREFIXES(AutocompleteControllerTest,
                            NoActionsAttachedToLensSearchboxMatches);
   FRIEND_TEST_ALL_PREFIXES(AutocompleteControllerTest,
+                           ContextualQueryAppendsSearchboxStats);
+  FRIEND_TEST_ALL_PREFIXES(AutocompleteControllerTest,
                            ContextualSearchActionAttachedPageKeywordMode);
   FRIEND_TEST_ALL_PREFIXES(AutocompleteControllerTest,
                            ContextualSearchActionAttachedInZeroSuggest);
+  FRIEND_TEST_ALL_PREFIXES(AutocompleteControllerTest,
+                           AttachContextualSearchOpenLensActionToMatches);
+  FRIEND_TEST_ALL_PREFIXES(
+      AutocompleteControllerTest,
+      ContextualSearchOpenLensActionAttachedPageKeywordMode);
   FRIEND_TEST_ALL_PREFIXES(AutocompleteProviderTest,
                            RedundantKeywordsIgnoredInResult);
   FRIEND_TEST_ALL_PREFIXES(AutocompleteProviderTest, UpdateSearchboxStats);
@@ -541,6 +548,10 @@ class AutocompleteController : public AutocompleteProviderListener,
   void MaybeCleanSuggestionsForKeywordMode(const AutocompleteInput& input,
                                            AutocompleteResult* result);
 
+  // Removes promotional IPH suggestions if `result` contains toolbelt. Does not
+  // remove disclaimer IPHs.
+  void MaybeCleanIphSuggestions(AutocompleteResult* result);
+
   // Get the experiment stats v2 entry for the omnibox position. Used on iOS.
   const omnibox::metrics::ChromeSearchboxStats::ExperimentStatsV2
   GetOmniboxPositionExperimentStatsV2() const;
@@ -582,6 +593,8 @@ class AutocompleteController : public AutocompleteProviderListener,
   raw_ptr<TabGroupProvider> tab_group_provider_;
 
   raw_ptr<FeaturedSearchProvider> featured_search_provider_;
+
+  raw_ptr<ContextualSearchProvider> contextual_search_provider_;
 
   // A vector of scoring signals annotators for URL suggestions.
   // Unlike the other existing annotators (e.g., pedals and keywords), these

@@ -260,7 +260,7 @@ class NotesBridge : public vivaldi::NotesModelObserver {
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj,
       const base::android::JavaParamRef<jobject>& j_note_id_obj,
-      jlongArray arr);
+      const base::android::JavaRef<jlongArray>& arr);
 
   bool IsChildOfTrashNode(JNIEnv* env,
                           const base::android::JavaParamRef<jobject>& obj,

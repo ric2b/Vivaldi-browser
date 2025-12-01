@@ -25,6 +25,7 @@ conf_files = [
   '40-nonlatin.conf',
   '45-generic.conf',
   '45-latin.conf',
+  '48-guessfamily.conf',
   '48-spacing.conf',
   '49-sansserif.conf',
   '50-user.conf',
@@ -45,11 +46,10 @@ conf_files = [
 
 preferred_hinting = get_option('default-hinting')
 preferred_sub_pixel_rendering = get_option('default-sub-pixel-rendering')
+preferred_bitmap = get_option('bitmap-conf')
 
 conf_links = [
-  '10-hinting-@0@.conf'.format(preferred_hinting),
   '10-scale-bitmap-fonts.conf',
-  '10-sub-pixel-@0@.conf'.format(preferred_sub_pixel_rendering),
   '10-yes-antialias.conf',
   '11-lcdfilter-default.conf',
   '20-unhint-small-vera.conf',
@@ -69,6 +69,26 @@ conf_links = [
   '80-delicious.conf',
   '90-synthetic.conf',
 ]
+
+if preferred_hinting != 'noinstall'
+  conf_links += '10-hinting-@0@.conf'.format(preferred_hinting)
+endif
+
+if preferred_sub_pixel_rendering != 'noinstall'
+  conf_links += '10-sub-pixel-@0@.conf'.format(preferred_sub_pixel_rendering)
+endif
+
+bitmap_conf_options = {
+  'yes': 'yes-bitmaps',
+  'no': 'no-bitmaps-and-emoji',
+  'no-except-emoji': 'no-bitmaps-except-emoji'
+}
+
+foreach opt, configfile : bitmap_conf_options
+  if opt == preferred_bitmap
+    conf_links += '70-@0@.conf'.format(configfile)
+  endif
+endforeach
 
 install_data(conf_files,
              install_dir: fc_templatedir,

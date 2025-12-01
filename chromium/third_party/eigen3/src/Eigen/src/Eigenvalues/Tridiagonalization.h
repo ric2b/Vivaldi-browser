@@ -345,7 +345,7 @@ EIGEN_DEVICE_FUNC void tridiagonalization_inplace(MatrixType& matA, CoeffVectorT
 
     // Apply similarity transformation to remaining columns,
     // i.e., A = H A H' where H = I - h v v' and v = matA.col(i).tail(n-i-1)
-    matA.col(i).coeffRef(i + 1) = 1;
+    matA.col(i).coeffRef(i + 1) = Scalar(1);
 
     hCoeffs.tail(n - i - 1).noalias() =
         (matA.bottomRightCorner(remainingSize, remainingSize).template selfadjointView<Lower>() *

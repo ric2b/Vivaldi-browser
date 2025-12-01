@@ -4,13 +4,13 @@
 #
 #   const char **azCompileOpt[]
 #
-# definition used in src/ctime.c, run this script from
-# the checkout root. It generates src/ctime.c .
+# definition used in ctime.c, run this script from
+# the checkout root. It generates ctime.c .
 #
-# Results are normally written into src/ctime.c.  But if an argument is
+# Results are normally written into ctime.c.  But if an argument is
 # provided, results are written there instead.  Examples:
 #
-#    tclsh tool/mkctimec.tcl                ;# <-- results to src/ctime.c
+#    tclsh tool/mkctimec.tcl                ;# <-- ctime.c
 #
 #    tclsh tool/mkctimec.tcl /dev/tty       ;# <-- results to the terminal
 #
@@ -108,6 +108,7 @@ set boolean_defnil_options {
   SQLITE_ALLOW_ROWID_IN_VIEW
   SQLITE_ALLOW_URI_AUTHORITY
   SQLITE_BUG_COMPATIBLE_20160819
+  SQLITE_BUG_COMPATIBLE_20250510
   SQLITE_CASE_SENSITIVE_LIKE
   SQLITE_CHECK_PAGES
   SQLITE_COVERAGE_TEST
@@ -167,6 +168,7 @@ set boolean_defnil_options {
   SQLITE_ENABLE_RBU
   SQLITE_ENABLE_RTREE
   SQLITE_ENABLE_SESSION
+  SQLITE_ENABLE_SETLK_TIMEOUT
   SQLITE_ENABLE_SNAPSHOT
   SQLITE_ENABLE_SORTER_REFERENCES
   SQLITE_ENABLE_SQLLOG
@@ -319,6 +321,7 @@ set value_options {
   SQLITE_ENABLE_LOCKING_STYLE
   SQLITE_EXTRA_AUTOEXT
   SQLITE_EXTRA_INIT
+  SQLITE_EXTRA_INIT_MUTEXED
   SQLITE_EXTRA_SHUTDOWN
   SQLITE_FTS3_MAX_EXPR_DEPTH
   SQLITE_INTEGRITY_CHECK_ERROR_MAX
@@ -440,7 +443,7 @@ foreach v $value2_options {
 if {$argc>0} {
   set destfile [lindex $argv 0]
 } else {
-  set destfile "[file dir [file dir [file normal $argv0]]]/src/ctime.c"
+  set destfile ctime.c
   puts "Overwriting $destfile..."
 }
 

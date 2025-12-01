@@ -11,10 +11,12 @@
 #include "third_party/blink/public/web/blink.h"
 #include "third_party/blink/renderer/platform/bindings/v8_binding.h"
 #include "third_party/blink/renderer/platform/bindings/v8_private_property.h"
+#include "third_party/blink/renderer/platform/wtf/text/strcat.h"
 
 namespace blink {
 
-gin::WrapperInfo RemoteObject::kWrapperInfo = {gin::kEmbedderNativeGin};
+gin::DeprecatedWrapperInfo RemoteObject::kWrapperInfo = {
+    gin::kEmbedderNativeGin};
 
 namespace {
 
@@ -291,12 +293,8 @@ v8::Local<v8::Value> MojomToJSValue(
 }
 }  // namespace
 
-RemoteObject::RemoteObject(v8::Isolate* isolate,
-                           RemoteObjectGatewayImpl* gateway,
-                           int32_t object_id)
-    : gin::NamedPropertyInterceptor(isolate, this),
-      gateway_(gateway),
-      object_id_(object_id) {}
+RemoteObject::RemoteObject(RemoteObjectGatewayImpl* gateway, int32_t object_id)
+    : gateway_(gateway), object_id_(object_id) {}
 
 RemoteObject::~RemoteObject() {
   if (gateway_) {
@@ -309,29 +307,31 @@ RemoteObject::~RemoteObject() {
 
 gin::ObjectTemplateBuilder RemoteObject::GetObjectTemplateBuilder(
     v8::Isolate* isolate) {
-  return gin::Wrappable<RemoteObject>::GetObjectTemplateBuilder(isolate)
+  return gin::DeprecatedWrappable<RemoteObject>::GetObjectTemplateBuilder(
+             isolate)
       .AddNamedPropertyInterceptor();
 }
 
 void RemoteObject::RemoteObjectInvokeCallback(
     const v8::FunctionCallbackInfo<v8::Value>& info) {
   v8::Isolate* isolate = info.GetIsolate();
+  String method_name = ToCoreString(isolate, info.Data().As<v8::String>());
   if (info.IsConstructCall()) {
     // This is not a constructor. Throw and return.
     isolate->ThrowException(v8::Exception::Error(
-        V8String(isolate, kMethodInvocationAsConstructorDisallowed)));
+        V8String(isolate, StrCat({"Error invoking ", method_name, ": ",
+                                  kMethodInvocationAsConstructorDisallowed}))));
     return;
   }
 
   RemoteObject* remote_object;
   if (!gin::ConvertFromV8(isolate, info.This(), &remote_object)) {
     // Someone messed with the |this| pointer. Throw and return.
-    isolate->ThrowException(v8::Exception::Error(
-        V8String(isolate, kMethodInvocationOnNonInjectedObjectDisallowed)));
+    isolate->ThrowException(v8::Exception::Error(V8String(
+        isolate, StrCat({"Error invoking ", ": ", method_name,
+                         kMethodInvocationOnNonInjectedObjectDisallowed}))));
     return;
   }
-
-  String method_name = ToCoreString(isolate, info.Data().As<v8::String>());
 
   v8::Local<v8::Object> method_cache = GetMethodCache(
       isolate, remote_object->GetWrapper(isolate).ToLocalChecked());
@@ -345,7 +345,8 @@ void RemoteObject::RemoteObjectInvokeCallback(
 
   if (cached_method->IsUndefined()) {
     isolate->ThrowException(v8::Exception::Error(
-        V8String(isolate, kMethodInvocationNonexistentMethod)));
+        V8String(isolate, StrCat({"Error invoking ", ": ", method_name,
+                                  kMethodInvocationNonexistentMethod}))));
     return;
   }
 
@@ -366,9 +367,10 @@ void RemoteObject::RemoteObjectInvokeCallback(
                                        &result);
 
   if (result->error != mojom::blink::RemoteInvocationError::OK) {
-    String message = String::Format("%s : ", kMethodInvocationErrorMessage) +
-                     RemoteInvocationErrorToString(result->error);
-    isolate->ThrowException(v8::Exception::Error(V8String(isolate, message)));
+    isolate->ThrowException(v8::Exception::Error(V8String(
+        isolate, StrCat({"Error invoking ", method_name, ": ",
+                         kMethodInvocationErrorMessage, ": ",
+                         RemoteInvocationErrorToString(result->error)}))));
     return;
   }
 

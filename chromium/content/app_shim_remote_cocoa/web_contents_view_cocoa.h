@@ -33,7 +33,6 @@ CONTENT_EXPORT
 // browser process.
 - (void)setHost:(remote_cocoa::mojom::WebContentsNSViewHost*)host;
 
-- (void)VivaldiSetInFramelessContentView:(BOOL)framelessContentView;
 - (void)setMouseDownCanMoveWindow:(BOOL)canMove;
 
 // Enable the workaround for https://crbug.com/1148078. This is called by
@@ -65,8 +64,6 @@ CONTENT_EXPORT
 // Updates the WCVC's web contents's visibility state. The update may occur
 // immediately or in the near future.
 - (void)updateWebContentsVisibility:(remote_cocoa::mojom::Visibility)visibility;
-
-- (void)updateWindowControlsOverlay:(const gfx::Rect&)boundingRect;
 
 @end
 

@@ -23,7 +23,7 @@
 extern "C" {
 #endif
 
-#define DOUBLE_DIVIDE_CHECK(x) ((x) < 0 ? (x)-0.000001 : (x) + 0.000001)
+#define DOUBLE_DIVIDE_CHECK(x) ((x) < 0 ? (x) - 0.000001 : (x) + 0.000001)
 
 #define MIN_ZERO_MOTION 0.95
 #define MAX_SR_CODED_ERROR 40

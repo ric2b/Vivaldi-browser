@@ -120,7 +120,6 @@
 #include "chrome/installer/util/google_update_util.h"
 #endif
 
-#include "app/vivaldi_version_info.h"
 #include "base/vivaldi_switches.h"
 #include "installer/util/vivaldi_install_constants.h"
 #include "installer/util/vivaldi_setup_util.h"

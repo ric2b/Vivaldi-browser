@@ -1,5 +1,5 @@
-#ifndef AVIF_H
-#define AVIF_H
+#ifndef CRABBYAVIF_AVIF_H
+#define CRABBYAVIF_AVIF_H
 
 #include <cstdarg>
 #include <cstddef>
@@ -13,6 +13,9 @@ using Box = T*;
 namespace crabbyavif {
 struct avifImage;
 struct avifIO;
+
+// Used to initialize avifROData/avifRWData on the stack.
+#define AVIF_DATA_EMPTY { NULL, 0 }
 }
 
 
@@ -66,21 +69,41 @@ constexpr static const uint32_t AVIF_TRANSFORM_IROT = (1 << 2);
 
 constexpr static const uint32_t AVIF_TRANSFORM_IMIR = (1 << 3);
 
-constexpr static const uint32_t AVIF_COLOR_PRIMARIES_BT709 = 1;
+constexpr static const uint16_t AVIF_COLOR_PRIMARIES_BT709 = 1;
 
-constexpr static const uint32_t AVIF_COLOR_PRIMARIES_IEC61966_2_4 = 1;
+constexpr static const uint16_t AVIF_COLOR_PRIMARIES_IEC61966_2_4 = 1;
 
-constexpr static const uint32_t AVIF_COLOR_PRIMARIES_BT2100 = 9;
+constexpr static const uint16_t AVIF_COLOR_PRIMARIES_BT2100 = 9;
 
-constexpr static const uint32_t AVIF_COLOR_PRIMARIES_DCI_P3 = 12;
+constexpr static const uint16_t AVIF_COLOR_PRIMARIES_DCI_P3 = 12;
 
-constexpr static const uint32_t AVIF_TRANSFER_CHARACTERISTICS_SMPTE2084 = 16;
+constexpr static const uint16_t AVIF_TRANSFER_CHARACTERISTICS_SMPTE2084 = 16;
 
 constexpr static const uint32_t AVIF_ADD_IMAGE_FLAG_NONE = 0;
 
 constexpr static const uint32_t AVIF_ADD_IMAGE_FLAG_FORCE_KEYFRAME = (1 << 0);
 
 constexpr static const uint32_t AVIF_ADD_IMAGE_FLAG_SINGLE = (1 << 1);
+
+constexpr static const uint32_t AVIF_QUALITY_WORST = 0;
+
+constexpr static const uint32_t AVIF_QUALITY_BEST = 100;
+
+constexpr static const uint32_t AVIF_QUALITY_LOSSLESS = 100;
+
+constexpr static const int32_t AVIF_QUALITY_DEFAULT = -1;
+
+constexpr static const uint32_t AVIF_QUANTIZER_WORST_QUALITY = 63;
+
+constexpr static const uint32_t AVIF_QUANTIZER_BEST_QUALITY = 0;
+
+constexpr static const uint32_t AVIF_QUANTIZER_LOSSLESS = 0;
+
+constexpr static const uint32_t AVIF_SPEED_SLOWEST = 0;
+
+constexpr static const uint32_t AVIF_SPEED_FASTEST = 10;
+
+constexpr static const uint32_t AVIF_SPEED_DEFAULT = 6;
 
 enum AndroidMediaCodecOutputColorFormat : int32_t {
     ANDROID_MEDIA_CODEC_OUTPUT_COLOR_FORMAT_YUV420_FLEXIBLE = 2135033992,
@@ -280,6 +303,8 @@ enum avifResult {
     AVIF_RESULT_DECODE_GAIN_MAP_FAILED = 30,
     AVIF_RESULT_INVALID_TONE_MAPPED_IMAGE = 31,
 };
+
+struct CodecSpecificOptions;
 
 struct Decoder;
 
@@ -505,14 +530,20 @@ struct avifEncoder {
     uint32_t extraLayerCount;
     int32_t quality;
     int32_t qualityAlpha;
+    int32_t minQuantizer;
+    int32_t maxQuantizer;
+    int32_t minQuantizerAlpha;
+    int32_t maxQuantizerAlpha;
     int32_t tileRowsLog2;
     int32_t tileColsLog2;
     avifBool autoTiling;
     avifScalingMode scalingMode;
     avifIOStats ioStats;
+    avifDiagnostics diag;
     int32_t qualityGainMap;
     Box<Encoder> rust_encoder;
     bool rust_encoder_initialized;
+    Box<CodecSpecificOptions> codec_specific_options;
 };
 
 using avifAddImageFlags = uint32_t;
@@ -543,13 +574,13 @@ struct avifRGBImage {
     uint32_t rowBytes;
 };
 
+using avifCodecFlags = uint32_t;
+
 struct avifPixelFormatInfo {
     avifBool monochrome;
     int chromaShiftX;
     int chromaShiftY;
 };
-
-using avifCodecFlags = uint32_t;
 
 
 
@@ -563,136 +594,391 @@ using avifCodecFlags = uint32_t;
 
 extern "C" {
 
+/// # Safety
+/// Used by the C API to create an avifDecoder object with default values.
 avifDecoder *crabby_avifDecoderCreate();
 
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if decoder is not null, it has to point to a valid avifDecoder object.
+/// - if io is not null, it has to point to a valid avifIO object.
 void crabby_avifDecoderSetIO(avifDecoder *decoder, avifIO *io);
 
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if decoder is not null, it has to point to a valid avifDecoder object.
+/// - if filename is not null, it has to point to a valid C-style string.
 avifResult crabby_avifDecoderSetIOFile(avifDecoder *decoder, const char *filename);
 
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if decoder is not null, it has to point to a valid avifDecoder object.
+/// - if data is not null, it has to be a valid buffer of size bytes.
 avifResult crabby_avifDecoderSetIOMemory(avifDecoder *decoder, const uint8_t *data, size_t size);
 
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if decoder is not null, it has to point to a valid avifDecoder object.
 avifResult crabby_avifDecoderSetSource(avifDecoder *decoder, avifDecoderSource source);
 
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if decoder is not null, it has to point to a valid avifDecoder object.
 avifResult crabby_avifDecoderParse(avifDecoder *decoder);
 
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if decoder is not null, it has to point to a valid avifDecoder object.
 avifResult crabby_avifDecoderNextImage(avifDecoder *decoder);
 
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if decoder is not null, it has to point to a valid avifDecoder object.
 avifResult crabby_avifDecoderNthImage(avifDecoder *decoder, uint32_t frameIndex);
 
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if decoder is not null, it has to point to a valid avifDecoder object.
+/// - if outTiming is not null, it has to point to a valid ImageTiming object.
 avifResult crabby_avifDecoderNthImageTiming(const avifDecoder *decoder,
                                             uint32_t frameIndex,
                                             avifImageTiming *outTiming);
 
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if decoder is not null, it has to point to a valid avifDecoder object.
 void crabby_avifDecoderDestroy(avifDecoder *decoder);
 
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if decoder is not null, it has to point to a valid avifDecoder object.
+/// - if image is not null, it has to point to a valid avifImage object.
 avifResult crabby_avifDecoderRead(avifDecoder *decoder, avifImage *image);
 
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if decoder is not null, it has to point to a valid avifDecoder object.
+/// - if image is not null, it has to point to a valid avifImage object.
+/// - if data is not null, it has to be a valid buffer of size bytes.
 avifResult crabby_avifDecoderReadMemory(avifDecoder *decoder,
                                         avifImage *image,
                                         const uint8_t *data,
                                         size_t size);
 
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if decoder is not null, it has to point to a valid avifDecoder object.
+/// - if image is not null, it has to point to a valid avifImage object.
+/// - if filename is not null, it has to point to a valid C-style string.
 avifResult crabby_avifDecoderReadFile(avifDecoder *decoder, avifImage *image, const char *filename);
 
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if decoder is not null, it has to point to a valid avifDecoder object.
 avifBool crabby_avifDecoderIsKeyframe(const avifDecoder *decoder, uint32_t frameIndex);
 
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if decoder is not null, it has to point to a valid avifDecoder object.
 uint32_t crabby_avifDecoderNearestKeyframe(const avifDecoder *decoder, uint32_t frameIndex);
 
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if decoder is not null, it has to point to a valid avifDecoder object.
 uint32_t crabby_avifDecoderDecodedRowCount(const avifDecoder *decoder);
 
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if decoder is not null, it has to point to a valid avifDecoder object.
+/// - if outExtent is not null, it has to point to a valid avifExtent object.
 avifResult crabby_avifDecoderNthImageMaxExtent(const avifDecoder *decoder,
                                                uint32_t frameIndex,
                                                avifExtent *outExtent);
 
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if input is not null, it has to point to a valid avifROData object.
 avifBool crabby_avifPeekCompatibleFileType(const avifROData *input);
 
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if decoder is not null, it has to point to a valid avifDecoder object.
+avifResult crabby_avifDecoderReset(avifDecoder *decoder);
+
+/// # Safety
+/// Used by the C API to create an avifEncoder object with default values.
 avifEncoder *crabby_avifEncoderCreate();
 
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if encoder is not null, it has to point to a valid avifEncoder object.
 void crabby_avifEncoderDestroy(avifEncoder *encoder);
 
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if encoder is not null, it has to point to a valid avifEncoder object.
+/// - if image is not null, it has to point to a valid avifImage object.
+/// - if output is not null, it has to point to a valid avifRWData object.
 avifResult crabby_avifEncoderWrite(avifEncoder *encoder,
                                    const avifImage *image,
                                    avifRWData *output);
 
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if encoder is not null, it has to point to a valid avifEncoder object.
+/// - if image is not null, it has to point to a valid avifImage object.
 avifResult crabby_avifEncoderAddImage(avifEncoder *encoder,
                                       const avifImage *image,
                                       uint64_t durationInTimescales,
                                       avifAddImageFlags addImageFlags);
 
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if encoder is not null, it has to point to a valid avifEncoder object.
+/// - if cellImages is not null, it has to point to valid array of avifImage objects of size
+///   |gridCols * gridRows|.
 avifResult crabby_avifEncoderAddImageGrid(avifEncoder *encoder,
                                           uint32_t gridCols,
                                           uint32_t gridRows,
                                           const avifImage *const *cellImages,
                                           avifAddImageFlags addImageFlags);
 
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if encoder is not null, it has to point to a valid avifEncoder object.
+/// - if output is not null, it has to point to a valid avifRWData object.
 avifResult crabby_avifEncoderFinish(avifEncoder *encoder, avifRWData *output);
 
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if encoder is not null, it has to point to a valid avifEncoder object.
+/// - if key is not null, it has to point to a valid C-style string.
+/// - if value is not null, it has to point to a valid C-style string.
+avifResult crabby_avifEncoderSetCodecSpecificOption(avifEncoder *encoder,
+                                                    const char *key,
+                                                    const char *value);
+
+/// # Safety
+/// C API function that does not perform any unsafe operation.
+avifGainMap *crabby_avifGainMapCreate();
+
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if gainmap is not null, it has to point to a buffer allocated by crabby_avifGainMapCreate.
+void crabby_avifGainMapDestroy(avifGainMap *gainmap);
+
+/// # Safety
+/// Used by the C API to create an avifImage object with default values.
 avifImage *crabby_avifImageCreateEmpty();
 
+/// # Safety
+/// Used by the C API to create an avifImage object with the given parameters.
 avifImage *crabby_avifImageCreate(uint32_t width,
                                   uint32_t height,
                                   uint32_t depth,
                                   avifPixelFormat yuvFormat);
 
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if dstImage is not null, it has to point to a valid avifImage object.
+/// - if srcImage is not null, it has to point to a valid avifImage object.
 avifResult crabby_avifImageCopy(avifImage *dstImage,
                                 const avifImage *srcImage,
                                 avifPlanesFlags planes);
 
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if image is not null, it has to point to a valid avifImage object.
 avifResult crabby_avifImageAllocatePlanes(avifImage *image, avifPlanesFlags planes);
 
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if image is not null, it has to point to a valid avifImage object.
 void crabby_avifImageFreePlanes(avifImage *image, avifPlanesFlags planes);
 
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if image is not null, it has to point to a valid avifImage object.
 void crabby_avifImageDestroy(avifImage *image);
 
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if image is not null, it has to point to a valid avifImage object.
 avifBool crabby_avifImageUsesU16(const avifImage *image);
 
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if image is not null, it has to point to a valid avifImage object.
 avifBool crabby_avifImageIsOpaque(const avifImage *image);
 
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if image is not null, it has to point to a valid avifImage object.
 uint8_t *crabby_avifImagePlane(const avifImage *image, int channel);
 
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if image is not null, it has to point to a valid avifImage object.
 uint32_t crabby_avifImagePlaneRowBytes(const avifImage *image, int channel);
 
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if image is not null, it has to point to a valid avifImage object.
 uint32_t crabby_avifImagePlaneWidth(const avifImage *image, int channel);
 
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if image is not null, it has to point to a valid avifImage object.
 uint32_t crabby_avifImagePlaneHeight(const avifImage *image, int channel);
 
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if dstImage is not null, it has to point to a valid avifImage object.
+/// - if srcImage is not null, it has to point to a valid avifImage object.
+/// - if rect is not null, it has to point to a valid avifCropRect object.
 avifResult crabby_avifImageSetViewRect(avifImage *dstImage,
                                        const avifImage *srcImage,
                                        const avifCropRect *rect);
 
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if image is not null, it has to point to a valid avifImage object.
+/// - if exif is not null, it has to point to a valid buffer of size exifSize bytes.
+avifResult crabby_avifImageSetMetadataExif(avifImage *image, const uint8_t *exif, size_t exifSize);
+
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if image is not null, it has to point to a valid avifImage object.
+/// - if xmp is not null, it has to point to a valid buffer of size xmpSize bytes.
+avifResult crabby_avifImageSetMetadataXMP(avifImage *image, const uint8_t *xmp, size_t xmpSize);
+
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if image is not null, it has to point to a valid avifImage object.
+/// - if icc is not null, it has to point to a valid buffer of size iccSize bytes.
+avifResult crabby_avifImageSetProfileICC(avifImage *image, const uint8_t *icc, size_t iccSize);
+
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if raw is not null, it has to point to a valid avifRWData object.
 avifResult crabby_avifRWDataRealloc(avifRWData *raw, size_t newSize);
 
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if raw is not null, it has to point to a valid avifRWData object.
+/// - if data is not null, it has to point to a valid buffer of size bytes.
 avifResult crabby_avifRWDataSet(avifRWData *raw, const uint8_t *data, size_t size);
 
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if raw is not null, it has to point to a valid avifRWData object.
 void crabby_avifRWDataFree(avifRWData *raw);
 
+/// # Safety
+/// Unused C API function.
 void cioDestroy(avifIO *_io);
 
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if io is not null, it has to point to a valid avifIO object.
+/// - if out is not null, it has to point to a valid avifROData object.
 avifResult cioRead(avifIO *io, uint32_t _readFlags, uint64_t offset, size_t size, avifROData *out);
 
+/// # Safety
+/// Unused C API function.
 avifResult cioWrite(avifIO *_io,
                     uint32_t _writeFlags,
                     uint64_t _offset,
                     const uint8_t *_data,
                     size_t _size);
 
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if data is not null, it has to be a valid buffer of size bytes.
 avifIO *crabby_avifIOCreateMemoryReader(const uint8_t *data, size_t size);
 
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if filename is not null, it has to be a valid C-style string.
 avifIO *crabby_avifIOCreateFileReader(const char *filename);
 
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if io is not null, it has to point to a valid avifIO object.
 void crabby_avifIODestroy(avifIO *io);
 
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if rgb is not null, it has to point to a valid avifRGBImage object.
+/// - if image is not null, it has to point to a valid avifImage object.
 void crabby_avifRGBImageSetDefaults(avifRGBImage *rgb, const avifImage *image);
 
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if image is not null, it has to point to a valid avifImage object.
+/// - if rgb is not null, it has to point to a valid avifRGBImage object.
 avifResult crabby_avifImageYUVToRGB(const avifImage *image, avifRGBImage *rgb);
 
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if image is not null, it has to point to a valid avifImage object.
+/// - if rgb is not null, it has to point to a valid avifRGBImage object.
+avifResult crabby_avifImageRGBToYUV(avifImage *image, const avifRGBImage *rgb);
+
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if image is not null, it has to point to a valid avifImage object.
+/// - if diag is not null, it has to point to a valid avifDiagnostics object.
 avifResult crabby_avifImageScale(avifImage *image,
                                  uint32_t dstWidth,
                                  uint32_t dstHeight,
                                  avifDiagnostics *_diag);
 
+/// # Safety
+/// C API function that does not do any unsafe operations.
+uint32_t crabby_avifRGBFormatChannelCount(avifRGBFormat format);
+
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if rgb is not null, it has to point to a valid avifRGBImage object.
+uint32_t crabby_avifRGBImagePixelSize(avifRGBImage *rgb);
+
+/// # Safety
+/// C API function that does not do any unsafe operations.
+avifBool crabby_avifRGBFormatHasAlpha(avifRGBFormat format);
+
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if rgb is not null, it has to point to a valid avifRGBImage object.
+avifResult crabby_avifRGBImageAllocatePixels(avifRGBImage *rgb);
+
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if rgb is not null, it has to point to a valid avifRGBImage object.
+void crabby_avifRGBImageFreePixels(avifRGBImage *rgb);
+
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if name is not null, it has to be a valid C-style string.
+avifCodecChoice crabby_avifCodecChoiceFromName(const char *name);
+
+/// # Safety
+/// C API function that does not do any unsafe operations.
+const char *crabby_avifCodecName(avifCodecChoice _choice, avifCodecFlags requiredFlags);
+
+/// # Safety
+/// C API function that does not do any unsafe operations.
+const char *crabby_avifPixelFormatToString(avifPixelFormat format);
+
+/// # Safety
+/// C API function.
 const char *crabby_avifResultToString(avifResult res);
 
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if cropRect is not null, it has to point to a valid avifCropRect object.
+/// - if clap is not null, it has to point to a valid avifCleanApertureBox object.
+/// - if diag is not null, it has to point to a valid avifDiagnostics object.
 avifBool crabby_avifCropRectConvertCleanApertureBox(avifCropRect *cropRect,
                                                     const avifCleanApertureBox *clap,
                                                     uint32_t imageW,
@@ -700,6 +986,11 @@ avifBool crabby_avifCropRectConvertCleanApertureBox(avifCropRect *cropRect,
                                                     avifPixelFormat yuvFormat,
                                                     avifDiagnostics *_diag);
 
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if cropRect is not null, it has to point to a valid avifCropRect object.
+/// - if clap is not null, it has to point to a valid avifCleanApertureBox object.
+/// - if diag is not null, it has to point to a valid avifDiagnostics object.
 avifBool crabby_avifCleanApertureBoxConvertCropRect(avifCleanApertureBox *clap,
                                                     const avifCropRect *cropRect,
                                                     uint32_t imageW,
@@ -707,16 +998,50 @@ avifBool crabby_avifCleanApertureBoxConvertCropRect(avifCleanApertureBox *clap,
                                                     avifPixelFormat yuvFormat,
                                                     avifDiagnostics *_diag);
 
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if info is not null, it has to point to a valid avifPixelFormatInfo object.
 void crabby_avifGetPixelFormatInfo(avifPixelFormat format, avifPixelFormatInfo *info);
 
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if diag is not null, it has to point to a valid avifDiagnostics object.
 void crabby_avifDiagnosticsClearError(avifDiagnostics *diag);
 
+/// # Safety
+/// C API function that does not perform any unsafe operation.
 void *crabby_avifAlloc(size_t size);
 
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if p is not null, it has to point to a buffer allocated by crabby_avifAlloc.
 void crabby_avifFree(void *p);
 
 } // extern "C"
 
 } // namespace crabbyavif
 
-#endif // AVIF_H
+#endif // CRABBYAVIF_AVIF_H
+
+#ifndef CRABBYAVIF_AVIF_CXX_H
+#define CRABBYAVIF_AVIF_CXX_H
+
+#include <memory>
+
+namespace crabbyavif {
+
+struct UniquePtrDeleter {
+    void operator()(avifEncoder * encoder) const { crabby_avifEncoderDestroy(encoder); }
+    void operator()(avifDecoder * decoder) const { crabby_avifDecoderDestroy(decoder); }
+    void operator()(avifImage * image) const { crabby_avifImageDestroy(image); }
+    void operator()(avifGainMap * gainMap) const { crabby_avifGainMapDestroy(gainMap); }
+};
+
+using EncoderPtr = std::unique_ptr<avifEncoder, UniquePtrDeleter>;
+using DecoderPtr = std::unique_ptr<avifDecoder, UniquePtrDeleter>;
+using ImagePtr = std::unique_ptr<avifImage, UniquePtrDeleter>;
+using GainMapPtr = std::unique_ptr<avifGainMap, UniquePtrDeleter>;
+
+} // namespace crabbyavif
+
+#endif // CRABBYAVIF_AVIF_CXX_H

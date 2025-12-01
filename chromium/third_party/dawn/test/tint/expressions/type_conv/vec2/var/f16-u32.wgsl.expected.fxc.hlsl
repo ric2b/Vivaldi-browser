@@ -1,17 +1,16 @@
 SKIP: INVALID
 
-[numthreads(1, 1, 1)]
-void unused_entry_point() {
-  return;
-}
 
 static vector<float16_t, 2> u = (float16_t(1.0h)).xx;
+uint2 tint_v2f16_to_v2u32(vector<float16_t, 2> value) {
+  return uint2(clamp(value, (float16_t(0.0h)).xx, (float16_t(65504.0h)).xx));
+}
 
 void f() {
-  uint2 v = uint2(u);
+  uint2 v = tint_v2f16_to_v2u32(u);
 }
-FXC validation failure:
-<scrubbed_path>(6,15-23): error X3000: syntax error: unexpected token 'float16_t'
 
+[numthreads(1, 1, 1)]
+void unused_entry_point() {
+}
 
-tint executable returned error: exit status 1

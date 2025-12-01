@@ -39,6 +39,7 @@ import * as Common from '../../core/common/common.js';
 import * as Host from '../../core/host/host.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import * as Platform from '../../core/platform/platform.js';
+import * as Root from '../../core/root/root.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as Protocol from '../../generated/protocol.js';
 import * as Bindings from '../../models/bindings/bindings.js';
@@ -131,6 +132,14 @@ const UIStrings = {
    *@description Tooltip for a filter in the Network panel
    */
   onlyShowThirdPartyRequests: 'Show only requests with origin different from page origin',
+  /**
+   *@description Label for a filter in the Network panel
+   */
+  ippRequests: 'IP Protected requests',
+  /**
+   *@description Tooltip for a filter in the Network panel
+   */
+  onlyShowIPProtectedRequests: '(Incognito Only) Show only requests sent to IP Protection proxies',
   /**
    *@description Text that appears when user drag and drop something (for example, a file) in Network Log View of the Network panel
    */
@@ -309,7 +318,7 @@ const UIStrings = {
   copyAllURLs: 'Copy all URLs',
   /**
    *@description A context menu command in the Network panel, for copying the URLs of all requestes
-   (after applying the Network filter) to the clipboard.
+   * (after applying the Network filter) to the clipboard.
    */
   copyAllListedURLs: 'Copy all listed URLs',
   /**
@@ -465,6 +474,26 @@ const UIStrings = {
    * @description Text for the Show only/Hide requests dropdown button of the filterbar
    */
   moreFilters: 'More filters',
+  /**
+   *@description Text of a context menu item to redirect to the AI assistance panel and to start a chat.
+   */
+  startAChat: 'Start a chat',
+  /**
+   *@description Context menu item in Network panel to explain the purpose of a request via AI.
+   */
+  explainPurpose: 'Explain purpose',
+  /**
+   *@description Context menu item in Network panel to explain why a request is slow via AI.
+   */
+  explainSlowness: 'Explain slowness',
+  /**
+   *@description Context menu item in Network panel to explain why a request is failing via AI.
+   */
+  explainFailures: 'Explain failures',
+  /**
+   *@description Context menu item in Network panel to assess security headers of a request via AI.
+   */
+  assessSecurityHeaders: 'Assess security headers',
 } as const;
 const str_ = i18n.i18n.registerUIStrings('panels/network/NetworkLogView.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
@@ -484,7 +513,7 @@ export class NetworkLogView extends Common.ObjectWrapper.eventMixin<EventTypes, 
   private readonly networkOnlyThirdPartySetting: Common.Settings.Setting<boolean>;
   private readonly networkResourceTypeFiltersSetting: Common.Settings.Setting<Record<string, boolean>>;
   private readonly networkShowOptionsToGenerateHarWithSensitiveData: Common.Settings.Setting<boolean>;
-  private rawRowHeight: number;
+  private readonly networkOnlyIPProtectedRequestsSetting: Common.Settings.Setting<boolean>;
   private readonly progressBarContainer: Element;
   private readonly networkLogLargeRowsSetting: Common.Settings.Setting<boolean>;
   private rowHeightInternal: number;
@@ -508,12 +537,7 @@ export class NetworkLogView extends Common.ObjectWrapper.eventMixin<EventTypes, 
   private activeGroupLookup: GroupLookupInterface|null;
   private readonly textFilterUI: UI.FilterBar.TextFilterUI;
   private readonly invertFilterUI: UI.FilterBar.CheckboxFilterUI;
-  private readonly dataURLFilterUI: UI.FilterBar.CheckboxFilterUI|undefined;
   private readonly moreFiltersDropDownUI: MoreFiltersDropDownUI|undefined;
-  private readonly onlyBlockedResponseCookiesFilterUI: UI.FilterBar.CheckboxFilterUI|undefined;
-  private readonly onlyBlockedRequestsUI: UI.FilterBar.CheckboxFilterUI|undefined;
-  private readonly onlyThirdPartyFilterUI: UI.FilterBar.CheckboxFilterUI|undefined;
-  private readonly hideChromeExtensionsUI: UI.FilterBar.CheckboxFilterUI|undefined;
   private readonly resourceCategoryFilterUI: UI.FilterBar.NamedBitSetFilterUI;
   private readonly filterParser: TextUtils.TextUtils.FilterParser;
   private readonly suggestionBuilder: UI.FilterSuggestionBuilder.FilterSuggestionBuilder;
@@ -521,6 +545,7 @@ export class NetworkLogView extends Common.ObjectWrapper.eventMixin<EventTypes, 
   private readonly summaryToolbarInternal: UI.Toolbar.Toolbar;
   private readonly filterBar: UI.FilterBar.FilterBar;
   private readonly textFilterSetting: Common.Settings.Setting<string>;
+  private networkRequestToNode: WeakMap<SDK.NetworkRequest.NetworkRequest, NetworkRequestNode>;
 
   constructor(
       filterBar: UI.FilterBar.FilterBar, progressBarContainer: Element,
@@ -532,6 +557,8 @@ export class NetworkLogView extends Common.ObjectWrapper.eventMixin<EventTypes, 
     this.element.id = 'network-container';
     this.element.classList.add('no-node-selected');
 
+    this.networkRequestToNode = new WeakMap();
+
     this.networkInvertFilterSetting = Common.Settings.Settings.instance().createSetting('network-invert-filter', false);
     this.networkHideDataURLSetting = Common.Settings.Settings.instance().createSetting('network-hide-data-url', false);
     this.networkHideChromeExtensions =
@@ -542,21 +569,20 @@ export class NetworkLogView extends Common.ObjectWrapper.eventMixin<EventTypes, 
         Common.Settings.Settings.instance().createSetting('network-only-blocked-requests', false);
     this.networkOnlyThirdPartySetting =
         Common.Settings.Settings.instance().createSetting('network-only-third-party-setting', false);
+    this.networkOnlyIPProtectedRequestsSetting =
+        Common.Settings.Settings.instance().createSetting('network-only-ip-protected-requests', false);
     this.networkResourceTypeFiltersSetting =
         Common.Settings.Settings.instance().createSetting('network-resource-type-filters', {});
     this.networkShowOptionsToGenerateHarWithSensitiveData = Common.Settings.Settings.instance().createSetting(
         'network.show-options-to-generate-har-with-sensitive-data', false);
 
-    this.rawRowHeight = 0;
     this.progressBarContainer = progressBarContainer;
     this.networkLogLargeRowsSetting = networkLogLargeRowsSetting;
     this.networkLogLargeRowsSetting.addChangeListener(updateRowHeight.bind(this), this);
 
     function updateRowHeight(this: NetworkLogView): void {
-      this.rawRowHeight = Boolean(this.networkLogLargeRowsSetting.get()) ? 41 : 21;
-      this.rowHeightInternal = this.computeRowHeight();
+      this.rowHeightInternal = Boolean(this.networkLogLargeRowsSetting.get()) ? 41 : 21;
     }
-    this.rawRowHeight = 0;
     this.rowHeightInternal = 0;
     updateRowHeight.call(this);
 
@@ -662,10 +688,6 @@ export class NetworkLogView extends Common.ObjectWrapper.eventMixin<EventTypes, 
     if (this.textFilterSetting.get()) {
       this.textFilterUI.setValue(this.textFilterSetting.get());
     }
-  }
-
-  getMoreFiltersDropdown(): MoreFiltersDropDownUI|undefined {
-    return this.moreFiltersDropDownUI;
   }
 
   private updateGroupByFrame(): void {
@@ -933,12 +955,8 @@ export class NetworkLogView extends Common.ObjectWrapper.eventMixin<EventTypes, 
     this.invalidateAllItems();
   }
 
-  private computeRowHeight(): number {
-    return this.rawRowHeight;
-  }
-
   nodeForRequest(request: SDK.NetworkRequest.NetworkRequest): NetworkRequestNode|null {
-    return networkRequestToNode.get(request) || null;
+    return this.networkRequestToNode.get(request) || null;
   }
 
   headerHeight(): number {
@@ -1086,7 +1104,7 @@ export class NetworkLogView extends Common.ObjectWrapper.eventMixin<EventTypes, 
       this.recordingHint.detach();
       this.recordingHint = null;
     }
-    UI.ARIAUtils.alert(i18nString(UIStrings.networkDataAvailable));
+    UI.ARIAUtils.LiveAnnouncer.alert(i18nString(UIStrings.networkDataAvailable));
   }
 
   private setHidden(value: boolean): void {
@@ -1193,7 +1211,7 @@ export class NetworkLogView extends Common.ObjectWrapper.eventMixin<EventTypes, 
 
     let nodeCount = 0;
     for (const request of Logs.NetworkLog.NetworkLog.instance().requests()) {
-      const node = networkRequestToNode.get(request);
+      const node = this.networkRequestToNode.get(request);
       if (!node) {
         continue;
       }
@@ -1386,10 +1404,6 @@ export class NetworkLogView extends Common.ObjectWrapper.eventMixin<EventTypes, 
     this.columnsInternal.willHide();
   }
 
-  override onResize(): void {
-    this.rowHeightInternal = this.computeRowHeight();
-  }
-
   flatNodesList(): NetworkNode[] {
     const rootNode =
         (this.dataGrid.rootNode() as
@@ -1463,7 +1477,7 @@ export class NetworkLogView extends Common.ObjectWrapper.eventMixin<EventTypes, 
     while (this.staleRequests.size) {
       const request = this.staleRequests.values().next().value as SDK.NetworkRequest.NetworkRequest;
       this.staleRequests.delete(request);
-      let node = networkRequestToNode.get(request);
+      let node = this.networkRequestToNode.get(request);
       if (!node) {
         node = this.createNodeForRequest(request);
       }
@@ -1563,6 +1577,8 @@ export class NetworkLogView extends Common.ObjectWrapper.eventMixin<EventTypes, 
     this.mainRequestLoadTime = -1;
     this.mainRequestDOMContentLoadedTime = -1;
 
+    this.networkRequestToNode = new WeakMap();
+
     this.dataGrid.rootNode().removeChildren();
     this.updateSummaryBar();
     this.scheduleRefresh();
@@ -1576,12 +1592,13 @@ export class NetworkLogView extends Common.ObjectWrapper.eventMixin<EventTypes, 
     this.networkOnlyBlockedRequestsSetting.set(false);
     this.networkOnlyThirdPartySetting.set(false);
     this.networkHideChromeExtensions.set(false);
+    this.networkOnlyIPProtectedRequestsSetting.set(false);
     this.resourceCategoryFilterUI.reset();
   }
 
   private createNodeForRequest(request: SDK.NetworkRequest.NetworkRequest): NetworkRequestNode {
     const node = new NetworkRequestNode(this, request);
-    networkRequestToNode.set(request, node);
+    this.networkRequestToNode.set(request, node);
     filteredNetworkRequests.add(node);
 
     for (let redirect = request.redirectSource(); redirect; redirect = redirect.redirectSource()) {
@@ -1608,7 +1625,7 @@ export class NetworkLogView extends Common.ObjectWrapper.eventMixin<EventTypes, 
       void {
     const {request} = event.data;
     this.staleRequests.delete(request);
-    const node = networkRequestToNode.get(request);
+    const node = this.networkRequestToNode.get(request);
     if (node) {
       this.removeNodeAndMaybeAncestors(node);
     }
@@ -1690,11 +1707,41 @@ export class NetworkLogView extends Common.ObjectWrapper.eventMixin<EventTypes, 
     const filtered = this.filterBar.hasActiveFilter();
     const copyMenu = contextMenu.clipboardSection().appendSubMenuItem(i18nString(UIStrings.copy), false, 'copy');
     if (request) {
-      if (UI.ActionRegistry.ActionRegistry.instance().hasAction('drjones.network-panel-context')) {
+      const openAiAssistanceId = 'drjones.network-panel-context';
+      if (UI.ActionRegistry.ActionRegistry.instance().hasAction(openAiAssistanceId)) {
+        function appendSubmenuPromptAction(
+            submenu: UI.ContextMenu.SubMenu, action: UI.ActionRegistration.Action,
+            label: Common.UIString.LocalizedString, prompt: string, jslogContext: string): void {
+          submenu.defaultSection().appendItem(
+              label, () => action.execute({prompt}), {disabled: !action.enabled(), jslogContext});
+        }
+
         UI.Context.Context.instance().setFlavor(SDK.NetworkRequest.NetworkRequest, request);
-        contextMenu.footerSection().appendAction(
-            'drjones.network-panel-context',
-        );
+        if (Root.Runtime.hostConfig.devToolsAiSubmenuPrompts?.enabled) {
+          const action = UI.ActionRegistry.ActionRegistry.instance().getAction(openAiAssistanceId);
+          const submenu = contextMenu.footerSection().appendSubMenuItem(
+              action.title(), false, openAiAssistanceId,
+              Root.Runtime.hostConfig.devToolsAiAssistanceNetworkAgent?.featureName);
+          submenu.defaultSection().appendAction(openAiAssistanceId, i18nString(UIStrings.startAChat));
+          appendSubmenuPromptAction(
+              submenu, action, i18nString(UIStrings.explainPurpose), 'What is the purpose of this request?',
+              openAiAssistanceId + '.purpose');
+          appendSubmenuPromptAction(
+              submenu, action, i18nString(UIStrings.explainSlowness), 'Why is this request taking so long?',
+              openAiAssistanceId + '.slowness');
+          appendSubmenuPromptAction(
+              submenu, action, i18nString(UIStrings.explainFailures), 'Why is the request failing?',
+              openAiAssistanceId + '.failures');
+          appendSubmenuPromptAction(
+              submenu, action, i18nString(UIStrings.assessSecurityHeaders), 'Are there any security headers present?',
+              openAiAssistanceId + '.security');
+        } else if (Root.Runtime.hostConfig.devToolsAiDebugWithAi?.enabled) {
+          contextMenu.footerSection().appendAction(
+              openAiAssistanceId, undefined, false, undefined,
+              Root.Runtime.hostConfig.devToolsAiAssistanceNetworkAgent?.featureName);
+        } else {
+          contextMenu.footerSection().appendAction(openAiAssistanceId);
+        }
       }
       copyMenu.defaultSection().appendItem(
           i18nString(UIStrings.copyURL),
@@ -1935,15 +1982,15 @@ export class NetworkLogView extends Common.ObjectWrapper.eventMixin<EventTypes, 
   async #handleCreateResponseHeaderOverrideClick(request: SDK.NetworkRequest.NetworkRequest): Promise<void> {
     const requestLocation =
         NetworkForward.UIRequestLocation.UIRequestLocation.responseHeaderMatch(request, {name: '', value: ''});
-    const networkPersistanceManager = Persistence.NetworkPersistenceManager.NetworkPersistenceManager.instance();
-    if (networkPersistanceManager.project()) {
+    const networkPersistenceManager = Persistence.NetworkPersistenceManager.NetworkPersistenceManager.instance();
+    if (networkPersistenceManager.project()) {
       Common.Settings.Settings.instance().moduleSetting('persistence-network-overrides-enabled').set(true);
-      await networkPersistanceManager.getOrCreateHeadersUISourceCodeFromUrl(request.url());
+      await networkPersistenceManager.getOrCreateHeadersUISourceCodeFromUrl(request.url());
       await Common.Revealer.reveal(requestLocation);
     } else {  // If folder for local overrides has not been provided yet
       UI.InspectorView.InspectorView.instance().displaySelectOverrideFolderInfobar(async () => {
         await Sources.SourcesNavigator.OverridesNavigatorView.instance().setupNewWorkspace();
-        await networkPersistanceManager.getOrCreateHeadersUISourceCodeFromUrl(request.url());
+        await networkPersistenceManager.getOrCreateHeadersUISourceCodeFromUrl(request.url());
         await Common.Revealer.reveal(requestLocation);
       });
     }
@@ -1969,12 +2016,16 @@ export class NetworkLogView extends Common.ObjectWrapper.eventMixin<EventTypes, 
     if (!this.resourceCategoryFilterUI.accept(categoryName)) {
       return false;
     }
-    const [hideDataURL, blockedCookies, blockedRequests, thirdParty, hideExtensionURL] = [
+    const [hideDataURL, blockedCookies, blockedRequests, thirdParty, hideExtensionURL, ippRequests] = [
       this.networkHideDataURLSetting.get(),
       this.networkShowBlockedCookiesOnlySetting.get(),
       this.networkOnlyBlockedRequestsSetting.get(),
       this.networkOnlyThirdPartySetting.get(),
       this.networkHideChromeExtensions.get(),
+      // TODO(crbug.com/425645896): Remove this guard once IP Protection is fully launched.
+      Root.Runtime.hostConfig.devToolsIpProtectionInDevTools?.enabled ?
+          this.networkOnlyIPProtectedRequestsSetting.get() :
+          false,
     ];
 
     if (hideDataURL && (request.parsedURL.isDataURL() || request.parsedURL.isBlobURL())) {
@@ -1991,6 +2042,12 @@ export class NetworkLogView extends Common.ObjectWrapper.eventMixin<EventTypes, 
     }
     if (hideExtensionURL && request.scheme === 'chrome-extension') {
       return false;
+    }
+    // TODO(crbug.com/425645896): Remove this guard once IP Protection is fully launched.
+    if (Root.Runtime.hostConfig.devToolsIpProtectionInDevTools?.enabled) {
+      if (ippRequests && !request.isIpProtectionUsed()) {
+        return false;
+      }
     }
     for (let i = 0; i < this.filters.length; ++i) {
       if (!this.filters[i](request)) {
@@ -2147,7 +2204,7 @@ export class NetworkLogView extends Common.ObjectWrapper.eventMixin<EventTypes, 
 
   private reveal(request: SDK.NetworkRequest.NetworkRequest): NetworkRequestNode|null {
     this.removeAllNodeHighlights();
-    const node = networkRequestToNode.get(request);
+    const node = this.networkRequestToNode.get(request);
     if (!node?.dataGrid) {
       return null;
     }
@@ -2353,6 +2410,7 @@ export class NetworkLogView extends Common.ObjectWrapper.eventMixin<EventTypes, 
               .replace(/"/g, '\\"')
               .replace(/[^a-zA-Z0-9\s_\-:=+~'\/.',?;()*`]/g, '^$&')
               .replace(/%(?=[a-zA-Z0-9_])/g, '%^')
+              .replace(/[^\S \r\n]/g, '^$&')
               .replace(/\r?\n|\r/g, '^\n\n') +
           encapsChars;
     }
@@ -2563,7 +2621,6 @@ export function computeStackTraceText(stackTrace: Protocol.Runtime.StackTrace): 
 }
 
 const filteredNetworkRequests = new WeakSet<NetworkRequestNode>();
-const networkRequestToNode = new WeakMap<SDK.NetworkRequest.NetworkRequest, NetworkRequestNode>();
 
 export function isRequestFilteredOut(request: NetworkRequestNode): boolean {
   return filteredNetworkRequests.has(request);
@@ -2601,6 +2658,7 @@ export class MoreFiltersDropDownUI extends Common.ObjectWrapper.ObjectWrapper<UI
   private networkShowBlockedCookiesOnlySetting: Common.Settings.Setting<boolean>;
   private networkOnlyBlockedRequestsSetting: Common.Settings.Setting<boolean>;
   private networkOnlyThirdPartySetting: Common.Settings.Setting<boolean>;
+  private networkOnlyIPProtectedRequestsSetting: Common.Settings.Setting<boolean>;
   private activeFiltersCount: HTMLElement;
   private activeFiltersCountAdorner: Adorners.Adorner.Adorner;
 
@@ -2616,6 +2674,8 @@ export class MoreFiltersDropDownUI extends Common.ObjectWrapper.ObjectWrapper<UI
         Common.Settings.Settings.instance().createSetting('network-only-blocked-requests', false);
     this.networkOnlyThirdPartySetting =
         Common.Settings.Settings.instance().createSetting('network-only-third-party-setting', false);
+    this.networkOnlyIPProtectedRequestsSetting =
+        Common.Settings.Settings.instance().createSetting('network-only-ip-protected-requests', false);
 
     this.filterElement = document.createElement('div');
     this.filterElement.setAttribute('aria-label', 'Show only/hide requests dropdown');
@@ -2652,6 +2712,10 @@ export class MoreFiltersDropDownUI extends Common.ObjectWrapper.ObjectWrapper<UI
     this.networkShowBlockedCookiesOnlySetting.addChangeListener(this.#onSettingChanged.bind(this));
     this.networkOnlyBlockedRequestsSetting.addChangeListener(this.#onSettingChanged.bind(this));
     this.networkOnlyThirdPartySetting.addChangeListener(this.#onSettingChanged.bind(this));
+    // TODO(crbug.com/425645896): Remove this guard once IP Protection is fully launched.
+    if (Root.Runtime.hostConfig.devToolsIpProtectionInDevTools?.enabled) {
+      this.networkOnlyIPProtectedRequestsSetting.addChangeListener(this.#onSettingChanged.bind(this));
+    }
 
     contextMenu.defaultSection().appendCheckboxItem(
         i18nString(UIStrings.hideDataUrls),
@@ -2683,6 +2747,18 @@ export class MoreFiltersDropDownUI extends Common.ObjectWrapper.ObjectWrapper<UI
           tooltip: i18nString(UIStrings.onlyShowBlockedRequests),
           jslogContext: 'only-blocked-requests',
         });
+    // Disable this filter if in regular browsing, as IP Protection is only available in incognito mode.
+    // TODO(crbug.com/425645896): Remove this guard once IP Protection is fully launched.
+    if (Root.Runtime.hostConfig.devToolsIpProtectionInDevTools?.enabled) {
+      contextMenu.defaultSection().appendCheckboxItem(
+          i18nString(UIStrings.ippRequests),
+          () => this.networkOnlyIPProtectedRequestsSetting.set(!this.networkOnlyIPProtectedRequestsSetting.get()), {
+            checked: this.networkOnlyIPProtectedRequestsSetting.get(),
+            disabled: !Root.Runtime.hostConfig.isOffTheRecord,
+            tooltip: i18nString(UIStrings.onlyShowIPProtectedRequests),
+            jslogContext: 'only-ip-protected-requests',
+          });
+    }
     contextMenu.defaultSection().appendCheckboxItem(
         i18nString(UIStrings.thirdParty),
         () => this.networkOnlyThirdPartySetting.set(!this.networkOnlyThirdPartySetting.get()), {
@@ -2699,6 +2775,10 @@ export class MoreFiltersDropDownUI extends Common.ObjectWrapper.ObjectWrapper<UI
       ...this.networkShowBlockedCookiesOnlySetting.get() ? [i18nString(UIStrings.hasBlockedCookies)] : [],
       ...this.networkOnlyBlockedRequestsSetting.get() ? [i18nString(UIStrings.blockedRequests)] : [],
       ...this.networkOnlyThirdPartySetting.get() ? [i18nString(UIStrings.thirdParty)] : [],
+      ...Root.Runtime.hostConfig.devToolsIpProtectionInDevTools?.enabled &&
+              this.networkOnlyIPProtectedRequestsSetting.get() ?
+          [i18nString(UIStrings.ippRequests)] :
+          [],
     ];
     return filters;
   }

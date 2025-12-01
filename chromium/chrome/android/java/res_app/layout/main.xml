@@ -176,6 +176,7 @@ found in the LICENSE file.
             android:inflatedId="@+id/tab_hover_card_holder"
             android:layout="@layout/tab_hover_card_holder" />
 
+        <!-- Vivaldi: This is required to show the tab hover card on tab stacks. -->
         <ViewStub
             android:id="@+id/tab_strip_tooltip_holder_stub"
             android:layout_width="wrap_content"
@@ -183,7 +184,6 @@ found in the LICENSE file.
             android:inflatedId="@+id/tab_strip_tooltip_holder"
             android:layout="@layout/tab_strip_tooltip_holder" />
 
-        <!-- Vivaldi: This is required to show the tab hover card on tab stacks. -->
         <ViewStub
             android:id="@+id/tab_hover_card_holder_stub_stack"
             android:layout_width="@dimen/tab_hover_card_width"
@@ -232,10 +232,11 @@ found in the LICENSE file.
             android:inflatedId="@+id/page_zoom_layout"
             android:layout="@layout/page_zoom_view" />
 
-        <ViewStub
-            android:id="@+id/tab_grid_dialog_stub"
+        <FrameLayout
+            android:id="@+id/tab_group_ui_dialog_container"
             android:layout_width="match_parent"
-            android:layout_height="match_parent" />
+            android:layout_height="match_parent"
+            android:visibility="gone"/>
 
         <FrameLayout
             android:id="@+id/sheet_container"

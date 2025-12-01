@@ -21,7 +21,7 @@ NS_ASSUME_NONNULL_BEGIN
 @class GNSCentralManager;
 @class GNSCentralPeerManager;
 
-@protocol GNSCentralManagerDelegate<NSObject>
+@protocol GNSCentralManagerDelegate <NSObject>
 
 /**
  * Called while scanning when a new peer is found.
@@ -70,7 +70,7 @@ NS_ASSUME_NONNULL_BEGIN
  * [centralPeer socketWithPairingCharacteristic:shouldAddPairingCharacteristics
  *                                   completion:^(GNSSocket *mySocket, NSError *error) {
  *                                    if (error) {
- *                                      NSLog(@"Error to get the socket %@", error);
+ *                                      GNCLoggerInfo(@"Error to get the socket %@", error);
  *                                      return;
  *                                    }
  *                                    mySocket.delegate = mySocketDelegate;
@@ -99,7 +99,7 @@ NS_ASSUME_NONNULL_BEGIN
 /**
  * BLE state based on -[CBCentralManager state].
  */
-@property(nonatomic, readonly) CBCentralManagerState cbCentralManagerState;
+@property(nonatomic, readonly) CBManagerState cbManagerState;
 
 - (instancetype)init NS_UNAVAILABLE;
 
@@ -181,6 +181,13 @@ NS_ASSUME_NONNULL_BEGIN
  */
 - (void)retrievePeripheralWithIdentifier:(NSUUID *)identifier
                        advertisementData:(NSDictionary<NSString *, id> *)advertisementData;
+
+/**
+ * Tries to retrieve a peripheral that matches the given identifier.
+ *
+ * @param identifier The peripheral identifier.
+ */
+- (nullable CBPeripheral *)retrievePeripheralWithIdentifier:(NSUUID *)identifier;
 
 /**
  * Stops "no-scan" mode.

@@ -281,6 +281,13 @@ pub(crate) fn floor_log2(n: u32) -> u32 {
     }
 }
 
+// Checks if the given pointer and size can be safely used to create a slice with
+// std::slice::from_raw_parts: https://doc.rust-lang.org/std/slice/fn.from_raw_parts.html#safety
+#[cfg(feature = "capi")]
+pub(crate) fn check_slice_from_raw_parts_safety(data: *const u8, size: usize) -> bool {
+    !data.is_null() && size <= isize::MAX as usize
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct PointerSlice<T> {
     ptr: *mut [T],

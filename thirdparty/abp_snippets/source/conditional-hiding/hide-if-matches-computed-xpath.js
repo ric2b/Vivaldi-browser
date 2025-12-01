@@ -22,7 +22,7 @@ import {waitUntilEvent} from "../utils/execution.js";
 import {profile} from "../introspection/profile.js";
 import {raceWinner} from "../introspection/race.js";
 import {getDebugger} from "../introspection/log.js";
-import {toRegExp} from "../utils/general.js";
+import {formatArguments, toRegExp} from "../utils/general.js";
 
 let {MutationObserver, WeakSet} = $(window);
 
@@ -48,6 +48,7 @@ const {ELEMENT_NODE} = Node;
 export function hideIfMatchesComputedXPath(query, searchQuery, searchRegex,
                                            waitUntil) {
   const {mark, end} = profile("hide-if-matches-computed-xpath");
+  const formattedArguments = formatArguments(arguments);
   const debugLog = getDebugger("hide-if-matches-computed-xpath");
 
   if (!searchQuery || !query) {
@@ -75,7 +76,11 @@ export function hideIfMatchesComputedXPath(query, searchQuery, searchRegex,
           hideElement(node);
         else
           $(node).textContent = "";
-        debugLog("success", "Matched: ", node, " for selector: ", query);
+        debugLog("success",
+                 "Matched: ",
+                 node,
+                 "\nFILTER: hide-if-matches-computed-xpath",
+                 formattedArguments);
       });
       end();
     };

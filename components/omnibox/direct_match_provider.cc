@@ -16,6 +16,7 @@
 
 #include "base/feature_list.h"
 #include "base/memory/raw_ptr.h"
+#include "base/strings/string_util.h"
 #include "base/trace_event/trace_event.h"
 
 #include "base/i18n/time_formatting.h"

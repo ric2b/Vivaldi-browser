@@ -8,18 +8,21 @@
 // This source code is licensed under the BSD-style license found in the
 // LICENSE file in the root directory of this source tree.
 
-#include <assert.h>
-
 #include <arm_neon.h>
+#include <assert.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #include "src/xnnpack/common.h"
+#include "src/xnnpack/microparams.h"
 #include "src/xnnpack/reduce.h"
+
 
 void xnn_qs8_rsum_ukernel__neondot_u32_acc2(
     size_t batch,
     const int8_t* input,
     int32_t* output,
-    const struct xnn_qs8_rsum_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
+    const struct xnn_qs8_rsum_params* restrict params) XNN_OOB_READS
 {
   assert(batch != 0);
   assert(input != NULL);

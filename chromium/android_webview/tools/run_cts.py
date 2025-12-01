@@ -29,6 +29,7 @@ from devil.utils import cmd_helper
 from devil.utils import logging_common
 from pylib.constants import ANDROID_SDK_ROOT
 from pylib.constants import ANDROID_SDK_TOOLS
+from pylib.constants import DIR_SOURCE_ROOT
 from pylib.local.emulator import avd
 from pylib.utils import test_filter
 
@@ -70,6 +71,7 @@ SDK_PLATFORM_DICT = {
     version_codes.TIRAMISU: 'T',
     version_codes.UPSIDE_DOWN_CAKE: 'U',
     version_codes.VANILLA_ICE_CREAM: 'V',
+    # TODO: crbug.com/420976165 - Update cts-release arg once 'B' is added.
 }
 
 # The test apks are apparently compatible across all architectures, the
@@ -514,13 +516,14 @@ def main():
       '--cts-release',
       # TODO(aluo): --platform is deprecated (the meaning is unclear).
       '--platform',
-      choices=sorted(set(SDK_PLATFORM_DICT.values())),
+      # TODO: crbug.com/420976165 - Remove 'B' once added to SDK_PLATFORM_DICT.
+      choices=sorted(set(SDK_PLATFORM_DICT.values()) | {'B'}),
       required=False,
       default=None,
       help='Which CTS release to use for the run. This should generally be <= '
-           'device OS level (otherwise, the newer tests will fail). If '
-           'unspecified, the script will auto-determine the release based on '
-           'device OS level.')
+      'device OS level (otherwise, the newer tests will fail). If '
+      'unspecified, the script will auto-determine the release based on '
+      'device OS level.')
   parser.add_argument(
       '--skip-expected-failures',
       action='store_true',
@@ -626,6 +629,14 @@ def main():
   with GetDevice(args) as device:
     arch = args.arch or DetermineArch(device)
     cts_release = args.cts_release or DetermineCtsRelease(device)
+
+    # CTS tests depend on a java version of 1.8, 9, or 11 on PATH. So we use the
+    # checked-in jdk11 to satisfy that.
+    # TODO(crbug.com/438779947): Switch to using the current jdk instead.
+    java_path = os.path.join(DIR_SOURCE_ROOT, 'third_party', 'jdk11', 'current',
+                             'bin')
+    if java_path not in os.environ['PATH']:
+      os.environ['PATH'] = os.pathsep.join([java_path, os.environ['PATH']])
 
     if (args.test_filter_files or args.test_filters
         or args.isolated_script_test_filters):

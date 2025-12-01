@@ -7,16 +7,22 @@
 #include "base/base64.h"
 #include "base/base64url.h"
 #include "base/containers/contains.h"
+#include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/branding_buildflags.h"
 #include "chrome/browser/autocomplete/chrome_autocomplete_scheme_classifier.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/new_tab_page/new_tab_page_util.h"
+#include "chrome/browser/preloading/autocomplete_dictionary_preload_service.h"
+#include "chrome/browser/preloading/autocomplete_dictionary_preload_service_factory.h"
 #include "chrome/browser/preloading/prefetch/search_prefetch/search_prefetch_service.h"
 #include "chrome/browser/preloading/prefetch/search_prefetch/search_prefetch_service_factory.h"
+#include "chrome/browser/preloading/search_preload/search_preload_service.h"
+#include "chrome/browser/preloading/search_preload/search_preload_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/metrics_reporter/metrics_reporter.h"
+#include "chrome/browser/ui/webui/new_tab_page/composebox/variations/composebox_fieldtrial.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/bookmarks/browser/bookmark_model.h"
@@ -85,6 +91,8 @@ constexpr char kExtensionAppIconResourceName[] =
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
 constexpr char kGoogleCalendarIconResourceName[] =
     "//resources/cr_components/searchbox/icons/calendar.svg";
+constexpr char kGoogleAgentspaceIconResourceName[] =
+    "//resources/cr_components/searchbox/icons/google_agentspace_logo.svg";
 const char* kGoogleGIconResourceName =
     "//resources/cr_components/searchbox/icons/google_g.svg";
 constexpr char kGoogleKeepNoteIconResourceName[] =
@@ -289,15 +297,21 @@ std::vector<searchbox::mojom::AutocompleteMatchPtr> CreateAutocompleteMatches(
     mojom_match->icon_path =
         SearchboxHandler::AutocompleteMatchVectorIconToResourceName(
             match.GetVectorIcon(is_bookmarked, turl));
-    mojom_match->icon_url = match.icon_url.spec();
+    // For enterprise search aggregator people suggestions, use branded icon if
+    // branded build.
+    if (match.enterprise_search_aggregator_type ==
+        AutocompleteMatch::EnterpriseSearchAggregatorType::PEOPLE) {
+      mojom_match->is_enterprise_search_aggregator_people_type = true;
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+      mojom_match->icon_path = kGoogleAgentspaceIconResourceName;
+#endif
+    }
+    mojom_match->icon_url = match.icon_url;
     mojom_match->image_dominant_color = match.image_dominant_color;
     mojom_match->image_url = match.image_url.spec();
     mojom_match->fill_into_edit = match.fill_into_edit;
     mojom_match->inline_autocompletion = match.inline_autocompletion;
     mojom_match->is_search_type = AutocompleteMatch::IsSearchType(match.type);
-    mojom_match->is_enterprise_search_aggregator_people_type =
-        match.enterprise_search_aggregator_type ==
-        AutocompleteMatch::EnterpriseSearchAggregatorType::PEOPLE;
     mojom_match->swap_contents_and_description =
         match.swap_contents_and_description;
     mojom_match->type = AutocompleteMatchType::ToString(match.type);
@@ -462,8 +476,13 @@ void SearchboxHandler::SetupWebUIDataSource(content::WebUIDataSource* source,
       {"searchboxThumbnailLabel",
        IDS_GOOGLE_SEARCH_BOX_MULTIMODAL_IMAGE_THUMBNAIL},
       {"voiceSearchButtonLabel", IDS_TOOLTIP_MIC_SEARCH},
-      {"searchboxComposeButtonText", IDS_NTP_COMPOSE_ENTRYPOINT}};
+      {"searchboxComposeButtonText", IDS_NTP_COMPOSE_ENTRYPOINT},
+      {"searchboxComposeButtonTitle", IDS_NTP_COMPOSE_ENTRYPOINT_A11Y_LABEL}};
   source->AddLocalizedStrings(kStrings);
+  source->AddString("searchboxComposePlaceholder",
+                    ntp_composebox::FeatureConfig::Get()
+                        .config.composebox()
+                        .input_placeholder_text());
 
   source->AddBoolean(
       "searchboxMatchSearchboxTheme",
@@ -491,7 +510,10 @@ void SearchboxHandler::SetupWebUIDataSource(content::WebUIDataSource* source,
 
   source->AddBoolean("searchboxShowComposeAnimation",
                      profile->GetPrefs()->GetInteger(
-                         prefs::kNtpComposeButtonShownCountPrefName) < 3);
+                         prefs::kNtpComposeButtonShownCountPrefName) <
+                         ntp_composebox::FeatureConfig::Get()
+                             .config.entry_point()
+                             .num_page_load_animations());
 }
 
 // static
@@ -780,9 +802,16 @@ void SearchboxHandler::OnNavigationLikely(
     // the web UI is referencing a stale match.
     return;
   }
+
   if (auto* search_prefetch_service =
           SearchPrefetchServiceFactory::GetForProfile(profile_)) {
     search_prefetch_service->OnNavigationLikely(
+        line, *match, navigation_predictor, web_contents_);
+  }
+
+  if (SearchPreloadService* search_preload_service =
+          SearchPreloadServiceFactory::GetForProfile(profile_)) {
+    search_preload_service->OnNavigationLikely(
         line, *match, navigation_predictor, web_contents_);
   }
 }
@@ -805,9 +834,21 @@ void SearchboxHandler::OnResultChanged(AutocompleteController* controller,
   //  AutocompleteController and move this logic to the RealboxOmniboxClient.
   if (owned_controller_) {
     if (autocomplete_controller()->done()) {
+      if (auto* dictionary_preload_service =
+              AutocompleteDictionaryPreloadServiceFactory::GetForProfile(
+                  profile_)) {
+        dictionary_preload_service->MaybePreload(
+            autocomplete_controller()->result());
+      }
       if (SearchPrefetchService* search_prefetch_service =
               SearchPrefetchServiceFactory::GetForProfile(profile_)) {
         search_prefetch_service->OnResultChanged(
+            web_contents_, autocomplete_controller()->result());
+      }
+
+      if (SearchPreloadService* search_preload_service =
+              SearchPreloadServiceFactory::GetForProfile(profile_)) {
+        search_preload_service->OnAutocompleteResultChanged(
             web_contents_, autocomplete_controller()->result());
       }
     }

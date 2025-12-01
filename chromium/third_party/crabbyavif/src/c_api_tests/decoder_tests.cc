@@ -206,6 +206,59 @@ TEST(DecoderTest, OneShotDecodeCustomIO) {
   EXPECT_EQ(image.depth, 8);
 }
 
+class DerivedIO : public avifIO {
+ public:
+  static avifIO* Create(const std::vector<uint8_t>& io_data) {
+    // Manage this memory manually to ensure that crabbyavif calls the destroy
+    // callback correctly.
+    DerivedIO* io = new DerivedIO(io_data);
+    io->destroy = DerivedIO::Destroy;
+    io->read = DerivedIO::Read;
+    io->sizeHint = io_data.size();
+    io->persistent = AVIF_FALSE;
+    return io;
+  }
+
+  static void Destroy(avifIO* io) { delete reinterpret_cast<DerivedIO*>(io); }
+
+  static avifResult Read(avifIO* io, uint32_t flags, uint64_t offset,
+                         size_t size, avifROData* out) {
+    DerivedIO* derived_io = reinterpret_cast<DerivedIO*>(io);
+    if (flags != 0 || offset > derived_io->data_.size()) {
+      return AVIF_RESULT_IO_ERROR;
+    }
+    uint64_t available_size = derived_io->data_.size() - offset;
+    if (size > available_size) {
+      size = static_cast<size_t>(available_size);
+    }
+    out->data = derived_io->data_.data() + offset;
+    out->size = size;
+    return AVIF_RESULT_OK;
+  }
+
+ private:
+  DerivedIO(const std::vector<uint8_t>& io_data) : data_(io_data) {}
+
+  const std::vector<uint8_t>& data_;
+};
+
+TEST(DecoderTest, DerivedIO) {
+  if (!testutil::Av1DecoderAvailable()) {
+    GTEST_SKIP() << "AV1 Codec unavailable, skip test.";
+  }
+  const char* file_name = "sofa_grid1x5_420.avif";
+  auto data = testutil::read_file(GetFilename(file_name).c_str());
+  avifIO* io = DerivedIO::Create(data);
+  DecoderPtr decoder(avifDecoderCreate());
+  ASSERT_NE(decoder, nullptr);
+  avifDecoderSetIO(decoder.get(), io);
+  avifImage image;
+  ASSERT_EQ(avifDecoderRead(decoder.get(), &image), AVIF_RESULT_OK);
+  EXPECT_EQ(image.width, 1024);
+  EXPECT_EQ(image.height, 770);
+  EXPECT_EQ(image.depth, 8);
+}
+
 TEST(DecoderTest, NthImage) {
   if (!testutil::Av1DecoderAvailable()) {
     GTEST_SKIP() << "AV1 Codec unavailable, skip test.";
@@ -647,11 +700,12 @@ TEST(DecoderTest, SetRawIO) {
   for (int i = 0; i < 5; ++i) {
     EXPECT_EQ(avifDecoderNextImage(decoder.get()), AVIF_RESULT_OK);
   }
+
+  decoder.reset(avifDecoderCreate());
+  EXPECT_NE(avifDecoderSetIOMemory(decoder.get(), nullptr, 0), AVIF_RESULT_OK);
 }
 
 TEST(DecoderTest, SetCustomIO) {
-  DecoderPtr decoder(avifDecoderCreate());
-  ASSERT_NE(decoder, nullptr);
   auto data =
       testutil::read_file(GetFilename("colors-animated-8bpc.avif").c_str());
   avifROData ro_data = {.data = data.data(), .size = data.size()};
@@ -660,6 +714,9 @@ TEST(DecoderTest, SetCustomIO) {
                .sizeHint = data.size(),
                .persistent = false,
                .data = static_cast<void*>(&ro_data)};
+  // |io| must outlive the decoder.
+  DecoderPtr decoder(avifDecoderCreate());
+  ASSERT_NE(decoder, nullptr);
   avifDecoderSetIO(decoder.get(), &io);
   ASSERT_EQ(avifDecoderParse(decoder.get()), AVIF_RESULT_OK);
   EXPECT_EQ(decoder->compressionFormat, COMPRESSION_FORMAT_AVIF);
@@ -993,6 +1050,84 @@ TEST(DecoderTest, ClapIrotImirNonEssential) {
   auto decoder = CreateDecoder("clap_irot_imir_non_essential.avif");
   ASSERT_NE(decoder, nullptr);
   ASSERT_EQ(avifDecoderParse(decoder.get()), AVIF_RESULT_BMFF_PARSE_FAILED);
+}
+
+TEST(DecoderTest, PeekCompatibleFileType) {
+  EXPECT_EQ(avifPeekCompatibleFileType(nullptr), AVIF_FALSE);
+
+  constexpr static uint8_t data[] = {1, 2, 3, 4};
+  avifROData input = {nullptr, 0};
+  EXPECT_EQ(avifPeekCompatibleFileType(&input), AVIF_FALSE);
+
+  input.data = data;
+  EXPECT_EQ(avifPeekCompatibleFileType(&input), AVIF_FALSE);
+}
+
+TEST(DecoderTest, NullCases) {
+  avifIO io;
+  auto decoder = CreateDecoder("clap_irot_imir_non_essential.avif");
+  avifDecoderSetIO(nullptr, &io);
+  avifDecoderSetIO(decoder.get(), nullptr);
+  avifDecoderSetIO(nullptr, nullptr);
+
+  EXPECT_NE(avifDecoderSetIOFile(nullptr, "something.avif"), AVIF_RESULT_OK);
+  EXPECT_NE(avifDecoderSetIOFile(decoder.get(), nullptr), AVIF_RESULT_OK);
+  EXPECT_NE(avifDecoderSetIOFile(nullptr, nullptr), AVIF_RESULT_OK);
+
+  uint8_t raw_data[10] = {0};
+  EXPECT_NE(avifDecoderSetIOMemory(nullptr, nullptr, 0), AVIF_RESULT_OK);
+  EXPECT_NE(avifDecoderSetIOMemory(nullptr, raw_data, 10), AVIF_RESULT_OK);
+  EXPECT_NE(avifDecoderSetIOMemory(decoder.get(), nullptr, 0), AVIF_RESULT_OK);
+  EXPECT_NE(avifDecoderSetIOMemory(decoder.get(), nullptr, 10), AVIF_RESULT_OK);
+
+  EXPECT_NE(avifDecoderSetSource(nullptr, AVIF_DECODER_SOURCE_AUTO),
+            AVIF_RESULT_OK);
+
+  EXPECT_NE(avifDecoderParse(nullptr), AVIF_RESULT_OK);
+  EXPECT_NE(avifDecoderNextImage(nullptr), AVIF_RESULT_OK);
+  EXPECT_NE(avifDecoderNthImage(nullptr, 0), AVIF_RESULT_OK);
+
+  avifImageTiming timing;
+  EXPECT_NE(avifDecoderNthImageTiming(nullptr, 0, &timing), AVIF_RESULT_OK);
+  EXPECT_NE(avifDecoderNthImageTiming(decoder.get(), 0, nullptr),
+            AVIF_RESULT_OK);
+  EXPECT_NE(avifDecoderNthImageTiming(nullptr, 0, nullptr), AVIF_RESULT_OK);
+
+  avifDecoderDestroy(nullptr);
+
+  ImagePtr image(avifImageCreateEmpty());
+  EXPECT_NE(avifDecoderRead(nullptr, nullptr), AVIF_RESULT_OK);
+  EXPECT_NE(avifDecoderRead(decoder.get(), nullptr), AVIF_RESULT_OK);
+  EXPECT_NE(avifDecoderRead(nullptr, image.get()), AVIF_RESULT_OK);
+
+  EXPECT_NE(avifDecoderReadMemory(nullptr, nullptr, nullptr, 0),
+            AVIF_RESULT_OK);
+  EXPECT_NE(avifDecoderReadMemory(decoder.get(), nullptr, nullptr, 0),
+            AVIF_RESULT_OK);
+  EXPECT_NE(avifDecoderReadMemory(decoder.get(), image.get(), nullptr, 0),
+            AVIF_RESULT_OK);
+
+  EXPECT_NE(avifDecoderReadFile(nullptr, nullptr, nullptr), AVIF_RESULT_OK);
+  EXPECT_NE(avifDecoderReadFile(nullptr, nullptr, "something.avif"),
+            AVIF_RESULT_OK);
+  EXPECT_NE(avifDecoderReadFile(decoder.get(), nullptr, nullptr),
+            AVIF_RESULT_OK);
+  EXPECT_NE(avifDecoderReadFile(decoder.get(), image.get(), nullptr),
+            AVIF_RESULT_OK);
+
+  EXPECT_NE(avifDecoderIsKeyframe(nullptr, 0), AVIF_TRUE);
+  // The return value does not matter.
+  avifDecoderNearestKeyframe(nullptr, 0);
+  // The return value does not matter.
+  avifDecoderDecodedRowCount(nullptr);
+
+  EXPECT_NE(avifDecoderNthImageMaxExtent(nullptr, 0, nullptr), AVIF_RESULT_OK);
+  EXPECT_NE(avifDecoderNthImageMaxExtent(decoder.get(), 0, nullptr),
+            AVIF_RESULT_OK);
+  avifExtent extent;
+  EXPECT_NE(avifDecoderNthImageMaxExtent(nullptr, 0, &extent), AVIF_RESULT_OK);
+
+  EXPECT_NE(avifDecoderReset(nullptr), AVIF_RESULT_OK);
 }
 
 }  // namespace

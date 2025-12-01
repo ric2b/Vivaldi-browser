@@ -4,11 +4,21 @@
 
 #import "ios/chrome/browser/ntp/ui_bundled/new_tab_page_utils.h"
 
+#import "base/time/time.h"
+#import "components/search_engines/util.h"
 #import "ios/chrome/browser/first_run/ui_bundled/first_run_util.h"
 #import "ios/chrome/browser/ntp/ui_bundled/new_tab_page_feature.h"
+#import "third_party/omnibox_proto/chrome_aim_entry_point.pb.h"
 
 bool ShouldShowTopOfFeedSyncPromo() {
   // Checks the flag and ensures that the user is not in first run.
   return IsDiscoverFeedTopSyncPromoEnabled() &&
          !ShouldPresentFirstRunExperience();
+}
+
+GURL GetUrlForAim(TemplateURLService* turl_service,
+                  const base::Time& query_start_time) {
+  return GetUrlForAim(turl_service,
+                      omnibox::IOS_CHROME_NTP_FAKE_OMNIBOX_ENTRY_POINT,
+                      query_start_time);
 }

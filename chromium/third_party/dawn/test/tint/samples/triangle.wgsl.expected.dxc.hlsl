@@ -1,38 +1,39 @@
 //
 // vtx_main
 //
-struct tint_symbol_1 {
+struct vtx_main_outputs {
+  float4 tint_symbol : SV_Position;
+};
+
+struct vtx_main_inputs {
   uint VertexIndex : SV_VertexID;
 };
-struct tint_symbol_2 {
-  float4 value : SV_Position;
-};
+
 
 float4 vtx_main_inner(uint VertexIndex) {
-  float2 tint_symbol_3[3] = {float2(0.0f, 0.5f), (-0.5f).xx, float2(0.5f, -0.5f)};
-  return float4(tint_symbol_3[min(VertexIndex, 2u)], 0.0f, 1.0f);
+  float2 v[3] = {float2(0.0f, 0.5f), (-0.5f).xx, float2(0.5f, -0.5f)};
+  return float4(v[min(VertexIndex, 2u)], 0.0f, 1.0f);
 }
 
-tint_symbol_2 vtx_main(tint_symbol_1 tint_symbol) {
-  float4 inner_result = vtx_main_inner(tint_symbol.VertexIndex);
-  tint_symbol_2 wrapper_result = (tint_symbol_2)0;
-  wrapper_result.value = inner_result;
-  return wrapper_result;
+vtx_main_outputs vtx_main(vtx_main_inputs inputs) {
+  vtx_main_outputs v_1 = {vtx_main_inner(inputs.VertexIndex)};
+  return v_1;
 }
+
 //
 // frag_main
 //
-struct tint_symbol {
-  float4 value : SV_Target0;
+struct frag_main_outputs {
+  float4 tint_symbol : SV_Target0;
 };
+
 
 float4 frag_main_inner() {
   return float4(1.0f, 0.0f, 0.0f, 1.0f);
 }
 
-tint_symbol frag_main() {
-  float4 inner_result = frag_main_inner();
-  tint_symbol wrapper_result = (tint_symbol)0;
-  wrapper_result.value = inner_result;
-  return wrapper_result;
+frag_main_outputs frag_main() {
+  frag_main_outputs v = {frag_main_inner()};
+  return v;
 }
+

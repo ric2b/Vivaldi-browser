@@ -16,7 +16,7 @@ build instructions.
 You can use Visual Studio's built-in debugger or
 [WinDBG](/developers/how-tos/debugging-on-windows/windbg-help) to debug
 Chromium. You don't need to use the IDE to build in order to use the debugger:
-Ninja is used to build Chromium and most developers invoke it from a command
+autoninja is used to build Chromium and most developers invoke it from a command
 prompt, and then open the IDE for debugging as necessary. To start debugging an
 already-built executable with Visual Studio just launch Visual Studio (2019 or
 higher) and select File-&gt; Open-&gt; Project/Solution (Ctrl+Shift+O) and
@@ -36,7 +36,7 @@ directory such as out\\solutions. Saving it there helps ensure that relative
 paths to source files, printed from build commands, will correctly identify the
 source files.
 
-The Tools menu can be used to add commands to do things like invoke ninja to
+The Tools menu can be used to add commands to do things like invoke autoninja to
 build Chrome, compile the selected source file, or other things.
 
 Visual Studio 2017 is not recommended for debugging of Chromium - use a newer
@@ -364,7 +364,7 @@ GPU Acceleration of rendering can be more easily debugged with tools. See:
 
 Sometimes it's useful to debug installation and execution on a machine other
 than your primary build box. To run the installer on said other machine, first
-build the mini_installer target on your main build machine (e.g., ninja -C
+build the mini_installer target on your main build machine (e.g., autoninja -C
 out\\Debug mini_installer). Next, on the debug machine:
 
 *    Make the build machine's build volume available on the debug machine

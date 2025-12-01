@@ -18,10 +18,11 @@
 import $ from "../$.js";
 import {apply, proxy} from "proxy-pants/function";
 
-import {toRegExp} from "../utils/general.js";
+import {formatArguments, toRegExp} from "../utils/general.js";
 import {hideElement} from "../utils/dom.js";
 import {raceWinner} from "../introspection/race.js";
 import {getDebugger} from "../introspection/log.js";
+import {profile} from "../introspection/profile.js";
 
 const {Map, MutationObserver, Object, Set, WeakSet} = $(window);
 
@@ -46,6 +47,8 @@ let observer = null;
  * @since Adblock Plus 3.3
  */
 export function hideIfShadowContains(search, selector = "*") {
+  // Map each argument to a string format for logging purposes
+  const formattedArgs = formatArguments(arguments);
   // Add new searches only if needed, accordingly with the selector.
   let key = `${search}\\${selector}`;
   if (!searches.has(key)) {
@@ -54,14 +57,16 @@ export function hideIfShadowContains(search, selector = "*") {
       () => {
         searches.delete(key);
       })
-    ]);
+    ], formattedArgs);
   }
 
-  const debugLog = getDebugger("hide-if-shadow-contain");
+  const debugLog = getDebugger("hide-if-shadow-contains");
+  const {mark, end} = profile("hide-if-shadow-contains");
 
   // Bootstrap the observer and the proxied attachShadow wrap once.
   if (!observer) {
     observer = new MutationObserver(records => {
+      mark();
       let visited = new Set();
       for (let {target} of $(records)) {
         // retrieve the ShadowRoot
@@ -95,9 +100,9 @@ export function hideIfShadowContains(search, selector = "*") {
               debugLog("success",
                        "Hiding: ",
                        closest,
-                       " for params: ",
-                       ...arguments);
+                       `\nFILTER: hide-if-shadow-contains ${formattedArgs}`);
             }
+            end();
           }
         }
       }

@@ -188,7 +188,9 @@ class VivaldiBrowserComponentWrapperImpl
       content::WebContents* guest_webcontents,
       content::WebContents* source,
       const content::OpenURLParams& params) override;
-  bool HandleNonNavigationAboutURL(const GURL& url) override;
+  bool HandleNonNavigationAboutURL(
+      const GURL& url,
+      content::WebContents* webcontents) override;
   int GetContentSetting(
       content::WebContents* contents,
       const GURL& primary_url,
@@ -257,8 +259,7 @@ class VivaldiBrowserComponentWrapperImpl
                                    bool proceed,
                                    bool* proceed_to_fire_unload) override;
   void GetTabPerformanceData(content::WebContents* web_contents,
-                                     uint64_t& memory_usage,
-                                     bool& is_discarded) override;
+                                     uint64_t& memory_usage) override;
   void LoadTabContentsIfNecessary(content::WebContents* web_contents) override;
   std::vector<tabs::TabAlert> GetTabAlertStatesForContents(
       content::WebContents* contents) override;

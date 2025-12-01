@@ -82,8 +82,8 @@ ChromeSafeBrowsingBlockingPageFactory::CreateSafeBrowsingPage(
           IsExtendedReportingEnabledBypassDeprecationFlag(*prefs),
           IsExtendedReportingPolicyManaged(*prefs),
           IsEnhancedProtectionEnabled(*prefs), is_proceed_anyway_disabled,
-          true,  // should_open_links_in_new_tab
-          true,  // always_show_back_to_safety
+          false,  // should_open_links_in_new_tab
+          true,   // always_show_back_to_safety
           !vivaldi::IsVivaldiRunning(),  // is_enhanced_protection_message_enabled
           IsSafeBrowsingPolicyManaged(*prefs), kHelpCenterLink);
 
@@ -122,14 +122,10 @@ ChromeSafeBrowsingBlockingPageFactory::CreateSafeBrowsingPage(
 #else
       base::NullCallback(),
 #endif
-      base::FeatureList::IsEnabled(
-          safe_browsing::kSafetyHubAbusiveNotificationRevocation)
-          ? base::BindOnce(
-                &MaybeIgnoreAbusiveNotificationAutoRevocation,
-                base::WrapRefCounted(
-                    HostContentSettingsMapFactory::GetForProfile(profile)),
-                main_frame_url)
-          : base::NullCallback(),
+      base::BindOnce(&MaybeIgnoreAbusiveNotificationAutoRevocation,
+                     base::WrapRefCounted(
+                         HostContentSettingsMapFactory::GetForProfile(profile)),
+                     main_frame_url),
       /*url_loader_for_testing=*/nullptr);
 }
 

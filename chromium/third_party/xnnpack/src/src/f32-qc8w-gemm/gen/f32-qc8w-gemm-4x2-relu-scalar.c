@@ -9,9 +9,13 @@
 // LICENSE file in the root directory of this source tree.
 
 #include <assert.h>
+#include <stddef.h>
+#include <stdint.h>
 
+#include "src/xnnpack/common.h"
 #include "src/xnnpack/gemm.h"
 #include "src/xnnpack/math.h"
+#include "src/xnnpack/microparams.h"
 #include "src/xnnpack/unaligned.h"
 
 
@@ -25,7 +29,7 @@ void xnn_f32_qc8w_gemm_relu_ukernel_4x2__scalar(
     float* restrict c,
     size_t cm_stride,
     size_t cn_stride,
-    const struct xnn_f32_relu_params params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f32_relu_params* restrict params)
 {
   assert(mr != 0);
   assert(mr <= 4);

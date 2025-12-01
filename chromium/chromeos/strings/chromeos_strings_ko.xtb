@@ -327,6 +327,7 @@
 <translation id="2240366984605217732">레이아웃 전환</translation>
 <translation id="224421911978987610">긴 노출</translation>
 <translation id="2244834438220057800">녹색</translation>
+<translation id="2248689665683494517">유리 꽃병에 꽂힌 양귀비 꽃 몇 송이를 그린 검은색 배경의 미니멀한 정물화</translation>
 <translation id="225692081236532131">활성화 상태</translation>
 <translation id="2267285889943769271">스크린샷 추가</translation>
 <translation id="2268044343513325586">다듬기</translation>
@@ -334,7 +335,7 @@
 <translation id="2276999893457278469">상위 도움말 콘텐츠</translation>
 <translation id="2277631741861284101">오디오를 간편하게 녹음하고 공유하세요</translation>
 <translation id="2279051792571591988">기본값 복원</translation>
-<translation id="2286454467119466181">단순</translation>
+<translation id="2286454467119466181">Simple</translation>
 <translation id="2287186687001756809">사용할 수 있는 이미지가 없습니다. 사진을 추가하려면 <ph name="LINK" />(으)로 이동하세요.</translation>
 <translation id="2294577623958216786">현재 설정된 일정은 <ph name="SUNRISE" />~<ph name="SUNSET" />입니다. 일몰 및 일출 일정을 자동으로 업데이트하려면 시스템 위치 액세스를 사용 설정하세요.</translation>
 <translation id="2305172810646967500">블랙</translation>
@@ -757,6 +758,7 @@
 <translation id="430786093962686457">시폰</translation>
 <translation id="4310735698903592804">Google AI 기반 최신 배경화면</translation>
 <translation id="4320904097188876154">네온 핑크색</translation>
+<translation id="432961742358282111">마우스 오른쪽 버튼으로 클릭하거나 길게 눌러 정의, 번역 또는 단위 변환을 확인합니다. 이 기능을 관리하려면 왼쪽 또는 오른쪽 화살표 키를 사용하세요.</translation>
 <translation id="4333390807948134856"><ph name="KEY_NAME" /> 키를 눌렀습니다.</translation>
 <translation id="4334293042716981313"><ph name="BEGIN_LINK_FREEFORM_SUBPAGE" />프롬프트를 직접 작성<ph name="END_LINK_FREEFORM_SUBPAGE" />할 수도 있습니다</translation>
 <translation id="4354430579665871434">키</translation>
@@ -948,7 +950,7 @@
 <translation id="5145331109270917438">수정된 날짜</translation>
 <translation id="5154917547274118687">메모리</translation>
 <translation id="5160857336552977725"><ph name="DEVICE_TYPE" />에 로그인</translation>
-<translation id="5168185087976003268">배터리 상태</translation>
+<translation id="5168185087976003268">배터리 성능 상태</translation>
 <translation id="5170568018924773124">폴더 열기</translation>
 <translation id="517075088756846356">업데이트를 계속하려면 <ph name="DEVICE_NAME" />에서 전원 케이블을 분리했다가 다시 연결하세요.</translation>
 <translation id="5180108905184566358">바오밥나무</translation>
@@ -1436,7 +1438,6 @@
 <translation id="7302860742311162920">ICCID</translation>
 <translation id="7305884605064981971">EDGE</translation>
 <translation id="7308203371573257315">Chromebook 도움말 포럼에서 전문가에게 문의하기</translation>
-<translation id="7309823890857024809">유리 꽃병에 꽂힌 양귀비 줄기 몇 가닥을 그린 검은색 배경의 미니멀한 정물화</translation>
 <translation id="7311368985037279727">키보드 색상</translation>
 <translation id="7317831949569936035">학교 등록</translation>
 <translation id="7319430975418800333">A3</translation>
@@ -1450,7 +1451,7 @@
 <translation id="7343649194310845056">네트워크 기기</translation>
 <translation id="7344788170842919262">황톳빛</translation>
 <translation id="7346768383111016081">게임 액션에 컨트롤을 사용하여 키보드로 플레이하세요.</translation>
-<translation id="7352651011704765696">문제가 발생했습니다.</translation>
+<translation id="7352651011704765696">문제가 발생했습니다</translation>
 <translation id="7353413232959255829">검색 결과 <ph name="LIST_SIZE" />개 중 <ph name="LIST_POSITION" />번: <ph name="SEARCH_RESULT_TEXT" />. 바로가기로 이동하려면 Enter를 누르세요.</translation>
 <translation id="7359657277149375382">파일 형식</translation>
 <translation id="73631062356239394">진단 데이터 공유</translation>

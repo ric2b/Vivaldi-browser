@@ -5,14 +5,16 @@ struct modf_result_vec2_f32 {
   float2 fract;
   float2 whole;
 };
+
+
 void modf_2d50da() {
   modf_result_vec2_f32 res = {(-0.5f).xx, (-1.0f).xx};
 }
 
 void fragment_main() {
   modf_2d50da();
-  return;
 }
+
 //
 // compute_main
 //
@@ -20,6 +22,8 @@ struct modf_result_vec2_f32 {
   float2 fract;
   float2 whole;
 };
+
+
 void modf_2d50da() {
   modf_result_vec2_f32 res = {(-0.5f).xx, (-1.0f).xx};
 }
@@ -27,8 +31,8 @@ void modf_2d50da() {
 [numthreads(1, 1, 1)]
 void compute_main() {
   modf_2d50da();
-  return;
 }
+
 //
 // vertex_main
 //
@@ -36,27 +40,31 @@ struct modf_result_vec2_f32 {
   float2 fract;
   float2 whole;
 };
-void modf_2d50da() {
-  modf_result_vec2_f32 res = {(-0.5f).xx, (-1.0f).xx};
-}
 
 struct VertexOutput {
   float4 pos;
 };
-struct tint_symbol_1 {
-  float4 pos : SV_Position;
+
+struct vertex_main_outputs {
+  float4 VertexOutput_pos : SV_Position;
 };
 
-VertexOutput vertex_main_inner() {
-  VertexOutput tint_symbol = (VertexOutput)0;
-  tint_symbol.pos = (0.0f).xxxx;
-  modf_2d50da();
-  return tint_symbol;
+
+void modf_2d50da() {
+  modf_result_vec2_f32 res = {(-0.5f).xx, (-1.0f).xx};
 }
 
-tint_symbol_1 vertex_main() {
-  VertexOutput inner_result = vertex_main_inner();
-  tint_symbol_1 wrapper_result = (tint_symbol_1)0;
-  wrapper_result.pos = inner_result.pos;
-  return wrapper_result;
+VertexOutput vertex_main_inner() {
+  VertexOutput v = (VertexOutput)0;
+  v.pos = (0.0f).xxxx;
+  modf_2d50da();
+  VertexOutput v_1 = v;
+  return v_1;
 }
+
+vertex_main_outputs vertex_main() {
+  VertexOutput v_2 = vertex_main_inner();
+  vertex_main_outputs v_3 = {v_2.pos};
+  return v_3;
+}
+

@@ -38,7 +38,9 @@ Since a setting can be set via multiple methods here is the priority order:
 2. vk_layer_settings.txt
 3. `VK_EXT_layer_settings`
 
-**Guideline: Settings which are unknown by the layer will be ignored independently of the method. It's the responsibility of the layer developer to ensure backward compatibility with previous versions of the layer. This is to ensure the list of layer settings remain stable across versions and that the responsibility of handling layer backward compatibility doesn't fall on Vulkan application developers as this could quickly become untrackable.**.
+For more information, read the [Vulkan Layers whitepaper](https://github.com/KhronosGroup/Vulkan-Profiles/tree/main/doc/Configuring-Vulkan-Layers-Whitepaper.pdf).
+
+Guideline: Settings which are unknown by the layer will be ignored independently of the method. It's the responsibility of the layer developer to ensure backward compatibility with previous versions of the layer. This is to ensure the list of layer settings remain stable across versions and that the responsibility of handling layer backward compatibility doesn't fall on Vulkan application developers as this could quickly become untrackable..
 
 ## Configuring Vulkan Layers using the *Vulkan API*
 

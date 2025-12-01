@@ -1,5 +1,5 @@
 /*
- * fontconfig/fc-fontations/mod.rs
+ * fontconfig/fc-fontations/names.rs
  *
  * Copyright 2025 Google LLC.
  *
@@ -22,33 +22,37 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
+use skrifa::string::LocalizedString;
 use skrifa::{string::StringId, MetadataProvider};
 
-use fc_fontations_bindgen::fcint::{
+use fcint_bindings::{
     FC_FAMILYLANG_OBJECT, FC_FAMILY_OBJECT, FC_FULLNAMELANG_OBJECT, FC_FULLNAME_OBJECT,
     FC_INVALID_OBJECT, FC_POSTSCRIPT_NAME_OBJECT, FC_STYLELANG_OBJECT, FC_STYLE_OBJECT,
 };
 
-use crate::{FcPatternBuilder, InstanceMode, PatternElement};
-use read_fonts::FontRef;
+use crate::{name_records::FcSortedNameRecords, FcPatternBuilder, InstanceMode, PatternElement};
+use read_fonts::{FontRef, TableProvider};
 use std::ffi::CString;
 
 use std::collections::HashSet;
 
-fn objects_for_id(string_id: StringId) -> (i32, i32) {
+fn object_ids_for_name_id(string_id: StringId) -> Option<(i32, i32)> {
     match string_id {
         StringId::FAMILY_NAME | StringId::WWS_FAMILY_NAME | StringId::TYPOGRAPHIC_FAMILY_NAME => {
-            (FC_FAMILY_OBJECT as i32, FC_FAMILYLANG_OBJECT as i32)
+            Some((FC_FAMILY_OBJECT as i32, FC_FAMILYLANG_OBJECT as i32))
         }
-        StringId::FULL_NAME => (FC_FULLNAME_OBJECT as i32, FC_FULLNAMELANG_OBJECT as i32),
-        StringId::POSTSCRIPT_NAME => (FC_POSTSCRIPT_NAME_OBJECT as i32, FC_INVALID_OBJECT as i32),
+        StringId::FULL_NAME | StringId::COMPATIBLE_FULL_NAME => {
+            Some((FC_FULLNAME_OBJECT as i32, FC_FULLNAMELANG_OBJECT as i32))
+        }
+        StringId::POSTSCRIPT_NAME => {
+            Some((FC_POSTSCRIPT_NAME_OBJECT as i32, FC_INVALID_OBJECT as i32))
+        }
         StringId::SUBFAMILY_NAME
         | StringId::WWS_SUBFAMILY_NAME
         | StringId::TYPOGRAPHIC_SUBFAMILY_NAME => {
-            (FC_STYLE_OBJECT as i32, FC_STYLELANG_OBJECT as i32)
+            Some((FC_STYLE_OBJECT as i32, FC_STYLELANG_OBJECT as i32))
         }
-
-        _ => panic!("No equivalent FontConfig objects found for StringId."),
+        _ => None,
     }
 }
 
@@ -67,13 +71,37 @@ fn mangle_postscript_name_for_named_instance(
     let instance_ps_name_id = font
         .named_instances()
         .get(named_instance_id as usize)?
-        .postscript_name_id()?;
-    let ps_name = font
-        .localized_strings(instance_ps_name_id)
-        .english_or_first()?
-        .clone()
-        .to_string();
-    CString::new(ps_name).ok()
+        .postscript_name_id();
+
+    if let Some(ps_name_id) = instance_ps_name_id {
+        let ps_name = font
+            .localized_strings(ps_name_id)
+            .english_or_first()?
+            .clone()
+            .to_string();
+        CString::new(ps_name).ok()
+    } else {
+        let instance_subfamily_name_id = font
+            .named_instances()
+            .get(named_instance_id as usize)?
+            .subfamily_name_id();
+        let prefix = font
+            .localized_strings(StringId::VARIATIONS_POSTSCRIPT_NAME_PREFIX)
+            .english_or_first()
+            .or(font
+                .localized_strings(StringId::FAMILY_NAME)
+                .english_or_first())?
+            .to_string()
+            + "-";
+        let subfam = font
+            .localized_strings(instance_subfamily_name_id)
+            .english_or_first()?
+            .to_string();
+
+        let assembled = prefix + &subfam;
+        let assembled = assembled.replace(" ", "");
+        CString::new(assembled).ok()
+    }
 }
 
 fn mangle_subfamily_name_for_named_instance(
@@ -110,64 +138,60 @@ fn mangle_full_name_for_named_instance(font: &FontRef, named_instance_id: i32) -
     CString::new(full_name + &subfam).ok()
 }
 
-fn determine_decorative(object_id: i32, name: &Option<CString>) -> bool {
-    object_id == FC_STYLE_OBJECT as i32
-        && name
-            .as_ref()
-            .is_some_and(|name| name.to_string_lossy().to_lowercase().contains("decorative"))
-}
-
-pub fn add_names(
-    font: &FontRef,
-    instance_mode: InstanceMode,
-    pattern: &mut FcPatternBuilder,
-    had_decorative: &mut bool,
-) {
-    // Order of these is important for matching FreeType. Or we might need to sort these descending to achieve the same result.
-    let string_ids = &[
-        StringId::WWS_FAMILY_NAME,
-        StringId::TYPOGRAPHIC_FAMILY_NAME,
-        StringId::FAMILY_NAME,
-        StringId::FULL_NAME,
-        StringId::POSTSCRIPT_NAME,
-        StringId::TYPOGRAPHIC_SUBFAMILY_NAME,
-        StringId::SUBFAMILY_NAME,
-        StringId::WWS_SUBFAMILY_NAME,
-    ];
-
+pub fn add_names(font: &FontRef, instance_mode: InstanceMode, pattern: &mut FcPatternBuilder) {
     let mut already_encountered_names: HashSet<(i32, String)> = HashSet::new();
-    for string_id in string_ids.iter() {
-        let object_ids = objects_for_id(*string_id);
-        for string in font.localized_strings(*string_id) {
-            let name = if string.to_string().is_empty() {
+    let name_table = font.name();
+    if name_table.is_err() {
+        return;
+    }
+    let name_table = name_table.unwrap();
+
+    for name_record in FcSortedNameRecords::new(&name_table) {
+        let string_id = name_record.name_id();
+        if let Some(object_ids) = object_ids_for_name_id(string_id) {
+            let localized = LocalizedString::new(&name_table, &name_record);
+
+            let name = if localized.to_string().is_empty() {
                 None
             } else {
-                CString::new(string.to_string()).ok()
+                let mut name_trimmed = localized.to_string().trim().to_owned();
+                // PostScript name sanitization.
+                if object_ids.0 == FC_POSTSCRIPT_NAME_OBJECT as i32 {
+                    name_trimmed = name_trimmed.replace(" ", "");
+                }
+                CString::new(name_trimmed).ok()
             };
-            let language = string.language().or(Some("und")).and_then(|lang| {
+            let language = localized.language().or(Some("und")).and_then(|lang| {
+                let lang = lang.to_lowercase();
                 let lang = if lang.starts_with("zh") {
                     lang
                 } else {
-                    lang.split('-').next().unwrap_or(lang)
+                    lang.split('-').next().unwrap_or(&lang).to_string()
                 };
                 CString::new(lang).ok()
             });
 
             // Instance postscript name.
             let name = match (instance_mode, string_id) {
-                (InstanceMode::Named(instance), &StringId::POSTSCRIPT_NAME) => {
+                (InstanceMode::Named(instance), StringId::POSTSCRIPT_NAME) => {
                     mangle_postscript_name_for_named_instance(font, instance).or(name)
                 }
-                (InstanceMode::Named(instance), &StringId::SUBFAMILY_NAME) => {
+                (InstanceMode::Named(instance), StringId::SUBFAMILY_NAME) => {
                     mangle_subfamily_name_for_named_instance(font, instance).or(name)
                 }
-                (InstanceMode::Named(instance), &StringId::FULL_NAME) => {
+                (InstanceMode::Named(instance), StringId::FULL_NAME) => {
                     mangle_full_name_for_named_instance(font, instance).or(name)
                 }
+                (
+                    InstanceMode::Variable,
+                    StringId::SUBFAMILY_NAME
+                    | StringId::WWS_SUBFAMILY_NAME
+                    | StringId::TYPOGRAPHIC_SUBFAMILY_NAME
+                    | StringId::FULL_NAME
+                    | StringId::POSTSCRIPT_NAME,
+                ) => None,
                 _ => name,
             };
-
-            *had_decorative = determine_decorative(object_ids.0, &name);
 
             if let (Some(name), Some(language)) = (name, language) {
                 let normalized_name = normalize_name(&name);

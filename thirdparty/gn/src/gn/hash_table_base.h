@@ -206,7 +206,9 @@ class HashTableBase {
   // so any owned pointer inside nodes should be handled by custom
   // constructors and operators in the derived class, if needed.
   HashTableBase(const HashTableBase& other)
-      : count_(other.count_), size_(other.size_) {
+      : count_(other.count_),
+        tombstone_count_(other.tombstone_count_),
+        size_(other.size_) {
     if (other.buckets_ != other.buckets0_) {
       // NOTE: using malloc() here to clarify that no object construction
       // should occur here.
@@ -224,7 +226,10 @@ class HashTableBase {
   }
 
   HashTableBase(HashTableBase&& other) noexcept
-      : count_(other.count_), size_(other.size_), buckets_(other.buckets_) {
+      : count_(other.count_),
+        tombstone_count_(other.tombstone_count_),
+        size_(other.size_),
+        buckets_(other.buckets_) {
     if (buckets_ == other.buckets0_) {
       buckets0_[0] = other.buckets0_[0];
       buckets_ = buckets0_;
@@ -432,6 +437,7 @@ class HashTableBase {
       free(buckets_);
 
     count_ = 0;
+    tombstone_count_ = 0;
     size_ = 1;
     buckets_ = buckets0_;
     buckets0_[0] = Node{};
@@ -474,9 +480,12 @@ class HashTableBase {
   // Call this method after updating the content of the |node| pointer
   // returned by an unsuccessful NodeLookup(). Return true to indicate that
   // the table size changed, and that existing iterators were invalidated.
-  bool UpdateAfterInsert() {
+  bool UpdateAfterInsert(bool was_tombstone) {
     count_ += 1;
-    if (UNLIKELY(count_ * 4 >= size_ * 3)) {
+    if (was_tombstone) {
+      tombstone_count_ -= 1;
+    }
+    if (UNLIKELY((count_ + tombstone_count_) * 4 >= size_ * 3)) {
       GrowBuckets();
       return true;
     }
@@ -489,6 +498,7 @@ class HashTableBase {
   // iterators where invalidated.
   bool UpdateAfterRemoval() {
     count_ -= 1;
+    tombstone_count_ += 1;
     // For now don't support shrinking since this is not useful for GN.
     return false;
   }
@@ -527,12 +537,14 @@ class HashTableBase {
     buckets_ = new_buckets;
     buckets0_[0] = Node{};
     size_ = new_size;
+    tombstone_count_ = 0;
   }
 
   // NOTE: The reason for default-initializing |buckets_| to a storage slot
   // inside the object is to ensure the value is never null. This removes one
   // nullptr check from each NodeLookup() instantiation.
   size_t count_ = 0;
+  size_t tombstone_count_ = 0;
   size_t size_ = 1;
   Node* buckets_ = buckets0_;
   Node buckets0_[1] = {{}};

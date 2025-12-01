@@ -8,23 +8,20 @@
 // This source code is licensed under the BSD-style license found in the
 // LICENSE file in the root directory of this source tree.
 
-
 #include <assert.h>
 #include <stddef.h>
 
-#include "src/xnnpack/simd/f32-hvx.h"
-
 #include "src/xnnpack/common.h"
-#include "src/xnnpack/math.h"
-#include "src/xnnpack/vunary.h"
 #include "src/xnnpack/microparams.h"
+#include "src/xnnpack/simd/f32-hvx.h"
+#include "src/xnnpack/vunary.h"
 
 
 void xnn_f32_vsqr_ukernel__hvx_u32(
     size_t batch,
     const float* input,
     float* output,
-    const struct xnn_f32_default_params params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f32_default_params* restrict params)
 {
   assert(batch != 0);
   assert(batch % sizeof(float) == 0);
@@ -57,7 +54,7 @@ void xnn_f32_vsqr_ukernel__hvx_u64(
     size_t batch,
     const float* input,
     float* output,
-    const struct xnn_f32_default_params params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f32_default_params* restrict params)
 {
   assert(batch != 0);
   assert(batch % sizeof(float) == 0);
@@ -102,7 +99,7 @@ void xnn_f32_vsqr_ukernel__hvx_u128(
     size_t batch,
     const float* input,
     float* output,
-    const struct xnn_f32_default_params params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f32_default_params* restrict params)
 {
   assert(batch != 0);
   assert(batch % sizeof(float) == 0);

@@ -44,7 +44,7 @@ import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.signin.services.SigninManager.SignInStateObserver;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabLaunchType;
-import org.chromium.chrome.browser.tabmodel.document.ChromeAsyncTabLauncher;
+import org.chromium.chrome.browser.tabmodel.AsyncTabLauncher;
 import org.chromium.chrome.browser.ui.signin.signin_promo.HistoryPageSigninPromoDelegate;
 import org.chromium.chrome.browser.ui.signin.signin_promo.SigninPromoCoordinator;
 import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
@@ -149,6 +149,7 @@ public class HistoryContentManager implements SignInStateObserver, PrefObserver 
     private AppFilterCoordinator mAppFilterSheet;
     private AppInfo mCurrentApp;
     private long mAppQueryStartMs;
+    private final AsyncTabLauncher mAsyncTabLauncher;
 
     /**
      * Creates a new HistoryContentManager.
@@ -174,6 +175,8 @@ public class HistoryContentManager implements SignInStateObserver, PrefObserver 
      * @param launchedForApp Whether history UI is launched for app-specific history.
      * @param openHistoryItemCallback Optional callback to be invoked when a history item is opened
      *     in the same activity (not called when opened from a separate activity).
+     * @param asyncTabLauncher Class to launch tabs asynchronously when a hitory item is opened in a
+     *     new tab.
      */
     public HistoryContentManager(
             @NonNull Activity activity,
@@ -192,7 +195,8 @@ public class HistoryContentManager implements SignInStateObserver, PrefObserver 
             String appId,
             boolean launchedForApp,
             boolean showAppFilter,
-            @Nullable Runnable openHistoryItemCallback) {
+            @Nullable Runnable openHistoryItemCallback,
+            @NonNull AsyncTabLauncher asyncTabLauncher) {
         mActivity = activity;
         mObserver = observer;
         mIsSeparateActivity = isSeparateActivity;
@@ -211,10 +215,11 @@ public class HistoryContentManager implements SignInStateObserver, PrefObserver 
         mAppId = appId;
         mLaunchedForApp = launchedForApp;
         mOpenHistoryItemCallback = openHistoryItemCallback;
+        mAsyncTabLauncher = asyncTabLauncher;
         mSelectionDelegate =
                 selectionDelegate != null
                         ? selectionDelegate
-                        : new SelectionDelegate<HistoryItem>() {
+                        : new SelectionDelegate<>() {
                             @Override
                             public boolean toggleSelectionForItem(HistoryItem bookmark) {
                                 return false;
@@ -547,14 +552,12 @@ public class HistoryContentManager implements SignInStateObserver, PrefObserver 
 
         assert mTabSupplier != null;
         Tab tab = mTabSupplier.get();
-        assert tab != null;
 
-        if (createNewTab) {
-            new ChromeAsyncTabLauncher(isIncognito != null ? isIncognito : mIsIncognito)
-                    .launchNewTab(
-                            new LoadUrlParams(url, PAGE_TRANSITION_TYPE),
-                            TabLaunchType.FROM_LINK,
-                            tab);
+        // When the history manager is embedded in the hub, there may not be a tab available. In
+        // this case, fallback to creating a new one.
+        if (tab == null || createNewTab) {
+            mAsyncTabLauncher.launchNewTab(
+                    new LoadUrlParams(url, PAGE_TRANSITION_TYPE), TabLaunchType.FROM_LINK, tab);
         } else {
             tab.loadUrl(new LoadUrlParams(url, PAGE_TRANSITION_TYPE));
         }
@@ -749,7 +752,7 @@ public class HistoryContentManager implements SignInStateObserver, PrefObserver 
 
         public AppInfo get(String appId) {
             assert appId != null;
-            if (mAppInfoMap == null) mAppInfoMap = new HashMap<String, AppInfo>();
+            if (mAppInfoMap == null) mAppInfoMap = new HashMap<>();
             AppInfo appInfo = mAppInfoMap.get(appId);
             if (appInfo == null) {
                 try {

@@ -68,8 +68,8 @@ BleAdvertisementHeader::BleAdvertisementHeader(
               kMinAdvertisementHeaderLength + 2) {
         advertisement_header_bytes = ble_advertisement_header_bytes;
       } else {
-        NEARBY_VLOG(1) << "Cannot deserialize BLEAdvertisementHeader. "
-                          "Invalid advertising data.";
+        VLOG(1) << "Cannot deserialize BLEAdvertisementHeader. "
+                   "Invalid advertising data.";
         return;
       }
     } else {
@@ -86,7 +86,7 @@ BleAdvertisementHeader::BleAdvertisementHeader(
     return;
   }
 
-  StreamReader stream_reader(advertisement_header_bytes);
+  StreamReader stream_reader(&advertisement_header_bytes);
   // The first 1 byte is supposed to be the version and number of slots.
   auto version_and_num_slots_byte = stream_reader.ReadUint8();
   if (!version_and_num_slots_byte.has_value()) {

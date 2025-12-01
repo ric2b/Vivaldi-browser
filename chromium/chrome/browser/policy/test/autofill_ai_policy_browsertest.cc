@@ -7,12 +7,12 @@
 
 #include "base/types/cxx23_to_underlying.h"
 #include "base/values.h"
-#include "chrome/browser/autofill_ai/chrome_autofill_ai_client.h"
 #include "chrome/browser/policy/policy_test_utils.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_test_environment_profile_adaptor.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/public/tab_features.h"
+#include "chrome/common/webui_url_constants.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/optimization_guide/core/feature_registry/feature_registration.h"
@@ -72,7 +72,7 @@ class AutofillAiPolicyTest
     UpdateProviderPolicy(policies);
 
     // The base test fixture creates a tab before we set the policy. We create a
-    // new tab so a new ChromeAutofillAiClient is created.
+    // new tab so a new `AutofillClient` is created.
     AddBlankTabAndShow(browser());
     ASSERT_TRUE(embedded_test_server()->Start());
   }

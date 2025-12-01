@@ -1,0 +1,46 @@
+# Copyright (c) 2025 Vivaldi Technologies AS. All rights reserved
+
+group("ad_blocker") {
+  public_deps = [
+    ":factory"
+  ]
+
+  if (is_android) {
+    public_deps += [
+      ":android"
+    ]
+  }
+}
+
+source_set("factory") {
+  sources = [
+    "adblock_rule_service_factory.cc",
+    "adblock_rule_service_factory.h",
+  ]
+
+  public_deps= [
+    "//vivaldi/components/ad_blocker/public/content",
+  ]
+
+  deps = [
+    "//base",
+    "//chrome/browser:browser_process",
+    "//chrome/browser/profiles",
+    "//components/keyed_service/content",
+    "//vivaldi/components/ad_blocker/content"
+  ]
+}
+
+source_set("android") {
+  sources = [
+    "android/adblock_manager.cc",
+    "android/adblock_manager.h"
+  ]
+
+  deps= [
+    "//base",
+    "//content/public/browser",
+    "//vivaldi/prefs",
+    ":factory",
+  ]
+}

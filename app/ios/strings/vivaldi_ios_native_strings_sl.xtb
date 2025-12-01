@@ -5,6 +5,7 @@
 <translation id="1016495303386450659">Postavka posodobljena</translation>
 <translation id="1033201038396796706">Težave s temnim načinom, hitrostjo osveževanja ali temo</translation>
 <translation id="1041637248958093184">Vivaldi pri uporabi zasebnih zavihkov ne bo shranil iskanj, obiskanih spletnih mest, piškotkov in začasnih datotek.</translation>
+<translation id="104766043551382253">Ikona</translation>
 <translation id="1062373127858055283">Vnesite URL slike</translation>
 <translation id="1066692930984703744">Omogočite sledilnike in blokiranje oglasov za hitrejše in varnejše brskanje</translation>
 <translation id="1116694919640316211">O tem</translation>
@@ -89,7 +90,6 @@
 <translation id="2034405583989639424">Uredi Hitro izbiro</translation>
 <translation id="2048247880942380698">Arabščina (<ph name="ORIGIN" />)</translation>
 <translation id="2079545284768500474">Razveljavi</translation>
-<translation id="2129408066358825297">Starost</translation>
 <translation id="2138901399878617625">Sadite drevesa med iskanjem</translation>
 <translation id="2148384276939959392">Izbrana sinhronizacija</translation>
 <translation id="2195713384412091023">S tem boste odstranili vse sinhronizacijske podatke, shranjene na našem strežniku, ponastavili vaše šifrirno geslo in se odjavili.</translation>
@@ -100,7 +100,6 @@
 <translation id="2273327106802955778">Več menija</translation>
 <translation id="2283599456633275070">Potovanje</translation>
 <translation id="2324160330092901720">Koda za preverjanje je bila poslana na <ph name="EMAIL_ID" /></translation>
-<translation id="2324257568471626606">Nov iskalnik</translation>
 <translation id="2326657631721795616">Vivaldi lahko še vedno podprete tako, da preprosto izberete neodvisen iskalnik, osredotočen na zasebnost:</translation>
 <translation id="2330644510603114741">Vedenje zavihka</translation>
 <translation id="233493642829799329">Če to spremenite, se lahko nekateri zavihki znova naložijo</translation>
@@ -122,7 +121,6 @@
 <translation id="2563886993995570961">Največje število stolpcev</translation>
 <translation id="257674075312929031">Skupina</translation>
 <translation id="2577446409661931381">Nova opomba</translation>
-<translation id="2578190116190373975">Še naprej uporabljaj <ph name="OLD_SEARCH_ENGINE" /></translation>
 <translation id="2590350610957954839">Zadnja obiskana skupina</translation>
 <translation id="261264557609353020">Začetna stran</translation>
 <translation id="2619628557366098325">Portugalščina (<ph name="ORIGIN" />)</translation>
@@ -132,7 +130,6 @@
 <translation id="2677862276555105603">Oglas
 blokiran</translation>
 <translation id="2678542925523700624">Estonščina (<ph name="ORIGIN" />)</translation>
-<translation id="2697254781659515880">Da bi podprli razvoj Vivaldija, smo sodelovali z <ph name="NEW_SEARCH_ENGINE" /> in ga nastavili kot vaš novi privzeti iskalnik.</translation>
 <translation id="2701366016894985129">Oglasi v rezultatih iskanja</translation>
 <translation id="2702801445560668637">Bralni seznam</translation>
 <translation id="2709516037105925701">Samodejno izpolnjevanje</translation>
@@ -179,9 +176,9 @@ blokiran</translation>
 <translation id="3270894089048358271">Nastavite Vivaldi kot privzetega</translation>
 <translation id="3270930591809084274">Sinhronizirani zavihki</translation>
 <translation id="3285898158753554866">Kopiraj prevedeno</translation>
+<translation id="3288330578370776290">Raje odpri strani v brskalniku namesto v zunanjih aplikacijah</translation>
 <translation id="3335772982573114336">Nova opomba</translation>
 <translation id="33451081266695216">Povezavo je prekinil strežnik.</translation>
-<translation id="3346386541263128307">E-poštni naslovi se morajo ujemati.</translation>
 <translation id="3363375699928395745">Vnesite naslov</translation>
 <translation id="3365991203476235715">Angleščina (<ph name="ORIGIN" />)</translation>
 <translation id="3368960138304620657">Litovščina (<ph name="ORIGIN" />)</translation>
@@ -215,7 +212,6 @@ blokiran</translation>
 <translation id="373855430416507951">Najdi na strani</translation>
 <translation id="3745190878148784130">Skrij Povečaj besedilo</translation>
 <translation id="3766350025418769949">Gesla, ki ste jih shranili v Vivaldi Password Manager, lahko uporabite v drugih aplikacijah na vašem iPadu.</translation>
-<translation id="3782426324365706059">Uporabi <ph name="NEW_SEARCH_ENGINE" /></translation>
 <translation id="3815158430926662417">Ne morem se vpisati v račun Vivaldi Sync</translation>
 <translation id="3817539520771282781">Po vrsti</translation>
 <translation id="383723620494271391">Želite še kaj dodati?</translation>
@@ -230,7 +226,6 @@ blokiran</translation>
 <translation id="3897092660631435901">Meni</translation>
 <translation id="3920366244737784074">Dodaj <ph name="ITEM_TYPE" /></translation>
 <translation id="3921585859122905677">Pozicija naslovne vrstice</translation>
-<translation id="3925725503020335904">Da bi podprli razvoj Vivaldija, smo sodelovali z <ph name="NEW_SEARCH_ENGINE_1" /> in ga nastavili kot vaš novi privzeti iskalnik. <ph name="NEW_SEARCH_ENGINE_2" /> je zasebni iskalnik, ki nam je všeč in upamo, da je všeč tudi vam.</translation>
 <translation id="3934481038955624945">Ponastavi vse</translation>
 <translation id="3953599441418463312">Japonščina (<ph name="ORIGIN" />)</translation>
 <translation id="395506590020066151">Sledilec blokiran</translation>
@@ -286,6 +281,7 @@ blokirani</translation>
 <translation id="445620040230332178">Slog zavihka</translation>
 <translation id="4461652107878667683">Navigacija naprej</translation>
 <translation id="4474581062946673155">Trenutno nimate sinhroniziranih zavihkov iz drugih naprav.</translation>
+<translation id="4478475525737953027">Strogo blokiranje</translation>
 <translation id="4488900295693536220">Uporabno, ko je naslovna vrstica na dnu, olajša doseganje zgornjih predlogov.</translation>
 <translation id="4497115807425788318">Lokacija</translation>
 <translation id="4507213865286211606">Velikost predogleda</translation>
@@ -357,7 +353,6 @@ blokiran</translation>
 <translation id="5195305454041437917">Pokaži X za odstranitev predloga</translation>
 <translation id="5238642303473095117">Izbriši podatke</translation>
 <translation id="5245732982828228444">Tukaj boste našli svoje zapiske</translation>
-<translation id="5249199221558969362">Vnesite številko realne življenjske dobe.</translation>
 <translation id="5271549068863921519">Shrani geslo</translation>
 <translation id="5290452628447338707">Brez opomb</translation>
 <translation id="5317780077021120954">Shrani</translation>
@@ -367,6 +362,7 @@ blokiran</translation>
 <translation id="535312628536375213">Imamo partnerstvo s tem spletnim mestom in izvzamemo oglase v rezultatih iskanja iz privzetega blokiranja. Ti oglasi ustvarjajo prihodek za Vivaldi, če komunicirate z njimi.</translation>
 <translation id="5378841821586202982">Mapa za smeti</translation>
 <translation id="5398772614898833570">Oglasi blokirani</translation>
+<translation id="5415265829033764921">Dovoli blokiranje določenih spletnih strani s pravili za blokiranje.</translation>
 <translation id="5421638721143596928">Vaših poverilnic ni bilo mogoče dešifrirati. Prosimo, prijavite se znova.</translation>
 <translation id="5439599923922718668">Pogosto obiskano</translation>
 <translation id="5439835075346716808">Registracija s tega IP naslova je bila začasno blokirana. Prosim poskusite kasneje.</translation>
@@ -438,7 +434,6 @@ blokiran</translation>
 <translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" /> izbrano</translation>
 <translation id="6442584491342758233">Neposredno ujemanje</translation>
 <translation id="6443682944493983866">Sprejmi jezike</translation>
-<translation id="6468130661190228905">Oprostite, videti je, da morate malo počakati, preden se pridružite naši skupnosti. Za včlanitev zahtevamo, da so naši člani stari vsaj 16 let.</translation>
 <translation id="6487150267908786236"><ph name="BEGIN_LINK" />Uvozi<ph name="END_LINK" /></translation>
 <translation id="6517411226162529295">Rezervni šifrirni ključ</translation>
 <translation id="6527303717912515753">Deli</translation>
@@ -447,6 +442,7 @@ blokiran</translation>
 <translation id="6544880104552732240">Izberite ciljni jezik</translation>
 <translation id="659351303388691480">Počisti podatke brskanja ...</translation>
 <translation id="6602272356389933803">Videz in tema</translation>
+<translation id="6609906162587123522">Ne odpiraj povezav v zunanjih aplikacijah</translation>
 <translation id="6614744450826097546">Podrobnosti oglasa</translation>
 <translation id="6631760746795162665">Kolumbijski (<ph name="ORIGIN" />)</translation>
 <translation id="6639866709520319699">Sledilci in oglasi so blokirani. Nekatera spletna mesta se lahko pokvarijo.</translation>
@@ -567,7 +563,6 @@ blokiran</translation>
 <translation id="7961270736686975887">Zamenjaj jezike</translation>
 <translation id="7967161908152532036">Naslov spletnega mesta</translation>
 <translation id="7979036127916589816">Napaka pri sinhronizaciji</translation>
-<translation id="8008214489230610096">Potrdite obnovitveni e-poštni naslov</translation>
 <translation id="8038592796033755028"><ph name="USERNAME" />naprave</translation>
 <translation id="8041093619605951337">Srečen</translation>
 <translation id="8046542428651654244">Posodobi sličico</translation>
@@ -582,7 +577,6 @@ blokiran</translation>
 <translation id="8131740175452115882">Potrdi</translation>
 <translation id="8134672010161840864">Stisni za obrezovanje in položaj slike</translation>
 <translation id="8142291334394582384">Obratni vrstni red predlogov za iskanje</translation>
-<translation id="8147118677117542370">Navedite svojo starost.</translation>
 <translation id="8165573437634525334">Podatki so zavarovani s šifriranim geslom</translation>
 <translation id="8237090677709100373">Barvna koda po meri</translation>
 <translation id="8255101384731542819">Neodvisno iskanje, zgrajeno v Franciji</translation>

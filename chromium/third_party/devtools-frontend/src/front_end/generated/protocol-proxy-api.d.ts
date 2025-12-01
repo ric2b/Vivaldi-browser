@@ -595,6 +595,11 @@ declare namespace ProtocolProxyApi {
     invoke_setWindowBounds(params: Protocol.Browser.SetWindowBoundsRequest): Promise<Protocol.ProtocolResponseWithError>;
 
     /**
+     * Set size of the browser contents resizing browser window as necessary.
+     */
+    invoke_setContentsSize(params: Protocol.Browser.SetContentsSizeRequest): Promise<Protocol.ProtocolResponseWithError>;
+
+    /**
      * Set dock tile details, platform-specific.
      */
     invoke_setDockTile(params: Protocol.Browser.SetDockTileRequest): Promise<Protocol.ProtocolResponseWithError>;
@@ -709,6 +714,11 @@ declare namespace ProtocolProxyApi {
      * Returns requested styles for a DOM node identified by `nodeId`.
      */
     invoke_getMatchedStylesForNode(params: Protocol.CSS.GetMatchedStylesForNodeRequest): Promise<Protocol.CSS.GetMatchedStylesForNodeResponse>;
+
+    /**
+     * Returns the values of the default UA-defined environment variables used in env()
+     */
+    invoke_getEnvironmentVariables(): Promise<Protocol.CSS.GetEnvironmentVariablesResponse>;
 
     /**
      * Returns all media queries parsed by the rendering engine.
@@ -1223,9 +1233,9 @@ declare namespace ProtocolProxyApi {
     /**
      * Returns the query container of the given node based on container query
      * conditions: containerName, physical and logical axes, and whether it queries
-     * scroll-state. If no axes are provided and queriesScrollState is false, the
-     * style container is returned, which is the direct parent or the closest
-     * element with a matching container-name.
+     * scroll-state or anchored elements. If no axes are provided and
+     * queriesScrollState is false, the style container is returned, which is the
+     * direct parent or the closest element with a matching container-name.
      */
     invoke_getContainerForNode(params: Protocol.DOM.GetContainerForNodeRequest): Promise<Protocol.DOM.GetContainerForNodeResponse>;
 
@@ -1240,6 +1250,12 @@ declare namespace ProtocolProxyApi {
      * https://www.w3.org/TR/css-anchor-position-1/#target.
      */
     invoke_getAnchorElement(params: Protocol.DOM.GetAnchorElementRequest): Promise<Protocol.DOM.GetAnchorElementResponse>;
+
+    /**
+     * When enabling, this API force-opens the popover identified by nodeId
+     * and keeps it open until disabled.
+     */
+    invoke_forceShowPopover(params: Protocol.DOM.ForceShowPopoverRequest): Promise<Protocol.DOM.ForceShowPopoverResponse>;
 
   }
   export interface DOMDispatcher {
@@ -1578,6 +1594,11 @@ declare namespace ProtocolProxyApi {
     invoke_setEmulatedVisionDeficiency(params: Protocol.Emulation.SetEmulatedVisionDeficiencyRequest): Promise<Protocol.ProtocolResponseWithError>;
 
     /**
+     * Emulates the given OS text scale.
+     */
+    invoke_setEmulatedOSTextScale(params: Protocol.Emulation.SetEmulatedOSTextScaleRequest): Promise<Protocol.ProtocolResponseWithError>;
+
+    /**
      * Overrides the Geolocation Position or Error. Omitting latitude, longitude or
      * accuracy emulates position unavailable.
      */
@@ -1677,6 +1698,11 @@ declare namespace ProtocolProxyApi {
     invoke_setVisibleSize(params: Protocol.Emulation.SetVisibleSizeRequest): Promise<Protocol.ProtocolResponseWithError>;
 
     invoke_setDisabledImageTypes(params: Protocol.Emulation.SetDisabledImageTypesRequest): Promise<Protocol.ProtocolResponseWithError>;
+
+    /**
+     * Override the value of navigator.connection.saveData
+     */
+    invoke_setDataSaverOverride(params: Protocol.Emulation.SetDataSaverOverrideRequest): Promise<Protocol.ProtocolResponseWithError>;
 
     invoke_setHardwareConcurrencyOverride(params: Protocol.Emulation.SetHardwareConcurrencyOverrideRequest): Promise<Protocol.ProtocolResponseWithError>;
 
@@ -2749,7 +2775,7 @@ declare namespace ProtocolProxyApi {
      */
     invoke_getAppId(): Promise<Protocol.Page.GetAppIdResponse>;
 
-    invoke_getAdScriptAncestryIds(params: Protocol.Page.GetAdScriptAncestryIdsRequest): Promise<Protocol.Page.GetAdScriptAncestryIdsResponse>;
+    invoke_getAdScriptAncestry(params: Protocol.Page.GetAdScriptAncestryRequest): Promise<Protocol.Page.GetAdScriptAncestryResponse>;
 
     /**
      * Returns present frame tree structure.
@@ -3133,8 +3159,7 @@ declare namespace ProtocolProxyApi {
     windowOpen(params: Protocol.Page.WindowOpenEvent): void;
 
     /**
-     * Issued for every compilation cache generated. Is only available
-     * if Page.setGenerateCompilationCache is enabled.
+     * Issued for every compilation cache generated.
      */
     compilationCacheProduced(params: Protocol.Page.CompilationCacheProducedEvent): void;
 
@@ -3247,8 +3272,6 @@ declare namespace ProtocolProxyApi {
     invoke_dispatchPeriodicSyncEvent(params: Protocol.ServiceWorker.DispatchPeriodicSyncEventRequest): Promise<Protocol.ProtocolResponseWithError>;
 
     invoke_enable(): Promise<Protocol.ProtocolResponseWithError>;
-
-    invoke_inspectWorker(params: Protocol.ServiceWorker.InspectWorkerRequest): Promise<Protocol.ProtocolResponseWithError>;
 
     invoke_setForceUpdateOnPageLoad(params: Protocol.ServiceWorker.SetForceUpdateOnPageLoadRequest): Promise<Protocol.ProtocolResponseWithError>;
 
@@ -3528,6 +3551,8 @@ declare namespace ProtocolProxyApi {
 
     attributionReportingReportSent(params: Protocol.Storage.AttributionReportingReportSentEvent): void;
 
+    attributionReportingVerboseDebugReportSent(params: Protocol.Storage.AttributionReportingVerboseDebugReportSentEvent): void;
+
   }
 
   export interface SystemInfoApi {
@@ -3659,6 +3684,11 @@ declare namespace ProtocolProxyApi {
      * `true`.
      */
     invoke_setRemoteLocations(params: Protocol.Target.SetRemoteLocationsRequest): Promise<Protocol.ProtocolResponseWithError>;
+
+    /**
+     * Opens a DevTools window for the target.
+     */
+    invoke_openDevTools(params: Protocol.Target.OpenDevToolsRequest): Promise<Protocol.Target.OpenDevToolsResponse>;
 
   }
   export interface TargetDispatcher {
@@ -4189,15 +4219,30 @@ declare namespace ProtocolProxyApi {
     invoke_getOsAppState(params: Protocol.PWA.GetOsAppStateRequest): Promise<Protocol.PWA.GetOsAppStateResponse>;
 
     /**
-     * Installs the given manifest identity, optionally using the given install_url
-     * or IWA bundle location.
+     * Installs the given manifest identity, optionally using the given installUrlOrBundleUrl
      *
-     * TODO(crbug.com/337872319) Support IWA to meet the following specific
-     * requirement.
-     * IWA-specific install description: If the manifest_id is isolated-app://,
-     * install_url_or_bundle_url is required, and can be either an http(s) URL or
-     * file:// URL pointing to a signed web bundle (.swbn). The .swbn file's
-     * signing key must correspond to manifest_id. If Chrome is not in IWA dev
+     * IWA-specific install description:
+     * manifestId corresponds to isolated-app:// + web_package::SignedWebBundleId
+     *
+     * File installation mode:
+     * The installUrlOrBundleUrl can be either file:// or http(s):// pointing
+     * to a signed web bundle (.swbn). In this case SignedWebBundleId must correspond to
+     * The .swbn file's signing key.
+     *
+     * Dev proxy installation mode:
+     * installUrlOrBundleUrl must be http(s):// that serves dev mode IWA.
+     * web_package::SignedWebBundleId must be of type dev proxy.
+     *
+     * The advantage of dev proxy mode is that all changes to IWA
+     * automatically will be reflected in the running app without
+     * reinstallation.
+     *
+     * To generate bundle id for proxy mode:
+     * 1. Generate 32 random bytes.
+     * 2. Add a specific suffix 0x00 at the end.
+     * 3. Encode the entire sequence using Base32 without padding.
+     *
+     * If Chrome is not in IWA dev
      * mode, the installation will fail, regardless of the state of the allowlist.
      */
     invoke_install(params: Protocol.PWA.InstallRequest): Promise<Protocol.ProtocolResponseWithError>;

@@ -834,6 +834,11 @@ typedef struct {
   int sharpness;
 
   /*!
+   * Indicates if sharpness is adapted based on frame QP
+   */
+  bool enable_adaptive_sharpness;
+
+  /*!
    * Indicates the trellis optimization mode of quantized coefficients.
    * 0: disabled
    * 1: enabled
@@ -1475,7 +1480,8 @@ typedef struct ThreadData {
   PC_TREE_SHARED_BUFFERS shared_coeff_buf;
   SIMPLE_MOTION_DATA_TREE *sms_tree;
   SIMPLE_MOTION_DATA_TREE *sms_root;
-  uint32_t *hash_value_buffer[2][2];
+  // buffers are AOM_BUFFER_SIZE_FOR_BLOCK_HASH elements long
+  uint32_t *hash_value_buffer[2];
   OBMCBuffer obmc_buffer;
   PALETTE_BUFFER *palette_buffer;
   CompoundTypeRdBuffers comp_rd_buffer;
@@ -4128,8 +4134,8 @@ static inline int has_no_stats_stage(const AV1_COMP *const cpi) {
 /*!\cond */
 
 static inline int is_one_pass_rt_params(const AV1_COMP *cpi) {
-  return has_no_stats_stage(cpi) && cpi->oxcf.mode == REALTIME &&
-         cpi->oxcf.gf_cfg.lag_in_frames == 0;
+  return has_no_stats_stage(cpi) && cpi->oxcf.gf_cfg.lag_in_frames == 0 &&
+         (cpi->oxcf.mode == REALTIME || cpi->svc.number_spatial_layers > 1);
 }
 
 // Use default/internal reference structure for single-layer RTC.

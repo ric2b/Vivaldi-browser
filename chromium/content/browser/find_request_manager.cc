@@ -11,6 +11,7 @@
 #include "base/containers/queue.h"
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
+#include "base/notimplemented.h"
 #include "base/task/single_thread_task_runner.h"
 #include "build/build_config.h"
 #include "content/browser/find_in_page_client.h"
@@ -20,6 +21,9 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
+
+#include "app/vivaldi_apptools.h"
+#include "components/content/vivaldi_content_frame_tools.h"
 
 namespace content {
 
@@ -76,8 +80,18 @@ RenderFrameHostImpl* GetDeepestLastChild(RenderFrameHostImpl* rfh) {
 // Returns the parent RenderFrameHost of |rfh|, if |rfh| has a parent, or
 // nullptr otherwise.
 RenderFrameHostImpl* GetAncestor(RenderFrameHostImpl* rfh) {
-  if (!rfh)
+  // Make sure we do not traverse into our UI. VB-118172.
+  if (!rfh || vivaldi::IsFramePartOfTheVivaldiUI(rfh)) {
     return nullptr;
+  }
+
+#if !BUILDFLAG(IS_ANDROID) || !BUILDFLAG(IS_IOS)
+  // In Vivaldi we should never step outside of guestviews, otherwise we might
+  // get into trouble where we get into cyclic lists. VB-117553.
+  if (vivaldi::IsVivaldiRunning()) {
+    return rfh->GetParentOrOuterDocument();
+  }
+#endif // !IS_ANDROID || !IS_IOS
 
   return rfh->GetParentOrOuterDocumentOrEmbedder();
 }
@@ -129,9 +143,9 @@ RenderFrameHostImpl* GetNextSibling(RenderFrameHostImpl* rfh) {
 // traversal follows the same ordering as in
 // blink::FrameTree::traverseNextWithWrap().
 RenderFrameHostImpl* TraverseNext(RenderFrameHostImpl* rfh, bool wrap) {
-  if (RenderFrameHostImpl* first_child = GetFirstChild(rfh))
+  if (RenderFrameHostImpl* first_child = GetFirstChild(rfh)) {
     return first_child;
-
+  }
   RenderFrameHostImpl* sibling = GetNextSibling(rfh);
   while (!sibling) {
     RenderFrameHostImpl* parent = GetAncestor(rfh);
@@ -165,6 +179,10 @@ RenderFrameHostImpl* TraverseFrame(RenderFrameHostImpl* rfh,
 }
 
 bool IsFindInPageDisabled(RenderFrameHost* rfh) {
+// // We need to filter out our UI elements from find-in-page sessions.
+  if (vivaldi::IsVivaldiRunning()) {
+    return ::vivaldi::IsFindInPageDisabled(rfh);
+  }
   return rfh && GetContentClient()->browser()->IsFindInPageDisabledForOrigin(
                     rfh->GetLastCommittedOrigin());
 }
@@ -293,6 +311,11 @@ FindRequestManager::ActivateNearestFindResultState::
     : current_request_id(GetNextID()), point(x, y) {}
 FindRequestManager::ActivateNearestFindResultState::
     ~ActivateNearestFindResultState() = default;
+
+int FindRequestManager::ActivateNearestFindResultState::GetNextID() {
+  static int next_id = 0;
+  return next_id++;
+}
 
 FindRequestManager::FrameRects::FrameRects() = default;
 FindRequestManager::FrameRects::FrameRects(const std::vector<gfx::RectF>& rects,
@@ -777,7 +800,8 @@ RenderFrameHost* FindRequestManager::Traverse(RenderFrameHost* from_rfh,
   if (from_rfh_impl->IsPendingDeletion() ||
       from_rfh_impl->IsInBackForwardCache() ||
       from_rfh_impl->lifecycle_state() ==
-          RenderFrameHostImpl::LifecycleStateImpl::kPrerendering) {
+          RenderFrameHostImpl::LifecycleStateImpl::kPrerendering ||
+      vivaldi::IsFramePartOfTheVivaldiUI(from_rfh)) {
     return nullptr;
   }
 

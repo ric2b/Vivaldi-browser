@@ -16,9 +16,9 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
 #include "crypto/hash.h"
-#include "crypto/sha2.h"
 #include "net/android/cert_verify_result_android.h"
 #include "net/android/network_library.h"
+#include "net/base/hash_value.h"
 #include "net/base/net_errors.h"
 #include "net/cert/asn1_util.h"
 #include "net/cert/cert_net_fetcher.h"
@@ -257,7 +257,8 @@ bool VerifyFromAndroidTrustManager(
     int flags,
     scoped_refptr<CertNetFetcher> cert_net_fetcher,
     CertVerifyResult* verify_result) {
-  android::CertVerifyStatusAndroid status;
+  android::CertVerifyStatusAndroid status =
+      android::CERT_VERIFY_STATUS_ANDROID_FAILED;
   std::vector<std::string> verified_chain;
 
   android::VerifyX509CertChain(
@@ -307,6 +308,12 @@ bool VerifyFromAndroidTrustManager(
       verify_result->verified_cert = std::move(verified_cert);
     else
       verify_result->cert_status |= CERT_STATUS_INVALID;
+  } else if (!IsCertStatusError(verify_result->cert_status)) {
+    // If the verified chain is empty and the return status was OK, that's
+    // actually an error. But don't add the cert_status flag if the chain is
+    // empty and it already was marked as an error, since that would hide the
+    // actual error reason.
+    verify_result->cert_status |= CERT_STATUS_INVALID;
   }
 
   // Extract the public key hashes and check whether or not any are known
@@ -319,7 +326,8 @@ bool VerifyFromAndroidTrustManager(
       continue;
     }
 
-    HashValue sha256(crypto::hash::Sha256(base::as_byte_span(spki_bytes)));
+    SHA256HashValue sha256(
+        crypto::hash::Sha256(base::as_byte_span(spki_bytes)));
     verify_result->public_key_hashes.push_back(sha256);
 
     if (!verify_result->is_issued_by_known_root) {

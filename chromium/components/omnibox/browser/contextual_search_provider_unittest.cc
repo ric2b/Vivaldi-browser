@@ -11,8 +11,9 @@
 #include "base/memory/scoped_refptr.h"
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_provider_listener.h"
-#include "components/omnibox/browser/mock_autocomplete_provider_client.h"
+#include "components/omnibox/browser/fake_autocomplete_provider_client.h"
 #include "components/omnibox/browser/test_scheme_classifier.h"
+#include "components/omnibox/common/omnibox_feature_configs.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/metrics_proto/omnibox_event.pb.h"
 #include "third_party/metrics_proto/omnibox_focus_type.pb.h"
@@ -27,7 +28,8 @@ class ContextualSearchProviderTest : public testing::Test,
       delete;
 
   void SetUp() override {
-    client_ = std::make_unique<MockAutocompleteProviderClient>();
+    contextual_search_config_.Get().show_open_lens_action = true;
+    client_ = std::make_unique<FakeAutocompleteProviderClient>();
     provider_ = new ContextualSearchProvider(client_.get(), this);
   }
 
@@ -36,7 +38,10 @@ class ContextualSearchProviderTest : public testing::Test,
   void OnProviderUpdate(bool updated_matches,
                         const AutocompleteProvider* provider) override {}
 
-  std::unique_ptr<MockAutocompleteProviderClient> client_;
+  omnibox_feature_configs::ScopedConfigForTesting<
+      omnibox_feature_configs::ContextualSearch>
+      contextual_search_config_;
+  std::unique_ptr<FakeAutocompleteProviderClient> client_;
   scoped_refptr<ContextualSearchProvider> provider_;
 };
 
@@ -47,6 +52,8 @@ TEST_F(ContextualSearchProviderTest, LensAdActionConditions) {
     });
   };
   EXPECT_CALL(*client_, IsLensEnabled()).WillRepeatedly(testing::Return(true));
+  EXPECT_CALL(*client_, AreLensEntrypointsVisible())
+      .WillRepeatedly(testing::Return(true));
 
   {
     AutocompleteInput input(u"nonempty input text",
@@ -121,6 +128,8 @@ TEST_F(ContextualSearchProviderTest, LensAdActionConditions) {
 
 TEST_F(ContextualSearchProviderTest, LensAdActionFillsEditAndElidesWwwOnly) {
   EXPECT_CALL(*client_, IsLensEnabled()).WillRepeatedly(testing::Return(true));
+  EXPECT_CALL(*client_, AreLensEntrypointsVisible())
+      .WillRepeatedly(testing::Return(true));
   {
     AutocompleteInput input(u"", metrics::OmniboxEventProto::OTHER,
                             TestSchemeClassifier());

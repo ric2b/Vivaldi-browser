@@ -298,9 +298,6 @@ constexpr CGFloat kTintCornerRadius = 6.0f;
   self.pageControl.translatesAutoresizingMaskIntoConstraints = NO;
   self.pageControl.numberOfPages = kNumberOfKeyboardPages;
   self.pageControl.currentPage = 0;
-  self.pageControl.currentPageIndicatorTintColor =
-      [UIColor colorNamed:kStaticGrey900Color];
-  self.pageControl.pageIndicatorTintColor = [UIColor colorNamed:kGrey600Color];
   [self.pageControl addTarget:self
                        action:@selector(pageControlChanged:)
              forControlEvents:UIControlEventValueChanged];

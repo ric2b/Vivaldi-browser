@@ -31,6 +31,9 @@
   bool IsVivaldiMail();
   bool IsVivaldiWebPanel();
   bool IsVivaldiWebPageWidget();
+  bool IsVivaldiEditorView();
+  bool IsVivaldiReader();
+  bool IsVivaldiRichTextEditor();
 
   void SetIsFullscreen(bool is_fullscreen);
 
@@ -50,6 +53,7 @@
                        WindowOpenDisposition disposition,
                        const blink::mojom::WindowFeatures& features);
 
+  bool IsTextfieldEditCommand(const input::NativeWebKeyboardEvent& event);
   bool ShouldForwardShortcutToBrowser(
       const input::NativeWebKeyboardEvent& event);
   bool ShortcutFoundInPrefs(std::string shortcut_text);

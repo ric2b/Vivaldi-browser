@@ -8,16 +8,16 @@ title: Configuring Apps and Extensions by Policy
 
 Policies can also be configured for extensions that support policy management
 via the [managed storage
-API](http://developer.chrome.com/extensions/manifest/storage). The sample
+API](https://developer.chrome.com/docs/extensions/reference/api/storage#property-managed). The sample
 [Managed
-Bookmarks](http://developer.chrome.com/extensions/examples/extensions/managed_bookmarks.zip)
+Bookmarks](https://github.com/GoogleChrome/chrome-extensions-samples/tree/main/_archive/mv2/extensions/managed_bookmarks)
 extension can be used to configure Chrome bookmarks via a policy, for example.
 Extensions that support policy management are listed in **chrome://policy**,
 together with the policies configured for them.
 
 This page documents how to configure policies for extensions, using the Managed
 Bookmarks extension as an example. Extensions can also be [installed via
-policy](/administrators/policy-list-3#ExtensionInstallForcelist);
+policy](https://chromeenterprise.google/policies/#ExtensionInstallForcelist);
 the examples below assume that the Managed Bookmarks extension has been loaded
 as an unpacked extension from **chrome://extensions** and got the extension ID
 "gihmafigllmhbppdfjnfecimiohcljba".
@@ -27,6 +27,8 @@ Each is a list of bookmarks, where each bookmark is a dictionary that contains a
 "title" and either a "url" or a list of "children". The examples below configure
 a "Chromium" bookmark to "chromium.org" and a "Videos" folder with a bookmark to
 "youtube.com".
+
+You can see the schema used for this example [here](https://github.com/GoogleChrome/chrome-extensions-samples/blob/main/_archive/mv2/extensions/managed_bookmarks/schema.json).
 
 **Chrome OS**
 
@@ -195,7 +197,13 @@ The first key indicates the bundle ID that is to be configured. Note that each
 policy maps first to its metadata, and its value is listed inside the value key.
 The state key is used by the MCX preferences to determine how often this policy
 should be enforced; setting it to always keeps this policy in place at all
-times. This configuration can be imported with dscl using an administrator
+times.
+
+Importantly, note that the presence of the state key means that this
+configuration **does not** directly match the schema provided in your
+manifest.json file.
+
+This configuration can be imported with dscl using an administrator
 account:
 
 ```
@@ -208,8 +216,8 @@ dscl complains that the path is invalid then you can create a node for the local
 computer with these commands:
 
 ```
-$ GUID=\`uuidgen\`
-$ ETHER=\`ifconfig en0 | awk '/ether/ {print $2}'\`
+$ GUID=$(uuidgen)
+$ ETHER=$(ifconfig en0 | awk '/ether/ {print $2}')
 $ dscl -u admin_username /Local/Default -create /Computers/local_computer
 $ dscl -u admin_username /Local/Default -create /Computers/local_computer RealName "Local Computer"
 $ dscl -u admin_username /Local/Default -create /Computers/local_computer GeneratedUID $GUID
@@ -222,6 +230,4 @@ The preferences system can be told to propagate these changes immediately:
 $ sudo mcxrefresh -n username</td>
 ```
 
-If `username` is running Chrome with the Managed Bookmarks extension then Chrome
-will load this policy in the next 10 seconds. Pressing "Reload policies" in
-**chrome://policy** loads them immediately.
+You will then need to click "Reload policies" at **chrome://policy**.

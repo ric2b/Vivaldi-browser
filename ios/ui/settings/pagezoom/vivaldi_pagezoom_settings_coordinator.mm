@@ -99,7 +99,6 @@
 }
 
 #pragma mark - Private
-
 - (void)handleDoneButtonTap {
   if (self.isFromDialog) {
     [self.baseViewController dismissViewControllerAnimated:YES

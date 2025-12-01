@@ -101,7 +101,7 @@ struct KeySet : public HashTableBase<KeyNode> {
   void Insert(Node* node, size_t hash, KeyType key) {
     node->hash = hash;
     node->key = key;
-    BaseType::UpdateAfterInsert();
+    BaseType::UpdateAfterInsert(false);
   }
 };
 
@@ -114,11 +114,22 @@ class StringAtomSet {
     //
     // This allows the StringAtom() default initializer to use the same
     // address directly, avoiding a table lookup.
-    //
     size_t hash = set_.Hash("");
     auto* node = set_.Lookup(hash, "");
     set_.Insert(node, hash, &kEmptyString);
   }
+
+#ifdef ASAN_ENABLED
+  ~StringAtomSet() {
+    if (!slabs_.empty()) {
+      Slab* last_slab = slabs_.back();
+      for (Slab* slab : slabs_) {
+        slab->destroy(slab == last_slab ? slab_index_ : kStringsPerSlab);
+        delete slab;
+      }
+    }
+  }
+#endif
 
   // Find the unique constant string pointer for |key|.
   const std::string* find(std::string_view key) {
@@ -166,6 +177,12 @@ class StringAtomSet {
       std::string* result = &items_[index].str;
       new (result) std::string(str);
       return result;
+    }
+
+    void destroy(size_t max_index) {
+      for (size_t i = 0; i < max_index; ++i) {
+        items_[i].str.~basic_string();
+      }
     }
 
    private:

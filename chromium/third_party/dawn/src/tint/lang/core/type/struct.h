@@ -33,8 +33,7 @@
 #include <string>
 #include <utility>
 
-#include "src/tint/lang/core/address_space.h"
-#include "src/tint/lang/core/builtin_value.h"
+#include "src/tint/lang/core/enums.h"
 #include "src/tint/lang/core/interpolation.h"
 #include "src/tint/lang/core/io_attributes.h"
 #include "src/tint/lang/core/type/node.h"
@@ -265,6 +264,18 @@ class StructMember : public Castable<StructMember, Node> {
     /// Resets the attributes to empty
     void ResetAttributes() { attributes_ = {}; }
 
+    /// Sets this member to be row major
+    void SetRowMajor() { is_row_major_ = true; }
+    /// Returns if this member is row major
+    bool RowMajor() const { return is_row_major_; }
+
+    /// Sets the matrix stride for the member
+    void SetMatrixStride(uint32_t matrix_stride) { matrix_stride_ = matrix_stride; }
+    /// Returns true if a matrix stride is set
+    bool HasMatrixStride() const { return matrix_stride_ > 0; }
+    /// Returns the matrix stride
+    uint32_t MatrixStride() const { return matrix_stride_; }
+
     /// @param ctx the clone context
     /// @returns a clone of this struct member
     StructMember* Clone(CloneContext& ctx) const;
@@ -277,6 +288,8 @@ class StructMember : public Castable<StructMember, Node> {
     const uint32_t offset_;
     const uint32_t align_;
     const uint32_t size_;
+    bool is_row_major_ = false;
+    uint32_t matrix_stride_ = 0;
     IOAttributes attributes_;
 };
 

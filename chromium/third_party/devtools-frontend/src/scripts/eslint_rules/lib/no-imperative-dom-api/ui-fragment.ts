@@ -2,22 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /**
- * @fileoverview A library to identify and templatize UI.Fragment and related calls.
+ * @file A library to identify and templatize UI.Fragment and related calls.
  */
 
-import type {TSESTree} from '@typescript-eslint/utils';
-
-import {isIdentifier, isIdentifierChain} from './ast.ts';
+import {isIdentifier, isIdentifierChain, type RuleCreator} from './ast.ts';
 import {DomFragment} from './dom-fragment.ts';
 
-type CallExpression = TSESTree.CallExpression;
-type MemberExpression = TSESTree.MemberExpression;
-
-export const uiFragment = {
+export const uiFragment: RuleCreator = {
   create(context) {
-    const sourceCode = context.getSourceCode();
+    const sourceCode = context.sourceCode;
     return {
-      MemberExpression(node: MemberExpression) {
+      MemberExpression(node) {
         if (isIdentifierChain(node, ['UI', 'Fragment', 'Fragment', 'build']) &&
             node.parent?.type === 'TaggedTemplateExpression') {
           const domFragment = DomFragment.getOrCreate(node.parent, sourceCode);
@@ -25,11 +20,11 @@ export const uiFragment = {
               sourceCode.getText(node.parent.quasi)
                   .replace(
                       /\$=["']([^"']*)["']/g,
-                      (_, id) =>
+                      (_, id: string) =>
                           `\${ref(e => { output.${id.replace(/-[a-z]/g, c => c.substr(1).toUpperCase())} = e; })}`);
         }
       },
-      CallExpression(node: CallExpression) {
+      CallExpression(node) {
         if (node.callee.type !== 'MemberExpression' || !isIdentifier(node.callee.property, ['element', '$'])) {
           return;
         }

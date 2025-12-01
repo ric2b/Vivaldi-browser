@@ -104,6 +104,21 @@ std::optional<base::Time> NodeLastModificationTimeFromSpecifics(
   return std::nullopt;
 }
 
+std::u16string NodeTitleFromSpecifics(
+    const sync_pb::NotesSpecifics& specifics) {
+  if (specifics.has_full_title()) {
+    return base::UTF8ToUTF16(specifics.full_title());
+  }
+  std::string node_title = specifics.legacy_canonicalized_title();
+  if (base::EndsWith(node_title, " ") &&
+      IsForbiddenTitleWithMaybeTrailingSpaces(node_title)) {
+    // Legacy clients added an extra space to the real title, so remove it here.
+    // See also FullTitleToLegacyCanonicalizedTitle().
+    node_title.pop_back();
+  }
+  return base::UTF8ToUTF16(node_title);
+}
+
 void MoveAllChildren(NoteModelView* model,
                      const vivaldi::NoteNode* old_parent,
                      const vivaldi::NoteNode* new_parent) {
@@ -145,21 +160,6 @@ std::string FullTitleToLegacyCanonicalizedTitle(const std::string& node_title) {
   base::TruncateUTF8ToByteSize(
       specifics_title, kLegacyCanonicalizedTitleLimitBytes, &specifics_title);
   return specifics_title;
-}
-
-std::u16string NodeTitleFromSpecifics(
-    const sync_pb::NotesSpecifics& specifics) {
-  if (specifics.has_full_title()) {
-    return base::UTF8ToUTF16(specifics.full_title());
-  }
-  std::string node_title = specifics.legacy_canonicalized_title();
-  if (base::EndsWith(node_title, " ") &&
-      IsForbiddenTitleWithMaybeTrailingSpaces(node_title)) {
-    // Legacy clients added an extra space to the real title, so remove it here.
-    // See also FullTitleToLegacyCanonicalizedTitle().
-    node_title.pop_back();
-  }
-  return base::UTF8ToUTF16(node_title);
 }
 
 bool IsNoteEntityReuploadNeeded(const syncer::EntityData& remote_entity_data) {

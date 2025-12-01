@@ -8,6 +8,8 @@
 // This source code is licensed under the BSD-style license found in the
 // LICENSE file in the root directory of this source tree.
 #include <assert.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <math.h>
 
 #include <tmmintrin.h>
@@ -15,6 +17,7 @@
 #include "src/xnnpack/common.h"
 #include "src/xnnpack/intrinsics-polyfill.h"
 #include "src/xnnpack/math.h"
+#include "src/xnnpack/microparams.h"
 #include "src/xnnpack/reduce.h"
 #include "src/xnnpack/unaligned.h"
 
@@ -26,7 +29,7 @@ void xnn_qu8_rdsum_ukernel_7p7x__ssse3_c64(
     size_t input_stride,
     const uint8_t* zero,
     uint32_t* output,
-    const struct xnn_qs8_rsum_params params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_qs8_rsum_params* restrict params)
 {
   assert(rows != 0);
   assert(channels != 0);

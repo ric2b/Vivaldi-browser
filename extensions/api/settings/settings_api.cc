@@ -48,8 +48,6 @@ ContentSetting ConvertToContentSetting(
       return CONTENT_SETTING_ASK;
     case vivaldi::settings::ContentSettingEnum::kSessionOnly:
       return CONTENT_SETTING_SESSION_ONLY;
-    case vivaldi::settings::ContentSettingEnum::kDetectImportantContent:
-      return CONTENT_SETTING_DETECT_IMPORTANT_CONTENT;
     default: {
       NOTREACHED();
       //break;

@@ -131,7 +131,7 @@ class PrintContextTest : public PaintTestConfigurations, public RenderingTest {
   void SetBodyInnerHTML(String body_content) {
     GetDocument().body()->setAttribute(html_names::kStyleAttr,
                                        AtomicString("margin: 0"));
-    GetDocument().body()->setInnerHTML(body_content);
+    GetDocument().body()->SetInnerHTMLWithoutTrustedTypes(body_content);
   }
 
   gfx::Rect PrintSinglePage(SkCanvas& canvas, int page_index = 0) {
@@ -694,6 +694,65 @@ TEST_P(PrintContextTest, LinkedTargetRootMargin) {
   EXPECT_SKRECT_EQ(0, 183, 0, 0, (*operations)[1].rect);
 }
 
+TEST_P(PrintContextTest, LinkedTargetInAbsPos) {
+  SetBodyInnerHTML(R"HTML(
+    <a style="display:block; width:33px; height:33px;" href="#target">link</a>
+    <div style="break-before:page; position:relative;">
+      <div id="target" style="position:absolute; top:100px; width:20px; height:20px;"></div>
+    </div>
+  )HTML");
+
+  // The link is on the first page.
+  testing::NiceMock<MockPageContextCanvas> first_canvas;
+  PrintSinglePage(first_canvas, 0);
+  const Vector<MockPageContextCanvas::Operation>* operations =
+      &first_canvas.RecordedOperations();
+  ASSERT_EQ(1u, operations->size());
+
+  // The destination is on the second page.
+  testing::NiceMock<MockPageContextCanvas> second_canvas;
+  PrintSinglePage(second_canvas, 1);
+  operations = &second_canvas.RecordedOperations();
+  ASSERT_EQ(1u, operations->size());
+
+  EXPECT_EQ(MockPageContextCanvas::kDrawPoint, (*operations)[0].type);
+  EXPECT_SKRECT_EQ(0, 100, 0, 0, (*operations)[0].rect);
+}
+
+TEST_P(PrintContextTest, LinkedTargetInAbsPosNextPage) {
+  SetBodyInnerHTML(R"HTML(
+    <a style="display:block; width:33px; height:33px;" href="#target">link</a>
+    <div style="break-before:page; position:relative;">
+      <div style="height:10px;"></div>
+      <div style="break-before:page;">
+        <div id="target" style="position:absolute; width:20px; height:20px;"></div>
+      </div>
+    </div>
+  )HTML");
+
+  // The link is on the first page.
+  testing::NiceMock<MockPageContextCanvas> first_canvas;
+  PrintSinglePage(first_canvas, 0);
+  const Vector<MockPageContextCanvas::Operation>* operations =
+      &first_canvas.RecordedOperations();
+  ASSERT_EQ(1u, operations->size());
+
+  // Nothing interesting on the second page.
+  testing::NiceMock<MockPageContextCanvas> second_canvas;
+  PrintSinglePage(second_canvas, 1);
+  operations = &second_canvas.RecordedOperations();
+  ASSERT_EQ(0u, operations->size());
+
+  // The destination is on the third page.
+  testing::NiceMock<MockPageContextCanvas> third_canvas;
+  PrintSinglePage(third_canvas, 2);
+  operations = &third_canvas.RecordedOperations();
+  ASSERT_EQ(1u, operations->size());
+
+  EXPECT_EQ(MockPageContextCanvas::kDrawPoint, (*operations)[0].type);
+  EXPECT_SKRECT_EQ(0, 0, 0, 0, (*operations)[0].rect);
+}
+
 // Here are a few tests to check that shrink to fit doesn't mess up page count.
 
 TEST_P(PrintContextTest, ScaledVerticalRL1) {
@@ -894,7 +953,7 @@ TEST_P(PrintContextFrameTest, WithScrolledSubframe) {
       AbsoluteBlockHtmlForLink(850, 860, 70, 80,
                                "http://another.invisible.com"));
 
-  ChildDocument().domWindow()->scrollTo(100, 100);
+  ChildDocument().domWindow()->scrollToForTesting(100, 100);
 
   MockPageContextCanvas canvas;
   PrintSinglePage(canvas);
@@ -1358,6 +1417,34 @@ TEST_P(PrintContextTest, WhiteRootBackgroundWithShouldPrintBackgroundEnabled) {
   // We should paint the specified white background.
   EXPECT_CALL(canvas, onDrawRect(_, _)).Times(1);
   PrintSinglePage(canvas);
+}
+
+// Test env(safe-printable-inset).
+TEST_P(PrintContextFrameTest, SafePrintableInset) {
+  SetBodyInnerHTML(R"HTML(
+      <div id="target" style="height:env(safe-printable-inset);"></div>
+)HTML");
+  gfx::SizeF page_size(400, 400);
+  auto* target = GetDocument().getElementById(AtomicString("target"));
+
+  WebPrintParams params(page_size);
+  // top, right, bottom, left insets: 20px, 50px, 0, 10px (see page_size).
+  params.printable_area_in_css_pixels = gfx::RectF(10, 20, 340, 380);
+
+  // Test that it only works when printing.
+  EXPECT_EQ(target->OffsetHeight(), 0);
+  GetDocument().GetFrame()->StartPrinting(params);
+  EXPECT_EQ(target->OffsetHeight(), 50);
+  GetDocument().GetFrame()->EndPrinting();
+  EXPECT_EQ(target->OffsetHeight(), 0);
+
+  // Test n-up printing (multiple pages per sheet). The printing code makes sure
+  // that the pages steer clear of any unprintable area near the paper edges, so
+  // env(safe-printable-inset) should just be 0.
+  params.pages_per_sheet = 4;
+  GetDocument().GetFrame()->StartPrinting(params);
+  EXPECT_EQ(target->OffsetHeight(), 0);
+  GetDocument().GetFrame()->EndPrinting();
 }
 
 }  // namespace blink

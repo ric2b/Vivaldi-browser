@@ -68,7 +68,7 @@ source_set("notes") {
     "//ios/third_party/material_components_ios",
     "//ui/base",
     "//vivaldi/components/notes:browser",
-    "//vivaldi/ios/chrome/browser/features",
+    "//vivaldi/browser:features",
     "//vivaldi/ios/panel",
     "//vivaldi/ios/sync:file_sync",
     "//vivaldi/ios/sync:sync_notes",

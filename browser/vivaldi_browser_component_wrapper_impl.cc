@@ -501,8 +501,9 @@ VivaldiBrowserComponentWrapperImpl::WebViewGuestOpenUrlFromTab(
 }
 
 bool VivaldiBrowserComponentWrapperImpl::HandleNonNavigationAboutURL(
-    const GURL& url) {
-  return ::HandleNonNavigationAboutURL(url);
+    const GURL& url,
+    content::WebContents* webcontents) {
+  return ::HandleNonNavigationAboutURL(url, webcontents->GetBrowserContext());
 }
 
 int VivaldiBrowserComponentWrapperImpl::GetContentSetting(
@@ -854,35 +855,11 @@ void VivaldiBrowserComponentWrapperImpl::DoBeforeUnloadFired(
 
 void VivaldiBrowserComponentWrapperImpl::GetTabPerformanceData(
     content::WebContents* web_contents,
-    uint64_t& memory_usage,
-    bool& is_discarded) {
-  resource_coordinator::TabLifecycleUnitExternal* tab_lifecycle_unit_external =
-      resource_coordinator::TabLifecycleUnitExternal::FromWebContents(
-          web_contents);
-
-  bool notYetLoaded =
-      web_contents->GetUserData(::vivaldi::kVivaldiStartupTabUserDataKey);
-
-  is_discarded = web_contents->WasDiscarded() ||
-                 tab_lifecycle_unit_external->GetTabState() ==
-                     ::mojom::LifecycleUnitState::DISCARDED ||
-                 notYetLoaded;
-
-  if (is_discarded) {
-    const auto* const pre_discard_resource_usage =
-        performance_manager::user_tuning::UserPerformanceTuningManager::
-            PreDiscardResourceUsage::FromWebContents(web_contents);
-    memory_usage =
-        pre_discard_resource_usage == nullptr
-            ? 0
-            : pre_discard_resource_usage->memory_footprint_estimate_kb() * 1024;
-  } else {
-    auto* tab = tabs::TabInterface::MaybeGetFromContents(
-        web_contents);
-    auto* const resource_tab_helper =
-        tab->GetTabFeatures()->resource_usage_helper();
-    memory_usage = (resource_tab_helper->GetMemoryUsageInBytes());
-  }
+    uint64_t& memory_usage) {
+  auto* tab = tabs::TabInterface::MaybeGetFromContents(web_contents);
+  auto* const resource_tab_helper =
+      tab->GetTabFeatures()->resource_usage_helper();
+  memory_usage = (resource_tab_helper->GetMemoryUsageInBytes());
 }
 
 void VivaldiBrowserComponentWrapperImpl::LoadTabContentsIfNecessary(
@@ -907,7 +884,8 @@ void VivaldiBrowserComponentWrapperImpl::LoadTabContentsIfNecessary(
 std::vector<tabs::TabAlert>
 VivaldiBrowserComponentWrapperImpl::GetTabAlertStatesForContents(
     content::WebContents* web_contents) {
-  return ::GetTabAlertStatesForContents(web_contents);
+  return ::GetTabAlertStatesForTab(
+      tabs::TabInterface::GetFromContents(web_contents));
 }
 
 std::unique_ptr<translate::TranslateUIDelegate>

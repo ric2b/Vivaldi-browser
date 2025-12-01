@@ -46,7 +46,6 @@
 #import "ios/chrome/browser/main_content/ui_bundled/main_content_ui_state.h"
 #import "ios/chrome/browser/main_content/ui_bundled/web_scroll_view_main_content_ui_forwarder.h"
 #import "ios/chrome/browser/metrics/model/tab_usage_recorder_browser_agent.h"
-#import "ios/chrome/browser/ntp/model/new_tab_page_tab_helper.h"
 #import "ios/chrome/browser/ntp/model/new_tab_page_util.h"
 #import "ios/chrome/browser/ntp/ui_bundled/new_tab_page_coordinator.h"
 #import "ios/chrome/browser/omnibox/public/omnibox_ui_features.h"
@@ -65,6 +64,7 @@
 #import "ios/chrome/browser/shared/public/commands/settings_commands.h"
 #import "ios/chrome/browser/shared/public/commands/text_zoom_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
+#import "ios/chrome/browser/shared/public/prototypes/diamond/utils.h"
 #import "ios/chrome/browser/shared/ui/util/named_guide.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/shared/ui/util/url_with_title.h"
@@ -89,8 +89,6 @@
 #import "ios/chrome/browser/url_loading/model/url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_params.h"
 #import "ios/chrome/browser/voice/ui_bundled/voice_search_notification_names.h"
-#import "ios/chrome/browser/web/model/page_placeholder_browser_agent.h"
-#import "ios/chrome/browser/web/model/page_placeholder_tab_helper.h"
 #import "ios/chrome/browser/web/model/web_navigation_browser_agent.h"
 #import "ios/chrome/browser/web/model/web_navigation_util.h"
 #import "ios/chrome/browser/web_state_list/model/web_usage_enabler/web_usage_enabler_browser_agent.h"
@@ -126,7 +124,6 @@
 #import "ios/chrome/browser/shared/public/commands/browser_coordinator_commands.h"
 #import "ios/chrome/browser/ui/browser_view/browser_view_controller+vivaldi.h"
 #import "ios/chrome/browser/ui/location_bar/location_bar_constants+vivaldi.h"
-#import "ios/chrome/browser/omnibox/model/omnibox_view_ios.h"
 #import "ios/chrome/browser/ui/tab_strip/vivaldi_tab_strip_constants.h"
 #import "ios/chrome/browser/toolbar/ui_bundled/secondary_toolbar_view.h"
 #import "ios/chrome/browser/ui/whats_new/vivaldi_whats_new_util.h"
@@ -159,6 +156,10 @@ enum HeaderBehaviour {
   // This header stay on screen and covers part of the content.
   Overlap
 };
+
+// Inset to remove from the toolbar height when in full-screen mode with the
+// dynamic island visible.
+const CGFloat kTopDynamicIslandInset = 24;
 
 // Vivaldi
 GURL ConvertUserDataToGURL(NSString* urlString) {
@@ -286,6 +287,9 @@ const double kDelayForRatingPrompt = 10.0;
   // Fake status bar view used to blend the toolbar into the status bar.
   UIView* _fakeStatusBarView;
 
+  // Background view behind the `_fakeStatusBarView and the `tabStripView`.
+  UIView* _topBackgroundView;
+
   // The service used to load url parameters in current or new tab.
   raw_ptr<UrlLoadingBrowserAgent> _urlLoadingBrowserAgent;
 
@@ -295,15 +299,17 @@ const double kDelayForRatingPrompt = 10.0;
   // Used to get the layout guide center.
   LayoutGuideCenter* _layoutGuideCenter;
 
-  // Used to add or cancel a page placeholder for next navigation.
-  raw_ptr<PagePlaceholderBrowserAgent> _pagePlaceholderBrowserAgent;
-
   // Whether the Lens Overlay is currently active and visible for the browser
   // view.
   BOOL _lensOverlayVisible;
 
   // Whether the find bar is currently visible.
   BOOL _findBarVisible;
+
+  // TODO(crbug.com/429955447): Remove when diamond prototype is cleaned.
+  ToolbarType _diamondToolbarType;
+  NSArray<NSLayoutConstraint*>* _diamondToolbarTopConstraints;
+  NSArray<NSLayoutConstraint*>* _diamondToolbarBottomConstraints;
 }
 
 // Activates/deactivates the object. This will enable/disable the ability for
@@ -502,7 +508,6 @@ const double kDelayForRatingPrompt = 10.0;
     _webStateList = dependencies.webStateList;
     _voiceSearchController = dependencies.voiceSearchController;
     self.safeAreaProvider = dependencies.safeAreaProvider;
-    _pagePlaceholderBrowserAgent = dependencies.pagePlaceholderBrowserAgent;
 
     self.inNewTabAnimation = NO;
     self.fullscreenController = dependencies.fullscreenController;
@@ -687,7 +692,7 @@ const double kDelayForRatingPrompt = 10.0;
       }
     }
   } else {
-  if (!IsRegularXRegularSizeClass(self)) {
+  if (!CanShowTabStrip(self)) {
     if (self.toolbarCoordinator.primaryToolbarViewController.view) {
       [results
           addObject:[HeaderDefinition
@@ -753,7 +758,7 @@ const double kDelayForRatingPrompt = 10.0;
     return 0.0;
   } // End Vivaldi
 
-  return IsRegularXRegularSizeClass(self) ? headerOffset : 0.0;
+  return CanShowTabStrip(self) ? headerOffset : 0.0;
 }
 
 - (CGFloat)headerHeight {
@@ -885,7 +890,6 @@ const double kDelayForRatingPrompt = 10.0;
   if (active) {
     // Force loading the view in case it was not loaded yet.
     [self loadViewIfNeeded];
-    _pagePlaceholderBrowserAgent->AddPagePlaceholder();
     if (self.viewForCurrentWebState) {
       [self displayTabView];
     }
@@ -972,8 +976,7 @@ const double kDelayForRatingPrompt = 10.0;
           toTabGridButtonWithCompletion:completionBlock];
     }
   } else {
-  if (IsRegularXRegularSizeClass(self) ||
-      CGPointEqualToPoint(originPoint, CGPointZero)) {
+  if (CanShowTabStrip(self) || CGPointEqualToPoint(originPoint, CGPointZero)) {
     completion();
   } else {
     self.inNewTabAnimation = YES;
@@ -1041,7 +1044,7 @@ const double kDelayForRatingPrompt = 10.0;
   // End Vivaldi
 }
 
-#pragma mark - NSObject
+#pragma mark - UIAccessibilityAction
 
 - (BOOL)accessibilityPerformEscape {
   [self dismissPopups];
@@ -1236,6 +1239,13 @@ const double kDelayForRatingPrompt = 10.0;
   self.primaryToolbarHeightConstraint.constant =
       [self primaryToolbarHeightWithInset];
 
+  if ([self topInsetWithCornerAdaptation] - self.rootSafeAreaInsets.top > 0) {
+    // On iOS 26, the safe area layout guide doesn't automatically adjust
+    // for the control setting island's dimensions.
+    // Update the collapsedTopToolbarHeight when the dynamic island has moved.
+    [self updateToolbarState];
+  }
+
   if (self.ntpCoordinator.isNTPActiveForCurrentWebState &&
       self.webUsageEnabled) {
     self.ntpCoordinator.viewController.view.frame =
@@ -1256,9 +1266,7 @@ const double kDelayForRatingPrompt = 10.0;
   // gamepads to work. (Ref: crbug.com/325307469)
   web::WebState* activeWebState = self.currentWebState;
   if (activeWebState && !GetFirstResponder()) {
-    NewTabPageTabHelper* NTPHelper =
-        NewTabPageTabHelper::FromWebState(activeWebState);
-    if (!NTPHelper || !NTPHelper->IsActive()) {
+    if (!IsVisibleURLNewTabPage(activeWebState)) {
       [activeWebState->GetWebViewProxy() becomeFirstResponder];
     }
   }
@@ -1470,12 +1478,10 @@ const double kDelayForRatingPrompt = 10.0;
 
       // Load view from Launch Screen and add it to window.
       NSBundle* mainBundle = base::apple::FrameworkBundle();
-      NSArray* topObjects = [mainBundle loadNibNamed:@"LaunchScreen"
-                                               owner:self
-                                             options:nil];
+      UIStoryboard* storyboard =
+          [UIStoryboard storyboardWithName:@"LaunchScreen" bundle:mainBundle];
       UIViewController* launchScreenController =
-          base::apple::ObjCCastStrict<UIViewController>(
-              [topObjects lastObject]);
+          [storyboard instantiateInitialViewController];
       // `launchScreenView` is loaded as an autoreleased object, and is retained
       // by the `completion` block below.
       UIView* launchScreenView = launchScreenController.view;
@@ -1600,7 +1606,7 @@ const double kDelayForRatingPrompt = 10.0;
     _fakeStatusBarView.overrideUserInterfaceStyle =
         _isOffTheRecord ? UIUserInterfaceStyleDark
                         : UIUserInterfaceStyleUnspecified;
-    const bool canShowTabStrip = IsRegularXRegularSizeClass(self);
+    const bool canShowTabStrip = CanShowTabStrip(self);
     _fakeStatusBarView.hidden = !canShowTabStrip;
     _fakeStatusBarView.autoresizingMask = UIViewAutoresizingFlexibleWidth;
     DCHECK(self.contentArea);
@@ -1628,9 +1634,9 @@ const double kDelayForRatingPrompt = 10.0;
     [self.tabStripCoordinator hideTabStrip:![self canShowTabStrip]];
   } else {
   if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET) {
-    const bool canShowTabStrip = IsRegularXRegularSizeClass(self);
-      [self.tabStripCoordinator start];
-      [self.tabStripCoordinator hideTabStrip:!canShowTabStrip];
+    const bool canShowTabStrip = CanShowTabStrip(self);
+    [self.tabStripCoordinator start];
+    [self.tabStripCoordinator hideTabStrip:!canShowTabStrip];
   }
   } // End Vivaldi
 
@@ -1680,6 +1686,9 @@ const double kDelayForRatingPrompt = 10.0;
   if (!height) {
     return 0.0;
   }
+  if (IsDiamondPrototypeEnabled()) {
+    return kDiamondToolbarHeight;
+  }
   // Add the safe area inset to the toolbar height.
   CGFloat unsafeHeight = self.rootSafeAreaInsets.bottom;
   return height + unsafeHeight;
@@ -1700,16 +1709,12 @@ const double kDelayForRatingPrompt = 10.0;
       topAnchor = [self view].topAnchor;
     }
   } else {
-  // On iPhone, the toolbar is underneath the top of the screen.
-  // On iPad, it depends:
-  // - if the window is compact, it is like iPhone, underneath the top of the
-  // screen.
-  // - if the window is regular, it is underneath the tab strip.
-  if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_PHONE ||
-      !IsRegularXRegularSizeClass(self)) {
-    topAnchor = self.view.topAnchor;
-  } else {
+  if (CanShowTabStrip(self)) {
+    // On iPad, the toolbar is underneath the tab strip.
     topAnchor = self.tabStripView.bottomAnchor;
+  } else {
+    // On iPhone, the toolbar is underneath the top of the screen.
+    topAnchor = self.view.topAnchor;
   }
   } // End Vivaldi
 
@@ -1754,9 +1759,14 @@ const double kDelayForRatingPrompt = 10.0;
   // The bottom toolbar can be constraint to the keyboard in some cases.
   self.secondaryToolbarHeightConstraint.priority = UILayoutPriorityRequired - 1;
   self.secondaryToolbarHeightConstraint.active = YES;
-  AddSameConstraintsToSides(
-      self.view, toolbarView,
-      LayoutSides::kBottom | LayoutSides::kLeading | LayoutSides::kTrailing);
+  if (IsDiamondPrototypeEnabled()) {
+    AddSameConstraintsToSides(self.view, toolbarView,
+                              LayoutSides::kLeading | LayoutSides::kTrailing);
+  } else {
+    AddSameConstraintsToSides(
+        self.view, toolbarView,
+        LayoutSides::kBottom | LayoutSides::kLeading | LayoutSides::kTrailing);
+  }
 }
 
 // Adds constraints to the primary and secondary toolbars, anchoring them to the
@@ -1875,9 +1885,28 @@ const double kDelayForRatingPrompt = 10.0;
     // its top.
     UIView* secondaryToolbarView =
         self.toolbarCoordinator.secondaryToolbarViewController.view;
-    [contentAreaGuide.bottomAnchor
-        constraintEqualToAnchor:secondaryToolbarView.topAnchor]
-        .active = YES;
+
+    if (IsDiamondPrototypeEnabled()) {
+      _diamondToolbarTopConstraints = @[
+        [secondaryToolbarView.topAnchor
+            constraintEqualToAnchor:primaryToolbarView.topAnchor],
+        [secondaryToolbarView.bottomAnchor
+            constraintEqualToAnchor:primaryToolbarView.bottomAnchor],
+        [contentAreaGuide.bottomAnchor
+            constraintEqualToAnchor:self.view.bottomAnchor],
+      ];
+      _diamondToolbarBottomConstraints = @[
+        [secondaryToolbarView.bottomAnchor
+            constraintEqualToAnchor:self.view.bottomAnchor],
+        [contentAreaGuide.bottomAnchor
+            constraintEqualToAnchor:secondaryToolbarView.topAnchor],
+      ];
+      [self diamondToolbarTypeChanged:_diamondToolbarType];
+    } else {
+      [contentAreaGuide.bottomAnchor
+          constraintEqualToAnchor:secondaryToolbarView.topAnchor]
+          .active = YES;
+    }
 
     AddSameConstraintsToSides(self.view, contentAreaGuide, contentSides);
 
@@ -2071,14 +2100,14 @@ const double kDelayForRatingPrompt = 10.0;
 
   // NTP is laid out only in the visible part of the screen.
   UIEdgeInsets viewportInsets = UIEdgeInsetsZero;
-  if (!IsRegularXRegularSizeClass(self)) {
+  if (!CanShowTabStrip(self)) {
     viewportInsets.bottom = [self secondaryToolbarHeightWithInset];
   }
 
   // Add toolbar margin to the frame for every scenario except compact-width
   // non-otr, as that is the only case where there isn't a primary toolbar.
   // (see crbug.com/1063173)
-  if (!IsSplitToolbarMode(self) || _isOffTheRecord) {
+  if (CanShowTabStrip(self) || !IsSplitToolbarMode(self) || _isOffTheRecord) {
     viewportInsets.top = [self expandedTopToolbarHeight];
   }
   return UIEdgeInsetsInsetRect(self.contentArea.bounds, viewportInsets);
@@ -2104,7 +2133,7 @@ const double kDelayForRatingPrompt = 10.0;
         self.primaryToolbarOffsetConstraint.constant = yOrigin;
       }
     } else {
-    if (isPrimaryToolbar && !IsRegularXRegularSizeClass(self)) {
+    if (isPrimaryToolbar && !CanShowTabStrip(self)) {
       self.primaryToolbarOffsetConstraint.constant = yOrigin;
     }
     } // End Vivaldi
@@ -2257,8 +2286,8 @@ const double kDelayForRatingPrompt = 10.0;
     } else { // Vivaldi
     [self showTabStripView:self.tabStripView];
     [self.tabStripView layoutSubviews];
-    const bool canShowTabStrip = IsRegularXRegularSizeClass(self);
-      [self.tabStripCoordinator hideTabStrip:!canShowTabStrip];
+    const bool canShowTabStrip = CanShowTabStrip(self);
+    [self.tabStripCoordinator hideTabStrip:!canShowTabStrip];
     _fakeStatusBarView.hidden = !canShowTabStrip;
     } // End Vivaldi
 
@@ -2299,6 +2328,50 @@ const double kDelayForRatingPrompt = 10.0;
   if (IsVivaldiRunning() && !ShouldPresentFirstRunExperience()) {
     [self.view bringSubviewToFront:self.tabStripView];
   } // End Vivaldi
+}
+
+// On iOS 26, returns the top inset with corner adapation, otherwise returns 0.
+- (CGFloat)topInsetWithCornerAdaptation {
+#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
+  if (@available(iOS 26, *)) {
+    UIViewLayoutRegion* safeAreaRegion =
+        [UIViewLayoutRegion safeAreaLayoutRegionWithCornerAdaptation:
+                                UIViewLayoutRegionAdaptivityAxisVertical];
+    NSDirectionalEdgeInsets calculatedInsets = [self.safeAreaProvider
+        directionalEdgeInsetsForLayoutRegion:safeAreaRegion];
+    return calculatedInsets.top;
+  }
+#endif
+  return 0;
+}
+
+// Adds a a background filler below the top of the fake status bar to the bottom
+// of the tab strip. This is needed on iPad when the app is windowed and pinned
+// to the top with fullscreen is enabled.
+- (void)configureTopBackgroundView {
+#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
+  if (@available(iOS 26, *)) {
+    if (self.tabStripView) {
+      _topBackgroundView = [[UIView alloc] init];
+      _topBackgroundView.translatesAutoresizingMaskIntoConstraints = NO;
+      _topBackgroundView.backgroundColor =
+          [UIColor colorNamed:kBackgroundColor];
+      [self.view insertSubview:_topBackgroundView
+                  belowSubview:_fakeStatusBarView];
+
+      [NSLayoutConstraint activateConstraints:@[
+        [_topBackgroundView.topAnchor
+            constraintEqualToAnchor:_fakeStatusBarView.topAnchor],
+        [_topBackgroundView.bottomAnchor
+            constraintEqualToAnchor:self.tabStripView.bottomAnchor],
+        [_topBackgroundView.leadingAnchor
+            constraintEqualToAnchor:_fakeStatusBarView.leadingAnchor],
+        [_topBackgroundView.trailingAnchor
+            constraintEqualToAnchor:_fakeStatusBarView.trailingAnchor],
+      ]];
+    }
+  }
+#endif
 }
 
 #pragma mark - Private Methods: Tap handling
@@ -2344,11 +2417,11 @@ const double kDelayForRatingPrompt = 10.0;
 
 #pragma mark - Helpers
 
-- (UIEdgeInsets)snapshotEdgeInsetsForNTPHelper:(NewTabPageTabHelper*)NTPHelper {
+- (UIEdgeInsets)snapshotEdgeInsetsForWebState:(web::WebState*)webState {
   UIEdgeInsets maxViewportInsets =
       self.fullscreenController->GetMaxViewportInsets();
 
-  if (NTPHelper && NTPHelper->IsActive()) {
+  if (IsVisibleURLNewTabPage(webState)) {
 
     // Vivaldi: We will always return zero inset since we will always have the
     // location bar on top.
@@ -2358,7 +2431,7 @@ const double kDelayForRatingPrompt = 10.0;
     // If the NTP is active, then it's used as the base view for snapshotting.
     // When the tab strip is visible, or for the incognito NTP, the NTP is laid
     // out between the toolbars, so it should not be inset while snapshotting.
-    if (IsRegularXRegularSizeClass(self) || _isOffTheRecord) {
+    if (CanShowTabStrip(self) || _isOffTheRecord) {
       return UIEdgeInsetsZero;
     }
 
@@ -2498,8 +2571,23 @@ const double kDelayForRatingPrompt = 10.0;
 // The minimum amount by which the top toolbar overlaps the browser content
 // area.
 - (CGFloat)collapsedTopToolbarHeight {
-  return self.rootSafeAreaInsets.top +
-         self.toolbarCoordinator.collapsedPrimaryToolbarHeight;
+  CGFloat topInset = self.rootSafeAreaInsets.top;
+
+  if (vivaldi::IsVivaldiRunning())
+    return topInset + self.toolbarCoordinator.collapsedPrimaryToolbarHeight;
+  // End Vivaldi
+
+  // On iOS 26, the safe area layout guide doesn't automatically adjust for the
+  // control setting island's dimensions.
+  // If the app is windowed, the dynamic island is not included in the
+  // status bar. In that case, `topInset` should be updated.
+  CGFloat topInsetWithCornerAdaptation = [self topInsetWithCornerAdaptation];
+  if (topInsetWithCornerAdaptation - topInset > 0) {
+    topInset =
+        fmax(topInset, topInsetWithCornerAdaptation - kTopDynamicIslandInset);
+  }
+
+  return topInset + self.toolbarCoordinator.collapsedPrimaryToolbarHeight;
 }
 
 // The minimum amount by which the bottom toolbar overlaps the browser content
@@ -2508,6 +2596,9 @@ const double kDelayForRatingPrompt = 10.0;
   CGFloat height = self.toolbarCoordinator.collapsedSecondaryToolbarHeight;
   if (!height) {
     return 0.0;
+  }
+  if (IsDiamondPrototypeEnabled()) {
+    return kDiamondCollapsedToolbarHeight;
   }
   // Height is non-zero only when bottom omnibox is enabled.
   return self.rootSafeAreaInsets.bottom + height;
@@ -2529,8 +2620,7 @@ const double kDelayForRatingPrompt = 10.0;
   } // End Vivaldi
 
   return [self primaryToolbarHeightWithInset] +
-         (IsRegularXRegularSizeClass(self) ? self.tabStripView.frame.size.height
-                                           : 0.0) +
+         (CanShowTabStrip(self) ? self.tabStripView.frame.size.height : 0.0) +
          self.headerOffset;
 }
 
@@ -2585,7 +2675,16 @@ const double kDelayForRatingPrompt = 10.0;
       [self setFramesForHeaders:[self headerViews] atOffset:offset];
     }
     [self updateToolbarViewsStateWithProgress:progress atOffset:offset];
-  } else {
+  } else { // Vivaldi
+#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
+  if (@available(iOS 26, *)) {
+    if (self.tabStripView) {
+      self.tabStripView.alpha = progress;
+      _fakeStatusBarView.alpha = progress;
+    }
+  }
+#endif
+
   CGFloat offset =
       AlignValueToPixel((1.0 - progress) * [self primaryToolbarHeightDelta]);
   [self setFramesForHeaders:[self headerViews] atOffset:offset];
@@ -2760,9 +2859,6 @@ const double kDelayForRatingPrompt = 10.0;
   }
 
   [self displayTabView];
-  if (!self.inNewTabAnimation) {
-    _pagePlaceholderBrowserAgent->CancelPagePlaceholder();
-  }
 }
 
 - (void)initiateNewTabForegroundAnimationForWebState:(web::WebState*)webState {
@@ -2781,17 +2877,29 @@ const double kDelayForRatingPrompt = 10.0;
       }
       return;
     }
-  } else {
+  } else { // Vivaldi
+  BOOL isNTP = IsURLNewTabPage(webState->GetVisibleURL());
+  BOOL isIncognito = _isOffTheRecord;
+  __weak id<OmniboxCommands> omniboxHandler = self.omniboxCommandsHandler;
+
   // Initiates the new tab foreground animation, which is phone-specific.
-  if (IsRegularXRegularSizeClass(self)) {
+  if (CanShowTabStrip(self)) {
     if (self.foregroundTabWasAddedCompletionBlock) {
       // This callback is called before webState is activated. Dispatch the
       // callback asynchronously to be sure the activation is complete.
       __weak BrowserViewController* weakSelf = self;
       base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
           FROM_HERE, base::BindOnce(^{
+            if (isNTP && isIncognito) {
+              [omniboxHandler focusOmniboxForVoiceOver];
+            }
+
             [weakSelf executeAndClearForegroundTabWasAddedCompletionBlock:YES];
           }));
+    } else {
+      if (isNTP && isIncognito) {
+        [omniboxHandler focusOmniboxForVoiceOver];
+      }
     }
     return;
   }
@@ -2831,19 +2939,18 @@ const double kDelayForRatingPrompt = 10.0;
   }
 }
 
-- (void)switchToTabAnimationPosition:(SwitchToTabAnimationPosition)position
-                   snapshotTabHelper:(SnapshotTabHelper*)snapshotTabHelper
-                  willAddPlaceholder:(BOOL)willAddPlaceholder
-                 newTabPageTabHelper:(NewTabPageTabHelper*)NTPHelper
-                     topToolbarImage:(UIImage*)topToolbarImage
-                  bottomToolbarImage:(UIImage*)bottomToolbarImage {
+- (void)switchToTabWithWebState:(web::WebState*)webState
+              animationPosition:(SwitchToTabAnimationPosition)position
+             willAddPlaceholder:(BOOL)willAddPlaceholder
+                topToolbarImage:(UIImage*)topToolbarImage
+             bottomToolbarImage:(UIImage*)bottomToolbarImage {
 
   if (IsVivaldiRunning()) {
     if ([self canShowTabStrip]) {
       return;
     }
-  } else {
-  if (IsRegularXRegularSizeClass(self)) {
+  } else { // Vivaldi
+  if (CanShowTabStrip(self)) {
     return;
   }
   } // End Vivaldi
@@ -2853,11 +2960,12 @@ const double kDelayForRatingPrompt = 10.0;
 
   SwipeView* swipeView = [[SwipeView alloc]
       initWithFrame:self.contentArea.frame
-          topMargin:[self snapshotEdgeInsetsForNTPHelper:NTPHelper].top];
+          topMargin:[self snapshotEdgeInsetsForWebState:webState].top];
 
   [swipeView setTopToolbarImage:topToolbarImage];
   [swipeView setBottomToolbarImage:bottomToolbarImage];
 
+  auto* snapshotTabHelper = SnapshotTabHelper::FromWebState(webState);
   snapshotTabHelper->RetrieveColorSnapshot(^(UIImage* image) {
     willAddPlaceholder ? [swipeView setImage:nil] : [swipeView setImage:image];
   });
@@ -2927,8 +3035,8 @@ const double kDelayForRatingPrompt = 10.0;
 
   if (IsVivaldiRunning()) {
     newPage.frame = [self ntpFrameForCurrentWebState];
-  } else {
-  if (isNTP && !isIncognito && !IsRegularXRegularSizeClass(self)) {
+  } else { // Vivaldi
+  if (isNTP && !isIncognito && !CanShowTabStrip(self)) {
     // Add a snapshot of the primary toolbar to the background as the
     // animation runs.
     UIViewController* toolbarViewController =
@@ -3035,27 +3143,10 @@ const double kDelayForRatingPrompt = 10.0;
                     action:@selector(authenticateIncognitoContent)
           forControlEvents:UIControlEventTouchUpInside];
 
-      DCHECK(self.applicationCommandsHandler);
-      __weak __typeof(self) weakSelf = self;
-      [self.blockingView.tabSwitcherButton
-                 addAction:[UIAction actionWithHandler:^(UIAction* action) {
-                   if (IsIOSSoftLockEnabled()) {
-                     base::UmaHistogramEnumeration(
-                         kIncognitoLockOverlayInteractionHistogram,
-                         IncognitoLockOverlayInteraction::
-                             kSeeOtherTabsButtonClicked);
-                     base::RecordAction(base::UserMetricsAction(
-                         "IOS.IncognitoLock.Overlay.SeeOtherTabs"));
-                   }
-                   [weakSelf.applicationCommandsHandler
-                       displayTabGridInMode:TabGridOpeningMode::kRegular];
-                 }]
-          forControlEvents:UIControlEventTouchUpInside];
-
       if (IsIOSSoftLockEnabled()) {
         base::WeakPtr<WebStateList> webStateList = _webStateList;
         id<IncognitoReauthCommands> reauthHandler = self.reauthHandler;
-        [self.blockingView.exitIncognitoButton
+        [self.blockingView.secondaryButton
                    addAction:[UIAction actionWithHandler:^(UIAction* action) {
                      if (IsIOSSoftLockEnabled()) {
                        base::UmaHistogramEnumeration(
@@ -3066,10 +3157,28 @@ const double kDelayForRatingPrompt = 10.0;
                            "IOS.IncognitoLock.Overlay.CloseIncognitoTabs"));
                      }
                      if (webStateList) {
-                       CloseAllWebStates(*(webStateList),
-                                         WebStateList::CLOSE_USER_ACTION);
+                       CloseAllWebStates(
+                           *(webStateList),
+                           WebStateList::ClosingReason::kUserAction);
                      }
                      [reauthHandler manualAuthenticationOverride];
+                   }]
+            forControlEvents:UIControlEventTouchUpInside];
+      } else {
+        DCHECK(self.applicationCommandsHandler);
+        __weak __typeof(self) weakSelf = self;
+        [self.blockingView.secondaryButton
+                   addAction:[UIAction actionWithHandler:^(UIAction* action) {
+                     if (IsIOSSoftLockEnabled()) {
+                       base::UmaHistogramEnumeration(
+                           kIncognitoLockOverlayInteractionHistogram,
+                           IncognitoLockOverlayInteraction::
+                               kSeeOtherTabsButtonClicked);
+                       base::RecordAction(base::UserMetricsAction(
+                           "IOS.IncognitoLock.Overlay.SeeOtherTabs"));
+                     }
+                     [weakSelf.applicationCommandsHandler
+                         displayTabGridInMode:TabGridOpeningMode::kRegular];
                    }]
             forControlEvents:UIControlEventTouchUpInside];
       }
@@ -3148,7 +3257,7 @@ const double kDelayForRatingPrompt = 10.0;
   if (IsVivaldiRunning()) {
     DCHECK(![self canShowTabStrip]);
   } else {
-  DCHECK(!IsRegularXRegularSizeClass(self));
+  DCHECK(!CanShowTabStrip(self));
   } // End Vivaldi
 
   // TODO(crbug.com/40842406): Signal to the toolbar coordinator to perform this
@@ -3297,6 +3406,23 @@ const double kDelayForRatingPrompt = 10.0;
 
 }
 
+- (void)diamondToolbarTypeChanged:(ToolbarType)type {
+  CHECK(IsDiamondPrototypeEnabled());
+  _diamondToolbarType = type;
+  switch (type) {
+    case ToolbarType::kPrimary:
+      [NSLayoutConstraint
+          deactivateConstraints:_diamondToolbarBottomConstraints];
+      [NSLayoutConstraint activateConstraints:_diamondToolbarTopConstraints];
+      break;
+
+    case ToolbarType::kSecondary:
+      [NSLayoutConstraint deactivateConstraints:_diamondToolbarTopConstraints];
+      [NSLayoutConstraint activateConstraints:_diamondToolbarBottomConstraints];
+      break;
+  }
+}
+
 #pragma mark - LogoAnimationControllerOwnerOwner (Public)
 
 - (id<LogoAnimationControllerOwner>)logoAnimationControllerOwner {
@@ -3341,7 +3467,7 @@ const double kDelayForRatingPrompt = 10.0;
   // The LensCoordinator needs the content area of the webView with the
   // header and footer toolbars visible.
   UIEdgeInsets viewportInsets = self.rootSafeAreaInsets;
-  if (!IsRegularXRegularSizeClass(self)) {
+  if (!CanShowTabStrip(self)) {
     viewportInsets.bottom = [self secondaryToolbarHeightWithInset];
   }
 
@@ -3371,8 +3497,12 @@ const double kDelayForRatingPrompt = 10.0;
   self.contentArea.accessibilityElementsHidden = self.contentAreaObstructed;
 }
 
+- (void)lensOverlayDidReadjustPresentation {
+  [self.omniboxCommandsHandler cancelOmniboxEdit];
+}
+
 - (NSDirectionalEdgeInsets)presentationInsetsForLensOverlay {
-  if (IsRegularXRegularSizeClass(self)) {
+  if (CanShowTabStrip(self)) {
     return NSDirectionalEdgeInsetsMake([self expandedTopToolbarHeight], 0, 0,
                                        0);
   }
@@ -3922,10 +4052,7 @@ const double kDelayForRatingPrompt = 10.0;
   if (!self.currentWebState)
     return NO;
 
-  NewTabPageTabHelper* NTPHelper =
-      NewTabPageTabHelper::FromWebState(self.currentWebState);
-  BOOL isNTP = NTPHelper && NTPHelper->IsActive();
-  return isNTP;
+  return IsVisibleURLNewTabPage(self.currentWebState);
 }
 
 - (UIColor*)activeWebStateThemeColor {

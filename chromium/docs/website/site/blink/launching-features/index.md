@@ -241,7 +241,7 @@ next step.
 
 Once you have a functional and reasonably complete feature implementation
 available as a runtime enabled feature, we recommend (but don't require) that
-you [request an Early Design Review
+you [request an Early Design/Incubation Review
 from the TAG](/blink/launching-features/wide-review/#tag) and proceed to
 the “Dev Trials” stage in ChromeStatus (note also exceptions enumerated
 [here](/blink/launching-features/wide-review/#exceptions)). There is a button to
@@ -313,7 +313,7 @@ Once you have a complete specification:
 
 1. If you have one, ask your spec mentor to [review the
    specification](/blink/spec-mentors/#reviewing-the-specification).
-2. [Request a Specification Review
+2. [Request a specification review
    from the TAG](/blink/launching-features/wide-review/#tag) (except in the cases noted
    [here](/blink/launching-features/wide-review/#exceptions)). You should submit
    this at least a month ahead of sending an Intent to Ship, to give the TAG
@@ -325,8 +325,7 @@ If you want to gather data on the usability of your feature that an [Origin
 Trial](/blink/origin-trials/running-an-origin-trial) can help collect, proceed
 to the “Origin Trial” stage in ChromeStatus and fill out the required fields
 detailing what you hope to learn from the origin trial. This will generate an
-[Intent to
-Experiment](https://docs.google.com/document/d/1vlTlsQKThwaX0-lj_iZbVTzyqY7LioqERU8DK3u3XjI/edit)
+Intent to Experiment
 mail that you should send to [blink-dev](mailto:blink-dev@chromium.org). After
 receiving at least [one LGTM](/blink/guidelines/api-owners/procedures) from the
 API owners, you can proceed with your origin trial release. Collect data and
@@ -474,7 +473,7 @@ feature ready for developers to try out under a flag, proceed to the next step.
 #### Step 2: Feature Complete behind a flag and implementation refinement {:#existing-standard-dev-trials}
 
 If the TAG has not already reviewed the consensus specification, request a
-[Specification Review](/blink/launching-features/wide-review/#tag)
+[specification review](/blink/launching-features/wide-review/#tag)
 (except in the cases noted
 [here](/blink/launching-features/wide-review/#exceptions))
 and proceed to the “Dev Trials” stage in ChromeStatus. This will generate a
@@ -502,8 +501,7 @@ on documentation, this is the time to finish that work and update for any
 changes in vendor signals.
 
 Proceed to the “Prepare to Ship” stage in ChromeStatus; this will generate an
-[Intent to
-Ship](https://docs.google.com/document/d/1vlTlsQKThwaX0-lj_iZbVTzyqY7LioqERU8DK3u3XjI/edit#bookmark=id.w8j30a6lypz0)
+Intent to Ship
 mail that you should send to [blink-dev](mailto:blink-dev@chromium.org). This
 will spark a conversation with the API owners; address any feedback from them,
 and once you [get 3 LGTMs](/blink/guidelines/api-owners/procedures) from the API
@@ -571,6 +569,12 @@ High-usage APIs may require much more work to land successfully. See
 for a good example of how this worked in practice with the deprecation and
 removal of the Web Components v0 APIs.
 
+Deprecations that change the behavior of
+[Android WebView APIs](https://developer.android.com/reference/android/webkit/WebSettings)
+will require additional processes due to their impact on Android applications. See
+[here](/blink/launching-features/webview-deprecations)
+for considerations and steps for deprecating such APIs.
+
 #### Step 1: Measure usage {:#deprecation-measure}
 
 Measure feature usage in the wild. [Various
@@ -631,7 +635,7 @@ If you are unsure of when a feature could be removed, or would like to
 discourage usage, you may deprecate a feature without a removal deadline. This
 is strongly discouraged and will require significant justification:
 
-* Email blink-dev using the ["Intent to Deprecate" template](https://docs.google.com/a/chromium.org/document/d/1Z7bbuD5ZMzvvLcUs9kAgYzd65ld80d5-p4Cl2a04bV0/edit).
+* Email blink-dev using an Intent to Deprecate generated from ChromeStatus
 
 * [1 LGTM](/blink/guidelines/api-owners/procedures) necessary from the API owners
 

@@ -16,7 +16,6 @@
  */
 
 import {readFileSync} from "node:fs";
-import {createRequire} from "node:module";
 import {join, dirname} from "node:path";
 import {fileURLToPath} from "node:url";
 
@@ -30,7 +29,7 @@ const dist = join(__dirname, "..", "dist");
 const pad = (message, file) => message.padEnd(40, " ") + "\x1b[0m" + file;
 
 const test = file => {
-  const callback = Function(`return ${readFileSync(join(dist, file))}`)();
+  const callback = Function(`return (${readFileSync(join(dist, file))})`)();
   const invokes = [];
   const {log} = console;
   console.log = (...args) => {

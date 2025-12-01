@@ -14,6 +14,7 @@
 
 use super::image::*;
 
+use std::ffi::CStr;
 use std::os::raw::c_char;
 use std::os::raw::c_int;
 use std::os::raw::c_void;
@@ -259,7 +260,7 @@ impl avifDiagnostics {
 }
 
 #[repr(C)]
-#[derive(Default)]
+#[derive(Clone, Copy, Default)]
 pub enum avifCodecChoice {
     #[default]
     Auto = 0,
@@ -269,6 +270,77 @@ pub enum avifCodecChoice {
     Rav1e = 4,
     Svt = 5,
     Avm = 6,
+}
+
+impl avifCodecChoice {
+    fn from_name(name: &str) -> Self {
+        let available_codecs: &[(avifCodecChoice, &str)] = &[
+            #[cfg(feature = "aom")]
+            (Self::Aom, "aom"),
+            #[cfg(feature = "dav1d")]
+            (Self::Dav1d, "dav1d"),
+            #[cfg(feature = "libgav1")]
+            (Self::Libgav1, "libgav1"),
+        ];
+        for available_codec in available_codecs {
+            if name == available_codec.1 {
+                return available_codec.0;
+            }
+        }
+        avifCodecChoice::Auto
+    }
+}
+
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if name is not null, it has to be a valid C-style string.
+#[no_mangle]
+pub unsafe extern "C" fn crabby_avifCodecChoiceFromName(name: *const c_char) -> avifCodecChoice {
+    if name.is_null() {
+        return avifCodecChoice::Auto;
+    }
+    // SAFETY: name is guaranteed to be a valid C-style string based on the pre-condition.
+    let name = unsafe { CStr::from_ptr(name) }.to_str();
+    if name.is_err() {
+        return avifCodecChoice::Auto;
+    }
+    avifCodecChoice::from_name(name.unwrap())
+}
+
+/// # Safety
+/// C API function that does not do any unsafe operations.
+#[no_mangle]
+pub unsafe extern "C" fn crabby_avifCodecName(
+    _choice: avifCodecChoice,
+    requiredFlags: avifCodecFlags,
+) -> *const c_char {
+    // This function will just return "dav1d" or "aom" based on whether encoder or decoder is being
+    // queried. It simply exists for compatibility with libavif.
+    CStr::from_bytes_with_nul(if (requiredFlags & avifCodecFlag::CanEncode as u32) != 0 {
+        b"aom\0"
+    } else {
+        b"dav1d\0"
+    })
+    .unwrap()
+    .as_ptr()
+}
+
+/// # Safety
+/// C API function that does not do any unsafe operations.
+#[no_mangle]
+pub unsafe extern "C" fn crabby_avifPixelFormatToString(format: PixelFormat) -> *const c_char {
+    CStr::from_bytes_with_nul(match format {
+        PixelFormat::Yuv444 => b"YUV444\0",
+        PixelFormat::Yuv422 => b"YUV422\0",
+        PixelFormat::Yuv420 => b"YUV420\0",
+        PixelFormat::Yuv400 => b"YUV400\0",
+        PixelFormat::AndroidP010 => b"P010\0",
+        PixelFormat::AndroidNv12 => b"NV12\0",
+        PixelFormat::AndroidNv21 => b"NV21\0",
+        _ => b"Unknown\0",
+    })
+    .unwrap()
+    .as_ptr()
 }
 
 pub(crate) fn to_avifBool(val: bool) -> avifBool {
@@ -314,8 +386,11 @@ const RESULT_TO_STRING: &[&str] = &[
     "Invalid tone mapped image item\0",
 ];
 
+/// # Safety
+/// C API function.
 #[no_mangle]
 pub unsafe extern "C" fn crabby_avifResultToString(res: avifResult) -> *const c_char {
+    // SAFETY: Constructs a CStr from a static list of strings above.
     unsafe {
         std::ffi::CStr::from_bytes_with_nul_unchecked(RESULT_TO_STRING[res.as_usize()].as_bytes())
             .as_ptr() as *const _
@@ -324,6 +399,11 @@ pub unsafe extern "C" fn crabby_avifResultToString(res: avifResult) -> *const c_
 
 pub type avifCropRect = CropRect;
 
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if cropRect is not null, it has to point to a valid avifCropRect object.
+/// - if clap is not null, it has to point to a valid avifCleanApertureBox object.
+/// - if diag is not null, it has to point to a valid avifDiagnostics object.
 #[no_mangle]
 pub unsafe extern "C" fn crabby_avifCropRectConvertCleanApertureBox(
     cropRect: *mut avifCropRect,
@@ -333,6 +413,9 @@ pub unsafe extern "C" fn crabby_avifCropRectConvertCleanApertureBox(
     yuvFormat: PixelFormat,
     _diag: *mut avifDiagnostics,
 ) -> avifBool {
+    if cropRect.is_null() || clap.is_null() {
+        return AVIF_FALSE;
+    }
     let rust_clap: CleanAperture = deref_const!(clap).into();
     let rect = deref_mut!(cropRect);
     *rect = match CropRect::create_from(&rust_clap, imageW, imageH, yuvFormat) {
@@ -342,6 +425,11 @@ pub unsafe extern "C" fn crabby_avifCropRectConvertCleanApertureBox(
     AVIF_TRUE
 }
 
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if cropRect is not null, it has to point to a valid avifCropRect object.
+/// - if clap is not null, it has to point to a valid avifCleanApertureBox object.
+/// - if diag is not null, it has to point to a valid avifDiagnostics object.
 #[no_mangle]
 pub unsafe extern "C" fn crabby_avifCleanApertureBoxConvertCropRect(
     clap: *mut avifCleanApertureBox,
@@ -351,6 +439,9 @@ pub unsafe extern "C" fn crabby_avifCleanApertureBoxConvertCropRect(
     yuvFormat: PixelFormat,
     _diag: *mut avifDiagnostics,
 ) -> avifBool {
+    if cropRect.is_null() || clap.is_null() {
+        return AVIF_FALSE;
+    }
     *deref_mut!(clap) =
         match CleanAperture::create_from(deref_const!(cropRect), imageW, imageH, yuvFormat) {
             Ok(x) => (&Some(x)).into(),
@@ -397,14 +488,15 @@ pub struct avifPixelFormatInfo {
     chromaShiftY: c_int,
 }
 
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if info is not null, it has to point to a valid avifPixelFormatInfo object.
 #[no_mangle]
 pub unsafe extern "C" fn crabby_avifGetPixelFormatInfo(
     format: PixelFormat,
     info: *mut avifPixelFormatInfo,
 ) {
-    if info.is_null() {
-        return;
-    }
+    check_pointer_or_return!(info);
     let info = deref_mut!(info);
     match format {
         PixelFormat::Yuv444 => {
@@ -431,11 +523,12 @@ pub unsafe extern "C" fn crabby_avifGetPixelFormatInfo(
     }
 }
 
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if diag is not null, it has to point to a valid avifDiagnostics object.
 #[no_mangle]
 pub unsafe extern "C" fn crabby_avifDiagnosticsClearError(diag: *mut avifDiagnostics) {
-    if diag.is_null() {
-        return;
-    }
+    check_pointer_or_return!(diag);
     deref_mut!(diag).error[0] = 0;
 }
 
@@ -453,12 +546,14 @@ pub const AVIF_TRANSFORM_IROT: u32 = 1 << 2;
 pub const AVIF_TRANSFORM_IMIR: u32 = 1 << 3;
 pub type avifTransformFlags = u32;
 
-pub const AVIF_COLOR_PRIMARIES_BT709: u32 = 1;
-pub const AVIF_COLOR_PRIMARIES_IEC61966_2_4: u32 = 1;
-pub const AVIF_COLOR_PRIMARIES_BT2100: u32 = 9;
-pub const AVIF_COLOR_PRIMARIES_DCI_P3: u32 = 12;
-pub const AVIF_TRANSFER_CHARACTERISTICS_SMPTE2084: u32 = 16;
+pub const AVIF_COLOR_PRIMARIES_BT709: u16 = 1;
+pub const AVIF_COLOR_PRIMARIES_IEC61966_2_4: u16 = 1;
+pub const AVIF_COLOR_PRIMARIES_BT2100: u16 = 9;
+pub const AVIF_COLOR_PRIMARIES_DCI_P3: u16 = 12;
+pub const AVIF_TRANSFER_CHARACTERISTICS_SMPTE2084: u16 = 16;
 
+/// # Safety
+/// C API function that does not perform any unsafe operation.
 #[no_mangle]
 pub unsafe extern "C" fn crabby_avifAlloc(size: usize) -> *mut c_void {
     let mut data: Vec<u8> = Vec::new();
@@ -472,9 +567,13 @@ pub unsafe extern "C" fn crabby_avifAlloc(size: usize) -> *mut c_void {
     ptr as *mut c_void
 }
 
+/// # Safety
+/// Used by the C API with the following pre-conditions:
+/// - if p is not null, it has to point to a buffer allocated by crabby_avifAlloc.
 #[no_mangle]
 pub unsafe extern "C" fn crabby_avifFree(p: *mut c_void) {
     if !p.is_null() {
+        // SAFETY: Safe because of the pre-condition and the null check.
         let _ = unsafe { Box::from_raw(p as *mut u8) };
     }
 }
@@ -483,3 +582,16 @@ pub const AVIF_ADD_IMAGE_FLAG_NONE: u32 = 0;
 pub const AVIF_ADD_IMAGE_FLAG_FORCE_KEYFRAME: u32 = 1 << 0;
 pub const AVIF_ADD_IMAGE_FLAG_SINGLE: u32 = 1 << 1;
 pub type avifAddImageFlags = u32;
+
+pub const AVIF_QUALITY_WORST: u32 = 0;
+pub const AVIF_QUALITY_BEST: u32 = 100;
+pub const AVIF_QUALITY_LOSSLESS: u32 = 100;
+pub const AVIF_QUALITY_DEFAULT: i32 = -1;
+
+pub const AVIF_QUANTIZER_WORST_QUALITY: u32 = 63;
+pub const AVIF_QUANTIZER_BEST_QUALITY: u32 = 0;
+pub const AVIF_QUANTIZER_LOSSLESS: u32 = 0;
+
+pub const AVIF_SPEED_SLOWEST: u32 = 0;
+pub const AVIF_SPEED_FASTEST: u32 = 10;
+pub const AVIF_SPEED_DEFAULT: u32 = 6;

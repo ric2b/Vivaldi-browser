@@ -34,6 +34,7 @@
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 // Vivaldi
+#include "base/strings/string_util.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 
 using bookmarks::BookmarkNode;
@@ -117,9 +118,6 @@ void BookmarkProvider::DoAutocomplete(const AutocompleteInput& input) {
           bookmark_match, AutocompleteMatchType::BOOKMARK_TITLE, relevance,
           bookmark_count, this, client_->GetSchemeClassifier(), adjusted_input,
           fixed_up_input);
-      // If the input was in a starter pack keyword scope, set the `keyword` and
-      // `transition` appropriately to avoid popping the user out of keyword
-      // mode.
 #if defined(VIVALDI_BUILD)
       if (bookmark_match.node->GetTitledUrlNodeUrl().spec() ==
           bookmark_separator_placeholder_)
@@ -132,13 +130,18 @@ void BookmarkProvider::DoAutocomplete(const AutocompleteInput& input) {
             net::registry_controlled_domains::HostHasRegistryControlledDomain(
                 host,
                 net::registry_controlled_domains::EXCLUDE_UNKNOWN_REGISTRIES,
-                net::registry_controlled_domains::EXCLUDE_PRIVATE_REGISTRIES);
+                net::registry_controlled_domains::EXCLUDE_PRIVATE_REGISTRIES) &&
+            (base::EndsWith(input.text(), base::UTF8ToUTF16(host)) ||
+             base::EndsWith(input.text(), base::UTF8ToUTF16(host) + u"/"));
         PrefService* prefs = client_->GetPrefs();
         match.allowed_to_be_default_match =
             !has_controlled_domain &&
             prefs->GetBoolean(vivaldiprefs::kAddressBarOmniboxBookmarksBoosted);
       }
 #endif
+      // If the input was in a starter pack keyword scope, set the `keyword` and
+      // `transition` appropriately to avoid popping the user out of keyword
+      // mode.
       if (starter_pack_engine) {
         match.keyword = starter_pack_engine->keyword();
         match.transition = ui::PAGE_TRANSITION_KEYWORD;

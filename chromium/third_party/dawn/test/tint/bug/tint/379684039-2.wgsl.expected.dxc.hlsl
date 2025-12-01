@@ -1,19 +1,31 @@
-[numthreads(1, 1, 1)]
-void unused_entry_point() {
-  return;
-}
 
 static uint idx = 0u;
 ByteAddressBuffer _storage : register(t2);
-
 void main() {
-  int2 vec = (0).xx;
-  while (true) {
-    uint tint_symbol_1 = 0u;
-    _storage.GetDimensions(tint_symbol_1);
-    uint tint_symbol_2 = ((tint_symbol_1 - 0u) / 128u);
-    if ((vec.y >= asint(_storage.Load((((128u * min(idx, (tint_symbol_2 - 1u))) + 112u) + 4u))))) {
-      break;
+  int2 vec = (int(0)).xx;
+  {
+    uint2 tint_loop_idx = (4294967295u).xx;
+    while(true) {
+      if (all((tint_loop_idx == (0u).xx))) {
+        break;
+      }
+      uint v = 0u;
+      _storage.GetDimensions(v);
+      if ((vec.y >= asint(_storage.Load((116u + (min(idx, ((v / 128u) - 1u)) * 128u)))))) {
+        break;
+      }
+      {
+        uint tint_low_inc = (tint_loop_idx.x - 1u);
+        tint_loop_idx.x = tint_low_inc;
+        uint tint_carry = uint((tint_low_inc == 4294967295u));
+        tint_loop_idx.y = (tint_loop_idx.y - tint_carry);
+      }
+      continue;
     }
   }
 }
+
+[numthreads(1, 1, 1)]
+void unused_entry_point() {
+}
+

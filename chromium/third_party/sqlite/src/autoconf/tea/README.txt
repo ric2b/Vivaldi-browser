@@ -1,9 +1,30 @@
-This is the SQLite extension for Tcl using the Tcl Extension
-Architecture (TEA). 
+This is the SQLite extension for Tcl using something akin to
+the Tcl Extension Architecture (TEA). To build it:
 
------------------------ A BETTER WAY ---------------------------
+    ./configure ...flags...
 
-A better way to build the TCL extension for SQLite is to use the
+e.g.:
+
+    ./configure --with-tcl=/path/to/tcl/install/root
+
+or:
+
+    ./configure --with-tclsh=/path/to/tcl/install/root
+
+Run ./configure --help for the full list of flags.
+
+The configuration process will fail if tclConfig.sh cannot be found.
+
+The makefile will only honor CFLAGS and CPPFLAGS passed to the
+configure script, not those directly passed to the makefile.
+
+Then:
+
+    make test install
+
+----------------------- THE PREFERRED WAY ---------------------------
+
+The preferred way to build the TCL extension for SQLite is to use the
 canonical source code tarball.  For Unix:
 
     ./configure --with-tclsh=$(TCLSH)
@@ -26,7 +47,7 @@ SQLite that does not require first installing TCL and/or "tclsh".
 The canonical Makefile in the SQLite source tree provides more
 capabilities (such as the the ability to run test cases to ensure
 that the build worked) and is better maintained.  The only
-downside of the canonical Makfile is that it requires a TCL
+downside of the canonical Makefile is that it requires a TCL
 installation.  But if you are wanting to build the TCL extension for
 SQLite, then presumably you already have a TCL installation.  So why
 not just use the more-capable and better-maintained canoncal Makefile?

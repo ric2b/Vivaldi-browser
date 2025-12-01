@@ -9,6 +9,7 @@
 #include "base/android/scoped_java_ref.h"
 #include "base/containers/adapters.h"
 #include "base/strings/string_split.h"
+#include "base/strings/string_util.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/language/language_model_manager_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -405,7 +406,7 @@ JNI_TranslateBridge_GetUserAcceptLanguages(
 static void JNI_TranslateBridge_SetLanguageOrder(
     JNIEnv* env,
     const JavaParamRef<jobject>& j_profile,
-    const JavaParamRef<jobjectArray>& j_order) {
+    std::vector<std::string>& order) {
 #if defined(VIVALDI_BUILD)
   std::unique_ptr<translate::TranslatePrefs> translate_prefs =
       VivaldiTranslateClient::CreateTranslatePrefs(GetPrefService(j_profile));
@@ -413,12 +414,6 @@ static void JNI_TranslateBridge_SetLanguageOrder(
   std::unique_ptr<translate::TranslatePrefs> translate_prefs =
       ChromeTranslateClient::CreateTranslatePrefs(GetPrefService(j_profile));
 #endif // Vivaldi
-  std::vector<std::string> order;
-  const int num_langs = (*env).GetArrayLength(j_order);
-  for (int i = 0; i < num_langs; i++) {
-    jstring string = (jstring)(*env).GetObjectArrayElement(j_order, i);
-    order.push_back((*env).GetStringUTFChars(string, nullptr));
-  }
   translate_prefs->SetLanguageOrder(order);
 }
 

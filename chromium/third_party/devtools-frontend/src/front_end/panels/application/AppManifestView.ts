@@ -486,7 +486,7 @@ export class AppManifestView extends Common.ObjectWrapper.eventMixin<EventTypes,
   constructor(
       emptyView: UI.EmptyWidget.EmptyWidget, reportView: UI.ReportView.ReportView,
       throttler: Common.Throttler.Throttler) {
-    super(true);
+    super({useShadowDom: true});
     this.registerRequiredCSS(appManifestViewStyles);
 
     this.contentElement.classList.add('manifest-container');
@@ -698,7 +698,7 @@ export class AppManifestView extends Common.ObjectWrapper.eventMixin<EventTypes,
         };
         copyButton.className = 'inline-button';
         copyButton.addEventListener('click', () => {
-          UI.ARIAUtils.alert(i18nString(UIStrings.copiedToClipboard, {PH1: recommendedId}));
+          UI.ARIAUtils.LiveAnnouncer.alert(i18nString(UIStrings.copiedToClipboard, {PH1: recommendedId}));
           Host.InspectorFrontendHost.InspectorFrontendHostInstance.copyText(recommendedId);
         });
         suggestedIdNote.appendChild(
@@ -817,19 +817,19 @@ export class AppManifestView extends Common.ObjectWrapper.eventMixin<EventTypes,
       urlField.appendChild(link);
 
       const shortcutIcons = shortcut.icons || [];
-      let hasShorcutIconLargeEnough = false;
+      let hasShortcutIconLargeEnough = false;
       for (const shortcutIcon of shortcutIcons) {
         const {imageResourceErrors: shortcutIconErrors} =
             await this.appendImageResourceToSection(url, shortcutIcon, shortcutSection, /** isScreenshot= */ false);
         imageErrors.push(...shortcutIconErrors);
-        if (!hasShorcutIconLargeEnough && shortcutIcon.sizes) {
+        if (!hasShortcutIconLargeEnough && shortcutIcon.sizes) {
           const shortcutIconSize = shortcutIcon.sizes.match(/^(\d+)x(\d+)$/);
           if (shortcutIconSize && shortcutIconSize[1] >= 96 && shortcutIconSize[2] >= 96) {
-            hasShorcutIconLargeEnough = true;
+            hasShortcutIconLargeEnough = true;
           }
         }
       }
-      if (!hasShorcutIconLargeEnough) {
+      if (!hasShortcutIconLargeEnough) {
         imageErrors.push(i18nString(UIStrings.shortcutSShouldIncludeAXPixel, {PH1: shortcutIndex}));
       }
       shortcutIndex++;
@@ -1063,6 +1063,20 @@ export class AppManifestView extends Common.ObjectWrapper.eventMixin<EventTypes,
     image: HTMLImageElement,
     wrapper: Element,
   }|null> {
+    const frameId = this.resourceTreeModel?.mainFrame?.id;
+    if (!this.target) {
+      throw new Error('no target');
+    }
+    if (!frameId) {
+      throw new Error('no main frame found');
+    }
+    const {content} = await SDK.PageResourceLoader.PageResourceLoader.instance().loadResource(
+        url, {
+          target: this.target,
+          frameId,
+          initiatorUrl: this.target.inspectedURL(),
+        },
+        /* isBinary=*/ true);
     const wrapper = document.createElement('div');
     wrapper.classList.add('image-wrapper');
     const image = document.createElement('img');
@@ -1070,7 +1084,10 @@ export class AppManifestView extends Common.ObjectWrapper.eventMixin<EventTypes,
       image.onload = resolve;
       image.onerror = reject;
     });
-    image.src = url;
+    // Octet-stream seems to work for most cases. If it turns out it
+    // does not work, we can parse mimeType out of the response headers
+    // using front_end/core/platform/MimeType.ts.
+    image.src = 'data:application/octet-stream;base64,' + await Common.Base64.encode(content);
     image.alt = i18nString(UIStrings.imageFromS, {PH1: url});
     wrapper.appendChild(image);
     try {

@@ -11,10 +11,10 @@
 #include "core/fpdfapi/parser/cpdf_dictionary.h"
 #include "core/fxcrt/check.h"
 
-CPDF_Pattern::CPDF_Pattern(CPDF_Document* pDoc,
+CPDF_Pattern::CPDF_Pattern(CPDF_Document* doc,
                            RetainPtr<CPDF_Object> pObj,
                            const CFX_Matrix& parentMatrix)
-    : document_(pDoc),
+    : document_(doc),
       pattern_obj_(std::move(pObj)),
       parent_matrix_(parentMatrix) {
   DCHECK(document_);
@@ -32,6 +32,6 @@ CPDF_ShadingPattern* CPDF_Pattern::AsShadingPattern() {
 }
 
 void CPDF_Pattern::SetPatternToFormMatrix() {
-  RetainPtr<const CPDF_Dictionary> pDict = pattern_obj()->GetDict();
-  pattern_to_form_ = pDict->GetMatrixFor("Matrix") * parent_matrix_;
+  RetainPtr<const CPDF_Dictionary> dict = pattern_obj()->GetDict();
+  pattern_to_form_ = dict->GetMatrixFor("Matrix") * parent_matrix_;
 }

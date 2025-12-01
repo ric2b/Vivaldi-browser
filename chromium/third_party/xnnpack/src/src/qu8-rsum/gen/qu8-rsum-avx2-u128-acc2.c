@@ -8,10 +8,13 @@
 // This source code is licensed under the BSD-style license found in the
 // LICENSE file in the root directory of this source tree.
 #include <assert.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #include <immintrin.h>
 
 #include "src/xnnpack/common.h"
+#include "src/xnnpack/microparams.h"
 #include "src/xnnpack/reduce.h"
 
 
@@ -19,7 +22,7 @@ void xnn_qu8_rsum_ukernel__avx2_u128_acc2(
     size_t batch,
     const uint8_t* input,
     uint32_t* output,
-    const struct xnn_qs8_rsum_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
+    const struct xnn_qs8_rsum_params* restrict params) XNN_OOB_READS
 {
   assert(batch != 0);
   assert(input != NULL);

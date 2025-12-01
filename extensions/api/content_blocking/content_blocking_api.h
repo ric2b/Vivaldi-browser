@@ -7,11 +7,11 @@
 #include <string>
 
 #include "base/memory/weak_ptr.h"
-#include "components/ad_blocker/adblock_known_sources_handler.h"
-#include "components/ad_blocker/adblock_rule_manager.h"
-#include "components/ad_blocker/adblock_rule_service.h"
-#include "components/ad_blocker/adblock_stats_data.h"
-#include "components/request_filter/adblock_filter/adblock_state_and_logs.h"
+#include "components/ad_blocker/public/content/adblock_rule_service.h"
+#include "components/ad_blocker/public/content/adblock_state_and_logs.h"
+#include "components/ad_blocker/public/core/adblock_known_sources_handler.h"
+#include "components/ad_blocker/public/core/adblock_rule_manager.h"
+#include "components/ad_blocker/public/core/adblock_stats_data.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_function.h"
@@ -34,7 +34,6 @@ class ContentBlockingEventRouter
   // adblock_filter::RuleService::Observer implementation.
   void OnRuleServiceStateLoaded(
       adblock_filter::RuleService* rule_service) override;
-  void OnGroupStateChanged(adblock_filter::RuleGroup group) override;
 
   // adblock_filter::RuleManager::Observer implementation.
   void OnRuleSourceUpdated(
@@ -113,35 +112,12 @@ class AdBlockFunction : public ExtensionFunction,
 
  protected:
   ~AdBlockFunction() override = default;
-  virtual ResponseAction RunWithService(adblock_filter::RuleService* rules_service) = 0;
+  virtual ResponseAction RunWithService(
+      adblock_filter::RuleService* rules_service) = 0;
   static ResponseValue ValidationFailure(AdBlockFunction* function);
 
  private:
   ResponseAction Run() override;
-};
-
-class ContentBlockingSetRuleGroupEnabledFunction : public AdBlockFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("contentBlocking.setRuleGroupEnabled",
-                             CONTENT_BLOCKING_SET_RULE_GROUP_ENABLED)
-  ContentBlockingSetRuleGroupEnabledFunction() = default;
-
- private:
-  ~ContentBlockingSetRuleGroupEnabledFunction() override = default;
-  // AdBlockFunction:
-  ResponseAction RunWithService(adblock_filter::RuleService* rules_service) override;
-};
-
-class ContentBlockingIsRuleGroupEnabledFunction : public AdBlockFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("contentBlocking.isRuleGroupEnabled",
-                             CONTENT_BLOCKING_IS_RULE_GROUP_ENABLED)
-  ContentBlockingIsRuleGroupEnabledFunction() = default;
-
- private:
-  ~ContentBlockingIsRuleGroupEnabledFunction() override = default;
-  // AdBlockFunction:
-  ResponseAction RunWithService(adblock_filter::RuleService* rules_service) override;
 };
 
 class ContentBlockingAddKnownSourceFromURLFunction : public AdBlockFunction {
@@ -153,7 +129,8 @@ class ContentBlockingAddKnownSourceFromURLFunction : public AdBlockFunction {
  private:
   ~ContentBlockingAddKnownSourceFromURLFunction() override = default;
   // AdBlockFunction:
-  ResponseAction RunWithService(adblock_filter::RuleService* rules_service) override;
+  ResponseAction RunWithService(
+      adblock_filter::RuleService* rules_service) override;
 };
 
 class ContentBlockingAddKnownSourceFromFileFunction : public AdBlockFunction {
@@ -165,7 +142,8 @@ class ContentBlockingAddKnownSourceFromFileFunction : public AdBlockFunction {
  private:
   ~ContentBlockingAddKnownSourceFromFileFunction() override = default;
   // AdBlockFunction:
-  ResponseAction RunWithService(adblock_filter::RuleService* rules_service) override;
+  ResponseAction RunWithService(
+      adblock_filter::RuleService* rules_service) override;
 };
 
 class ContentBlockingSetKnownSourceSettingsFunction : public AdBlockFunction {
@@ -177,7 +155,8 @@ class ContentBlockingSetKnownSourceSettingsFunction : public AdBlockFunction {
  private:
   ~ContentBlockingSetKnownSourceSettingsFunction() override = default;
   // AdBlockFunction:
-  ResponseAction RunWithService(adblock_filter::RuleService* rules_service) override;
+  ResponseAction RunWithService(
+      adblock_filter::RuleService* rules_service) override;
 };
 
 class ContentBlockingEnableSourceFunction : public AdBlockFunction {
@@ -189,7 +168,8 @@ class ContentBlockingEnableSourceFunction : public AdBlockFunction {
  private:
   ~ContentBlockingEnableSourceFunction() override = default;
   // AdBlockFunction:
-  ResponseAction RunWithService(adblock_filter::RuleService* rules_service) override;
+  ResponseAction RunWithService(
+      adblock_filter::RuleService* rules_service) override;
 };
 
 class ContentBlockingDisableSourceFunction : public AdBlockFunction {
@@ -201,7 +181,8 @@ class ContentBlockingDisableSourceFunction : public AdBlockFunction {
  private:
   ~ContentBlockingDisableSourceFunction() override = default;
   // AdBlockFunction:
-  ResponseAction RunWithService(adblock_filter::RuleService* rules_service) override;
+  ResponseAction RunWithService(
+      adblock_filter::RuleService* rules_service) override;
 };
 
 class ContentBlockingFetchSourceNowFunction : public AdBlockFunction {
@@ -213,7 +194,8 @@ class ContentBlockingFetchSourceNowFunction : public AdBlockFunction {
  private:
   ~ContentBlockingFetchSourceNowFunction() override = default;
   // AdBlockFunction:
-  ResponseAction RunWithService(adblock_filter::RuleService* rules_service) override;
+  ResponseAction RunWithService(
+      adblock_filter::RuleService* rules_service) override;
 };
 
 class ContentBlockingDeleteKnownSourceFunction : public AdBlockFunction {
@@ -225,7 +207,8 @@ class ContentBlockingDeleteKnownSourceFunction : public AdBlockFunction {
  private:
   ~ContentBlockingDeleteKnownSourceFunction() override = default;
   // AdBlockFunction:
-  ResponseAction RunWithService(adblock_filter::RuleService* rules_service) override;
+  ResponseAction RunWithService(
+      adblock_filter::RuleService* rules_service) override;
 };
 
 class ContentBlockingResetPresetSourcesFunction : public AdBlockFunction {
@@ -237,7 +220,8 @@ class ContentBlockingResetPresetSourcesFunction : public AdBlockFunction {
  private:
   ~ContentBlockingResetPresetSourcesFunction() override = default;
   // AdBlockFunction:
-  ResponseAction RunWithService(adblock_filter::RuleService* rules_service) override;
+  ResponseAction RunWithService(
+      adblock_filter::RuleService* rules_service) override;
 };
 
 class ContentBlockingGetRuleSourceFunction : public AdBlockFunction {
@@ -249,7 +233,8 @@ class ContentBlockingGetRuleSourceFunction : public AdBlockFunction {
  private:
   ~ContentBlockingGetRuleSourceFunction() override = default;
   // AdBlockFunction:
-  ResponseAction RunWithService(adblock_filter::RuleService* rules_service) override;
+  ResponseAction RunWithService(
+      adblock_filter::RuleService* rules_service) override;
 };
 
 class ContentBlockingGetRuleSourcesFunction : public AdBlockFunction {
@@ -261,7 +246,8 @@ class ContentBlockingGetRuleSourcesFunction : public AdBlockFunction {
  private:
   ~ContentBlockingGetRuleSourcesFunction() override = default;
   // AdBlockFunction:
-  ResponseAction RunWithService(adblock_filter::RuleService* rules_service) override;
+  ResponseAction RunWithService(
+      adblock_filter::RuleService* rules_service) override;
 };
 
 class ContentBlockingSetActiveExceptionsListFunction : public AdBlockFunction {
@@ -273,7 +259,8 @@ class ContentBlockingSetActiveExceptionsListFunction : public AdBlockFunction {
  private:
   ~ContentBlockingSetActiveExceptionsListFunction() override = default;
   // AdBlockFunction:
-  ResponseAction RunWithService(adblock_filter::RuleService* rules_service) override;
+  ResponseAction RunWithService(
+      adblock_filter::RuleService* rules_service) override;
 };
 
 class ContentBlockingGetActiveExceptionsListFunction : public AdBlockFunction {
@@ -285,7 +272,8 @@ class ContentBlockingGetActiveExceptionsListFunction : public AdBlockFunction {
  private:
   ~ContentBlockingGetActiveExceptionsListFunction() override = default;
   // AdBlockFunction:
-  ResponseAction RunWithService(adblock_filter::RuleService* rules_service) override;
+  ResponseAction RunWithService(
+      adblock_filter::RuleService* rules_service) override;
 };
 
 class ContentBlockingAddExceptionForDomainFunction : public AdBlockFunction {
@@ -297,7 +285,8 @@ class ContentBlockingAddExceptionForDomainFunction : public AdBlockFunction {
  private:
   ~ContentBlockingAddExceptionForDomainFunction() override = default;
   // AdBlockFunction:
-  ResponseAction RunWithService(adblock_filter::RuleService* rules_service) override;
+  ResponseAction RunWithService(
+      adblock_filter::RuleService* rules_service) override;
 };
 
 class ContentBlockingRemoveExceptionForDomainFunction : public AdBlockFunction {
@@ -309,7 +298,8 @@ class ContentBlockingRemoveExceptionForDomainFunction : public AdBlockFunction {
  private:
   ~ContentBlockingRemoveExceptionForDomainFunction() override = default;
   // AdBlockFunction:
-  ResponseAction RunWithService(adblock_filter::RuleService* rules_service) override;
+  ResponseAction RunWithService(
+      adblock_filter::RuleService* rules_service) override;
 };
 
 class ContentBlockingRemoveAllExceptionsFunction : public AdBlockFunction {
@@ -321,7 +311,8 @@ class ContentBlockingRemoveAllExceptionsFunction : public AdBlockFunction {
  private:
   ~ContentBlockingRemoveAllExceptionsFunction() override = default;
   // AdBlockFunction:
-  ResponseAction RunWithService(adblock_filter::RuleService* rules_service) override;
+  ResponseAction RunWithService(
+      adblock_filter::RuleService* rules_service) override;
 };
 
 class ContentBlockingGetExceptionsFunction : public AdBlockFunction {
@@ -333,7 +324,8 @@ class ContentBlockingGetExceptionsFunction : public AdBlockFunction {
  private:
   ~ContentBlockingGetExceptionsFunction() override = default;
   // AdBlockFunction:
-  ResponseAction RunWithService(adblock_filter::RuleService* rules_service) override;
+  ResponseAction RunWithService(
+      adblock_filter::RuleService* rules_service) override;
 };
 
 class ContentBlockingGetAllExceptionListsFunction : public AdBlockFunction {
@@ -345,7 +337,8 @@ class ContentBlockingGetAllExceptionListsFunction : public AdBlockFunction {
  private:
   ~ContentBlockingGetAllExceptionListsFunction() override = default;
   // AdBlockFunction:
-  ResponseAction RunWithService(adblock_filter::RuleService* rules_service) override;
+  ResponseAction RunWithService(
+      adblock_filter::RuleService* rules_service) override;
 };
 
 class ContentBlockingGetBlockedUrlsInfoFunction : public AdBlockFunction {
@@ -357,7 +350,8 @@ class ContentBlockingGetBlockedUrlsInfoFunction : public AdBlockFunction {
  private:
   ~ContentBlockingGetBlockedUrlsInfoFunction() override = default;
   // AdBlockFunction:
-  ResponseAction RunWithService(adblock_filter::RuleService* rules_service) override;
+  ResponseAction RunWithService(
+      adblock_filter::RuleService* rules_service) override;
 };
 
 class ContentBlockingGetAdBlockingStatsFunction : public AdBlockFunction {
@@ -369,7 +363,8 @@ class ContentBlockingGetAdBlockingStatsFunction : public AdBlockFunction {
  private:
   ~ContentBlockingGetAdBlockingStatsFunction() override = default;
   // AdBlockFunction:
-  ResponseAction RunWithService(adblock_filter::RuleService* rules_service) override;
+  ResponseAction RunWithService(
+      adblock_filter::RuleService* rules_service) override;
 
   void OnStatsDataLoaded(std::unique_ptr<adblock_filter::StatsData> data);
 };
@@ -383,7 +378,8 @@ class ContentBlockingClearAdBlockingStatsFunction : public AdBlockFunction {
  private:
   ~ContentBlockingClearAdBlockingStatsFunction() override = default;
   // AdBlockFunction:
-  ResponseAction RunWithService(adblock_filter::RuleService* rules_service) override;
+  ResponseAction RunWithService(
+      adblock_filter::RuleService* rules_service) override;
 };
 
 class ContentBlockingIsExemptOfFilteringFunction : public AdBlockFunction {
@@ -395,7 +391,8 @@ class ContentBlockingIsExemptOfFilteringFunction : public AdBlockFunction {
  private:
   ~ContentBlockingIsExemptOfFilteringFunction() override = default;
   // AdBlockFunction:
-  ResponseAction RunWithService(adblock_filter::RuleService* rules_service) override;
+  ResponseAction RunWithService(
+      adblock_filter::RuleService* rules_service) override;
 };
 
 class ContentBlockingIsExemptByPartnerURLFunction : public AdBlockFunction {
@@ -407,7 +404,8 @@ class ContentBlockingIsExemptByPartnerURLFunction : public AdBlockFunction {
  private:
   ~ContentBlockingIsExemptByPartnerURLFunction() override = default;
   // AdBlockFunction:
-  ResponseAction RunWithService(adblock_filter::RuleService* rules_service) override;
+  ResponseAction RunWithService(
+      adblock_filter::RuleService* rules_service) override;
 };
 
 class ContentBlockingGetAdAttributionDomainFunction : public AdBlockFunction {
@@ -419,7 +417,8 @@ class ContentBlockingGetAdAttributionDomainFunction : public AdBlockFunction {
  private:
   ~ContentBlockingGetAdAttributionDomainFunction() override = default;
   // AdBlockFunction:
-  ResponseAction RunWithService(adblock_filter::RuleService* rules_service) override;
+  ResponseAction RunWithService(
+      adblock_filter::RuleService* rules_service) override;
 };
 
 class ContentBlockingGetAdAttributionAllowedTrackersFunction
@@ -433,7 +432,8 @@ class ContentBlockingGetAdAttributionAllowedTrackersFunction
  private:
   ~ContentBlockingGetAdAttributionAllowedTrackersFunction() override = default;
   // AdBlockFunction:
-  ResponseAction RunWithService(adblock_filter::RuleService* rules_service) override;
+  ResponseAction RunWithService(
+      adblock_filter::RuleService* rules_service) override;
 };
 }  // namespace extensions
 

@@ -1,3 +1,5 @@
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
 # Copyright 2020 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -36,6 +38,8 @@ cc_library(
     visibility = ["//visibility:private"],
     deps = [
         ":preferences_repository",
+        "//internal/base:file_path",
+        "//internal/base:files",
         "//internal/platform:base",
         "//internal/platform:test_util",
         "//internal/platform:types",
@@ -97,7 +101,8 @@ cc_library(
         "//internal/platform/implementation:comm",
         "//internal/platform/implementation/shared:count_down_latch",
         "//internal/proto:credential_cc_proto",
-        # TODO: Support WebRTC
+        "//third_party/webrtc/files/stable/webrtc/api:create_modular_peer_connection_factory",
+        "//third_party/webrtc/files/stable/webrtc/api:libjingle_peerconnection_api",
         "//third_party/webrtc/files/stable/webrtc/api:scoped_refptr",
         "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/container:flat_hash_map",
@@ -110,6 +115,30 @@ cc_library(
         "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/synchronization",
         "@com_google_absl//absl/time",
+    ],
+)
+
+cc_test(
+    name = "comm_test",
+    srcs = [
+        "awdl_test.cc",
+        "ble_v2_test.cc",
+    ],
+    deps = [
+        ":comm",
+        ":g3",
+        "//internal/platform:base",
+        "//internal/platform:cancellation_flag",
+        "//internal/platform:test_util",
+        "//internal/platform:uuid",
+        "//internal/platform/implementation:comm",
+        "@com_github_protobuf_matchers//protobuf-matchers",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings:string_view",
+        "@com_google_absl//absl/synchronization",
+        "@com_google_absl//absl/time",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_nisaba//nisaba/port:thread_pool/fiber",
     ],
 )
 
@@ -158,6 +187,7 @@ cc_library(
         ":comm",
         ":crypto",  # build_cleaner: keep
         ":types",
+        "//internal/base:file_path",
         "//internal/base:files",
         "//internal/platform:base",
         "//internal/platform:logging",
@@ -180,6 +210,8 @@ cc_library(
     srcs = ["preferences_repository.cc"],
     hdrs = ["preferences_repository.h"],
     deps = [
+        "//internal/base:file_path",
+        "//internal/base:files",
         "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/synchronization",

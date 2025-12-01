@@ -17,6 +17,9 @@ void RenderWidgetHostViewChildFrame::DidOverscroll(
   if (parent_view && !parent_view->IsRenderWidgetHostViewChildFrame()) {
     parent_view->DidOverscroll(params);
   }
+  if (overscroll_controller_) {
+    overscroll_controller_->OnDidOverscroll(params);
+  }
 }
 
 }  // namespace content

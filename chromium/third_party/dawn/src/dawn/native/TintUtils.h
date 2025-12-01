@@ -52,10 +52,11 @@ tint::VertexPullingConfig BuildVertexPullingTransformConfig(
 std::unordered_map<tint::OverrideId, double> BuildSubstituteOverridesTransformConfig(
     const ProgrammableStage& stage);
 
+namespace stream {
 // Uses tint::ForeachField when available to implement the stream::Stream trait for types.
 template <typename T>
     requires(tint::HasReflection<T>)
-class stream::Stream<T> {
+class Stream<T> {
   public:
     static void Write(Sink* s, const T& v) {
         tint::ForeachField(v, [&](const auto& f) { StreamIn(s, f); });
@@ -70,6 +71,7 @@ class stream::Stream<T> {
         return error;
     }
 };
+}  // namespace stream
 
 constexpr tint::BindingPoint ToTint(const BindingSlot& slot) {
     return {static_cast<uint32_t>(slot.group), static_cast<uint32_t>(slot.binding)};

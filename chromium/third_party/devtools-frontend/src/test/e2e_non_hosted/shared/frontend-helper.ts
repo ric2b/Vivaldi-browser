@@ -21,7 +21,6 @@ export interface ClickOptions {
   maxPixelsFromLeft?: number;
 }
 
-const envThrottleRate = process.env['STRESS'] ? 3 : 1;
 const envLatePromises = process.env['LATE_PROMISES'] !== undefined ?
     ['true', ''].includes(process.env['LATE_PROMISES'].toLowerCase()) ? 10 : Number(process.env['LATE_PROMISES']) :
     0;
@@ -37,17 +36,6 @@ const globalThis: any = global;
 
 export class DevToolsPage extends PageWrapper {
   #currentHighlightedElement?: HighlightedElement;
-
-  async setExperimentEnabled(experiment: string, enabled: boolean) {
-    await this.evaluate(`(async () => {
-      const Root = await import('./core/root/root.js');
-      Root.Runtime.experiments.setEnabled('${experiment}', ${enabled});
-    })()`);
-  }
-
-  async enableExperiment(experiment: string) {
-    await this.setExperimentEnabled(experiment, true);
-  }
 
   async delayPromisesIfRequired(): Promise<void> {
     if (envLatePromises === 0) {
@@ -69,32 +57,15 @@ export class DevToolsPage extends PageWrapper {
   }
 
   async throttleCPUIfRequired(): Promise<void> {
-    if (envThrottleRate === 1) {
+    if (TestConfig.cpuThrottle === 1) {
       return;
     }
     /* eslint-disable-next-line no-console */
-    console.log(`Throttling CPU: ${envThrottleRate}x slowdown`);
+    console.log(`Throttling CPU: ${TestConfig.cpuThrottle}x slowdown`);
     const client = await this.page.createCDPSession();
     await client.send('Emulation.setCPUThrottlingRate', {
-      rate: envThrottleRate,
+      rate: TestConfig.cpuThrottle,
     });
-  }
-
-  async setDevToolsSetting(settingName: string, value: string|boolean) {
-    const rawValue = (typeof value === 'boolean') ? value.toString() : `'${value}'`;
-    await this.evaluate(`(async () => {
-      const Common = await import('./core/common/common.js');
-      Common.Settings.Settings.instance().createSetting('${settingName}', ${rawValue});
-    })()`);
-  }
-
-  async setDockingSide(side: string) {
-    await this.evaluate(`
-      (async function() {
-        const UI = await import('./ui/legacy/legacy.js');
-        UI.DockController.DockController.instance().setDockSide('${side}');
-      })();
-    `);
   }
 
   async ensureReadyForTesting() {
@@ -179,7 +150,7 @@ export class DevToolsPage extends PageWrapper {
     return await asyncScope.exec(() => this.waitForFunction(async () => {
       const element = await this.$<ElementType, typeof selector>(selector, root, handler);
       return (element || undefined);
-    }, asyncScope), `Waiting for element matching selector '${selector}'`);
+    }, asyncScope), `Waiting for element matching selector '${handler ? `${handler}/` : ''}${selector}'`);
   }
 
   /**
@@ -195,42 +166,6 @@ export class DevToolsPage extends PageWrapper {
   async typeText(text: string, opts?: {delay: number}) {
     await this.page.keyboard.type(text, opts);
     await this.drainTaskQueue();
-  }
-
-  async pressKey(key: puppeteer.KeyInput, modifiers?: {control?: boolean, alt?: boolean, shift?: boolean}) {
-    if (modifiers) {
-      if (modifiers.control) {
-        if (platform === 'mac') {
-          // Use command key on mac
-          await this.page.keyboard.down('Meta');
-        } else {
-          await this.page.keyboard.down('Control');
-        }
-      }
-      if (modifiers.alt) {
-        await this.page.keyboard.down('Alt');
-      }
-      if (modifiers.shift) {
-        await this.page.keyboard.down('Shift');
-      }
-    }
-    await this.page.keyboard.press(key);
-    if (modifiers) {
-      if (modifiers.shift) {
-        await this.page.keyboard.up('Shift');
-      }
-      if (modifiers.alt) {
-        await this.page.keyboard.up('Alt');
-      }
-      if (modifiers.control) {
-        if (platform === 'mac') {
-          // Use command key on mac
-          await this.page.keyboard.up('Meta');
-        } else {
-          await this.page.keyboard.up('Control');
-        }
-      }
-    }
   }
 
   async click(selector: string, options?: ClickOptions) {
@@ -261,7 +196,7 @@ export class DevToolsPage extends PageWrapper {
         return true;
       }
       return false;
-    }, asyncScope), `Waiting for no elements to match selector '${selector}'`);
+    }, asyncScope), `Waiting for no elements to match selector '${handler ? `${handler}/` : ''}${selector}'`);
   }
 
   /**
@@ -303,15 +238,19 @@ export class DevToolsPage extends PageWrapper {
     }
 
     await element.evaluate(el => {
-      el.scrollIntoView();
+      el.scrollIntoView({
+        behavior: 'instant',
+        block: 'center',
+        inline: 'center',
+      });
     });
   }
 
   /**
    * Search for all elements based on their textContent
    *
-   * @param textContent The text content to search for.
-   * @param root The root of the search.
+   * @param textContent - The text content to search for.
+   * @param root - The root of the search.
    */
   async $$textContent(textContent: string, root?: puppeteer.ElementHandle) {
     return await this.$$(textContent, root, 'pierceShadowText');
@@ -377,8 +316,8 @@ export class DevToolsPage extends PageWrapper {
   /**
    * Search for an element based on its textContent.
    *
-   * @param textContent The text content to search for.
-   * @param root The root of the search.
+   * @param textContent - The text content to search for.
+   * @param root - The root of the search.
    */
   async $textContent(textContent: string, root?: puppeteer.ElementHandle) {
     return await this.$(textContent, root, 'pierceShadowText');
@@ -399,7 +338,7 @@ export class DevToolsPage extends PageWrapper {
    * Match multiple elements based on a selector and return their textContents, but only for those
    * elements that are visible.
    *
-   * @param selector jquery selector to match
+   * @param selector - jquery selector to match
    * @returns array containing text contents from visible elements
    */
   async getVisibleTextContents(selector: string) {
@@ -415,7 +354,7 @@ export class DevToolsPage extends PageWrapper {
       const element = await this.$<ElementType, typeof selector>(selector, root, handler);
       const visible = await element.evaluate(node => node.checkVisibility());
       return visible ? element : undefined;
-    }, asyncScope), `Waiting for element matching selector '${selector}' to be visible`);
+    }, asyncScope), `Waiting for element matching selector '${handler ? `${handler}/` : ''}${selector}' to be visible`);
   }
 
   async waitForMany<ElementType extends Element|null = null, Selector extends string = string>(
@@ -424,7 +363,7 @@ export class DevToolsPage extends PageWrapper {
     return await asyncScope.exec(() => this.waitForFunction(async () => {
       const elements = await this.$$<ElementType, typeof selector>(selector, root, handler);
       return elements.length >= count ? elements : undefined;
-    }, asyncScope), `Waiting for ${count} elements to match selector '${selector}'`);
+    }, asyncScope), `Waiting for ${count} elements to match selector '${handler ? `${handler}/` : ''}${selector}'`);
   }
 
   waitForAriaNone = (selector: string, root?: puppeteer.ElementHandle, asyncScope = new AsyncScope()) => {
@@ -655,16 +594,74 @@ export class DevToolsPage extends PageWrapper {
 export interface DevtoolsSettings {
   enabledDevToolsExperiments: string[];
   devToolsSettings: Record<string, string|boolean>;
-  dockingMode: string;
+  // front_end/ui/legacy/DockController.ts DockState
+  dockingMode: 'bottom'|'right'|'left'|'undocked';
 }
 
-export const DEFAULT_DEVTOOLS_SETTINGS = {
+export const DEFAULT_DEVTOOLS_SETTINGS: DevtoolsSettings = {
   enabledDevToolsExperiments: [],
   devToolsSettings: {
-    isUnderTest: true,
+    veLogsTestMode: true,
   },
   dockingMode: 'right',
 };
+
+/**
+ * @internal
+ */
+async function setDevToolsSettings(devToolsPata: DevToolsPage, settings: Record<string, string|boolean>) {
+  if (!Object.keys(settings).length) {
+    return;
+  }
+  const rawValues = Object.entries(settings).map(value => {
+    const rawValue = typeof value[1] === 'boolean' ? value[1].toString() : `'${value[1]}'`;
+    return [value[0], rawValue];
+  });
+
+  return await devToolsPata.evaluate(`(async () => {
+      const Common = await import('./core/common/common.js');
+      ${rawValues.map(([settingName, value]) => {
+    // Creating the setting might not be enough if it already exists, so we
+    // create it and then forcibly set the value.
+    return `const setting = Common.Settings.Settings.instance().createSetting('${settingName}', ${value});
+        setting.set(${value});`;
+  })}
+    })()`);
+}
+
+/**
+ * @internal
+ */
+async function setDevToolsExperiments(devToolsPage: DevToolsPage, experiments: string[]) {
+  if (!experiments.length) {
+    return;
+  }
+  return await devToolsPage.evaluate(async experiments => {
+    // @ts-expect-error evaluate in DevTools page
+    const Root = await import('./core/root/root.js');
+    for (const experiment of experiments) {
+      Root.Runtime.experiments.setEnabled(experiment, true);
+    }
+  }, experiments);
+}
+
+async function disableAnimations(devToolsPage: DevToolsPage) {
+  const session = await devToolsPage.page.createCDPSession();
+  await session.send('Animation.enable');
+  await session.send('Animation.setPlaybackRate', {playbackRate: 30_000});
+}
+
+/**
+ * @internal
+ */
+async function setDockingSide(devToolsPage: DevToolsPage, side: string) {
+  await devToolsPage.evaluate(`
+    (async function() {
+      const UI = await import('./ui/legacy/legacy.js');
+      UI.DockController.DockController.instance().setDockSide('${side}');
+    })();
+  `);
+}
 
 export async function setupDevToolsPage(context: puppeteer.BrowserContext, settings: DevtoolsSettings) {
   const devToolsTarget = await context.waitForTarget(target => target.url().startsWith('devtools://'));
@@ -675,18 +672,22 @@ export async function setupDevToolsPage(context: puppeteer.BrowserContext, setti
   installPageErrorHandlers(frontend);
   const devToolsPage = new DevToolsPage(frontend);
   await devToolsPage.ensureReadyForTesting();
-  for (const key in settings.devToolsSettings) {
-    await devToolsPage.setDevToolsSetting(key, settings.devToolsSettings[key]);
-  }
-  for (const experiment of settings.enabledDevToolsExperiments) {
-    await devToolsPage.enableExperiment(experiment);
-  }
+  await Promise.all([
+    disableAnimations(devToolsPage),
+    setDevToolsSettings(devToolsPage, settings.devToolsSettings),
+    setDevToolsExperiments(devToolsPage, settings.enabledDevToolsExperiments),
+  ]);
+
   await devToolsPage.reload();
   await devToolsPage.ensureReadyForTesting();
-  await devToolsPage.throttleCPUIfRequired();
-  await devToolsPage.delayPromisesIfRequired();
-  await devToolsPage.useSoftMenu();
-  await devToolsPage.setDockingSide(settings.dockingMode);
+
+  await Promise.all([
+    devToolsPage.throttleCPUIfRequired(),
+    devToolsPage.delayPromisesIfRequired(),
+    devToolsPage.useSoftMenu(),
+  ]);
+
+  await setDockingSide(devToolsPage, settings.dockingMode);
   return devToolsPage;
 }
 

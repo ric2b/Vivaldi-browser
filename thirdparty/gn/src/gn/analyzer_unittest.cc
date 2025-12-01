@@ -15,6 +15,7 @@
 #include "gn/source_file.h"
 #include "gn/substitution_list.h"
 #include "gn/target.h"
+#include "gn/test_with_scheduler.h"
 #include "gn/tool.h"
 #include "gn/toolchain.h"
 #include "util/test/test.h"
@@ -43,7 +44,7 @@ class MockLoader : public Loader {
   ~MockLoader() override = default;
 };
 
-class AnalyzerTest : public testing::Test {
+class AnalyzerTest : public TestWithScheduler {
  public:
   AnalyzerTest()
       : loader_(new MockLoader),
@@ -90,6 +91,8 @@ class AnalyzerTest : public testing::Test {
 
   void RunAnalyzerTest(const std::string& input,
                        const std::string& expected_output) {
+    // Wait for any async OnResolve() to happen.
+    scheduler().Run();
     Analyzer analyzer(builder_, SourceFile("//build/config/BUILDCONFIG.gn"),
                       SourceFile("//.gn"),
                       {SourceFile("//out/debug/args.gn"),

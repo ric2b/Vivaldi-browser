@@ -5,17 +5,12 @@
 import {assert} from 'chai';
 import type * as puppeteer from 'puppeteer-core';
 
+import type {DevToolsPage} from '../../e2e_non_hosted/shared/frontend-helper.js';
 import {
-  $$,
-  $textContent,
-  click,
-  clickElement,
-  hasClass,
   matchStringTable,
   waitFor,
-  waitForClass,
-  waitForFunction,
 } from '../../shared/helper.js';
+import {getBrowserAndPagesWrappers} from '../../shared/non_hosted_wrappers.js';
 
 import {openPanelViaMoreTools} from './settings-helpers.js';
 
@@ -38,47 +33,54 @@ export const HIDE_THIS_ISSUE = 'Hide issues like this';
 export const UNHIDE_THIS_ISSUE = 'Unhide issues like this';
 export const UNHIDE_ALL_ISSUES = '.unhide-all-issues-button';
 
-export async function getHideIssuesMenu(root?: puppeteer.ElementHandle) {
-  return await waitFor(HIDE_ISSUES_MENU, root);
+export async function getHideIssuesMenu(
+    root?: puppeteer.ElementHandle, devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  return await devToolsPage.waitFor(HIDE_ISSUES_MENU, root);
 }
 
-export async function navigateToIssuesTab() {
-  await openPanelViaMoreTools('Issues');
+export async function navigateToIssuesTab(devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  await openPanelViaMoreTools('Issues', devToolsPage);
 }
 
-export async function getUnhideAllIssuesBtn() {
-  const btn = await waitFor(UNHIDE_ALL_ISSUES);
+export async function getUnhideAllIssuesBtn(devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  const btn = await devToolsPage.waitFor(UNHIDE_ALL_ISSUES);
   return btn;
 }
 
-export async function getHideIssuesMenuItem(): Promise<puppeteer.ElementHandle<HTMLElement>|null> {
-  const menuItem = await waitFor<HTMLElement>(`[aria-label="${HIDE_THIS_ISSUE}"]`);
+export async function getHideIssuesMenuItem(devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage):
+    Promise<puppeteer.ElementHandle<HTMLElement>|null> {
+  const menuItem = await devToolsPage.waitFor<HTMLElement>(`[aria-label="${HIDE_THIS_ISSUE}"]`);
   if (menuItem) {
     return menuItem;
   }
   return null;
 }
 
-export async function getUnhideIssuesMenuItem(): Promise<puppeteer.ElementHandle<HTMLElement>|null> {
-  return await waitFor(`[aria-label="${UNHIDE_THIS_ISSUE}"]`);
+export async function getUnhideIssuesMenuItem(devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage):
+    Promise<puppeteer.ElementHandle<HTMLElement>|null> {
+  return await devToolsPage.waitFor(`[aria-label="${UNHIDE_THIS_ISSUE}"]`);
 }
 
-export async function getHiddenIssuesRow(): Promise<puppeteer.ElementHandle<HTMLElement>|null> {
-  return await waitFor('.hidden-issues');
+export async function getHiddenIssuesRow(devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage):
+    Promise<puppeteer.ElementHandle<HTMLElement>|null> {
+  return await devToolsPage.waitFor('.hidden-issues');
 }
 
-export async function getHiddenIssuesRowBody(): Promise<puppeteer.ElementHandle<HTMLElement>|null> {
-  return await waitFor('.hidden-issues-body');
+export async function getHiddenIssuesRowBody(devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage):
+    Promise<puppeteer.ElementHandle<HTMLElement>|null> {
+  return await devToolsPage.waitFor('.hidden-issues-body');
 }
 
-export async function assertCategoryName(categoryName: string) {
-  const categoryNameElement = await waitFor(CATEGORY_NAME);
+export async function assertCategoryName(
+    categoryName: string, devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  const categoryNameElement = await devToolsPage.waitFor(CATEGORY_NAME);
   const selectedCategoryName = await categoryNameElement.evaluate(node => node.textContent);
   assert.strictEqual(selectedCategoryName, categoryName);
 }
 
-export async function assertIssueTitle(issueMessage: string) {
-  const issueMessageElement = await waitFor(ISSUE_TITLE);
+export async function assertIssueTitle(
+    issueMessage: string, devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  const issueMessageElement = await devToolsPage.waitFor(ISSUE_TITLE);
   const selectedIssueMessage = await issueMessageElement.evaluate(node => node.textContent);
   assert.strictEqual(selectedIssueMessage, issueMessage);
 }
@@ -99,34 +101,39 @@ async function getIssueByTitleElement(issueMessageElement: puppeteer.ElementHand
 }
 
 // Only works if there is just a single issue.
-export async function getIssueByTitle(issueMessage: string): Promise<puppeteer.ElementHandle<HTMLElement>|undefined> {
-  const issueMessageElement = await waitFor(ISSUE_TITLE);
+export async function getIssueByTitle(
+    issueMessage: string, devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage):
+    Promise<puppeteer.ElementHandle<HTMLElement>|undefined> {
+  const issueMessageElement = await devToolsPage.waitFor(ISSUE_TITLE);
   const selectedIssueMessage = await issueMessageElement.evaluate(node => node.textContent);
   assert.strictEqual(selectedIssueMessage, issueMessage);
   return await getIssueByTitleElement(issueMessageElement);
 }
 
 // Works also if there are multiple issues.
-export async function getAndExpandSpecificIssueByTitle(issueMessage: string):
+export async function getAndExpandSpecificIssueByTitle(
+    issueMessage: string, devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage):
     Promise<puppeteer.ElementHandle<HTMLElement>|undefined> {
-  const issueMessageElement = await waitForFunction(async () => {
-    const issueElements = await $$(ISSUE_TITLE);
+  const issueMessageElement = await devToolsPage.waitForFunction(async () => {
+    const issueElements = await devToolsPage.$$(ISSUE_TITLE);
     for (const issueElement of issueElements) {
-      const message = await issueElement.evaluate(issueElement => issueElement.textContent);
+      const message = await issueElement.evaluate((issueElement: Element) => issueElement.textContent);
       if (message === issueMessage) {
         return issueElement;
       }
     }
     return undefined;
   });
-  await clickElement(issueMessageElement);
-  await waitFor('.message');
+  await issueMessageElement.click();
+  await devToolsPage.waitFor('.message');
   return await getIssueByTitleElement(issueMessageElement);
 }
 
-export async function getIssueHeaderByTitle(issueMessage: string):
+export async function getIssueHeaderByTitle(
+    issueMessage: string, devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage):
     Promise<puppeteer.ElementHandle<HTMLElement>|undefined> {
-  const issueMessageElement = await waitForFunction(async () => await $textContent(issueMessage) ?? undefined);
+  const issueMessageElement = await devToolsPage.waitForFunction(
+      async () => await devToolsPage.$textContent(issueMessage, undefined) ?? undefined);
   const header =
       await issueMessageElement.evaluateHandle(el => el.parentElement) as puppeteer.ElementHandle<HTMLElement>;
   if (header) {
@@ -135,41 +142,43 @@ export async function getIssueHeaderByTitle(issueMessage: string):
   return undefined;
 }
 
-export async function assertStatus(status: 'blocked'|'report-only') {
+export async function assertStatus(
+    status: 'blocked'|'report-only', devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
   const classStatus = status === 'blocked' ? BLOCKED_STATUS : REPORT_ONLY_STATUS;
-  const issueMessageElement = await waitFor(classStatus);
+  const issueMessageElement = await devToolsPage.waitFor(classStatus);
   const selectedIssueMessage = await issueMessageElement.evaluate(node => node.textContent);
   assert.strictEqual(selectedIssueMessage, status);
 }
 
-export async function expandCategory() {
-  const categoryElement = await waitFor(CATEGORY);
+export async function expandCategory(devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  const categoryElement = await devToolsPage.waitFor(CATEGORY);
   const isCategoryExpanded = await categoryElement.evaluate(node => node.classList.contains('expanded'));
 
   if (!isCategoryExpanded) {
-    await click(CATEGORY);
+    await devToolsPage.click(CATEGORY);
   }
 
-  await waitFor(ISSUE);
+  await devToolsPage.waitFor(ISSUE);
 }
 
-export async function expandKind(classSelector: string) {
-  const kindElement = await waitFor(`${KIND}${classSelector}`);
+export async function expandKind(
+    classSelector: string, devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  const kindElement = await devToolsPage.waitFor(`${KIND}${classSelector}`);
   const isKindExpanded = await kindElement.evaluate(node => node.classList.contains('expanded'));
   if (!isKindExpanded) {
     await kindElement.click();
   }
-  await waitFor(ISSUE);
+  await devToolsPage.waitFor(ISSUE);
 }
 
-export async function expandIssue() {
-  if (await getGroupByCategoryChecked()) {
-    await expandCategory();
+export async function expandIssue(devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  if (await getGroupByCategoryChecked(devToolsPage)) {
+    await expandCategory(devToolsPage);
   }
 
-  const issue = await waitFor(ISSUE);
-  await clickElement(issue);
-  await waitFor('.message');
+  const issue = await devToolsPage.waitFor(ISSUE);
+  await issue.click();
+  await devToolsPage.waitFor('.message');
 }
 
 interface IssueResourceSection {
@@ -178,10 +187,10 @@ interface IssueResourceSection {
 }
 
 export async function getResourcesElement(
-    resourceName: string, issueElement?: puppeteer.ElementHandle<Element>|undefined,
-    className?: string): Promise<IssueResourceSection> {
-  return await waitForFunction(async () => {
-    const elements = await $$(className ?? RESOURCES_LABEL, issueElement);
+    resourceName: string, issueElement?: puppeteer.ElementHandle<Element>|undefined, className?: string,
+    devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage): Promise<IssueResourceSection> {
+  return await devToolsPage.waitForFunction(async () => {
+    const elements = await devToolsPage.$$(className ?? RESOURCES_LABEL, issueElement);
     for (const el of elements) {
       const text = await el.evaluate(el => el.textContent);
       if (text?.includes(resourceName)) {
@@ -193,15 +202,16 @@ export async function getResourcesElement(
   });
 }
 
-export async function ensureResourceSectionIsExpanded(section: IssueResourceSection) {
+export async function ensureResourceSectionIsExpanded(
+    section: IssueResourceSection, devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
   await section.label.evaluate(el => {
     el.scrollIntoView();
   });
-  const isExpanded = await hasClass(section.content, 'expanded');
+  const isExpanded = await devToolsPage.hasClass(section.content, 'expanded');
   if (!isExpanded) {
     await section.label.click();
   }
-  await waitForClass(section.content, 'expanded');
+  await devToolsPage.waitForClass(section.content, 'expanded');
 }
 
 async function extractTableFromResourceSection(resourceContentElement: puppeteer.ElementHandle<Element>):
@@ -230,9 +240,9 @@ async function extractTableFromResourceSection(resourceContentElement: puppeteer
 }
 
 export async function waitForTableFromResourceSection(
-    resourceContentElement: puppeteer.ElementHandle<Element>,
-    predicate: (table: string[][]) => true | undefined): Promise<string[][]> {
-  return await waitForFunction(async () => {
+    resourceContentElement: puppeteer.ElementHandle<Element>, predicate: (table: string[][]) => true | undefined,
+    devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage): Promise<string[][]> {
+  return await devToolsPage.waitForFunction(async () => {
     const table = await extractTableFromResourceSection(resourceContentElement);
     if (!table || predicate(table) !== true) {
       return undefined;
@@ -242,19 +252,20 @@ export async function waitForTableFromResourceSection(
 }
 
 export function waitForTableFromResourceSectionContents(
-    resourceContentElement: puppeteer.ElementHandle<Element>,
-    expected: Array<Array<string|RegExp>>): Promise<string[][]> {
+    resourceContentElement: puppeteer.ElementHandle<Element>, expected: Array<Array<string|RegExp>>,
+    devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage): Promise<string[][]> {
   return waitForTableFromResourceSection(
-      resourceContentElement, table => matchStringTable(table, expected) === true ? true : undefined);
+      resourceContentElement, table => matchStringTable(table, expected) === true ? true : undefined, devToolsPage);
 }
 
-export async function getGroupByCategoryChecked() {
-  const categoryCheckbox = await waitFor(CATEGORY_CHECKBOX);
+export async function getGroupByCategoryChecked(
+    devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  const categoryCheckbox = await devToolsPage.waitFor(CATEGORY_CHECKBOX);
   return await categoryCheckbox.evaluate(node => (node as HTMLInputElement).checked);
 }
 
-export async function getGroupByKindChecked() {
-  const categoryCheckbox = await waitFor(KIND_CHECKBOX);
+export async function getGroupByKindChecked(devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  const categoryCheckbox = await devToolsPage.waitFor(KIND_CHECKBOX);
   return await categoryCheckbox.evaluate(node => (node as HTMLInputElement).checked);
 }
 
@@ -263,35 +274,36 @@ export async function revealNodeInElementsPanel() {
   await revealIcon.click();
 }
 
-export async function revealViolatingSourcesLines() {
-  const sourcesLink = await waitFor(SOURCES_LINK);
+export async function revealViolatingSourcesLines(
+    devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  const sourcesLink = await devToolsPage.waitFor(SOURCES_LINK);
   await sourcesLink.click();
 }
 
-export async function toggleGroupByCategory() {
-  const wasChecked = await getGroupByCategoryChecked();
-  const categoryCheckbox = await waitFor(CATEGORY_CHECKBOX);
+export async function toggleGroupByCategory(devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  const wasChecked = await getGroupByCategoryChecked(devToolsPage);
+  const categoryCheckbox = await devToolsPage.waitFor(CATEGORY_CHECKBOX);
 
   // Invoke `click()` directly on the checkbox to toggle while hidden.
   await categoryCheckbox.evaluate(checkbox => (checkbox as HTMLInputElement).click());
 
   if (wasChecked) {
-    await waitFor(ISSUE);
+    await devToolsPage.waitFor(ISSUE);
   } else {
-    await waitFor(CATEGORY);
+    await devToolsPage.waitFor(CATEGORY);
   }
 }
 
-export async function toggleGroupByKind() {
-  const wasChecked = await getGroupByKindChecked();
-  const kindCheckbox = await waitFor(KIND_CHECKBOX);
+export async function toggleGroupByKind(devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  const wasChecked = await getGroupByKindChecked(devToolsPage);
+  const kindCheckbox = await devToolsPage.waitFor(KIND_CHECKBOX);
 
   // Invoke `click()` directly on the checkbox to toggle while hidden.
   await kindCheckbox.evaluate(checkbox => (checkbox as HTMLInputElement).click());
 
   if (wasChecked) {
-    await waitFor(ISSUE);
+    await devToolsPage.waitFor(ISSUE);
   } else {
-    await waitFor(KIND);
+    await devToolsPage.waitFor(KIND);
   }
 }

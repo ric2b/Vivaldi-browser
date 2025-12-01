@@ -10,6 +10,7 @@
 
 #include "base/functional/callback_forward.h"
 #include "base/test/run_until.h"
+#include "base/test/scoped_feature_list.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/actions/chrome_action_id.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
@@ -26,6 +27,7 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/lens/lens_features.h"
 #include "components/omnibox/browser/omnibox_prefs.h"
+#include "components/omnibox/common/omnibox_features.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "ui/events/test/test_event.h"
@@ -110,15 +112,26 @@ class LensOverlayPageActionIconViewTest
   LensOverlayPageActionIconViewTest() {
     if (IsMigrationEnabled()) {
       scoped_feature_list_.InitWithFeaturesAndParameters(
-          {{lens::features::kLensOverlay, {}},
-           {::features::kPageActionsMigration,
-            {
-                {::features::kPageActionsMigrationLensOverlay.name, "true"},
-            }}},
-          {});
+          {
+              {lens::features::kLensOverlay, {}},
+              {lens::features::kLensOverlayOmniboxEntryPoint, {}},
+              {
+                  ::features::kPageActionsMigration,
+                  {
+                      {::features::kPageActionsMigrationLensOverlay.name,
+                       "true"},
+                  },
+              },
+          },
+          {lens::features::kLensOverlayKeyboardSelection,
+           omnibox::kAiModeOmniboxEntryPoint});
     } else {
       scoped_feature_list_.InitWithFeatures(
-          {lens::features::kLensOverlay}, {::features::kPageActionsMigration});
+          {lens::features::kLensOverlay,
+           lens::features::kLensOverlayOmniboxEntryPoint},
+          {lens::features::kLensOverlayKeyboardSelection,
+           ::features::kPageActionsMigration,
+           omnibox::kAiModeOmniboxEntryPoint});
     }
   }
 
@@ -166,8 +179,9 @@ class LensOverlayPageActionIconViewTestOmniboxEntryPointDisabled
       scoped_feature_list_.InitWithFeaturesAndParameters(
           {base::test::FeatureRefAndParams(lens::features::kLensOverlay,
                                            {{"omnibox-entry-point", "false"}}),
-           base::test::FeatureRefAndParams(::features::kPageActionsMigration,
-                                           {})},
+           base::test::FeatureRefAndParams(
+               ::features::kPageActionsMigration,
+               {{::features::kPageActionsMigrationLensOverlay.name, "true"}})},
           {});
     } else {
       scoped_feature_list_.InitWithFeaturesAndParameters(

@@ -27,7 +27,7 @@ $VerifiedPlatform linux-amd64 linux-arm64 mac-amd64 mac-arm64 windows-amd64
 # them, but we do not test they work. They also may not have all necessary
 # vpython packages.
 $VerifiedPlatform linux-386 linux-ppc64 linux-ppc64le linux-riscv64 linux-s390x
-$VerifiedPlatform linux-armv6l linux-mips64 linux-mips64le linux-mipsle
+$VerifiedPlatform linux-armv6l linux-mips64 linux-mips64le linux-mipsle linux-loong64
 $VerifiedPlatform windows-arm64
 
 # vpython.
@@ -37,7 +37,7 @@ infra/tools/luci/vpython3/${platform} git_revision:ad0c4b622c7d4cee870f57eed8170
 infra/tools/luci/led/${platform} git_revision:a095a06b3c202445e01b75d5690a8587cbc3ab7d
 
 # LUCI config generator
-infra/tools/luci/lucicfg/${platform} git_revision:eb1acfb1fe32535c85f2ba09cba7990ddb53be0e
+infra/tools/luci/lucicfg/${platform} git_revision:8098fe45159459f4381cfc4e1863f490aa70c062
 
 # Mac toolchain installer
 infra/tools/mac_toolchain/${os=mac}-${arch} git_revision:59b5b4b5a506dc23eae31ef0f5b168281c6521da
@@ -46,7 +46,7 @@ infra/tools/mac_toolchain/${os=mac}-${arch} git_revision:59b5b4b5a506dc23eae31ef
 infra/tools/prpc/${platform} git_revision:b1f414539ac10cc67a0250890a38712cc06cf102
 
 # LUCI authentication command line tool
-infra/tools/luci-auth/${platform} git_revision:3cfe24b006df32bd8a51dbe5c6f3c7cdfc066de8
+infra/tools/luci-auth/${platform} git_revision:14c1dfd95e07b23eeaff304bd29a2eb80b06fe0b
 
 # LUCI Git credential helper
 infra/tools/luci/git-credential-luci/${platform} git_revision:fad062d39eaf922fe3bc5116e8039763c4530344
@@ -58,10 +58,10 @@ infra/tools/bb/${platform} git_revision:b1f414539ac10cc67a0250890a38712cc06cf102
 infra/tools/rdb/${platform} git_revision:3543fb152a50d3086105df574a32176f67d9a043
 
 # dirmd, a tool to work with DIR_METADATA files
-infra/tools/dirmd/${platform} git_revision:b1f414539ac10cc67a0250890a38712cc06cf102
+infra/tools/dirmd/${platform} git_revision:6b4aa314771569029ce32f5bcb2924120bd06b86
 
 # Pinpoint CLI
-infra/chromeperf/pinpoint/${platform} git_revision:82a1d15d3ee4be12008c2df875e64b0abdffa6b9
+infra/chromeperf/pinpoint/${platform} git_revision:6b4aa314771569029ce32f5bcb2924120bd06b86
 
 @Subdir reclient
 # reclient, currently this is only for ChromeOS build.

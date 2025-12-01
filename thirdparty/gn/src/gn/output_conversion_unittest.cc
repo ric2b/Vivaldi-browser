@@ -186,8 +186,11 @@ TEST_F(OutputConversionTest, JSON) {
   auto c_scope = std::make_unique<Scope>(settings());
   Value e_value(nullptr, Value::LIST);
   e_value.list_value().push_back(Value(nullptr, "bar"));
+  e_value.list_value().push_back(Value(nullptr, "$"));
 
   auto e_value_scope = std::make_unique<Scope>(settings());
+  Value d_value(nullptr, "$");
+  e_value_scope->SetValue("d", d_value, nullptr);
   Value f_value(nullptr, "baz");
   e_value_scope->SetValue("f", f_value, nullptr);
   e_value.list_value().push_back(Value(nullptr, std::move(e_value_scope)));
@@ -202,7 +205,9 @@ TEST_F(OutputConversionTest, JSON) {
   "c": {
     "e": [
       "bar",
+      "$",
       {
+        "d": "$",
         "f": "baz"
       }
     ]

@@ -45,6 +45,7 @@
 #include "chrome/browser/ui/startup/startup_tab.h"
 #include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_utils.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/common/chrome_switches.h"
 #include "components/saved_tab_groups/public/tab_group_sync_service.h"
@@ -72,6 +73,7 @@
 #include "app/vivaldi_apptools.h"
 #include "components/sessions/vivaldi_session_service_commands.h"
 #include "components/page_actions/page_actions_tab_helper.h"
+#include "ui/vivaldi_browser_ui_data.h"
 
 using content::NavigationEntry;
 using content::WebContents;
@@ -244,6 +246,43 @@ void SessionService::DeleteLastSession() {
   ++count_delete_last_session_for_testing_;
 }
 
+void SessionService::SetSplitTab(SessionID window_id,
+                                 SessionID tab_id,
+                                 std::optional<split_tabs::SplitTabId> split) {
+  if (!ShouldTrackChangesToWindow(window_id) ||
+      !features::IsRestoringSplitViewEnabled()) {
+    return;
+  }
+
+  // Tabs get unsplit as they close. However, if the whole window is closing
+  // tabs should stay in their split. So, ignore this call in that case.
+  if (base::Contains(pending_window_close_ids_, window_id) ||
+      base::Contains(window_closing_ids_, window_id)) {
+    return;
+  }
+
+  ScheduleCommand(sessions::CreateSplitTabCommand(tab_id, std::move(split)));
+}
+
+void SessionService::SetSplitTabData(
+    SessionID window_id,
+    const split_tabs::SplitTabId split,
+    const split_tabs::SplitTabVisualData* visual_data) {
+  if (!ShouldTrackChangesToWindow(window_id) ||
+      !features::IsRestoringSplitViewEnabled()) {
+    return;
+  }
+
+  // Any split metadata changes happening in a closing window can be ignored.
+  if (base::Contains(pending_window_close_ids_, window_id) ||
+      base::Contains(window_closing_ids_, window_id)) {
+    return;
+  }
+
+  ScheduleCommand(
+      sessions::CreateSplitTabDataUpdateCommand(split, visual_data));
+}
+
 void SessionService::SetTabGroup(SessionID window_id,
                                  SessionID tab_id,
                                  std::optional<tab_groups::TabGroupId> group) {
@@ -374,7 +413,11 @@ void SessionService::WindowOpened(Browser* browser) {
   SetWindowVisibleOnAllWorkspaces(
       browser->session_id(), browser->window()->IsVisibleOnAllWorkspaces());
 
-  SetWindowVivExtData(browser->session_id(), browser->viv_ext_data());
+  vivaldi::VivaldiBrowserUiData* browser_ui_data =
+      vivaldi::VivaldiBrowserUiData::From(browser);
+  if (browser_ui_data) {
+    SetWindowVivExtData(browser->session_id(), browser_ui_data->viv_ext_data());
+  }
 }
 
 void SessionService::WindowClosing(SessionID window_id) {
@@ -583,11 +626,12 @@ void SessionService::BuildCommandsForTab(
     WebContents* tab,
     int index_in_window,
     std::optional<tab_groups::TabGroupId> group,
+    std::optional<split_tabs::SplitTabId> split,
     bool is_pinned,
     IdToRange* tab_to_available_range) {
   DCHECK(is_saving_enabled());
   SessionServiceBase::BuildCommandsForTab(window_id, tab, index_in_window,
-                                          group, is_pinned,
+                                          group, split, is_pinned,
                                           tab_to_available_range);
 
   sessions::SessionTabHelper* session_tab_helper =
@@ -625,6 +669,11 @@ void SessionService::BuildCommandsForTab(
   if (group.has_value()) {
     command_storage_manager()->AppendRebuildCommand(
         sessions::CreateTabGroupCommand(session_id, std::move(group)));
+  }
+
+  if (features::IsRestoringSplitViewEnabled() && split.has_value()) {
+    command_storage_manager()->AppendRebuildCommand(
+        sessions::CreateSplitTabCommand(session_id, std::move(split)));
   }
 }
 

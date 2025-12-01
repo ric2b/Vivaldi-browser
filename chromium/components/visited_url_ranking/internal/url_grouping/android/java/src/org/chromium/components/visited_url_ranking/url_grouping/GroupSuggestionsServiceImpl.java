@@ -8,7 +8,9 @@ import org.jni_zero.CalledByNative;
 import org.jni_zero.JNINamespace;
 import org.jni_zero.NativeMethods;
 
+import org.chromium.base.JniOnceCallback;
 import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.url.GURL;
 
 /**
@@ -84,9 +86,33 @@ public class GroupSuggestionsServiceImpl implements GroupSuggestionsService {
         mDelegateBridge.unregisterDelegate(delegate);
     }
 
+    @Override
+    public @Nullable CachedSuggestions getCachedSuggestions(int windowId) {
+        if (mNativePtr == 0) {
+            // Return CachedSuggestions with an empty list if the native service isn't initialized.
+            return new CachedSuggestions(null, emptyJniCallback());
+        }
+        return GroupSuggestionsServiceImplJni.get().getCachedSuggestions(mNativePtr, windowId);
+    }
+
     @CalledByNative
     private void clearNativePtr() {
         mNativePtr = 0;
+    }
+
+    private static JniOnceCallback<UserResponseMetadata> emptyJniCallback() {
+        return new JniOnceCallback<>() {
+            @Override
+            public void destroy() {}
+
+            @Override
+            public void onResult(UserResponseMetadata result) {}
+
+            @Override
+            public Runnable bind(UserResponseMetadata result) {
+                return () -> {};
+            }
+        };
     }
 
     @NativeMethods
@@ -110,5 +136,8 @@ public class GroupSuggestionsServiceImpl implements GroupSuggestionsService {
                 long nativeGroupSuggestionsServiceAndroid, int tabId, int transitionType);
 
         void didEnterTabSwitcher(long nativeGroupSuggestionsServiceAndroid);
+
+        CachedSuggestions getCachedSuggestions(
+                long nativeGroupSuggestionsServiceAndroid, int windowId);
     }
 }

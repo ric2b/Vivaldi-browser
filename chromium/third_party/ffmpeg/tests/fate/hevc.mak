@@ -219,7 +219,7 @@ FATE_HEVC-$(call FRAMECRC, HEVC, HEVC, HEVC_PARSER SCALE_FILTER) +=         \
                                                     $(HEVC_TESTS_422_10BIN) \
                                                     $(HEVC_TESTS_444_12BIT) \
 
-FATE_HEVC-$(call FRAMECRC, HEVC, HEVC, HEVC_PARSER SCALE_FILTER) += $(HEVC_TESTS_MULTIVIEW)
+FATE_HEVC-$(call FRAMECRC, HEVC, HEVC, HEVC_PARSER SCALE_FILTER SETPTS_FILTER) += $(HEVC_TESTS_MULTIVIEW)
 
 fate-hevc-paramchange-yuv420p-yuv420p10: CMD = framecrc -i $(TARGET_SAMPLES)/hevc/paramchange_yuv420p_yuv420p10.hevc -fps_mode passthrough -sws_flags area+accurate_rnd+bitexact
 FATE_HEVC-$(call FRAMECRC, HEVC, HEVC, HEVC_PARSER SCALE_FILTER LARGE_TESTS) += fate-hevc-paramchange-yuv420p-yuv420p10
@@ -229,7 +229,7 @@ tests/data/hevc-mp4.mov: ffmpeg$(PROGSSUF)$(EXESUF) | tests/data
 	$(M)$(TARGET_EXEC) $(TARGET_PATH)/$< -nostdin \
 	-i $(TARGET_SAMPLES)/hevc-conformance/WPP_A_ericsson_MAIN10_2.bit -c copy -flags +bitexact $(TARGET_PATH)/$@ -y 2>/dev/null
 
-FATE_HEVC-$(call ALLYES, HEVC_DEMUXER MOV_DEMUXER HEVC_PARSER HEVC_MP4TOANNEXB_BSF MOV_MUXER HEVC_MUXER) += fate-hevc-bsf-mp4toannexb
+FATE_HEVC-$(call DEMMUX, HEVC MOV, MOV HEVC, HEVC_PARSER HEVC_MP4TOANNEXB_BSF EXTRACT_EXTRADATA_BSF) += fate-hevc-bsf-mp4toannexb
 fate-hevc-bsf-mp4toannexb: tests/data/hevc-mp4.mov
 fate-hevc-bsf-mp4toannexb: CMD = md5 -i $(TARGET_PATH)/tests/data/hevc-mp4.mov -c:v copy -fflags +bitexact -f hevc
 fate-hevc-bsf-mp4toannexb: CMP = oneline
@@ -249,7 +249,7 @@ fate-hevc-monochrome-crop: CMD = probeframes -show_entries frame=width,height:st
 FATE_HEVC_FFPROBE-$(call PARSERDEMDEC, HEVC, HEVC, HEVC) += fate-hevc-monochrome-crop
 
 fate-hevc-afd-tc-sei: CMD = run ffprobe$(PROGSSUF)$(EXESUF) -bitexact -flags output_corrupt -show_entries frame_side_data_list -select_streams v $(TARGET_SAMPLES)/mpegts/loewe.ts
-FATE_HEVC_FFPROBE-$(call PARSERDEMDEC, HEVC, HEVC, HEVC) += fate-hevc-afd-tc-sei
+FATE_HEVC_FFPROBE-$(call PARSERDEMDEC, HEVC, HEVC, HEVC, EXTRACT_EXTRADATA_BSF) += fate-hevc-afd-tc-sei
 
 fate-hevc-hdr10-plus-metadata: CMD = probeframes -show_entries frame=side_data_list $(TARGET_SAMPLES)/hevc/hdr10_plus_h265_sample.hevc
 FATE_HEVC_FFPROBE-$(call DEMDEC, HEVC, HEVC) += fate-hevc-hdr10-plus-metadata
@@ -270,11 +270,11 @@ fate-hevc-small422chroma: CMD = framecrc -i $(TARGET_SAMPLES)/hevc/food.hevc -pi
 FATE_HEVC-$(call FRAMECRC, HEVC, HEVC, HEVC_PARSER SCALE_FILTER) += fate-hevc-small422chroma
 
 fate-hevc-pir: CMD = framecrc -i $(TARGET_SAMPLES)/hevc/pir.hevc
-FATE_HEVC-$(call FRAMECRC, HEVC, HEVC) += fate-hevc-pir
+FATE_HEVC-$(call FRAMECRC, HEVC, HEVC, HEVC_PARSER) += fate-hevc-pir
 
 # multiview stream, where the secondary layer has a nontrivial nuh_layer_id=6
 fate-hevc-mv-nuh-layer-id: CMD = framecrc -i $(TARGET_SAMPLES)/hevc/mv_nuh_layer_id.bit -map 0:view:all
-FATE_HEVC-$(call FRAMECRC, HEVC, HEVC) += fate-hevc-mv-nuh-layer-id
+FATE_HEVC-$(call FRAMECRC, HEVC, HEVC, HEVC_PARSER) += fate-hevc-mv-nuh-layer-id
 
 # NB: $\ at the end of line joins lines without adding whitespace;
 # this trick is recommended by GNU make manual
@@ -292,7 +292,10 @@ fate-hevc-mv-position: CMD = framecrc -i $(TARGET_SAMPLES)/hevc/multiview.mov -m
 FATE_HEVC-$(call FRAMECRC, MOV, HEVC) += fate-hevc-mv-position
 
 fate-hevc-alpha: CMD = framecrc -i $(TARGET_SAMPLES)/hevc/alpha.mp4
-FATE_HEVC-$(call FRAMECRC, HEVC, HEVC) += fate-hevc-alpha
+FATE_HEVC-$(call FRAMECRC, MOV, HEVC) += fate-hevc-alpha
+
+fate-hevc-color-reserved: CMD = framecrc -bsf:v hevc_metadata=colour_primaries=0:transfer_characteristics=0:matrix_coefficients=3 -i $(TARGET_SAMPLES)/hevc-conformance/AMP_A_Samsung_4.bit -vf scale,format=nv12 -frames:v 1
+FATE_HEVC-$(call FRAMECRC, HEVC, HEVC, HEVC_METADATA_BSF SCALE_FILTER) += fate-hevc-color-reserved
 
 FATE_SAMPLES_AVCONV += $(FATE_HEVC-yes)
 FATE_SAMPLES_FFPROBE += $(FATE_HEVC_FFPROBE-yes)

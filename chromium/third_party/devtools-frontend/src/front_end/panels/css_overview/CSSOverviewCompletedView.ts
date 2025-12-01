@@ -346,7 +346,7 @@ export const DEFAULT_VIEW: View = (input, output, target) => {
           </devtools-widget>
         </devtools-split-view>
       </devtools-split-view>`,
-      target, {host: input});
+      target);
   // clang-format on
 };
 
@@ -578,7 +578,7 @@ export class CSSOverviewCompletedView extends UI.Widget.VBox {
   };
 
   constructor(element?: HTMLElement, view = DEFAULT_VIEW) {
-    super(false, false, element);
+    super(element);
     this.#view = view;
     this.registerRequiredCSS(cssOverviewCompletedViewStyles);
     this.#linkifier = new Components.Linkifier.Linkifier(/* maxLinkLength */ 20, /* useLinkDecorator */ true);
@@ -922,7 +922,7 @@ export const ELEMENT_DETAILS_DEFAULT_VIEW: ElementDetailsViewFunction = (input, 
         </table>
       </devtools-data-grid>
     </div>`,
-    target, {host: input});
+    target);
   // clang-format on
 };
 

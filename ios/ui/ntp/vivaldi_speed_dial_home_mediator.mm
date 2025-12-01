@@ -5,9 +5,10 @@
 #import "base/apple/foundation_util.h"
 #import "base/check.h"
 #import "base/strings/sys_string_conversions.h"
+#import "browser/features/vivaldi_features.h"
 #import "chromium/base/containers/stack.h"
-#import "components/bookmarks/browser/bookmark_model_observer.h"
 #import "components/bookmarks/browser/bookmark_model.h"
+#import "components/bookmarks/browser/bookmark_model_observer.h"
 #import "components/bookmarks/common/bookmark_pref_names.h"
 #import "components/bookmarks/managed/managed_bookmark_service.h"
 #import "components/bookmarks/vivaldi_bookmark_kit.h"
@@ -19,7 +20,6 @@
 #import "ios/chrome/browser/bookmarks/ui_bundled/bookmark_utils_ios.h"
 #import "ios/chrome/browser/content_suggestions/ui_bundled/cells/content_suggestions_most_visited_item.h"
 #import "ios/chrome/browser/content_suggestions/ui_bundled/cells/most_visited_tiles_config.h"
-#import "ios/chrome/browser/features/vivaldi_features.h"
 #import "ios/chrome/browser/first_run/ui_bundled/first_run_util.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_backed_boolean.h"
@@ -32,8 +32,8 @@
 #import "ios/ui/ntp/top_toolbar/top_toolbar_swift.h"
 #import "ios/ui/ntp/vivaldi_speed_dial_constants.h"
 #import "ios/ui/ntp/vivaldi_speed_dial_page_type.h"
-#import "ios/ui/settings/start_page/vivaldi_start_page_prefs_helper.h"
 #import "ios/ui/settings/start_page/vivaldi_start_page_prefs.h"
+#import "ios/ui/settings/start_page/vivaldi_start_page_prefs_helper.h"
 #import "prefs/vivaldi_pref_names.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 #import "url/gurl.h"
@@ -244,7 +244,7 @@ using l10n_util::GetNSString;
 }
 
 - (void)computeSpeedDialFolders {
-  if (IsTopSitesEnabled()) {
+  if (vivaldi_features::IsTopSitesEnabled()) {
     [_mostVisitedSiteManager start];
   }
 
@@ -375,7 +375,7 @@ using l10n_util::GetNSString;
   }
 
   // If top sites is enabled
-  if (IsTopSitesEnabled() && [self showFrequentlyVisited]) {
+  if (vivaldi_features::IsTopSitesEnabled() && [self showFrequentlyVisited]) {
     VivaldiNTPTopToolbarItem* toolbarItem =
         [[VivaldiNTPTopToolbarItem alloc]
              initWithPrimaryId:nil
@@ -461,8 +461,7 @@ using l10n_util::GetNSString;
 
 // Reloads only the top site items and notify the consumers.
 - (void)reloadChildrenForTopSite {
-
-  if (!IsTopSitesEnabled() || ![self showFrequentlyVisited]) {
+  if (!vivaldi_features::IsTopSitesEnabled() || ![self showFrequentlyVisited]) {
     return;
   }
 

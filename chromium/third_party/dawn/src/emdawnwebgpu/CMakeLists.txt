@@ -114,19 +114,6 @@ if (EMSCRIPTEN)
                 ${EMDAWNWEBGPU_HEADERS_GEN_HEADERS}  # for webgpu.h
                 ${EMDAWNWEBGPU_STRUCT_INFO_JSON_GEN_SOURCES}  # for struct_info_webgpu.json
         )
-
-        # Prior to CMake 3.20 the GENERATED property is local to a directory which means that putting
-        # generated headers in INTERFACE properties causes dependent targets to complain that they
-        # cannot find the file. (because they don't see it as generated and want to check is is
-        # actually on the filesystem).
-        # Work around this by generating the files once if they aren't present at configuration time.
-        if (NOT EXISTS ${OUTPUT})
-            message(STATUS "Dawn: Generating initial versions of files for ${PRINT_NAME}.")
-            execute_process(COMMAND ${ARGS} RESULT_VARIABLE RET)
-            if (NOT RET EQUAL 0)
-                message(FATAL_ERROR "Dawn: Failed to generate the initial version of files for ${PRINT_NAME}. Base args are '${ARGS}'.")
-            endif()
-        endif()
     endfunction()
 
     message(STATUS "Dawn: Configuring Emscripten gen_struct_info for WebGPU.")
@@ -179,19 +166,6 @@ if (EMSCRIPTEN)
                 "${EM_SRC_DIR}/concat.py"
                 ${SRCS}
         )
-
-        # Prior to CMake 3.20 the GENERATED property is local to a directory which means that putting
-        # generated headers in INTERFACE properties causes dependent targets to complain that they
-        # cannot find the file. (because they don't see it as generated and want to check is is
-        # actually on the filesystem).
-        # Work around this by generating the files once if they aren't present at configuration time.
-        if (NOT EXISTS ${OUTPUT})
-            message(STATUS "Dawn: Generating initial versions of files for ${PRINT_NAME}.")
-            execute_process(COMMAND ${ARGS} RESULT_VARIABLE RET)
-            if (NOT RET EQUAL 0)
-                message(FATAL_ERROR "Dawn: Failed to generate the initial version of files for ${PRINT_NAME}. Base args are '${ARGS}'.")
-            endif()
-        endif()
     endfunction()
 
     webgpu_gen_struct_info_js(
@@ -308,39 +282,61 @@ if (EMSCRIPTEN)
     if (${DAWN_BUILD_TESTS})
         set(emdawnwebgpu_test_sources
             "tests/FuturesTests.cpp"
+            "tests/SpotTests.cpp"
         )
         set(emdawnwebgpu_test_deps
             dawn::dawn_wgpu_utils
             emdawnwebgpu_cpp
-            gmock_main
+            gmock_main_wasmsafe
+        )
+
+        add_library(emdawnwebgpu_test_linkopts INTERFACE)
+        target_link_options(emdawnwebgpu_test_linkopts
+            INTERFACE
+                "-sALLOW_MEMORY_GROWTH"
+                # Build with Closure so we can look at code size, and to test that Closure
+                # minification works, and to let Closure statically analyze our JS.
+                "$<$<CONFIG:Release,MinSizeRel>:--closure=1>"
+        )
+        if (NOT DAWN_ENABLE_ASAN)
+            target_link_options(emdawnwebgpu_test_linkopts
+                INTERFACE
+                    # If ASAN is not enabled, enable SAFE_HEAP to catch some bugs.
+                    # (ASAN+UBSAN is preferable to this.)
+                    "$<$<CONFIG:Debug>:-sSAFE_HEAP>"
+            )
+        endif()
+
+        add_library(emdawnwebgpu_tests)
+        target_link_libraries(
+            emdawnwebgpu_tests
+            PUBLIC
+                emdawnwebgpu_test_linkopts
+                ${emdawnwebgpu_test_deps}
         )
 
         add_executable(emdawnwebgpu_tests_asyncify ${emdawnwebgpu_test_sources})
         set_target_properties(emdawnwebgpu_tests_asyncify PROPERTIES
             SUFFIX ".html")
-        target_link_libraries(
-            emdawnwebgpu_tests_asyncify
+        target_link_libraries(emdawnwebgpu_tests_asyncify PUBLIC emdawnwebgpu_tests)
+        target_link_options(emdawnwebgpu_tests_asyncify
             PUBLIC
-                ${emdawnwebgpu_test_deps}
-        )
-        target_link_options(emdawnwebgpu_tests_asyncify PUBLIC
-            # We need Asyncify or JSPI for Future tests.
-            "-sASYNCIFY=1"
+                # We need Asyncify or JSPI for Future tests.
+                "-sASYNCIFY=1"
+                "-sASYNCIFY_STACK_SIZE=10000"  # Needed when building with ASAN.
         )
 
         add_executable(emdawnwebgpu_tests_jspi ${emdawnwebgpu_test_sources})
         set_target_properties(emdawnwebgpu_tests_jspi PROPERTIES
             SUFFIX ".html")
-        target_link_libraries(
-            emdawnwebgpu_tests_jspi
+        target_link_libraries(emdawnwebgpu_tests_jspi PUBLIC emdawnwebgpu_tests)
+        target_link_options(emdawnwebgpu_tests_jspi
             PUBLIC
-                ${emdawnwebgpu_test_deps}
-        )
-        target_link_options(emdawnwebgpu_tests_jspi PUBLIC
-            # We need Asyncify or JSPI for Future tests.
-            "-sJSPI=1"
+                # We need Asyncify or JSPI for Future tests.
+                "-sJSPI=1"
         )
 
+        # A "sample" that makes real (bogus) API calls to serve as a basic code size test.
         DawnJSONGenerator(
             TARGET "emdawnwebgpu_link_test_cpp"
             PRINT_NAME "emdawnwebgpu LinkTest.cpp"
@@ -349,20 +345,30 @@ if (EMSCRIPTEN)
         add_executable(emdawnwebgpu_link_test
             ${EMDAWNWEBGPU_LINK_TEST_CPP_SOURCES}
         )
-        # The test is just that this links, not that it runs (it doesn't do
-        # anything interesting), so just build to .js. Since it has a main()
-        # function, this is the same as building to .html, but skipping the
-        # .html file. It _is_ runnable if invoked via <script> or `node`.
+        # The test is just that this links, not that it runs (it will just
+        # crash), so just build to .js. Since it has a main() function, this is
+        # the same as building to .html, but skipping the .html file.
         set_target_properties(emdawnwebgpu_link_test PROPERTIES
             SUFFIX ".js")
-        target_link_options(emdawnwebgpu_link_test
-            PRIVATE
-                --closure=1
-        )
         target_link_libraries(
             emdawnwebgpu_link_test
             PUBLIC
+                emdawnwebgpu_test_linkopts
                 emdawnwebgpu_c
+        )
+
+        # A "sample" that just creates a device. This is used to check the code size for the
+        # elimination of unused library code.
+        add_executable(emdawnwebgpu_init_only_sample
+            "InitOnlySample.cpp"
+        )
+        set_target_properties(emdawnwebgpu_init_only_sample PROPERTIES
+            SUFFIX ".js")
+        target_link_libraries(
+            emdawnwebgpu_init_only_sample
+            PUBLIC
+                emdawnwebgpu_test_linkopts
+                emdawnwebgpu_cpp
         )
     endif()
 endif()

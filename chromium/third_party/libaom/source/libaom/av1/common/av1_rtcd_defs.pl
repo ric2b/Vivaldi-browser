@@ -350,6 +350,24 @@ if (aom_config("CONFIG_AV1_ENCODER") eq "yes") {
   add_proto qw/void av1_fwd_txfm2d_16x4/, "const int16_t *input, int32_t *output, int stride, TX_TYPE tx_type, int bd";
   specialize qw/av1_fwd_txfm2d_16x4 sse4_1 neon/;
 
+  if (aom_config("CONFIG_HIGHWAY") eq "yes") {
+    specialize qw/av1_lowbd_fwd_txfm avx512/;
+    specialize qw/av1_fwd_txfm2d_4x8 avx512/;
+    specialize qw/av1_fwd_txfm2d_8x4 avx512/;
+    specialize qw/av1_fwd_txfm2d_8x16 avx512/;
+    specialize qw/av1_fwd_txfm2d_16x8 avx512/;
+    specialize qw/av1_fwd_txfm2d_16x32 avx512/;
+    specialize qw/av1_fwd_txfm2d_32x16 avx512/;
+    specialize qw/av1_fwd_txfm2d_4x4 avx512/;
+    specialize qw/av1_fwd_txfm2d_8x8 avx512/;
+    specialize qw/av1_fwd_txfm2d_16x16 avx512/;
+    specialize qw/av1_fwd_txfm2d_32x32 avx512/;
+    specialize qw/av1_fwd_txfm2d_64x64 avx512/;
+    specialize qw/av1_fwd_txfm2d_32x64 avx512/;
+    specialize qw/av1_fwd_txfm2d_64x32 avx512/;
+    specialize qw/av1_fwd_txfm2d_16x4 avx512/;
+  }
+
   if (aom_config("CONFIG_REALTIME_ONLY") ne "yes") {
     add_proto qw/void av1_fwd_txfm2d_4x16/, "const int16_t *input, int32_t *output, int stride, TX_TYPE tx_type, int bd";
     specialize qw/av1_fwd_txfm2d_4x16 sse4_1 neon/;
@@ -361,6 +379,14 @@ if (aom_config("CONFIG_AV1_ENCODER") eq "yes") {
     specialize qw/av1_fwd_txfm2d_16x64 sse4_1 neon/;
     add_proto qw/void av1_fwd_txfm2d_64x16/, "const int16_t *input, int32_t *output, int stride, TX_TYPE tx_type, int bd";
     specialize qw/av1_fwd_txfm2d_64x16 sse4_1 neon/;
+
+    if (aom_config("CONFIG_HIGHWAY") eq "yes") {
+      specialize qw/av1_fwd_txfm2d_4x16 avx512/;
+      specialize qw/av1_fwd_txfm2d_8x32 avx512/;
+      specialize qw/av1_fwd_txfm2d_32x8 avx512/;
+      specialize qw/av1_fwd_txfm2d_16x64 avx512/;
+      specialize qw/av1_fwd_txfm2d_64x16 avx512/;
+    }
   }
   #
   # Motion search
@@ -415,7 +441,7 @@ if (aom_config("CONFIG_AV1_ENCODER") eq "yes") {
   specialize qw/av1_wedge_compute_delta_squares sse2 avx2 neon/;
 
   # hash
-  add_proto qw/uint32_t av1_get_crc32c_value/, "void *crc_calculator, uint8_t *p, size_t length";
+  add_proto qw/uint32_t av1_get_crc32c_value/, "void *crc_calculator, const uint8_t *p, size_t length";
   specialize qw/av1_get_crc32c_value sse4_2 arm_crc32/;
 
   if (aom_config("CONFIG_REALTIME_ONLY") ne "yes") {
@@ -542,6 +568,11 @@ if ((aom_config("CONFIG_REALTIME_ONLY") ne "yes") || (aom_config("CONFIG_AV1_DEC
                                   int dgd_stride, int32_t *flt0, int32_t *flt1, int flt_stride,
                                   int sgr_params_idx, int bit_depth, int highbd";
   specialize qw/av1_selfguided_restoration sse4_1 avx2 neon/;
+
+  if (aom_config("CONFIG_HIGHWAY") eq "yes") {
+    specialize qw/av1_apply_selfguided_restoration avx512/;
+    specialize qw/av1_selfguided_restoration avx512/;
+  }
 }
 
 # CONVOLVE_ROUND/COMPOUND_ROUND functions
@@ -588,12 +619,12 @@ if(aom_config("CONFIG_AV1_HIGHBITDEPTH") eq "yes") {
     specialize qw/av1_highbd_dist_wtd_convolve_x sse4_1 avx2 neon sve2/;
     specialize qw/av1_highbd_dist_wtd_convolve_y sse4_1 avx2 neon sve2/;
     specialize qw/av1_highbd_dist_wtd_convolve_2d_copy sse4_1 avx2 neon/;
-    specialize qw/av1_highbd_convolve_2d_sr ssse3 avx2 neon sve2/;
-    specialize qw/av1_highbd_convolve_2d_sr_intrabc neon/;
-    specialize qw/av1_highbd_convolve_x_sr ssse3 avx2 neon sve2/;
-    specialize qw/av1_highbd_convolve_x_sr_intrabc neon/;
-    specialize qw/av1_highbd_convolve_y_sr ssse3 avx2 neon sve2/;
-    specialize qw/av1_highbd_convolve_y_sr_intrabc neon/;
+    specialize qw/av1_highbd_convolve_2d_sr ssse3 avx2 neon sve2 rvv/;
+    specialize qw/av1_highbd_convolve_2d_sr_intrabc neon rvv/;
+    specialize qw/av1_highbd_convolve_x_sr ssse3 avx2 neon sve2 rvv/;
+    specialize qw/av1_highbd_convolve_x_sr_intrabc neon rvv/;
+    specialize qw/av1_highbd_convolve_y_sr ssse3 avx2 neon sve2 rvv/;
+    specialize qw/av1_highbd_convolve_y_sr_intrabc neon rvv/;
     specialize qw/av1_highbd_convolve_2d_scale sse4_1 neon/;
   }
 

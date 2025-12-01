@@ -200,6 +200,14 @@ SPECIAL_CASES = {
         "License": "MPL-2.0",
         "License File": ["/../ios/background_audio/resources/LICENSE.txt"],
     },
+    join('..', 'ios', 'reader_mode', 'resources'): {
+        "Name": "Arc90 Inc/Mozilla Readability",
+        "URL": "https://github.com/mozilla/readability",
+        "License": "Apache-2.0",
+        "License File": [
+          "/../ios/reader_mode/resources/LICENSE",
+        ],
+    },
 }
 
 ADDITIONAL_PATHS = tuple(SPECIAL_CASES.keys())

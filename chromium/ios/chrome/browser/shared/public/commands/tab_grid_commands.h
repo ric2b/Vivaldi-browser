@@ -25,9 +25,6 @@ class TabGroup;
 // Shows a non-incognito web page searching for `text`.
 - (void)showWebSearchForText:(NSString*)text;
 
-// Shows the recent tabs panel searching for `text`.
-- (void)showRecentTabsForText:(NSString*)text;
-
 // Shows the tab grid according to `page`.
 - (void)showPage:(TabGridPage)page animated:(BOOL)animated;
 
@@ -39,6 +36,11 @@ class TabGroup;
 // will be executed after the step dismisses.
 - (void)showGuidedTourLongPressStepWithDismissalCompletion:
     (ProceduralBlock)completion;
+
+// Vivaldi
+// Shows the recent tabs panel searching for `text`.
+- (void)showRecentTabsForText:(NSString*)text;
+// End Vivaldi
 
 @end
 

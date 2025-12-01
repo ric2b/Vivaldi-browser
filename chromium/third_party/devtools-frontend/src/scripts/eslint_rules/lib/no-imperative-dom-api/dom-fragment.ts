@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /**
- * @fileoverview A library to associate DOM fragments with their construction code.
+ * @file A library to associate DOM fragments with their construction code.
  */
 
 import type {TSESLint, TSESTree} from '@typescript-eslint/utils';
@@ -135,7 +135,7 @@ export class DomFragment {
       return '${' + text + '}';
     }
 
-    function appendExpression(expression) {
+    function appendExpression(expression: string) {
       if (lineLength + expression.length + 1 > MAX_LINE_LENGTH) {
         components.push(`\n${' '.repeat(indent + 4)}`);
         lineLength = expression.length + indent + 4;

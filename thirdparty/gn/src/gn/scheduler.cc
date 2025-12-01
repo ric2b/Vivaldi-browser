@@ -25,6 +25,19 @@ Scheduler::~Scheduler() {
 }
 
 bool Scheduler::Run() {
+  // Reentrancy check.
+  CHECK(!is_running_);
+
+  // Ensure there is at least one task, (or else this will wait forever).
+  if (is_failed_ || (work_count_.IsZero() && pool_work_count_.IsZero())) {
+    // Flush any posted tasks (that were posted from the UI thread).
+    main_thread_run_loop_->PostQuit();
+    main_thread_run_loop_->Run();
+    return is_failed_;
+  }
+
+  has_been_shutdown_ = false;
+  is_running_ = true;
   main_thread_run_loop_->Run();
   bool local_is_failed;
   {
@@ -35,6 +48,7 @@ bool Scheduler::Run() {
   // Don't do this while holding |lock_|, since it will block on the workers,
   // which may be in turn waiting on the lock.
   WaitForPoolTasks();
+  is_running_ = false;
   return !local_is_failed;
 }
 

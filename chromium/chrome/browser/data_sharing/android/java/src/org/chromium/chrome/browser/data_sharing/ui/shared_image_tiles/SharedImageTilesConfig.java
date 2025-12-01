@@ -229,7 +229,6 @@ public class SharedImageTilesConfig {
                             ? R.color.small_shared_image_tiles_text_color_dark
                             : R.color.small_shared_image_tiles_text_color_light;
             setTextColor(ContextCompat.getColor(context, textColorRes));
-
             return this;
         }
 

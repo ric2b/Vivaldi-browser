@@ -12,12 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Not all functions are used from all test targets. So allow unused functions in this module.
-#![allow(unused)]
+// Not all functions are used from all test targets. So allow dead code in this module.
+#![allow(dead_code)]
 
 use crabby_avif::image::*;
 use crabby_avif::*;
-use std::fs::File;
 
 pub fn get_test_file(filename: &str) -> String {
     let base_path = if cfg!(google3) {
@@ -42,12 +41,12 @@ pub fn get_decoder(filename: &str) -> decoder::Decoder {
 
 #[cfg(feature = "png")]
 pub fn decode_png(filename: &str) -> Vec<u8> {
-    let decoder = png::Decoder::new(File::open(get_test_file(filename)).unwrap());
+    let decoder = png::Decoder::new(std::fs::File::open(get_test_file(filename)).unwrap());
     let mut reader = decoder.read_info().unwrap();
     // Indexed colors are not supported.
     assert_ne!(reader.output_color_type().0, png::ColorType::Indexed);
     let mut pixels = vec![0; reader.output_buffer_size()];
-    let info = reader.next_frame(&mut pixels).unwrap();
+    reader.next_frame(&mut pixels).unwrap();
     pixels
 }
 
@@ -104,7 +103,7 @@ pub fn generate_gradient_image(
         let max_xy_sum = plane_data.width + plane_data.height - 2;
         for y in 0..plane_data.height {
             if image.depth == 8 {
-                let row = image.row_mut(plane, y)?;
+                let row = image.row_exact_mut(plane, y)?;
                 for x in 0..plane_data.width {
                     let value = (x + y) % (max_xy_sum + 1);
                     row[x as usize] = (value * 255 / std::cmp::max(1, max_xy_sum)) as u8;
@@ -115,7 +114,7 @@ pub fn generate_gradient_image(
                 }
             } else {
                 let max_channel = image.max_channel() as u32;
-                let row = image.row16_mut(plane, y)?;
+                let row = image.row16_exact_mut(plane, y)?;
                 for x in 0..plane_data.width {
                     let value = (x + y) % (max_xy_sum + 1);
                     row[x as usize] = (value * max_channel / std::cmp::max(1, max_xy_sum)) as u16;
@@ -207,16 +206,113 @@ pub fn fill_plane(image: &mut Image, plane: Plane, value: u16) -> AvifResult<()>
     let plane_data = image.plane_data(plane).ok_or(AvifError::NoContent)?;
     for y in 0..plane_data.height {
         if image.depth == 8 {
-            for pixel in &mut image.row_mut(Plane::A, y)?[..plane_data.width as usize] {
+            for pixel in image.row_exact_mut(Plane::A, y)? {
                 *pixel = value as u8;
             }
         } else {
-            for pixel in &mut image.row16_mut(Plane::A, y)?[..plane_data.width as usize] {
+            for pixel in image.row16_exact_mut(Plane::A, y)? {
                 *pixel = value;
             }
         }
     }
     Ok(())
+}
+
+fn copy_cell_image_into_grid(
+    cell: &Image,
+    columns: u32,
+    first_image_width: u32,
+    first_image_height: u32,
+    cell_index: u32,
+    category: Category,
+    image: &mut Image,
+) -> AvifResult<()> {
+    let row_index = cell_index / columns;
+    let column_index = cell_index % columns;
+    for plane in category.planes() {
+        let plane = *plane;
+        let src_plane = cell.plane_data(plane);
+        if src_plane.is_none() {
+            continue;
+        }
+        let src_plane = src_plane.unwrap();
+        let height_multiplier = if matches!(plane, Plane::U | Plane::V) {
+            cell.yuv_format.apply_chroma_shift_y(first_image_height)
+        } else {
+            first_image_height
+        };
+        let dst_y_start = row_index * height_multiplier;
+        let width_multiplier = if matches!(plane, Plane::U | Plane::V) {
+            cell.yuv_format.apply_chroma_shift_x(first_image_width)
+        } else {
+            first_image_width
+        };
+        let dst_x_offset = (column_index * width_multiplier) as usize;
+        let dst_x_offset_end = dst_x_offset + src_plane.width as usize;
+        if image.depth == 8 {
+            for y in 0..src_plane.height {
+                let src_row = cell.row(plane, y)?;
+                let src_slice = &src_row[0..src_plane.width as usize];
+                let dst_row = image.row_mut(plane, dst_y_start + y)?;
+                let dst_slice = &mut dst_row[dst_x_offset..dst_x_offset_end];
+                dst_slice.copy_from_slice(src_slice);
+            }
+        } else {
+            for y in 0..src_plane.height {
+                let src_row = cell.row16(plane, y)?;
+                let src_slice = &src_row[0..src_plane.width as usize];
+                let dst_row = image.row16_mut(plane, dst_y_start + y)?;
+                let dst_slice = &mut dst_row[dst_x_offset..dst_x_offset_end];
+                dst_slice.copy_from_slice(src_slice);
+            }
+        }
+    }
+    Ok(())
+}
+
+pub fn merge_cells_into_grid_image(
+    columns: u32,
+    rows: u32,
+    cell_images: &[&Image],
+) -> AvifResult<Image> {
+    let tile_width = cell_images[0].width;
+    let tile_height = cell_images[0].height;
+    let mut image = image::Image {
+        width: (columns - 1) * tile_width + cell_images.last().unwrap().width,
+        height: (rows - 1) * tile_height + cell_images.last().unwrap().height,
+        depth: cell_images[0].depth,
+        yuv_format: cell_images[0].yuv_format,
+        yuv_range: cell_images[0].yuv_range,
+        ..Default::default()
+    };
+    image.allocate_planes(Category::Color)?;
+    if cell_images[0].alpha_present {
+        image.allocate_planes(Category::Alpha)?;
+        image.alpha_present = true;
+    }
+    for (cell_index, cell_image) in cell_images.iter().enumerate() {
+        copy_cell_image_into_grid(
+            cell_image,
+            columns,
+            cell_images[0].width,
+            cell_images[0].height,
+            cell_index as u32,
+            Category::Color,
+            &mut image,
+        )?;
+        if image.alpha_present {
+            copy_cell_image_into_grid(
+                cell_image,
+                columns,
+                cell_images[0].width,
+                cell_images[0].height,
+                cell_index as u32,
+                Category::Alpha,
+                &mut image,
+            )?;
+        }
+    }
+    Ok(image)
 }
 
 pub const HAS_DECODER: bool = cfg!(any(

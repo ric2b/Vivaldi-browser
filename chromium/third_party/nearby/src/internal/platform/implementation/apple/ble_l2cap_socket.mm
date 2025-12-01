@@ -14,10 +14,10 @@
 
 #import "internal/platform/implementation/apple/ble_l2cap_socket.h"
 
-#include "internal/platform/implementation/ble_v2.h"
+#import "internal/platform/implementation/apple/Log/GNCLogger.h"
 #import "internal/platform/implementation/apple/Mediums/BLEv2/GNCBLEL2CAPConnection.h"
 #import "internal/platform/implementation/apple/utils.h"
-#import "GoogleToolboxForMac/GTMLogger.h"
+#include "internal/platform/implementation/ble_v2.h"
 
 namespace nearby {
 namespace apple {
@@ -83,8 +83,6 @@ ExceptionOr<ByteArray> BleL2capInputStream::Read(std::int64_t size) {
   [condition_ unlock];
 
   if (dataToReturn) {
-    GTMLoggerInfo(@"[NEARBY] BleL2capInputStream: Received data of size: %lu",
-                  (unsigned long)dataToReturn.length);
     return ExceptionOr<ByteArray>{ByteArray((const char *)dataToReturn.bytes, dataToReturn.length)};
   } else {
     return ExceptionOr<ByteArray>{Exception::kIo};
@@ -108,9 +106,6 @@ BleL2capOutputStream::~BleL2capOutputStream() {
 
 Exception BleL2capOutputStream::Write(const ByteArray &data) {
   [condition_ lock];
-  GTMLoggerInfo(@"[NEARBY] BleL2capOutputStream: Sending data of size: %lu",
-                NSDataFromByteArray(data).length);
-
   if (!connection_) {
     [condition_ unlock];
     return {Exception::kIo};
@@ -156,7 +151,7 @@ Exception BleL2capOutputStream::Flush() {
 }
 
 Exception BleL2capOutputStream::Close() {
-  GTMLoggerInfo(@"[NEARBY] BleL2capOutputStream Closing");
+  GNCLoggerInfo(@"[NEARBY] BleL2capOutputStream Closing");
   // Unblock pending write operation.
   [condition_ lock];
   connection_ = nil;
@@ -193,7 +188,7 @@ Exception BleL2capSocket::Close() {
 }
 
 void BleL2capSocket::DoClose() {
-  GTMLoggerInfo(@"[NEARBY] BleL2capSocket DoClose");
+  GNCLoggerInfo(@"[NEARBY] BleL2capSocket DoClose");
   if (!closed_) {
     input_stream_->Close();
     output_stream_->Close();

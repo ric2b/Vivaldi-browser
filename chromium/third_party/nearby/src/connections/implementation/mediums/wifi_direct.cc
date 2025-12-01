@@ -22,8 +22,8 @@
 #include "internal/platform/expected.h"
 #include "internal/platform/logging.h"
 #include "internal/platform/mutex_lock.h"
-#include "internal/platform/wifi_direct.h"
 #include "internal/platform/wifi_credential.h"
+#include "internal/platform/wifi_direct.h"
 
 namespace nearby {
 namespace connections {
@@ -78,7 +78,7 @@ bool WifiDirect::IsGOStarted() {
 bool WifiDirect::StartWifiDirect() {
   MutexLock lock(&mutex_);
   if (is_go_started_) {
-    NEARBY_LOGS(INFO) << "No need to start GO because it is already started.";
+    LOG(INFO) << "No need to start GO because it is already started.";
     return true;
   }
   is_go_started_ = medium_.StartWifiDirect();
@@ -88,7 +88,7 @@ bool WifiDirect::StartWifiDirect() {
 bool WifiDirect::StopWifiDirect() {
   MutexLock lock(&mutex_);
   if (!is_go_started_) {
-    NEARBY_LOGS(INFO) << "No need to stop GO because it is not started.";
+    LOG(INFO) << "No need to stop GO because it is not started.";
     return true;
   }
   is_go_started_ = false;
@@ -106,8 +106,7 @@ bool WifiDirect::ConnectWifiDirect(const std::string& ssid,
                                    const std::string& password) {
   MutexLock lock(&mutex_);
   if (is_connected_to_go_) {
-    NEARBY_LOGS(INFO)
-        << "No need to connect to GO because it is already connected.";
+    LOG(INFO) << "No need to connect to GO because it is already connected.";
     return true;
   }
   is_connected_to_go_ = medium_.ConnectWifiDirect(ssid, password);
@@ -117,8 +116,7 @@ bool WifiDirect::ConnectWifiDirect(const std::string& ssid,
 bool WifiDirect::DisconnectWifiDirect() {
   MutexLock lock(&mutex_);
   if (!is_connected_to_go_) {
-    NEARBY_LOGS(INFO)
-        << "No need to disconnect to GO because it is not connected.";
+    LOG(INFO) << "No need to disconnect to GO because it is not connected.";
     return true;
   }
   is_connected_to_go_ = false;
@@ -133,8 +131,8 @@ WifiDirectCredentials* WifiDirect::GetCredentials(
 
   const auto& it = server_sockets_.find(service_id);
   if (it == server_sockets_.end()) {
-    NEARBY_LOGS(INFO) << "No server socket found for service_id:" << service_id
-                      << ".  Use default credentials";
+    LOG(INFO) << "No server socket found for service_id:" << service_id
+              << ".  Use default credentials";
     return crendential;
   }
   crendential->SetGateway(it->second.GetIPAddress());
@@ -149,21 +147,20 @@ bool WifiDirect::StartAcceptingConnections(
   MutexLock lock(&mutex_);
 
   if (service_id.empty()) {
-    NEARBY_LOGS(INFO)
-        << "Can not to start accepting WifiDirect GC's connections; "
-           "service_id is empty.";
+    LOG(INFO) << "Can not to start accepting WifiDirect GC's connections; "
+                 "service_id is empty.";
     return false;
   }
 
   if (!IsGOAvailableLocked()) {
-    NEARBY_LOGS(INFO)
+    LOG(INFO)
         << "Can't start accepting  WifiDirect GC's connections [service_id="
         << service_id << "]; WifiDirct GO is not available.";
     return false;
   }
 
   if (IsAcceptingConnectionsLocked(service_id)) {
-    NEARBY_LOGS(INFO)
+    LOG(INFO)
         << "Refusing to start accepting WifiDirect GC's connections [service="
         << service_id
         << "]; WifiDirect GO server is already in-progress with the same name.";
@@ -173,7 +170,7 @@ bool WifiDirect::StartAcceptingConnections(
   // "port=0" to let the platform to select an available port for the socket
   WifiDirectServerSocket server_socket = medium_.ListenForService(/*port=*/0);
   if (!server_socket.IsValid()) {
-    NEARBY_LOGS(INFO)
+    LOG(INFO)
         << "Failed to start to listen on WifiDirect GO server for service_id="
         << service_id;
     return false;
@@ -211,16 +208,15 @@ bool WifiDirect::StopAcceptingConnections(const std::string& service_id) {
   MutexLock lock(&mutex_);
 
   if (service_id.empty()) {
-    NEARBY_LOGS(INFO)
-        << "Unable to stop accepting WifiDirect GC's connections because "
-           "the service_id is empty.";
+    LOG(INFO) << "Unable to stop accepting WifiDirect GC's connections because "
+                 "the service_id is empty.";
     return false;
   }
 
   const auto& it = server_sockets_.find(service_id);
   if (it == server_sockets_.end()) {
-    NEARBY_LOGS(INFO) << "Can't stop accepting WifiDirect GC's connections for "
-                      << service_id << " because it was never started.";
+    LOG(INFO) << "Can't stop accepting WifiDirect GC's connections for "
+              << service_id << " because it was never started.";
     return false;
   }
 
@@ -241,9 +237,8 @@ bool WifiDirect::StopAcceptingConnections(const std::string& service_id) {
 
   // Finally, close the WifiDirectServerSocket.
   if (!listening_socket.Close().Ok()) {
-    NEARBY_LOGS(INFO)
-        << "Failed to close WifiDirect server socket for service_id:"
-        << service_id;
+    LOG(INFO) << "Failed to close WifiDirect server socket for service_id:"
+              << service_id;
     return false;
   }
 
@@ -267,20 +262,20 @@ ErrorOr<WifiDirectSocket> WifiDirect::Connect(
   WifiDirectSocket socket;
 
   if (service_id.empty()) {
-    NEARBY_LOGS(INFO) << "Refusing to create client WifiDirect socket because "
-                         "service_id is empty.";
+    LOG(INFO) << "Refusing to create client WifiDirect socket because "
+                 "service_id is empty.";
     return {Error(OperationResultCode::NEARBY_LOCAL_CLIENT_STATE_WRONG)};
   }
 
   if (!IsGCAvailableLocked()) {
-    NEARBY_LOGS(INFO) << "Can't create WifiDirect client socket [service_id="
-                      << service_id << "]; WifiDirect GC isn't available.";
+    LOG(INFO) << "Can't create WifiDirect client socket [service_id="
+              << service_id << "]; WifiDirect GC isn't available.";
     return {Error(
         OperationResultCode::MEDIUM_UNAVAILABLE_WIFI_DIRECT_NOT_AVAILABLE)};
   }
 
   if (cancellation_flag->Cancelled()) {
-    NEARBY_LOGS(INFO) << "Can't create  WifiDirect client socket due to cancel";
+    LOG(INFO) << "Can't create  WifiDirect client socket due to cancel";
     return {
         Error(OperationResultCode::
                   CLIENT_CANCELLATION_CANCEL_WIFI_DIRECT_OUTGOING_CONNECTION)};
@@ -288,8 +283,8 @@ ErrorOr<WifiDirectSocket> WifiDirect::Connect(
 
   socket = medium_.ConnectToService(ip_address, port, cancellation_flag);
   if (!socket.IsValid()) {
-    NEARBY_LOGS(INFO) << "Failed to Connect via WifiDirect Server [service_id="
-                      << service_id << "]";
+    LOG(INFO) << "Failed to Connect via WifiDirect Server [service_id="
+              << service_id << "]";
     return {Error(OperationResultCode::
                       CONNECTIVITY_WIFI_DIRECT_CLIENT_SOCKET_CREATION_FAILURE)};
   }

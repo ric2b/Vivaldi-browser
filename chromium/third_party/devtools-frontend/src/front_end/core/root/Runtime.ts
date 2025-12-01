@@ -11,6 +11,10 @@ let runtimePlatform = '';
 let runtimeInstance: Runtime|undefined;
 let isNode: boolean|undefined;
 
+/** Returns the base URL (similar to `<base>`).
+ * Used to resolve the relative URLs of any additional DevTools files (locale strings, etc) needed.
+ * See: https://cs.chromium.org/remoteBase+f:devtools_window
+ */
 export function getRemoteBase(location: string = self.location.toString()): {
   base: string,
   version: string,
@@ -318,7 +322,8 @@ export const enum ExperimentName {
   TIMELINE_DEBUG_MODE = 'timeline-debug-mode',
   TIMELINE_ENHANCED_TRACES = 'timeline-enhanced-traces',
   TIMELINE_COMPILED_SOURCES = 'timeline-compiled-sources',
-  TIMELINE_EXPERIMENTAL_INSIGHTS = 'timeline-experimental-insights',
+  TIMELINE_SAVE_AS_GZ = 'timeline-save-as-gz',
+  VERTICAL_DRAWER = 'vertical-drawer',
   // Adding or removing an entry from this enum?
   // You will need to update:
   // 1. REGISTERED_EXPERIMENTS in EnvironmentHelpers.ts (to create this experiment in the test env)
@@ -364,6 +369,7 @@ export interface HostConfigFreestyler {
   multimodal?: boolean;
   multimodalUploadInput?: boolean;
   functionCalling?: boolean;
+  featureName?: string;
 }
 
 export interface HostConfigAiAssistanceNetworkAgent {
@@ -371,6 +377,7 @@ export interface HostConfigAiAssistanceNetworkAgent {
   temperature: number;
   enabled: boolean;
   userTier: string;
+  featureName?: string;
 }
 
 export interface HostConfigAiAssistancePerformanceAgent {
@@ -380,6 +387,7 @@ export interface HostConfigAiAssistancePerformanceAgent {
   userTier: string;
   // Introduced in crrev.com/c/6243415
   insightsEnabled?: boolean;
+  featureName?: string;
 }
 
 export interface HostConfigAiAssistanceFileAgent {
@@ -387,12 +395,17 @@ export interface HostConfigAiAssistanceFileAgent {
   temperature: number;
   enabled: boolean;
   userTier: string;
+  featureName?: string;
 }
 
-/**
- * @see http://go/chrome-devtools:automatic-workspace-folders-design
- */
-export interface HostConfigAutomaticFileSystems {
+export interface HostConfigAiCodeCompletion {
+  modelId: string;
+  temperature: number;
+  enabled: boolean;
+  userTier: string;
+}
+
+export interface HostConfigDeepLinksViaExtensibilityApi {
   enabled: boolean;
 }
 
@@ -428,12 +441,26 @@ export interface HostConfigThirdPartyCookieControls {
   managedBlockThirdPartyCookies: string|boolean;
 }
 
-interface CSSValueTracing {
+interface AiGeneratedTimelineLabels {
   enabled: boolean;
 }
 
-interface AiGeneratedTimelineLabels {
+interface AllowPopoverForcing {
   enabled: boolean;
+}
+
+interface AiSubmenuPrompts {
+  enabled: boolean;
+  featureName?: string;
+}
+
+interface IpProtectionInDevTools {
+  enabled: boolean;
+}
+
+interface AiDebugWithAi {
+  enabled: boolean;
+  featureName?: string;
 }
 
 /**
@@ -453,11 +480,13 @@ export type HostConfig = Platform.TypeScriptUtilities.RecursivePartial<{
   aidaAvailability: AidaAvailability,
   channel: Channel,
   devToolsConsoleInsights: HostConfigConsoleInsights,
+  devToolsDeepLinksViaExtensibilityApi: HostConfigDeepLinksViaExtensibilityApi,
   devToolsFreestyler: HostConfigFreestyler,
   devToolsAiAssistanceNetworkAgent: HostConfigAiAssistanceNetworkAgent,
+  devToolsAiDebugWithAi: AiDebugWithAi,
   devToolsAiAssistanceFileAgent: HostConfigAiAssistanceFileAgent,
   devToolsAiAssistancePerformanceAgent: HostConfigAiAssistancePerformanceAgent,
-  devToolsAutomaticFileSystems: HostConfigAutomaticFileSystems,
+  devToolsAiCodeCompletion: HostConfigAiCodeCompletion,
   devToolsVeLogging: HostConfigVeLogging,
   devToolsWellKnown: HostConfigWellKnown,
   devToolsPrivacyUI: HostConfigPrivacyUI,
@@ -469,8 +498,10 @@ export type HostConfig = Platform.TypeScriptUtilities.RecursivePartial<{
   devToolsEnableOriginBoundCookies: HostConfigEnableOriginBoundCookies,
   devToolsAnimationStylesInStylesTab: HostConfigAnimationStylesInStylesTab,
   thirdPartyCookieControls: HostConfigThirdPartyCookieControls,
-  devToolsCssValueTracing: CSSValueTracing,
   devToolsAiGeneratedTimelineLabels: AiGeneratedTimelineLabels,
+  devToolsAllowPopoverForcing: AllowPopoverForcing,
+  devToolsAiSubmenuPrompts: AiSubmenuPrompts,
+  devToolsIpProtectionInDevTools: IpProtectionInDevTools,
 }>;
 
 /**

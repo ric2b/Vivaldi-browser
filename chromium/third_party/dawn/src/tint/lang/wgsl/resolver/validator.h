@@ -243,13 +243,11 @@ class Validator {
     /// @param storage_type the attribute storage type
     /// @param stage the current pipeline stage
     /// @param is_input true if this is an input attribute
-    /// @param ignore_clip_distances_type_validation true if ignore type check on clip_distances
     /// @returns true on success, false otherwise.
     bool BuiltinAttribute(const ast::BuiltinAttribute* attr,
                           const core::type::Type* storage_type,
                           ast::PipelineStage stage,
-                          const bool is_input,
-                          const bool ignore_clip_distances_type_validation = false) const;
+                          const bool is_input) const;
 
     /// Validates a continue statement
     /// @param stmt the continue statement to validate
@@ -432,6 +430,12 @@ class Validator {
     /// @returns true on success, false otherwise
     bool StorageTexture(const core::type::StorageTexture* t, const Source& source) const;
 
+    /// Validates a texel buffer
+    /// @param t the texel buffer to validate
+    /// @param source the source of the texel buffer
+    /// @returns true on success, false otherwise
+    bool TexelBuffer(const core::type::TexelBuffer* t, const Source& source) const;
+
     /// Validates a sampled texture
     /// @param t the texture to validate
     /// @param source the source of the texture
@@ -569,6 +573,18 @@ class Validator {
     /// @param source the source of the f16 usage
     /// @returns true on success, false otherwise
     bool CheckF16Enabled(const Source& source) const;
+
+    /// Validates that 'chromium_experimental_subgroup_matrix' extension is enabled for i8 usage at
+    /// @p source
+    /// @param source the source of the i8 usage
+    /// @returns true on success, false otherwise
+    bool CheckI8Enabled(const Source& source) const;
+
+    /// Validates that 'chromium_experimental_subgroup_matrix' extension is enabled for u8 usage at
+    /// @p source
+    /// @param source the source of the u8 usage
+    /// @returns true on success, false otherwise
+    bool CheckU8Enabled(const Source& source) const;
 
     /// Validates there are no duplicate attributes
     /// @param attributes the list of attributes to validate

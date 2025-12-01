@@ -5,7 +5,6 @@
 
 import getpass
 import re
-import pytest
 
 from .proto import trace_span_pb2
 from . import anonymization

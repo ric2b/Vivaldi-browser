@@ -90,6 +90,17 @@ class PartialPivLU : public SolverBase<PartialPivLU<MatrixType_, PermutationInde
   typedef Transpositions<RowsAtCompileTime, MaxRowsAtCompileTime, PermutationIndex> TranspositionType;
   typedef typename MatrixType::PlainObject PlainObject;
 
+  /** \brief Reports whether the LU factorization was successful.
+   *
+   * \note This function always returns \c Success. It is provided for compatibility
+   * with other factorization routines.
+   * \returns \c Success
+   */
+  ComputationInfo info() const {
+    eigen_assert(m_isInitialized && "PartialPivLU is not initialized.");
+    return Success;
+  }
+
   /**
    * \brief Default Constructor.
    *

@@ -673,14 +673,7 @@ class OneDnnContractionRewriteVisitor : public DfsHloRewriteVisitor {
     if (Match(instr, pattern)) {
       if (!IsSupportedType(contraction->shape().element_type()))
         return absl::OkStatus();
-      // TODO(intel-tf): Remove the condition below when the fusion Contraction
-      // + Add(bias) + Add(e.g., residual) is enabled.
-      auto contraction_config = contraction->backend_config<BackendConfig>();
-      auto orig_fusion_config = GetFusionsConfig(&contraction_config);
-      if (!orig_fusion_config->ops().empty() &&
-          orig_fusion_config->ops(0) == OneDnnFusionConfig::BIAS) {
-        return absl::OkStatus();
-      }
+
       std::vector<HloInstruction*> new_operands;
       for (auto operand : contraction->operands()) {
         new_operands.push_back(operand);
@@ -739,6 +732,11 @@ class OneDnnContractionRewriteVisitor : public DfsHloRewriteVisitor {
               contraction->shape(), new_operands)));
 
       auto backend_config = custom_call->backend_config<BackendConfig>();
+      // SUM post-op does not work for BF16 because element-wise addition
+      // is not allowed due to precision constraints by oneDNN.
+      // Hence, the SUM use case is fused as BINARY_ADD for BF16.
+      // This is verified by checking if the output shape of the
+      // custom call matches the addend shape.
       bool can_fuse_sum =
           (ShapeUtil::Equal(custom_call->shape(), addend->shape()) &&
            addend_user_count == 1 &&
@@ -892,19 +890,40 @@ class OneDnnContractionRewriteVisitor : public DfsHloRewriteVisitor {
     return absl::OkStatus();
   }
 
+  auto SigmoidActivation(HloInstruction* instr, HloInstruction** src) {
+    return Match(instr,
+                 m::Divide(BcastConstScalar(1.0),
+                           m::AddAnyOrder(BcastConstScalar(1.0),
+                                          m::Exp(m::Negate(m::Op(src))))));
+  }
+
   absl::Status HandleMultiply(HloInstruction* instr) override {
     HloInstruction* contraction;
     HloInstruction* intermediate_instr = nullptr;
-    HloInstruction* src;
+    HloInstruction* optional_bitcast = nullptr;
+    HloInstruction *src, *multiplier, *new_src;
     auto activation = GELUActivation(instr, &src);
     if (activation != OneDnnFusionConfig::UNDEFINED) {
-      HloInstruction* optional_bitcast = nullptr;
       if (Match(src, ElementwiseSafeIntermediates(
                          &intermediate_instr, &optional_bitcast,
                          OneDnnFusibleInstr(&contraction)))) {
         return FuseActivation(activation, instr, contraction,
                               intermediate_instr, optional_bitcast);
       }
+    }
+
+    if (Match(instr, m::MultiplyAnyOrder(
+                         m::Op(&multiplier).WithOpcode(HloOpcode::kDivide),
+                         m::Op(&src))) &&
+        SigmoidActivation(multiplier, &new_src) &&
+        Match(src, ElementwiseSafeIntermediates(
+                       &intermediate_instr, &optional_bitcast,
+                       OneDnnFusibleInstr(&contraction))
+                       .WithPredicate([&new_src](const HloInstruction* root) {
+                         return root == new_src;
+                       }))) {
+      return FuseActivation(OneDnnFusionConfig::SWISH, instr, contraction,
+                            intermediate_instr, optional_bitcast);
     }
 
     HloInstruction* constant;
@@ -955,13 +974,6 @@ class OneDnnContractionRewriteVisitor : public DfsHloRewriteVisitor {
       TF_RETURN_IF_ERROR(ReplaceInstruction(instr, new_instr));
     }
     return absl::OkStatus();
-  }
-
-  auto SigmoidActivation(HloInstruction* instr, HloInstruction** src) {
-    return Match(instr,
-                 m::Divide(BcastConstScalar(1.0),
-                           m::AddAnyOrder(BcastConstScalar(1.0),
-                                          m::Exp(m::Negate(m::Op(src))))));
   }
 
   absl::Status HandleDivide(HloInstruction* instr) override {

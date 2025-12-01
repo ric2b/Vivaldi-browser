@@ -31,23 +31,23 @@ layout(binding = 0, std140)
 uniform uniforms_block_1_ubo {
   Uniforms inner;
 } v;
-layout(binding = 10, std430)
+layout(binding = 1, std430)
 buffer U32s_1_ssbo {
   uint values[];
 } indices;
-layout(binding = 11, std430)
+layout(binding = 2, std430)
 buffer F32s_1_ssbo {
   float values[];
 } positions;
-layout(binding = 20, std430)
+layout(binding = 3, std430)
 buffer AU32s_1_ssbo {
   uint values[];
 } counters;
-layout(binding = 21, std430)
+layout(binding = 4, std430)
 buffer AI32s_1_ssbo {
   int values[];
 } LUT;
-layout(binding = 50, std430)
+layout(binding = 5, std430)
 buffer dbg_block_1_ssbo {
   Dbg inner;
 } v_1;
@@ -63,7 +63,7 @@ vec3 toVoxelPos(vec3 position) {
   return vec3(gz, gz, gz);
 }
 uvec3 tint_v3f32_to_v3u32(vec3 value) {
-  return mix(uvec3(4294967295u), mix(uvec3(0u), uvec3(value), greaterThanEqual(value, vec3(0.0f))), lessThanEqual(value, vec3(4294967040.0f)));
+  return uvec3(clamp(value, vec3(0.0f), vec3(4294967040.0f)));
 }
 uint toIndex1D(uint gridSize, vec3 voxelPos) {
   uvec3 icoord = tint_v3f32_to_v3u32(voxelPos);

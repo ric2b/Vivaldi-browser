@@ -105,7 +105,7 @@ ElementsTestRunner.findNode = async function(matchFunction, callback) {
 
 /**
  * @param {function(!Element): boolean} matchFunction
- * @param {!Promise}
+ * @returns {!Promise}
  */
 ElementsTestRunner.findNodePromise = function(matchFunction) {
   return new Promise(resolve => ElementsTestRunner.findNode(matchFunction, resolve));
@@ -1232,7 +1232,7 @@ function onBlankSection(selector, callback) {
  * To pick which properties to dump: dumpInspectorHighlightJSON(idValue, ['prop'], callback).
  *
  * @param {string} idValue
- * @param {?Array<string>} attributes List of top-level property names to include in the result
+ * @param {?Array<string>} attributes - List of top-level property names to include in the result
  * @param {?Function=} maybeCallback
  */
 ElementsTestRunner.dumpInspectorHighlightJSON = function(idValue, attributes, maybeCallback) {
@@ -1261,24 +1261,6 @@ ElementsTestRunner.dumpInspectorGridHighlightsJSON = async function(idValues, ca
   const result = await TestRunner.OverlayAgent.getGridHighlightObjectsForTest(nodeIds);
   TestRunner.addResult(JSON.stringify(result, null, 2));
   callback();
-};
-
-ElementsTestRunner.dumpInspectorDistanceJSON = function(idValue, callback) {
-  ElementsTestRunner.nodeWithId(idValue, nodeResolved);
-
-  async function nodeResolved(node) {
-    const result = await TestRunner.OverlayAgent.getHighlightObjectForTest(node.id, true);
-    const info = result['distanceInfo'];
-    if (!info) {
-      TestRunner.addResult(`${idValue}: No distance info`);
-    } else {
-      if (info['style']) {
-        info['style'] = '<style data>';
-      }
-      TestRunner.addResult(idValue + JSON.stringify(info, null, 2));
-    }
-    callback();
-  }
 };
 
 ElementsTestRunner.dumpInspectorHighlightStyleJSON = async function(idValue) {

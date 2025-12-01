@@ -10,6 +10,7 @@
 #include "base/functional/bind.h"
 #include "base/path_service.h"
 #include "base/vivaldi_switches.h"
+#include "browser/ad_blocker/adblock_rule_service_factory.h"
 #include "browser/stats_reporter.h"
 #include "browser/translate/vivaldi_translate_client.h"
 #include "build/build_config.h"
@@ -31,7 +32,6 @@
 #include "components/favicon/core/favicon_service.h"
 #include "components/omnibox/omnibox_service_factory.h"
 #include "components/page_actions/page_actions_service_factory.h"
-#include "components/request_filter/adblock_filter/adblock_rule_service_factory.h"
 #include "components/request_filter/request_filter_manager_factory.h"
 #include "components/request_filter/request_filter_proxying_url_loader_factory.h"
 #include "components/request_filter/request_filter_proxying_websocket.h"
@@ -43,6 +43,7 @@
 #include "media/base/media_switches.h"
 #include "menus/context_menu_service_factory.h"
 #include "menus/main_menu_service_factory.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "sessions/index_service_factory.h"
 #include "sync/note_sync_service_factory.h"
 #include "translate_history/th_service_factory.h"
@@ -51,7 +52,6 @@
 
 #include "app/vivaldi_apptools.h"
 #include "browser/search_engines/vivaldi_search_engines_updater.h"
-#include "browser/vivaldi_runtime_feature.h"
 #include "components/browser/vivaldi_brand_select.h"
 #include "components/search_engines/search_engines_managers_factory.h"
 
@@ -142,7 +142,6 @@ void VivaldiBrowserMainExtraParts::
     EnsureBrowserContextKeyedServiceFactoriesBuilt() {
   vivaldi_status::VivaldiStatusFactory::GetInstance();
   translate::TranslateLanguageList::DisableUpdate();
-  vivaldi_runtime_feature::Init();
 #if !BUILDFLAG(IS_ANDROID)
   vivaldi::NotesModelFactory::GetInstance();
   calendar::CalendarServiceFactory::GetInstance();

@@ -6,6 +6,7 @@
 
 #import "components/optimization_guide/machine_learning_tflite_buildflags.h"
 #import "ios/chrome/browser/affiliations/model/ios_chrome_affiliation_service_factory.h"
+#import "ios/chrome/browser/aim/model/ios_chrome_aim_eligibility_service_factory.h"
 #import "ios/chrome/browser/autocomplete/model/autocomplete_classifier_factory.h"
 #import "ios/chrome/browser/autocomplete/model/autocomplete_provider_client_impl.h"
 #import "ios/chrome/browser/autocomplete/model/autocomplete_scoring_model_service_factory.h"
@@ -72,7 +73,7 @@
 #import "ios/chrome/browser/home_customization/model/ntp_background_service_factory.h"
 #import "ios/chrome/browser/https_upgrades/model/https_upgrade_service_factory.h"
 #import "ios/chrome/browser/image_fetcher/model/image_fetcher_service_factory.h"
-#import "ios/chrome/browser/intelligence/gemini/model/glic_service_factory.h"
+#import "ios/chrome/browser/intelligence/bwg/model/bwg_service_factory.h"
 #import "ios/chrome/browser/invalidation/model/ios_chrome_profile_invalidation_provider_factory.h"
 #import "ios/chrome/browser/language/model/accept_languages_service_factory.h"
 #import "ios/chrome/browser/language/model/language_model_manager_factory.h"
@@ -83,6 +84,8 @@
 #import "ios/chrome/browser/metrics/model/bookmark_model_metrics_service_factory.h"
 #import "ios/chrome/browser/metrics/model/google_groups_manager_factory.h"
 #import "ios/chrome/browser/metrics/model/ios_profile_session_durations_service_factory.h"
+#import "ios/chrome/browser/mini_map/model/mini_map_service_factory.h"
+#import "ios/chrome/browser/omnibox/model/placeholder_service/placeholder_service_factory.h"
 #import "ios/chrome/browser/optimization_guide/model/optimization_guide_service_factory.h"
 #import "ios/chrome/browser/page_content_annotations/model/page_content_annotations_service_factory.h"
 #import "ios/chrome/browser/page_image/model/page_image_service_factory.h"
@@ -106,6 +109,7 @@
 #import "ios/chrome/browser/power_bookmarks/model/power_bookmark_service_factory.h"
 #import "ios/chrome/browser/prerender/model/prerender_service_factory.h"
 #import "ios/chrome/browser/price_insights/model/price_insights_model_factory.h"
+#import "ios/chrome/browser/privacy_sandbox/tracking_protection_settings_factory.h"
 #import "ios/chrome/browser/promos_manager/model/promos_manager_factory.h"
 #import "ios/chrome/browser/push_notification/model/provisional_push_notification_service_factory.h"
 #import "ios/chrome/browser/push_notification/model/push_notification_profile_service_factory.h"
@@ -125,6 +129,7 @@
 #import "ios/chrome/browser/saved_tab_groups/model/tab_group_service_factory.h"
 #import "ios/chrome/browser/saved_tab_groups/model/tab_group_sync_service_factory.h"
 #import "ios/chrome/browser/screen_time/model/screen_time_buildflags.h"
+#import "ios/chrome/browser/script_blocking/model/script_blocking_rule_applier_service_factory.h"
 #import "ios/chrome/browser/search_engines/model/search_engine_choice_service_factory.h"
 #import "ios/chrome/browser/search_engines/model/template_url_fetcher_factory.h"
 #import "ios/chrome/browser/search_engines/model/template_url_prepopulate_data_resolver_factory.h"
@@ -191,8 +196,10 @@
 
 // Vivaldi
 #import "components/search_engines/search_engines_managers_factory.h"
-#import "ios/ad_blocker/adblock_rule_service_factory.h"
+#import "ios/chrome/browser/ad_blocker/adblock_rule_service_factory.h"
 #import "ios/direct_match/direct_match_service_factory.h"
+#import "ios/favicon/vivaldi_favicon_loader_factory.h"
+#import "ios/favicon/vivaldi_favicon_service_factory.h"
 #import "ios/notes/notes_factory.h"
 #import "ios/translate/vivaldi_ios_th_service_factory.h"
 #import "prefs/vivaldi_prefs_definitions.h"
@@ -239,6 +246,7 @@ void EnsureProfileKeyedServiceFactoriesBuilt() {
   ios::InMemoryURLIndexFactory::GetInstance();
   ios::LocalOrSyncableBookmarkSyncServiceFactory::GetInstance();
   ios::PasswordManagerLogRouterFactory::GetInstance();
+  ios::PlaceholderServiceFactory::GetInstance();
   ios::ProviderStateServiceFactory::GetInstance();
   ios::SearchEngineChoiceServiceFactory::GetInstance();
   ios::ShortcutsBackendFactory::GetInstance();
@@ -282,7 +290,7 @@ void EnsureProfileKeyedServiceFactoriesBuilt() {
   DomainDiversityReporterFactory::GetInstance();
   ExternalFileRemoverFactory::GetInstance();
   FollowServiceFactory::GetInstance();
-  GlicServiceFactory::GetInstance();
+  BwgServiceFactory::GetInstance();
   GoogleGroupsManagerFactory::GetInstance();
   GoogleLogoServiceFactory::GetInstance();
   HashRealTimeServiceFactory::GetInstance();
@@ -296,6 +304,7 @@ void EnsureProfileKeyedServiceFactoriesBuilt() {
   InactiveTabsServiceFactory::GetInstance();
   IOSChromeAccountPasswordStoreFactory::GetInstance();
   IOSChromeAffiliationServiceFactory::GetInstance();
+  IOSChromeAimEligibilityServiceFactory::GetInstance();
   IOSChromeBulkLeakCheckServiceFactory::GetInstance();
   IOSChromeFaviconLoaderFactory::GetInstance();
   IOSChromeGCMProfileServiceFactory::GetInstance();
@@ -324,6 +333,7 @@ void EnsureProfileKeyedServiceFactoriesBuilt() {
   ListFamilyMembersServiceFactory::GetInstance();
   MailtoHandlerServiceFactory::GetInstance();
   ManagedBookmarkServiceFactory::GetInstance();
+  MiniMapServiceFactory::GetInstance();
   OhttpKeyServiceFactory::GetInstance();
   OnDeviceTailModelServiceFactory::GetInstance();
   OptimizationGuideServiceFactory::GetInstance();
@@ -347,6 +357,7 @@ void EnsureProfileKeyedServiceFactoriesBuilt() {
   SafeBrowsingHelperFactory::GetInstance();
   SafeBrowsingMetricsCollectorFactory::GetInstance();
   SamplePanelModelFactory::GetInstance();
+  ScriptBlockingRuleApplierServiceFactory::GetInstance();
   SendTabToSelfSyncServiceFactory::GetInstance();
   SessionRestorationServiceFactory::GetInstance();
   SessionSyncServiceFactory::GetInstance();
@@ -367,6 +378,7 @@ void EnsureProfileKeyedServiceFactoriesBuilt() {
   TextToSpeechPlaybackControllerFactory::GetInstance();
   TipsManagerIOSFactory::GetInstance();
   LanguageDetectionModelServiceFactory::GetInstance();
+  TrackingProtectionSettingsFactory::GetInstance();
   TrustedVaultClientBackendFactory::GetInstance();
   UnifiedConsentServiceFactory::GetInstance();
   UnitConversionServiceFactory::GetInstance();
@@ -395,9 +407,11 @@ void EnsureProfileKeyedServiceFactoriesBuilt() {
   // Vivaldi
   adblock_filter::RuleServiceFactory::GetInstance();
   direct_match::DirectMatchServiceFactory::GetInstance();
-  vivaldi::NotesModelFactory::GetInstance();
-  translate_history::VivaldiIOSTHServiceFactory::GetInstance();
+  ios::VivaldiFaviconLoaderFactory::GetInstance();
+  ios::VivaldiFaviconServiceFactory::GetInstance();
   SearchEnginesManagersFactory::GetInstance();
+  translate_history::VivaldiIOSTHServiceFactory::GetInstance();
+  vivaldi::NotesModelFactory::GetInstance();
   vivaldi::VivaldiPrefsDefinitions::GetInstance();
   // End Vivaldi
 }

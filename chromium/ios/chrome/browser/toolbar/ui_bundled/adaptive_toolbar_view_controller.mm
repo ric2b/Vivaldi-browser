@@ -13,6 +13,7 @@
 #import "ios/chrome/browser/fullscreen/ui_bundled/fullscreen_reason.h"
 #import "ios/chrome/browser/shared/public/commands/omnibox_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
+#import "ios/chrome/browser/shared/public/prototypes/diamond/utils.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/shared/ui/util/animation_util.h"
 #import "ios/chrome/browser/shared/ui/util/layout_guide_names.h"
@@ -94,6 +95,10 @@ const CGFloat kFullscreenProgressFullyExpanded = 1.0;
 // End Vivaldi
 
 #pragma mark - Public
+
+- (ToolbarButton*)tabGridButton {
+  return self.view.tabGridButton;
+}
 
 - (ToolbarButton*)toolsMenuButton {
   return self.view.toolsMenuButton;
@@ -197,6 +202,11 @@ const CGFloat kFullscreenProgressFullyExpanded = 1.0;
   [self configureMenuProviderForButton:self.view.tabGridButton
                             buttonType:AdaptiveToolbarButtonTypeTabGrid];
 
+  if (IsVivaldiRunning()) {
+    [self configureMenuProviderForButton:self.view.searchButton
+                              buttonType:AdaptiveToolbarButtonTypeSearch];
+  } // End Vivaldi
+
   // LocationBarContainer initial fullscreen progress.
   [self updateLocationBarHeightForFullscreenProgress:
             kFullscreenProgressFullyExpanded];
@@ -296,6 +306,9 @@ const CGFloat kFullscreenProgressFullyExpanded = 1.0;
 
 - (void)setCanGoForward:(BOOL)canGoForward {
   self.view.forwardButton.enabled = canGoForward;
+  if (IsDiamondPrototypeEnabled()) {
+    self.view.forwardButton.hidden = !canGoForward;
+  }
 
   // Vivaldi
   self.view.canShowForward = canGoForward;
@@ -305,6 +318,9 @@ const CGFloat kFullscreenProgressFullyExpanded = 1.0;
 
 - (void)setCanGoBack:(BOOL)canGoBack {
   self.view.backButton.enabled = canGoBack;
+  if (IsDiamondPrototypeEnabled()) {
+    self.view.backButton.hidden = !canGoBack;
+  }
 
   // Vivaldi
   self.view.canShowBack = canGoBack;
@@ -324,8 +340,8 @@ const CGFloat kFullscreenProgressFullyExpanded = 1.0;
 
   if (!loading) {
     [self stopProgressBar];
-  } else if (self.view.progressBar.hidden &&
-             !IsRegularXRegularSizeClass(self) && !self.isNTP) {
+  } else if (self.view.progressBar.hidden && !CanShowTabStrip(self) &&
+             !self.isNTP) {
     [self.view.progressBar setProgress:0];
     [self updateProgressBarVisibility];
     // Layout if needed the progress bar to avoid having the progress bar
@@ -346,8 +362,8 @@ const CGFloat kFullscreenProgressFullyExpanded = 1.0;
   CGFloat scaleSign = tabCount > self.view.tabGridButton.tabCount ? 1 : -1;
   self.view.tabGridButton.tabCount = tabCount;
 
-  if (IsRegularXRegularSizeClass(self)) {
-    // No animation on Regular x Regular.
+  if (CanShowTabStrip(self)) {
+    // No animation on iPad.
     return;
   }
 
@@ -514,6 +530,13 @@ const CGFloat kFullscreenProgressFullyExpanded = 1.0;
 // Updates `locationBarContainer` height and adjusts its corner radius for the
 // fullscreen `progress`
 - (void)updateLocationBarHeightForFullscreenProgress:(CGFloat)progress {
+  if (IsDiamondPrototypeEnabled()) {
+    const CGFloat height = kDiamondLocationBarHeight * progress +
+                           kDiamondCollapsedToolbarHeight * (1 - progress);
+    self.view.locationBarContainerHeight.constant = height;
+    self.view.locationBarContainer.layer.cornerRadius = height / 2;
+    return;
+  }
   const CGFloat expandedHeight =
       LocationBarHeight(self.traitCollection.preferredContentSizeCategory);
   const CGFloat collapsedHeight =
@@ -569,6 +592,11 @@ const CGFloat kFullscreenProgressFullyExpanded = 1.0;
 // change.
 - (void)updateAllButtonsVisibility {
   for (ToolbarButton* button in self.view.allButtons) {
+    if (IsDiamondPrototypeEnabled()) {
+      if (button == self.view.backButton || button == self.view.forwardButton) {
+        continue;
+      }
+    }
     [button updateHiddenInCurrentSizeClass];
   }
 }
@@ -616,6 +644,8 @@ const CGFloat kFullscreenProgressFullyExpanded = 1.0;
   } else if (sender == self.view.openNewTabButton) {
     base::RecordAction(base::UserMetricsAction("MobileToolbarNewTabShortcut"));
     base::RecordAction(base::UserMetricsAction("MobileTabNewTab"));
+  } else if (sender == self.view.diamondPrototypeButton) {
+    CHECK(IsDiamondPrototypeEnabled());
   } else {
     NOTREACHED();
   }
@@ -667,7 +697,7 @@ const CGFloat kFullscreenProgressFullyExpanded = 1.0;
 - (void)updateUIOnTraitChange:(UITraitCollection*)previousTraitCollection {
   // Progress bar and buttons visibility.
   [self updateAllButtonsVisibility];
-  if (IsRegularXRegularSizeClass(self)) {
+  if (CanShowTabStrip(self)) {
     [self.view.progressBar setHidden:YES animated:NO completion:nil];
   } else if (self.loading && self.hasOmnibox) {
 

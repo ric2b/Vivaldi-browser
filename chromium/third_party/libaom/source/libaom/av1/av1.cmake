@@ -92,6 +92,10 @@ list(APPEND AOM_AV1_COMMON_SOURCES
             "${AOM_ROOT}/av1/common/warped_motion.c"
             "${AOM_ROOT}/av1/common/warped_motion.h")
 
+if(CONFIG_HIGHWAY)
+  list(APPEND AOM_AV1_COMMON_SOURCES "${AOM_ROOT}/av1/common/selfguided_hwy.h")
+endif()
+
 list(APPEND AOM_AV1_DECODER_SOURCES
             "${AOM_ROOT}/av1/av1_dx_iface.c"
             "${AOM_ROOT}/av1/decoder/decodeframe.c"
@@ -258,6 +262,11 @@ list(APPEND AOM_AV1_ENCODER_SOURCES
             "${AOM_ROOT}/av1/encoder/dwt.c"
             "${AOM_ROOT}/av1/encoder/dwt.h")
 
+if(CONFIG_HIGHWAY)
+  list(APPEND AOM_AV1_ENCODER_SOURCES
+              "${AOM_ROOT}/av1/encoder/av1_fwd_txfm2d_hwy.h")
+endif()
+
 if(CONFIG_REALTIME_ONLY)
   list(REMOVE_ITEM AOM_AV1_ENCODER_SOURCES
                    "${AOM_ROOT}/av1/encoder/grain_test_vectors.h")
@@ -311,6 +320,11 @@ list(APPEND AOM_AV1_COMMON_INTRIN_AVX2
             "${AOM_ROOT}/av1/common/x86/warp_plane_avx2.c"
             "${AOM_ROOT}/av1/common/x86/wiener_convolve_avx2.c")
 
+if(CONFIG_HIGHWAY)
+  list(APPEND AOM_AV1_COMMON_INTRIN_AVX512
+              "${AOM_ROOT}/av1/common/x86/selfguided_hwy_avx512.cc")
+endif()
+
 list(APPEND AOM_AV1_ENCODER_ASM_SSE2 "${AOM_ROOT}/av1/encoder/x86/dct_sse2.asm"
             "${AOM_ROOT}/av1/encoder/x86/error_sse2.asm")
 
@@ -363,6 +377,16 @@ if(NOT CONFIG_EXCLUDE_SIMD_MISMATCH)
   list(APPEND AOM_AV1_ENCODER_INTRIN_AVX2
               "${AOM_ROOT}/av1/encoder/x86/cnn_avx2.c"
               "${AOM_ROOT}/av1/encoder/x86/ml_avx2.c")
+endif()
+
+if(CONFIG_HIGHWAY)
+  list(APPEND AOM_AV1_ENCODER_INTRIN_AVX2
+              "${AOM_ROOT}/av1/encoder/x86/av1_fwd_txfm2d_hwy_avx2.cc")
+  list(REMOVE_ITEM AOM_AV1_ENCODER_INTRIN_AVX2
+                   "${AOM_ROOT}/av1/encoder/x86/av1_fwd_txfm2d_avx2.c"
+                   "${AOM_ROOT}/av1/encoder/x86/highbd_fwd_txfm_avx2.c")
+  list(APPEND AOM_AV1_ENCODER_INTRIN_AVX512
+              "${AOM_ROOT}/av1/encoder/x86/av1_fwd_txfm2d_hwy_avx512.cc")
 endif()
 
 list(APPEND AOM_AV1_ENCODER_INTRIN_NEON
@@ -447,7 +471,8 @@ list(APPEND AOM_AV1_COMMON_INTRIN_VSX "${AOM_ROOT}/av1/common/ppc/cfl_ppc.c")
 
 list(APPEND AOM_AV1_COMMON_INTRIN_RVV
             "${AOM_ROOT}/av1/common/riscv/cdef_block_rvv.c"
-            "${AOM_ROOT}/av1/common/riscv/convolve_rvv.c")
+            "${AOM_ROOT}/av1/common/riscv/convolve_rvv.c"
+            "${AOM_ROOT}/av1/common/riscv/highbd_convolve_rvv.c")
 
 if(CONFIG_THREE_PASS)
   list(APPEND AOM_AV1_ENCODER_SOURCES "${AOM_ROOT}/av1/encoder/thirdpass.c"
@@ -564,6 +589,7 @@ if(CONFIG_REALTIME_ONLY)
                      "${AOM_ROOT}/av1/common/cfl.h"
                      "${AOM_ROOT}/av1/common/restoration.c"
                      "${AOM_ROOT}/av1/common/restoration.h"
+                     "${AOM_ROOT}/av1/common/selfguided_hwy.h"
                      "${AOM_ROOT}/av1/common/warped_motion.c"
                      "${AOM_ROOT}/av1/common/warped_motion.h")
 
@@ -589,6 +615,9 @@ if(CONFIG_REALTIME_ONLY)
                      "${AOM_ROOT}/av1/common/x86/selfguided_avx2.c"
                      "${AOM_ROOT}/av1/common/x86/warp_plane_avx2.c"
                      "${AOM_ROOT}/av1/common/x86/wiener_convolve_avx2.c")
+
+    list(REMOVE_ITEM AOM_AV1_COMMON_INTRIN_AVX512
+                     "${AOM_ROOT}/av1/common/x86/selfguided_hwy_avx512.cc")
 
     list(REMOVE_ITEM AOM_AV1_COMMON_INTRIN_NEON
                      "${AOM_ROOT}/av1/common/arm/cfl_neon.c"
@@ -768,6 +797,18 @@ function(setup_av1_targets)
       add_intrinsics_object_library("-mavx2" "avx2" "aom_av1_encoder"
                                     "AOM_AV1_ENCODER_INTRIN_AVX2")
     endif()
+  endif()
+
+  if(HAVE_AVX512 AND CONFIG_AV1_ENCODER AND CONFIG_HIGHWAY)
+    add_intrinsics_object_library("-march=skylake-avx512" "avx512"
+                                  "aom_av1_encoder"
+                                  "AOM_AV1_ENCODER_INTRIN_AVX512")
+  endif()
+
+  if(HAVE_AVX512 AND CONFIG_HIGHWAY)
+    add_intrinsics_object_library("-march=skylake-avx512" "avx512"
+                                  "aom_av1_common"
+                                  "AOM_AV1_COMMON_INTRIN_AVX512")
   endif()
 
   if(HAVE_NEON)

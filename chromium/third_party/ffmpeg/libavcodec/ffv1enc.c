@@ -281,6 +281,8 @@ static int encode_plane(FFV1Context *f, FFV1SliceContext *sc,
     int16_t *sample[3];
     sc->run_index = 0;
 
+    sample[2] = sc->sample_buffer; // dummy to avoid UB pointer arithmetic
+
     memset(sc->sample_buffer, 0, ring_size * (w + 6) * sizeof(*sc->sample_buffer));
 
     for (y = 0; y < h; y++) {
@@ -629,7 +631,6 @@ av_cold int ff_ffv1_encode_init(AVCodecContext *avctx)
     if (s->ec < 0) {
         if (s->version >= 4) {
             s->ec = 2;
-            s->crcref = 0x7a8c4079;
         } else if (s->version >= 3) {
             s->ec = 1;
         } else
@@ -639,8 +640,10 @@ av_cold int ff_ffv1_encode_init(AVCodecContext *avctx)
     // CRC requires version 3+
     if (s->ec == 1)
         s->version = FFMAX(s->version, 3);
-    if (s->ec == 2)
+    if (s->ec == 2) {
         s->version = FFMAX(s->version, 4);
+        s->crcref = 0x7a8c4079;
+    }
 
     if ((s->version == 2 || s->version>3) && avctx->strict_std_compliance > FF_COMPLIANCE_EXPERIMENTAL) {
         av_log(avctx, AV_LOG_ERROR, "Version 2 or 4 needed for requested features but version 2 or 4 is experimental and not enabled\n");
@@ -839,6 +842,9 @@ av_cold int ff_ffv1_encode_setup_plane_info(AVCodecContext *avctx,
             s->bits_per_raw_sample = 14;
         s->packed_at_lsb = 1;
     case AV_PIX_FMT_GRAY16:
+    case AV_PIX_FMT_P016:
+    case AV_PIX_FMT_P216:
+    case AV_PIX_FMT_P416:
     case AV_PIX_FMT_YUV444P16:
     case AV_PIX_FMT_YUV422P16:
     case AV_PIX_FMT_YUV420P16:
@@ -859,6 +865,9 @@ av_cold int ff_ffv1_encode_setup_plane_info(AVCodecContext *avctx,
         s->version = FFMAX(s->version, 1);
     case AV_PIX_FMT_GRAY8:
     case AV_PIX_FMT_YA8:
+    case AV_PIX_FMT_NV12:
+    case AV_PIX_FMT_NV16:
+    case AV_PIX_FMT_NV24:
     case AV_PIX_FMT_YUV444P:
     case AV_PIX_FMT_YUV440P:
     case AV_PIX_FMT_YUV422P:
@@ -1501,6 +1510,9 @@ static int encode_float32_rgb_frame(FFV1Context *f, FFV1SliceContext *sc,
     ff_ffv1_compute_bits_per_plane(f, sc, bits, &offset, NULL, f->bits_per_raw_sample);
 
     sc->run_index = 0;
+
+    for (int p = 0; p < MAX_PLANES; ++p)
+        sample[p][2] = sc->sample_buffer32; // dummy to avoid UB pointer arithmetic
 
     memset(RENAME(sc->sample_buffer), 0, ring_size * MAX_PLANES *
            (w + 6) * sizeof(*RENAME(sc->sample_buffer)));

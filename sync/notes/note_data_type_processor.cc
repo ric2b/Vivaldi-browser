@@ -107,22 +107,6 @@ size_t CountSyncableNotesFromModel(NoteModelView* model) {
   return count;
 }
 
-// Gaia-ID-related metrics should not be recorded on mobile platforms, where
-// Sync-the-feature is no longer a thing (excluding edge cases pending
-// migration). On desktop, use `wipe_model_upon_sync_disabled_behavior` as
-// a workaround to distinguish transport mode from full-sync mode, as
-// metrics should only be recorded for the latter.
-bool ShouldRecordPreviouslySyncingGaiaIdMetrics(
-    syncer::WipeModelUponSyncDisabledBehavior
-        wipe_model_upon_sync_disabled_behavior) {
-#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS) || BUILDFLAG(IS_CHROMEOS)
-  return false;
-#else   // BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS) || BUILDFLAG(IS_CHROMEOS)
-  return wipe_model_upon_sync_disabled_behavior ==
-         syncer::WipeModelUponSyncDisabledBehavior::kNever;
-#endif  // BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS) || BUILDFLAG(IS_CHROMEOS)
-}
-
 }  // namespace
 
 NoteDataTypeProcessor::NoteDataTypeProcessor(
@@ -242,8 +226,8 @@ void NoteDataTypeProcessor::OnUpdateReceived(
     // Local changes continue to be tracked in order to allow users to delete
     // notes and recover upon restart.
     DisconnectSync();
-    activation_request_.error_handler.Run(
-        syncer::ModelError(FROM_HERE, "Local notes count exceed limit."));
+    activation_request_.error_handler.Run(syncer::ModelError(
+        FROM_HERE, syncer::ModelError::Type::kGenericTestError));
     return;
   }
 
@@ -417,10 +401,8 @@ void NoteDataTypeProcessor::ConnectIfReady() {
     // case and thus tracker should be empty.
     DCHECK(!note_tracker_);
     start_callback_.Reset();
-    activation_request_.error_handler.Run(
-        syncer::ModelError(FROM_HERE,
-                           "Latest remote note count exceeded limit. Turn "
-                           "off and turn on sync to retry."));
+    activation_request_.error_handler.Run(syncer::ModelError(
+        FROM_HERE, syncer::ModelError::Type::kGenericTestError));
     return;
   }
 
@@ -436,8 +418,8 @@ void NoteDataTypeProcessor::ConnectIfReady() {
     // to be tracked in order order to allow users to delete notes and
     // recover upon restart.
     start_callback_.Reset();
-    activation_request_.error_handler.Run(
-        syncer::ModelError(FROM_HERE, "Local notes count exceed limit."));
+    activation_request_.error_handler.Run(syncer::ModelError(
+        FROM_HERE, syncer::ModelError::Type::kGenericTestError));
     return;
   }
 
@@ -518,8 +500,8 @@ void NoteDataTypeProcessor::NudgeForCommitIfNeeded() {
     // notes and recover upon restart.
     DisconnectSync();
     start_callback_.Reset();
-    activation_request_.error_handler.Run(
-        syncer::ModelError(FROM_HERE, "Local notes count exceed limit."));
+    activation_request_.error_handler.Run(syncer::ModelError(
+        FROM_HERE, syncer::ModelError::Type::kGenericTestError));
     return;
   }
 
@@ -564,8 +546,8 @@ void NoteDataTypeProcessor::OnInitialUpdateReceived(
   if (updates.size() > max_initial_updates_count) {
     DisconnectSync();
     last_initial_merge_remote_updates_exceeded_limit_ = true;
-    activation_request_.error_handler.Run(
-        syncer::ModelError(FROM_HERE, "Remote notes count exceed limit."));
+    activation_request_.error_handler.Run(syncer::ModelError(
+        FROM_HERE, syncer::ModelError::Type::kGenericTestError));
     schedule_save_closure_.Run();
     return;
   }
@@ -579,13 +561,9 @@ void NoteDataTypeProcessor::OnInitialUpdateReceived(
                                          notes_model_observer_.get());
 
     notes_model_->EnsurePermanentNodesExist();
-    NoteModelMerger(
-        std::move(updates), notes_model_, note_tracker_.get(),
-        ShouldRecordPreviouslySyncingGaiaIdMetrics(
-            wipe_model_upon_sync_disabled_behavior_)
-            ? activation_request_.previously_syncing_gaia_id_info
-            : syncer::PreviouslySyncingGaiaIdInfoForMetrics::kUnspecified)
-        .Merge();
+    NoteModelMerger model_merger(std::move(updates), notes_model_,
+                                 note_tracker_.get());
+    model_merger.Merge();
   }
 
   // If any of the permanent nodes is missing, we treat it as failure.
@@ -594,8 +572,8 @@ void NoteDataTypeProcessor::OnInitialUpdateReceived(
       !note_tracker_->GetEntityForNoteNode(notes_model_->trash_node())) {
     DisconnectSync();
     StopTrackingMetadataAndResetTracker();
-    activation_request_.error_handler.Run(
-        syncer::ModelError(FROM_HERE, "Permanent note entities missing"));
+    activation_request_.error_handler.Run(syncer::ModelError(
+        FROM_HERE, syncer::ModelError::Type::kGenericTestError));
     return;
   }
 
@@ -773,8 +751,8 @@ void NoteDataTypeProcessor::ReportBridgeErrorForTest() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   DisconnectSync();
-  activation_request_.error_handler.Run(
-      syncer::ModelError(FROM_HERE, "Report error for test"));
+  activation_request_.error_handler.Run(syncer::ModelError(
+      FROM_HERE, syncer::ModelError::Type::kGenericTestError));
 }
 
 void NoteDataTypeProcessor::StopTrackingMetadataAndResetTracker() {

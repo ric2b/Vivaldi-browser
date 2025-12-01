@@ -57,8 +57,36 @@ NSURL* rel_notes_url_;
     GetItemVersion(item));
 }
 
-- (void)updaterDidNotFindUpdate:(SPUUpdater *)updater {
-  extensions::AutoUpdateAPI::SendUpdaterDidNotFindUpdate();
+- (void)updaterDidNotFindUpdate:(nonnull SPUUpdater*)updater
+                          error:(nonnull NSError*)error {
+  NSDictionary* userInfo = error.userInfo;
+  // Check if the SPUNoUpdateFoundReasonKey exists in the userInfo dictionary
+  NSNumber* reasonNumber = userInfo[SPUNoUpdateFoundReasonKey];
+  std::string outReason = "";
+  if (reasonNumber) {
+    // Cast the value to the SPUNoUpdateFoundReason enum type
+    SPUNoUpdateFoundReason reason =
+        (SPUNoUpdateFoundReason)[reasonNumber integerValue];
+    switch (reason) {
+      case SPUNoUpdateFoundReasonOnLatestVersion:
+        outReason = "OnLatestVersion";
+        break;
+      case SPUNoUpdateFoundReasonOnNewerThanLatestVersion:
+        outReason = "OnNewerThanLatestVersion";
+        break;
+      case SPUNoUpdateFoundReasonSystemIsTooOld:
+        outReason = "SystemIsTooOld";
+        break;
+      case SPUNoUpdateFoundReasonSystemIsTooNew:
+        outReason = "SystemIsTooNew";
+        break;
+      case SPUNoUpdateFoundReasonUnknown:
+      default:
+        outReason = "Unknown";
+    }
+  }
+
+  extensions::AutoUpdateAPI::SendUpdaterDidNotFindUpdate(outReason);
 }
 
 - (void)updater:(SPUUpdater*)updater

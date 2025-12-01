@@ -4,8 +4,8 @@
 // LICENSE file in the root directory of this source tree.
 //
 
-#ifndef __XNNPACK_SRC_XNNPACK_SIMD_F32_SCALAR_H_
-#define __XNNPACK_SRC_XNNPACK_SIMD_F32_SCALAR_H_
+#ifndef XNNPACK_SRC_XNNPACK_SIMD_F32_SCALAR_H_
+#define XNNPACK_SRC_XNNPACK_SIMD_F32_SCALAR_H_
 
 #include <math.h>
 #include <stddef.h>
@@ -105,6 +105,16 @@ static XNN_INLINE xnn_simd_f32_t xnn_xor_f32(xnn_simd_f32_t a,
   return *(const xnn_simd_f32_t *)&res;
 }
 
+static XNN_INLINE xnn_simd_f32_t xnn_not_f32(xnn_simd_f32_t a) {
+  const uint32_t res = ~(*(const uint32_t *)&a);
+  return *(const xnn_simd_f32_t *)&res;
+}
+
+static XNN_INLINE xnn_simd_f32_t xnn_andnot_f32(xnn_simd_f32_t a,
+                                                xnn_simd_f32_t b) {
+  return xnn_and_f32(xnn_not_f32(a), b);
+}
+
 static XNN_INLINE xnn_simd_f32_t xnn_sll_f32(xnn_simd_f32_t a, uint8_t bits) {
   const uint32_t res = *(uint32_t *)&a << bits;
   return *(const xnn_simd_f32_t *)&res;
@@ -183,4 +193,4 @@ static XNN_INLINE void xnn_store_tail_f32(float *output, xnn_simd_f32_t v,
   *output = v;
 }
 
-#endif  // __XNNPACK_SRC_XNNPACK_SIMD_F32_SCALAR_H_
+#endif  // XNNPACK_SRC_XNNPACK_SIMD_F32_SCALAR_H_

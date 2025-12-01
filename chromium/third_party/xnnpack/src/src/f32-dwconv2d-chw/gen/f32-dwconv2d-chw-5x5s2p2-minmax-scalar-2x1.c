@@ -9,9 +9,13 @@
 // LICENSE file in the root directory of this source tree.
 
 #include <assert.h>
+#include <stddef.h>
+#include <stdint.h>
 
+#include "src/xnnpack/common.h"
 #include "src/xnnpack/dwconv.h"
 #include "src/xnnpack/math.h"
+#include "src/xnnpack/microparams.h"
 
 
 void xnn_f32_dwconv2d_chw_ukernel_5x5s2p2__scalar_2x1(
@@ -22,7 +26,7 @@ void xnn_f32_dwconv2d_chw_ukernel_5x5s2p2__scalar_2x1(
     const float* zero,
     float* output,
     uint32_t padding_top,
-    const struct xnn_f32_minmax_params params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f32_minmax_params* restrict params)
 {
   assert(input_height != 0);
   assert(input_width != 0);

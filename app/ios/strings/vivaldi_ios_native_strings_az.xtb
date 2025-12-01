@@ -5,6 +5,7 @@
 <translation id="1016495303386450659">Element yeniləndi</translation>
 <translation id="1033201038396796706">Qaranlıq rejim, yenilənmə tezliyi və ya görünüş problemləri</translation>
 <translation id="1041637248958093184">Gizli vərəq rejimindən istifadə edildikdə axtarış nəticələri, kukilər və müvəqqəti fayllar Vivaldidə saxlanılmayacaq.</translation>
+<translation id="104766043551382253">Nişan</translation>
 <translation id="1062373127858055283">Şəkil URL-unu daxil edin</translation>
 <translation id="1066692930984703744">Sürətli və təhlükəsiz səyahət üçün izləyici və reklam əngəlləyicisini aktiv edin</translation>
 <translation id="1116694919640316211">Haqqında</translation>
@@ -46,6 +47,7 @@
 <translation id="1470330357709335121">Vivaldi yavaş və ləngdir</translation>
 <translation id="1502492982318476895">Eyniləşdirmə mümkün olmadı: <ph name="ERROR_MESSAGE" /></translation>
 <translation id="1521731267649138856">bərpa etmək e-poçt ünvanınız.</translation>
+<translation id="1534183273237573805">Bu axtarış mühəriklərindən birini seçməklə Vivaldinin inkişafına dəstərk vermiş olursunuz.</translation>
 <translation id="1535446875484049224">Qaranlıq mövzu qüsurludur və ya doğru görünmür</translation>
 <translation id="1567659716528258242">Vivaldi telefonumu qızdırır</translation>
 <translation id="156793582229023040">İzlənmədən və verilənlərin toplanmasından narahatam</translation>
@@ -88,16 +90,17 @@
 <translation id="2034405583989639424">Sürətli keçidə düzəliş edin</translation>
 <translation id="2048247880942380698">Ərəbcə <ph name="ORIGIN" /></translation>
 <translation id="2079545284768500474">Geri qaytar</translation>
-<translation id="2129408066358825297">Yaşı</translation>
+<translation id="2138901399878617625">Hər axtarışınızda ağac əkin</translation>
 <translation id="2148384276939959392">Seçiləni eyniləşdirin</translation>
 <translation id="2195713384412091023">Bu, sizin serverimizdə saxlanılan bütün verilənlərinizi siləcək, şifrələmə şifrələrinizi sıfırlayacaq və çıxış etməklə hesabınızı bağlayacaqdır.</translation>
 <translation id="2228584369802328636">Oyunlar</translation>
+<translation id="2240680014596059312">Məxfi. Sürətli. Daha az reklamlar.</translation>
 <translation id="2243210264130642074">Saxlanılmadı</translation>
 <translation id="2272338747456392228">Hesab kilidləndi</translation>
 <translation id="2273327106802955778">Daha çox menyu</translation>
 <translation id="2283599456633275070">Turizm</translation>
 <translation id="2324160330092901720">Doğrulama kodu <ph name="EMAIL_ID" /> ünvanına göndərildi</translation>
-<translation id="2324257568471626606">Yeni axtarış mühərriki</translation>
+<translation id="2326657631721795616">Siz, məxfiliyə önəm verən müstəqil axtarış mühərrikini seçməklə Vivaldini dəstəkləyə bilərsiniz:</translation>
 <translation id="2330644510603114741">Vərəq davranışları</translation>
 <translation id="233493642829799329">Bunu dəyişdirmək bəzi vərəqlərinizin yenidən yüklənməsinə gətirib çıxara bilər</translation>
 <translation id="2336309953058658733">Səbəti boşaldın</translation>
@@ -118,7 +121,6 @@
 <translation id="2563886993995570961">Ən çox sütun sayı</translation>
 <translation id="257674075312929031">Qrup</translation>
 <translation id="2577446409661931381">Yeni qeyd</translation>
-<translation id="2578190116190373975"><ph name="OLD_SEARCH_ENGINE" /> istifadə etməyə davam edin</translation>
 <translation id="2590350610957954839">Sonuncu baxılan qrup</translation>
 <translation id="261264557609353020">Başlanğıc səhifə</translation>
 <translation id="2619628557366098325">Portuqalca (<ph name="ORIGIN" />)</translation>
@@ -128,7 +130,6 @@
 <translation id="2677862276555105603">Reklam
 əngəlləndi</translation>
 <translation id="2678542925523700624">Estonca <ph name="ORIGIN" /></translation>
-<translation id="2697254781659515880">Vivaldinin inkişafını dəstəkləmək üçün biz <ph name="NEW_SEARCH_ENGINE" /> axtarış mühərriki ilə əməkdaşlıq edirik və onu yeni standart axtarış mühərriki kimi təyin edirik.</translation>
 <translation id="2701366016894985129">Axtarış nəticlərində reklamlar</translation>
 <translation id="2702801445560668637">Oxu siyahısı</translation>
 <translation id="2709516037105925701">Avtomatik doldurma</translation>
@@ -175,9 +176,9 @@
 <translation id="3270894089048358271">Vivaldini standart veb-bələdçiniz təyin edin</translation>
 <translation id="3270930591809084274">Eyniləşdirilmiş vərəqlər</translation>
 <translation id="3285898158753554866">Tərcümə olunanı kopyalamaq</translation>
+<translation id="3288330578370776290">Səhifəni kənar tətbiqdə deyil, veb-bələdçidə açmaq</translation>
 <translation id="3335772982573114336">Yeni qeyd</translation>
 <translation id="33451081266695216">Bağlantı server tərəfindən məhdudlaşdırıldı.</translation>
-<translation id="3346386541263128307">E-poçt ünvanının eyni olması lazımdır.</translation>
 <translation id="3363375699928395745">Başlıq daxil edin</translation>
 <translation id="3365991203476235715">İngiliscə <ph name="ORIGIN" /></translation>
 <translation id="3368960138304620657">Litvaca <ph name="ORIGIN" /></translation>
@@ -211,7 +212,6 @@
 <translation id="373855430416507951">SƏhifədə tapın</translation>
 <translation id="3745190878148784130">Mətni böyütməyi gizlətmək</translation>
 <translation id="3766350025418769949">Vivaldi şifrə menecerində saxlanılmış şifrələri iPad-ınızdakı başqa tətbiqlərdə istifadə edə bilərsiniz.</translation>
-<translation id="3782426324365706059"><ph name="NEW_SEARCH_ENGINE" /> istifadə edin</translation>
 <translation id="3815158430926662417">Vivaldi eyniləşdirmə səhifəsinə qoşula bilmirəm</translation>
 <translation id="3817539520771282781">Növünə görə</translation>
 <translation id="383723620494271391">Başqa nə isə əlavə etmək istərdiniz?</translation>
@@ -226,7 +226,6 @@
 <translation id="3897092660631435901">Menyu</translation>
 <translation id="3920366244737784074"><ph name="ITEM_TYPE" /> əlavə etmək</translation>
 <translation id="3921585859122905677">Ünvan sətri mövqeyi</translation>
-<translation id="3925725503020335904">Vivaldinin inkişafını dəstəkləmək üçün biz <ph name="NEW_SEARCH_ENGINE_1" /> ilə əməkdaşlıq edirik və onu sizin standart axtarış mühərriki kimi təyin etdik. <ph name="NEW_SEARCH_ENGINE_2" /> bəyəndiyimiz məxfi axtarış mühərrikidi və ümid edirik ki, sizin də xoşunuza gələcək.</translation>
 <translation id="3934481038955624945">Hamısını sıfırlamaq</translation>
 <translation id="3953599441418463312">Yaponca <ph name="ORIGIN" /></translation>
 <translation id="395506590020066151">İzləyixci əngəlləndi</translation>
@@ -254,6 +253,7 @@
 <translation id="4152011295694446843">Əlfəcinlərinizi burada tapa bilərsiniz</translation>
 <translation id="4152623049003960417">İzləyici haqqında məlumat</translation>
 <translation id="4176463684765177261">Söndürülüb</translation>
+<translation id="4181792832006033883">Vivaldi hansısa texnoloji nəhəng və ya inverstorlar tərəfindən deyil, istifadəşilərimiz tərəfindən maliyələşir. Hər maddi dəstək azad və məxfi internet üçün missiyamızı birbaşa dəstəkləyir. Dəyişikliyin bir hissəsi ol.</translation>
 <translation id="4184746246941929945">Vivaldi bu saytda reklamların qarşısını almamaq üçün <ph name="PARTNER_NAME" /> ilə əməkdaşlıq edir. Bu reklamlar Vivaldinin inkişafını maliyələşdirir.</translation>
 <translation id="4193549853510262477">Avtomatik aşkarlandı</translation>
 <translation id="4209092469652827314">Böyük</translation>
@@ -270,6 +270,7 @@
 <translation id="4316955624679873896">Əlfəcin saxlanıldı</translation>
 <translation id="432696242656678770">Rusca (<ph name="ORIGIN" />)</translation>
 <translation id="4350751486125178847">İspanca (<ph name="ORIGIN" />)</translation>
+<translation id="4354058221156080376">Daha yaxşı internet üçün bizimlə qalın</translation>
 <translation id="4376661454588260127">Vyetnamca (<ph name="ORIGIN" />)</translation>
 <translation id="4380745054983890306">Səhifələri PDF kimi saxlamaq istərdim</translation>
 <translation id="4394049700291259645">Söndürün</translation>
@@ -280,6 +281,7 @@
 <translation id="445620040230332178">Vərəqlərin görünüşü</translation>
 <translation id="4461652107878667683">İrəli davam edin</translation>
 <translation id="4474581062946673155">Hazırda başqa cihazlardan eyniləşdirilmiş heç bir vərəqiniz yoxdur.</translation>
+<translation id="4478475525737953027">Ciddi əngəlləmə</translation>
 <translation id="4488900295693536220">Ünvan sətri aşağıda olduqda, ən yaxşı təklifləri asan yolla əldə etmək üçün tətbiq olunur.</translation>
 <translation id="4497115807425788318">Məkan</translation>
 <translation id="4507213865286211606">Eskizlərin ölçüsü</translation>
@@ -288,6 +290,7 @@
 <translation id="4525945044609022380">Bu e-poçt artıq başqa hesab ilə əlaqələndirilib.</translation>
 <translation id="4526803704855831732">Məxfi vərəqlər</translation>
 <translation id="4542001945479572846">Başqa bir şey</translation>
+<translation id="4548278119881373657">Seçimi təsdiqləyin</translation>
 <translation id="4553717494760925411">Geriyə qayıdın</translation>
 <translation id="4563480492836333884">E-poçt qəbul edilmədi. Lütfən, başqa domen istifadə edin.</translation>
 <translation id="457386861538956877">Daha çox...</translation>
@@ -342,6 +345,7 @@
 <translation id="5094376253685335202">Eyniləşdirməni açın</translation>
 <translation id="5116316489033177455">Əlfəcinləri və sürətli keçidləri eyniləşdirin</translation>
 <translation id="5122095890854520072">Latviyaca <ph name="ORIGIN" /></translation>
+<translation id="5128025282874907098">Maddi yardımınızın 100%-i Vivaldinin uzun müddətli inkişafına və ən yaxşı internet üçün mübarizəmizə sərf olunacaq.</translation>
 <translation id="5153806174841856652">Daxil olmaq mümkün olmadı</translation>
 <translation id="5160018607418677056"><ph name="BEGIN_LINK" />Kodu təkrar göndərin<ph name="END_LINK" /></translation>
 <translation id="5166345991950198590">Ən çox baxılan saytları göstərmək</translation>
@@ -349,7 +353,6 @@
 <translation id="5195305454041437917">Təklifi silmək üçün X düyməsini göstərmək</translation>
 <translation id="5238642303473095117">Verilənləri silin</translation>
 <translation id="5245732982828228444">Qeydlərinizi burada tapa bilərsiniz</translation>
-<translation id="5249199221558969362">Doğru yaş seçməyiniz xahiş olunur.</translation>
 <translation id="5271549068863921519">Şifrəni saxlayın</translation>
 <translation id="5290452628447338707">Qeydlər yoxdur</translation>
 <translation id="5317780077021120954">Saxlayın</translation>
@@ -359,6 +362,7 @@
 <translation id="535312628536375213">Bu sat ilə əməkdaşlığımız var və əsasən bu saytlardakı reklamları əngəlləmədən azad edirik. Bu reklamlardan istifadə etsəniz onlar Vivaldiyə gəlir gətirəcək.</translation>
 <translation id="5378841821586202982">Səbət</translation>
 <translation id="5398772614898833570">Reklamlar əngəlləndi</translation>
+<translation id="5415265829033764921">Müəyyən veb səhifələri əngəlləmək üçün əngəlləmə qaydalarına icazə vermək.</translation>
 <translation id="5421638721143596928">Məlumatlarınızın şifrəsini açmaq mümkün olmadı. Yenidən daxil olun.</translation>
 <translation id="5439599923922718668">Tez-tez baxılanlar</translation>
 <translation id="5439835075346716808">Bu İP ünvanından qeyiyyat müvəqqəti əngəllənib. Daha sonra yenidən cəhd edin.</translation>
@@ -408,11 +412,14 @@
 <translation id="6079696972035130497">Limitsiz</translation>
 <translation id="6093557041367452381">Yazılanlar tarixçəsini, Ünvan sətri Başlanğıc səhifəyə yönəldikədə göstərir.</translation>
 <translation id="6110857187283700804">daxil etdikləriniz təklif üçün axtarış təminatçısına göndərildi. Bu, məxfi pəncərədə söndürülüb.</translation>
+<translation id="6119047040189002834">İzlənilmədən uzaq olun və dəyərlərinizə uyğun axtarış mühərrikini seçin:</translation>
 <translation id="614539368862754027"><ph name="NUMBER_OF_SELECTED_NOTES" />element köçürüldü</translation>
 <translation id="6147094071357011481">Sonuncu bağlanmış vərəqlər əlçatmazdır</translation>
+<translation id="6171727814244883097">Bizi dəstəkləmənin ən asan yolu</translation>
 <translation id="6177301865411451337">Eyniləşdirmə xidmətində bir problem olduğu görünür. Xidmət yenilənmələrini buradan yoxlayın: <ph name="BEGIN_LINK" />VivaldiStatus.com<ph name="END_LINK" /></translation>
 <translation id="6180515952840978051">Veb səhifələri Sürətli keçid kimi saxlamaq çətinlik yaradır</translation>
 <translation id="6193995664633100765">Hindcə <ph name="ORIGIN" /></translation>
+<translation id="6209408431919042972">İndi ianə edin</translation>
 <translation id="6224086034182508647">Veb səhifə görünüşü seçimləri</translation>
 <translation id="6253990869902066991">Vivaldi səhifələri gözlənilmədən yeniləyir</translation>
 <translation id="6257488392933423163">HTML kimi göstərmək</translation>
@@ -427,7 +434,6 @@
 <translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" />seçildi</translation>
 <translation id="6442584491342758233">Birbaşa oxşarlıq</translation>
 <translation id="6443682944493983866">Qəbul edilən dillər</translation>
-<translation id="6468130661190228905">Təəssüf edirik, cəmiyyətimizə qoşulmaq üçün bir az gözləməyiniz lazım gələcək. Cəmiyyətimizə üzv olmaq üçün ən az 16 yaşınız olmalıdır.</translation>
 <translation id="6487150267908786236"><ph name="BEGIN_LINK" />idxal edin<ph name="END_LINK" /></translation>
 <translation id="6517411226162529295">Ehtiyyat şifrələmə açarı</translation>
 <translation id="6527303717912515753">Paylaşın</translation>
@@ -436,6 +442,7 @@
 <translation id="6544880104552732240">Hədəf dilini seçin</translation>
 <translation id="659351303388691480">Veb-bələdçi verilənlərini təmizləyin...</translation>
 <translation id="6602272356389933803">Xarici görünüş mövzusu</translation>
+<translation id="6609906162587123522">Keçidi kənar tətbiqdə açmayın</translation>
 <translation id="6614744450826097546">Reklam təfərrüatları</translation>
 <translation id="6631760746795162665">Kolombiyaca <ph name="ORIGIN" /></translation>
 <translation id="6639866709520319699">İzləyicilər və reklamlar əngəlləndi. Bəzi səhifələr pozula bilər.</translation>
@@ -545,6 +552,7 @@
 <translation id="7791543448312431591">Əlavə etmək</translation>
 <translation id="7801111502975417831">Videonun arxa planda oxudulmasını istəyirəm</translation>
 <translation id="7801204999757211519">Artıq bir hesabınız var? <ph name="BEGIN_LINK" />Daxil olun<ph name="END_LINK" /></translation>
+<translation id="780301667611848630">Xeyr, təşəkkürlər</translation>
 <translation id="7850070199083838600">Yeni qrup yaradaq?</translation>
 <translation id="7862984977194621600">Axtarış təkliflərini aktiv etmək</translation>
 <translation id="7870765213383950011">Birinci qrup</translation>
@@ -555,7 +563,6 @@
 <translation id="7961270736686975887">Dilləri dəyişmək</translation>
 <translation id="7967161908152532036">Veb sayt ayarları</translation>
 <translation id="7979036127916589816">Eyniləşdirmə xətası</translation>
-<translation id="8008214489230610096">Bərpa e-poçt ünvanını təsdiq edin</translation>
 <translation id="8038592796033755028"><ph name="USERNAME" />-ın cihazları</translation>
 <translation id="8041093619605951337">Xöşbəxt</translation>
 <translation id="8046542428651654244">Eskizləri yeniləmək</translation>
@@ -570,9 +577,9 @@
 <translation id="8131740175452115882">Təsdiq edin</translation>
 <translation id="8134672010161840864">Təsviri kəsin və ya dəyişin</translation>
 <translation id="8142291334394582384">Axtarış təklifləri sırasını tərsinə çevirin</translation>
-<translation id="8147118677117542370">Yaşınızı göstərin.</translation>
 <translation id="8165573437634525334">Verilənlər şifrələmə şifrəsi ilə qorunur</translation>
 <translation id="8237090677709100373">Xüsusi seçilmiş rəng</translation>
+<translation id="8255101384731542819">Fransada yaradılmış müstəqil axtarış</translation>
 <translation id="8257908958623224237">Başqa müştəri verilənləri ilə ziddiyyət var.</translation>
 <translation id="8261506727792406068">Silin</translation>
 <translation id="8273666073173891138">Qeyd <ph name="FOLDER_TITLE" /> qovluğunda saxlanıldı</translation>
@@ -580,6 +587,7 @@
 <translation id="8284356787013856231">Faylı açmaq icazənin ləğv edildi</translation>
 <translation id="8289933454364510719">Yuxarıda və ya aşağıda</translation>
 <translation id="8304044605002588416">Başlanğıc səhifə düyməsini dəyişmək</translation>
+<translation id="8304538706952727936">Texnoloji nəhənglərdən azad olun</translation>
 <translation id="8323167517179506834">URL yazın</translation>
 <translation id="8326104954595890674">Yeni məxfi vərəq</translation>
 <translation id="8329813750766387010">Yeniləndi: <ph name="DATE" /></translation>
@@ -622,6 +630,7 @@
 <translation id="8818152010000655963">Divar kağızı</translation>
 <translation id="8819841443522803117">Standart veb-bələdçini dəyişmənin vaxtıdır? Vivaldini seçin.</translation>
 <translation id="8820817407110198400">Əlfəcinlər</translation>
+<translation id="8828442094222036738">Məxfi Google axtarışı, Avropada hazırlanıb</translation>
 <translation id="8855707633300847215">Vərəq zolağını göstərmək</translation>
 <translation id="8861211142470908937">Ən az şifrə uzunluğu üçün 12 simvol tələb olunur</translation>
 <translation id="8892354889971902600">Sonuncu bağlanmış vərəqlər burada görünəcək.</translation>

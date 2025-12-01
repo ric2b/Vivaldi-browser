@@ -29,10 +29,10 @@
 #include "vivaldi_status/vivaldi_status.h"
 
 #include "browser/translate/vivaldi_translate_server_request.h"
+#include "chrome/common/extensions/webstore_install_result.h"
 #include "components/datasource/vivaldi_image_store.h"
 #include "extensions/schema/vivaldi_utilities.h"
 #include "ui/lights/razer_chroma_handler.h"
-#include "chrome/common/extensions/webstore_install_result.h"
 
 class Browser;
 class Profile;
@@ -1198,6 +1198,28 @@ class UtilitiesRequestVivaldiSyncStatusFunction : public ExtensionFunction {
 
  private:
   ~UtilitiesRequestVivaldiSyncStatusFunction() override = default;
+  ResponseAction Run() override;
+};
+
+class UtilitiesOpenPrivacyReportDialogFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.openPrivacyReportDialog",
+                             UTILITIES_OPEN_PRIVACY_REPORT_DIALOG)
+  UtilitiesOpenPrivacyReportDialogFunction() = default;
+
+ private:
+  ~UtilitiesOpenPrivacyReportDialogFunction() override = default;
+  ResponseAction Run() override;
+};
+
+class UtilitiesUpdatePrimarySelectionFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.updatePrimarySelection",
+                             UTILITIES_UPDATE_PRIMARY_SELECTION)
+  UtilitiesUpdatePrimarySelectionFunction() = default;
+
+ private:
+  ~UtilitiesUpdatePrimarySelectionFunction() override = default;
   ResponseAction Run() override;
 };
 

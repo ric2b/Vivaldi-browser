@@ -378,7 +378,7 @@ export class DataGridImpl<T> extends Common.ObjectWrapper.ObjectWrapper<EventTyp
       }
       const accessibleText =
           expandText ? `${this.selectedNode.nodeAccessibleText}, ${expandText}` : this.selectedNode.nodeAccessibleText;
-      UI.ARIAUtils.alert(accessibleText);
+      UI.ARIAUtils.LiveAnnouncer.alert(accessibleText);
     }
   }
 
@@ -407,7 +407,7 @@ export class DataGridImpl<T> extends Common.ObjectWrapper.ObjectWrapper<EventTyp
       const items = i18nString(UIStrings.rowsS, {PH1: numberOfRows});
       accessibleText = i18nString(UIStrings.sSUseTheUpAndDownArrowKeysTo, {PH1: this.displayName, PH2: items});
     }
-    UI.ARIAUtils.alert(accessibleText);
+    UI.ARIAUtils.LiveAnnouncer.alert(accessibleText);
   }
 
   private innerAddColumn(column: ColumnDescriptor, position?: number): void {
@@ -1029,7 +1029,8 @@ export class DataGridImpl<T> extends Common.ObjectWrapper.ObjectWrapper<EventTyp
   }
 
   private applyColumnWeights(): void {
-    let tableWidth = this.element.offsetWidth - this.cornerWidth;
+    // Subtract 1 to prevent unnecessary overflow in x-axis
+    let tableWidth = this.element.offsetWidth - this.cornerWidth - 1;
     if (tableWidth <= 0) {
       return;
     }
@@ -1048,7 +1049,7 @@ export class DataGridImpl<T> extends Common.ObjectWrapper.ObjectWrapper<EventTyp
     }
     let sum = 0;
     let lastOffset = 0;
-    const minColumnWidth = 14;  // px
+    const minColumnWidth = ColumnResizePadding;  // px
 
     for (let i = 0; i < this.visibleColumnsArray.length; ++i) {
       const column = this.visibleColumnsArray[i];
@@ -1138,7 +1139,7 @@ export class DataGridImpl<T> extends Common.ObjectWrapper.ObjectWrapper<EventTyp
       emptyData[column] = null;
     }
     this.creationNode = new CreationDataGridNode(emptyData, hasChildren);
-    UI.ARIAUtils.alert(i18nString(UIStrings.emptyRowCreated));
+    UI.ARIAUtils.LiveAnnouncer.alert(i18nString(UIStrings.emptyRowCreated));
     this.rootNode().appendChild(this.creationNode);
   }
 
@@ -1352,7 +1353,7 @@ export class DataGridImpl<T> extends Common.ObjectWrapper.ObjectWrapper<EventTyp
     cell.classList.add(sortOrder);
     const ariaLabel = this.isSortOrderAscending() ? 'ascending' : 'descending';
     cell.setAttribute('aria-sort', ariaLabel);
-    UI.ARIAUtils.alert(i18nString(UIStrings.enterToSort, {PH1: ariaLabel || ''}));
+    UI.ARIAUtils.LiveAnnouncer.alert(i18nString(UIStrings.enterToSort, {PH1: ariaLabel || ''}));
 
     this.dispatchEventToListeners(Events.SORTING_CHANGED);
   }
@@ -1705,7 +1706,7 @@ export const enum DataType {
   BOOLEAN = 'Boolean',
 }
 
-export const ColumnResizePadding = 34;
+export const ColumnResizePadding = 30;
 export const CenterResizerOverBorderAdjustment = 3;
 
 export const enum ResizeMethod {
@@ -2509,7 +2510,7 @@ export class CreationDataGridNode<T> extends DataGridNode<T> {
 export class DataGridWidget<T> extends UI.Widget.VBox {
   readonly dataGrid: DataGridImpl<T>;
   constructor(dataGrid: DataGridImpl<T>, element?: HTMLElement) {
-    super(undefined, undefined, element);
+    super(element);
     this.dataGrid = dataGrid;
     this.element.appendChild(dataGrid.element);
     this.setDefaultFocusedElement(dataGrid.element);

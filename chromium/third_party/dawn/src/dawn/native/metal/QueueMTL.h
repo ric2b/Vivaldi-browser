@@ -54,7 +54,8 @@ class Queue final : public QueueBase {
     ResultOrError<Ref<SharedFence>> GetOrCreateSharedFence();
 
     Ref<WaitListEvent> CreateWorkDoneEvent(ExecutionSerial serial);
-    ResultOrError<bool> WaitForQueueSerial(ExecutionSerial serial, Nanoseconds timeout) override;
+    ResultOrError<bool> WaitForQueueSerialImpl(ExecutionSerial serial,
+                                               Nanoseconds timeout) override;
 
   private:
     Queue(Device* device, const QueueDescriptor* descriptor);
@@ -65,7 +66,7 @@ class Queue final : public QueueBase {
 
     MaybeError SubmitImpl(uint32_t commandCount, CommandBufferBase* const* commands) override;
     bool HasPendingCommands() const override;
-    MaybeError SubmitPendingCommands() override;
+    MaybeError SubmitPendingCommandsImpl() override;
     ResultOrError<ExecutionSerial> CheckAndUpdateCompletedSerials() override;
     void ForceEventualFlushOfCommands() override;
     MaybeError WaitForIdleForDestruction() override;
@@ -78,10 +79,6 @@ class Queue final : public QueueBase {
     // a different thread so we guard access to it with a mutex.
     std::mutex mLastSubmittedCommandsMutex;
     NSPRef<id<MTLCommandBuffer>> mLastSubmittedCommands;
-
-    // The completed serial is updated in a Metal completion handler that can be fired on a
-    // different thread, so it needs to be atomic.
-    std::atomic<uint64_t> mCompletedSerial;
 
     // This mutex must be held to access mWaitingEvents (which may happen in a Metal driver
     // thread).

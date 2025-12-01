@@ -7,7 +7,7 @@ import '../../ui/legacy/legacy.js';
 import * as Common from '../../core/common/common.js';
 import * as Host from '../../core/host/host.js';
 import * as i18n from '../../core/i18n/i18n.js';
-import type * as Platform from '../../core/platform/platform.js';
+import * as Platform from '../../core/platform/platform.js';
 import * as Root from '../../core/root/root.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as Protocol from '../../generated/protocol.js';
@@ -18,10 +18,7 @@ import * as Snackbars from '../../ui/components/snackbars/snackbars.js';
 import * as UI from '../../ui/legacy/legacy.js';
 import * as Lit from '../../ui/lit/lit.js';
 import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
-import * as ElementsPanel from '../elements/elements.js';
 import * as NetworkForward from '../network/forward/forward.js';
-import * as NetworkPanel from '../network/network.js';
-import * as SourcesPanel from '../sources/sources.js';
 import * as TimelinePanel from '../timeline/timeline.js';
 import * as TimelineUtils from '../timeline/utils/utils.js';
 
@@ -36,6 +33,7 @@ import {
   State as ChatViewState,
   type Step
 } from './components/ChatView.js';
+import {ExploreWidget} from './components/ExploreWidget.js';
 import {isAiAssistancePatchingEnabled} from './PatchWidget.js';
 
 const {html} = Lit;
@@ -134,6 +132,10 @@ const UIStringsNotTranslate = {
    */
   inputPlaceholderForPerformance: 'Ask a question about the selected item and its call tree',
   /**
+   *@description Placeholder text for the chat UI input.
+   */
+  inputPlaceholderForPerformanceWithNoRecording: 'Record a performance trace and select an item to ask a question',
+  /**
    *@description Placeholder text for the chat UI input when there is no context selected.
    */
   inputPlaceholderForStylingNoContext: 'Select an element to ask a question',
@@ -215,6 +217,24 @@ const str_ = i18n.i18n.registerUIStrings('panels/ai_assistance/AiAssistancePanel
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 const lockedString = i18n.i18n.lockedString;
 
+interface ExternalStylingRequestParameters {
+  conversationType: AiAssistanceModel.ConversationType.STYLING;
+  prompt: string;
+  selector?: string;
+}
+
+interface ExternalNetworkRequestParameters {
+  conversationType: AiAssistanceModel.ConversationType.NETWORK;
+  prompt: string;
+  requestUrl: string;
+}
+
+interface ExternalPerformanceInsightsRequestParameters {
+  conversationType: AiAssistanceModel.ConversationType.PERFORMANCE_INSIGHT;
+  prompt: string;
+  insightTitle: string;
+}
+
 function selectedElementFilter(maybeNode: SDK.DOMModel.DOMNode|null): SDK.DOMModel.DOMNode|null {
   if (maybeNode) {
     return maybeNode.nodeType() === Node.ELEMENT_NODE ? maybeNode : null;
@@ -257,16 +277,24 @@ async function getEmptyStateSuggestions(
         {title: 'Are there any security headers present?', jslogContext: 'network-default'},
         {title: 'Why is the request failing?', jslogContext: 'network-default'},
       ];
-    case AiAssistanceModel.ConversationType.PERFORMANCE:
-      return [
-        {title: 'What\'s the purpose of this work?', jslogContext: 'performance-default'},
-        {title: 'Where is time being spent?', jslogContext: 'performance-default'},
-        {title: 'How can I optimize this?', jslogContext: 'performance-default'},
-      ];
     case AiAssistanceModel.ConversationType.PERFORMANCE_INSIGHT:
+    case AiAssistanceModel.ConversationType.PERFORMANCE: {
+      const focus = context?.getItem() as TimelineUtils.AIContext.AgentFocus | null;
+      if (focus?.data.type === 'call-tree') {
+        return [
+          {title: 'What\'s the purpose of this work?', jslogContext: 'performance-default'},
+          {title: 'Where is time being spent?', jslogContext: 'performance-default'},
+          {title: 'How can I optimize this?', jslogContext: 'performance-default'},
+        ];
+      }
+
       return [
         {title: 'Help me optimize my page load performance', jslogContext: 'performance-insights-default'},
       ];
+    }
+
+    default:
+      Platform.assertNever(conversationType, 'Unknown conversation type');
   }
 }
 
@@ -290,7 +318,7 @@ type View = (input: ViewInput, output: PanelViewOutput, target: HTMLElement) => 
 function toolbarView(input: ToolbarViewInput): Lit.LitTemplate {
   // clang-format off
   return html`
-    <div class="toolbar-container" role="toolbar" .jslogContext=${VisualLogging.toolbar()}>
+    <div class="toolbar-container" role="toolbar" jslog=${VisualLogging.toolbar()}>
       <devtools-toolbar class="freestyler-left-toolbar" role="presentation">
       ${input.showChatActions
         ? html`<devtools-button
@@ -306,7 +334,8 @@ function toolbarView(input: ToolbarViewInput): Lit.LitTemplate {
           aria-label=${i18nString(UIStrings.history)}
           .iconName=${'history'}
           .jslogContext=${'freestyler.history'}
-          .populateMenuCall=${input.populateHistoryMenu}></devtools-menu-button>`
+          .populateMenuCall=${input.populateHistoryMenu}
+        ></devtools-menu-button>`
           : Lit.nothing}
         ${input.showDeleteHistoryAction
           ? html`<devtools-button
@@ -348,18 +377,29 @@ function toolbarView(input: ToolbarViewInput): Lit.LitTemplate {
 
 function defaultView(input: ViewInput, output: PanelViewOutput, target: HTMLElement): void {
   // clang-format off
-  Lit.render(html`
-    ${toolbarView(input)}
-    <div class="chat-container">
-      <devtools-ai-chat-view .props=${input} ${Lit.Directives.ref((el: Element|undefined) => {
-        if (!el || !(el instanceof ChatView)) {
-          return;
-        }
+  Lit.render(
+    html`
+      ${toolbarView(input)}
+      <div class="ai-assistance-view-container">
+        ${input.state !== ChatViewState.EXPLORE_VIEW
+          ? html` <devtools-ai-chat-view
+              .props=${input}
+              ${Lit.Directives.ref((el: Element | undefined) => {
+                if (!el || !(el instanceof ChatView)) {
+                  return;
+                }
 
-        output.chatView = el;
-      })}></devtools-ai-chat-view>
-    </div>
-  `, target, {host: input});
+                output.chatView = el;
+              })}
+            ></devtools-ai-chat-view>`
+          : html`<devtools-widget
+              class="explore"
+              .widgetConfig=${UI.Widget.widgetConfig(ExploreWidget)}
+            ></devtools-widget>`}
+      </div>
+    `,
+    target,
+  );
   // clang-format on
 }
 
@@ -384,19 +424,12 @@ function createRequestContext(request: SDK.NetworkRequest.NetworkRequest|null): 
   return new AiAssistanceModel.RequestContext(request);
 }
 
-function createCallTreeContext(callTree: TimelineUtils.AICallTree.AICallTree|null): AiAssistanceModel.CallTreeContext|
-    null {
-  if (!callTree) {
+function createPerformanceTraceContext(focus: TimelineUtils.AIContext.AgentFocus|null):
+    AiAssistanceModel.PerformanceTraceContext|null {
+  if (!focus) {
     return null;
   }
-  return new AiAssistanceModel.CallTreeContext(callTree);
-}
-function createPerfInsightContext(insight: TimelineUtils.InsightAIContext.ActiveInsight|null):
-    AiAssistanceModel.InsightContext|null {
-  if (!insight) {
-    return null;
-  }
-  return new AiAssistanceModel.InsightContext(insight);
+  return new AiAssistanceModel.PerformanceTraceContext(focus);
 }
 
 function agentToConversationType(agent: AiAssistanceModel.AiAgent<unknown>): AiAssistanceModel.ConversationType {
@@ -412,59 +445,60 @@ function agentToConversationType(agent: AiAssistanceModel.AiAgent<unknown>): AiA
   }
 
   if (agent instanceof AiAssistanceModel.PerformanceAgent) {
-    return AiAssistanceModel.ConversationType.PERFORMANCE;
-  }
-
-  if (agent instanceof AiAssistanceModel.PerformanceInsightsAgent) {
-    return AiAssistanceModel.ConversationType.PERFORMANCE_INSIGHT;
+    return agent.getConversationType();
   }
 
   throw new Error('Provided agent does not have a corresponding conversation type');
 }
 
-// TODO(crbug.com/416134018): Add piercing of shadow roots and handling of child frames
-async function inspectElementBySelector(selector: string): Promise<void> {
-  const primaryPageTarget = SDK.TargetManager.TargetManager.instance().primaryPageTarget();
-  const runtimeModel = primaryPageTarget?.model(SDK.RuntimeModel.RuntimeModel);
-  const executionContext = runtimeModel?.defaultExecutionContext();
-  if (!executionContext) {
-    throw new Error('Could not find execution context for executing code');
+async function inspectElementBySelector(selector: string): Promise<SDK.DOMModel.DOMNode|null> {
+  const whitespaceTrimmedQuery = selector.trim();
+  if (!whitespaceTrimmedQuery.length) {
+    return null;
   }
 
-  // `inspect()` is not available in `callFunctionOn()`, but it is in `evaluate()`.
-  // We therefore get a reference to `inspect()` via `evaluate()` and then pass
-  // this reference as an argument to `callFunctionOn()`.
-  const inspectReference = await executionContext.evaluate(
-      {
-        expression: 'window.inspect',
-        includeCommandLineAPI: true,
-        returnByValue: false,
-      },
-      /* userGesture */ false,
-      /* awaitPromise */ false,
-  );
-  if ('error' in inspectReference || inspectReference.exceptionDetails) {
-    throw new Error('Cannot find \'window.inspect\'');
-  }
+  const showUAShadowDOM = Common.Settings.Settings.instance().moduleSetting('show-ua-shadow-dom').get();
+  const domModels = SDK.TargetManager.TargetManager.instance().models(SDK.DOMModel.DOMModel, {scoped: true});
 
-  const inspectResult = await executionContext.callFunctionOn({
-    functionDeclaration: 'async function (inspect, selector) { return inspect(document.querySelector(selector)); }',
-    arguments: [{objectId: inspectReference.object.objectId}, {value: selector}],
-    userGesture: false,
-    awaitPromise: true,
-    returnByValue: false,
-  });
-  if ('error' in inspectResult || inspectResult.exceptionDetails ||
-      SDK.RemoteObject.RemoteObject.isNullOrUndefined(inspectResult.object)) {
-    throw new Error(`'document.querySelector()' could not find matching element for '${selector}' selector`);
+  const performSearchPromises =
+      domModels.map(domModel => domModel.performSearch(whitespaceTrimmedQuery, showUAShadowDOM));
+  const resultCounts = await Promise.all(performSearchPromises);
+
+  // If the selector matches multiple times, this returns the first match.
+  const index = resultCounts.findIndex(value => value > 0);
+  if (index >= 0) {
+    return await domModels[index].searchResult(0);
   }
+  return null;
+}
+
+async function inspectNetworkRequestByUrl(selector: string): Promise<SDK.NetworkRequest.NetworkRequest|null> {
+  const networkManagers =
+      SDK.TargetManager.TargetManager.instance().models(SDK.NetworkManager.NetworkManager, {scoped: true});
+
+  const results = networkManagers
+                      .map(networkManager => {
+                        let request = networkManager.requestForURL(Platform.DevToolsPath.urlString`${selector}`);
+                        if (!request && selector.at(-1) === '/') {
+                          request =
+                              networkManager.requestForURL(Platform.DevToolsPath.urlString`${selector.slice(0, -1)}`);
+                        } else if (!request && selector.at(-1) !== '/') {
+                          request = networkManager.requestForURL(Platform.DevToolsPath.urlString`${selector}/`);
+                        }
+                        return request;
+                      })
+                      .filter(req => !!req);
+  const request = results.at(0);
+
+  return request ?? null;
 }
 
 let panelInstance: AiAssistancePanel;
 export class AiAssistancePanel extends UI.Panel.Panel {
   static panelName = 'freestyler';
 
-  #toggleSearchElementAction: UI.ActionRegistration.Action;
+  // NodeJS debugging does not have Elements panel, thus this action might not exist.
+  #toggleSearchElementAction?: UI.ActionRegistration.Action;
   #aidaClient: Host.AidaClient.AidaClient;
   #viewOutput: PanelViewOutput = {};
   #serverSideLoggingEnabled = isAiAssistanceServerSideLoggingEnabled();
@@ -478,8 +512,7 @@ export class AiAssistancePanel extends UI.Panel.Panel {
 
   #selectedFile: AiAssistanceModel.FileContext|null = null;
   #selectedElement: AiAssistanceModel.NodeContext|null = null;
-  #selectedCallTree: AiAssistanceModel.CallTreeContext|null = null;
-  #selectedPerformanceInsight: AiAssistanceModel.InsightContext|null = null;
+  #selectedPerformanceTrace: AiAssistanceModel.PerformanceTraceContext|null = null;
   #selectedRequest: AiAssistanceModel.RequestContext|null = null;
 
   // Messages displayed in the `ChatView` component.
@@ -506,6 +539,7 @@ export class AiAssistancePanel extends UI.Panel.Panel {
   #imageInput?: ImageInputData;
   // Used to disable send button when there is not text input.
   #isTextInputEmpty = true;
+  #timelinePanelInstance: TimelinePanel.TimelinePanel.TimelinePanel|null = null;
 
   constructor(private view: View = defaultView, {aidaClient, aidaAvailability, syncInfo}: {
     aidaClient: Host.AidaClient.AidaClient,
@@ -516,8 +550,6 @@ export class AiAssistancePanel extends UI.Panel.Panel {
     this.registerRequiredCSS(aiAssistancePanelStyles);
     this.#aiAssistanceEnabledSetting = this.#getAiAssistanceEnabledSetting();
 
-    this.#toggleSearchElementAction =
-        UI.ActionRegistry.ActionRegistry.instance().getAction('elements.toggle-element-search');
     this.#aidaClient = aidaClient;
     this.#aidaAvailability = aidaAvailability;
     this.#userInfo = {
@@ -528,12 +560,32 @@ export class AiAssistancePanel extends UI.Panel.Panel {
     this.#historicalConversations = AiAssistanceModel.AiHistoryStorage.instance().getHistory().map(item => {
       return new AiAssistanceModel.Conversation(item.type, item.history, item.id, true, item.isExternal);
     });
+
+    if (UI.ActionRegistry.ActionRegistry.instance().hasAction('elements.toggle-element-search')) {
+      this.#toggleSearchElementAction =
+          UI.ActionRegistry.ActionRegistry.instance().getAction('elements.toggle-element-search');
+    }
+    AiAssistanceModel.AiHistoryStorage.instance().addEventListener(
+        AiAssistanceModel.Events.HISTORY_DELETED, this.#onHistoryDeleted, this);
   }
 
   #getChatUiState(): ChatViewState {
     const blockedByAge = Root.Runtime.hostConfig.aidaAvailability?.blockedByAge === true;
-    return (this.#aiAssistanceEnabledSetting?.getIfNotDisabled() && !blockedByAge) ? ChatViewState.CHAT_VIEW :
-                                                                                     ChatViewState.CONSENT_VIEW;
+
+    // Special case due to the way its handled downstream quirks
+    if (this.#aidaAvailability !== Host.AidaClient.AidaAccessPreconditions.AVAILABLE) {
+      return ChatViewState.CHAT_VIEW;
+    }
+
+    if (!this.#aiAssistanceEnabledSetting?.getIfNotDisabled() || blockedByAge) {
+      return ChatViewState.CONSENT_VIEW;
+    }
+
+    if (this.#conversation?.type) {
+      return ChatViewState.CHAT_VIEW;
+    }
+
+    return ChatViewState.EXPLORE_VIEW;
   }
 
   #getAiAssistanceEnabledSetting(): Common.Settings.Setting<boolean>|undefined {
@@ -573,12 +625,9 @@ export class AiAssistancePanel extends UI.Panel.Panel {
         agent = new AiAssistanceModel.FileAgent(options);
         break;
       }
+      case AiAssistanceModel.ConversationType.PERFORMANCE_INSIGHT:
       case AiAssistanceModel.ConversationType.PERFORMANCE: {
-        agent = new AiAssistanceModel.PerformanceAgent(options);
-        break;
-      }
-      case AiAssistanceModel.ConversationType.PERFORMANCE_INSIGHT: {
-        agent = new AiAssistanceModel.PerformanceInsightsAgent(options);
+        agent = new AiAssistanceModel.PerformanceAgent(options, conversationType);
         break;
       }
     }
@@ -601,6 +650,32 @@ export class AiAssistancePanel extends UI.Panel.Panel {
     return panelInstance;
   }
 
+  /**
+   * Called when the TimelinePanel instance changes. We use this to listen to
+   * the status of if the user is viewing a trace or not, and update the
+   * placeholder text in the panel accordingly. We do this because if the user
+   * has an active trace, we show different text than if they are viewing
+   * the performance panel but have no trace imported.
+   */
+  #bindTimelineTraceListener(): void {
+    const timelinePanel = UI.Context.Context.instance().flavor(TimelinePanel.TimelinePanel.TimelinePanel);
+
+    // Avoid binding multiple times.
+    if (timelinePanel === this.#timelinePanelInstance) {
+      return;
+    }
+
+    // Ensure we clear up any listener from the old TimelinePanel instance.
+    this.#timelinePanelInstance?.removeEventListener(
+        TimelinePanel.TimelinePanel.Events.IS_VIEWING_TRACE, this.requestUpdate, this);
+    this.#timelinePanelInstance = timelinePanel;
+
+    if (this.#timelinePanelInstance) {
+      this.#timelinePanelInstance.addEventListener(
+          TimelinePanel.TimelinePanel.Events.IS_VIEWING_TRACE, this.requestUpdate, this);
+    }
+  }
+
   // We select the default agent based on the open panels if
   // there isn't any active conversation.
   #selectDefaultAgentIfNeeded(): void {
@@ -611,12 +686,11 @@ export class AiAssistancePanel extends UI.Panel.Panel {
       return;
     }
     const {hostConfig} = Root.Runtime;
-    const isElementsPanelVisible =
-        Boolean(UI.Context.Context.instance().flavor(ElementsPanel.ElementsPanel.ElementsPanel));
-    const isNetworkPanelVisible = Boolean(UI.Context.Context.instance().flavor(NetworkPanel.NetworkPanel.NetworkPanel));
-    const isSourcesPanelVisible = Boolean(UI.Context.Context.instance().flavor(SourcesPanel.SourcesPanel.SourcesPanel));
-    const isPerformancePanelVisible =
-        Boolean(UI.Context.Context.instance().flavor(TimelinePanel.TimelinePanel.TimelinePanel));
+    const viewManager = UI.ViewManager.ViewManager.instance();
+    const isElementsPanelVisible = viewManager.isViewVisible('elements');
+    const isNetworkPanelVisible = viewManager.isViewVisible('network');
+    const isSourcesPanelVisible = viewManager.isViewVisible('sources');
+    const isPerformancePanelVisible = viewManager.isViewVisible('timeline');
 
     // Check if the user has an insight expanded in the performance panel sidebar.
     // If they have, we default to the Insights agent; otherwise we fallback to
@@ -706,36 +780,27 @@ export class AiAssistancePanel extends UI.Panel.Panel {
         createNodeContext(selectedElementFilter(UI.Context.Context.instance().flavor(SDK.DOMModel.DOMNode)));
     this.#selectedRequest =
         createRequestContext(UI.Context.Context.instance().flavor(SDK.NetworkRequest.NetworkRequest));
-    this.#selectedCallTree =
-        createCallTreeContext(UI.Context.Context.instance().flavor(TimelineUtils.AICallTree.AICallTree));
-    this.#selectedPerformanceInsight =
-        createPerfInsightContext(UI.Context.Context.instance().flavor(TimelineUtils.InsightAIContext.ActiveInsight));
+    this.#selectedPerformanceTrace =
+        createPerformanceTraceContext(UI.Context.Context.instance().flavor(TimelineUtils.AIContext.AgentFocus));
     this.#selectedFile = createFileContext(UI.Context.Context.instance().flavor(Workspace.UISourceCode.UISourceCode));
     this.#updateConversationState(this.#conversationAgent);
 
     this.#aiAssistanceEnabledSetting?.addChangeListener(this.requestUpdate, this);
     Host.AidaClient.HostConfigTracker.instance().addEventListener(
         Host.AidaClient.Events.AIDA_AVAILABILITY_CHANGED, this.#handleAidaAvailabilityChange);
-    this.#toggleSearchElementAction.addEventListener(UI.ActionRegistration.Events.TOGGLED, this.requestUpdate, this);
+    this.#toggleSearchElementAction?.addEventListener(UI.ActionRegistration.Events.TOGGLED, this.requestUpdate, this);
 
     UI.Context.Context.instance().addFlavorChangeListener(SDK.DOMModel.DOMNode, this.#handleDOMNodeFlavorChange);
     UI.Context.Context.instance().addFlavorChangeListener(
         SDK.NetworkRequest.NetworkRequest, this.#handleNetworkRequestFlavorChange);
     UI.Context.Context.instance().addFlavorChangeListener(
-        TimelineUtils.AICallTree.AICallTree, this.#handleTraceEntryNodeFlavorChange);
+        TimelineUtils.AIContext.AgentFocus, this.#handlePerformanceTraceFlavorChange);
     UI.Context.Context.instance().addFlavorChangeListener(
         Workspace.UISourceCode.UISourceCode, this.#handleUISourceCodeFlavorChange);
-    UI.Context.Context.instance().addFlavorChangeListener(
-        TimelineUtils.InsightAIContext.ActiveInsight, this.#handlePerfInsightFlavorChange);
 
-    UI.Context.Context.instance().addFlavorChangeListener(
-        ElementsPanel.ElementsPanel.ElementsPanel, this.#selectDefaultAgentIfNeeded, this);
-    UI.Context.Context.instance().addFlavorChangeListener(
-        NetworkPanel.NetworkPanel.NetworkPanel, this.#selectDefaultAgentIfNeeded, this);
-    UI.Context.Context.instance().addFlavorChangeListener(
-        SourcesPanel.SourcesPanel.SourcesPanel, this.#selectDefaultAgentIfNeeded, this);
-    UI.Context.Context.instance().addFlavorChangeListener(
-        TimelinePanel.TimelinePanel.TimelinePanel, this.#selectDefaultAgentIfNeeded, this);
+    UI.ViewManager.ViewManager.instance().addEventListener(
+        UI.ViewManager.Events.VIEW_VISIBILITY_CHANGED, this.#selectDefaultAgentIfNeeded, this);
+
     SDK.TargetManager.TargetManager.instance().addModelListener(
         SDK.DOMModel.DOMModel, SDK.DOMModel.Events.AttrModified, this.#handleDOMNodeAttrChange, this);
     SDK.TargetManager.TargetManager.instance().addModelListener(
@@ -745,6 +810,13 @@ export class AiAssistancePanel extends UI.Panel.Panel {
         SDK.ResourceTreeModel.ResourceTreeModel, SDK.ResourceTreeModel.Events.PrimaryPageChanged,
         this.#onPrimaryPageChanged, this);
 
+    // Listen to changes in the Timeline Panel state. We also call the
+    // function immediately in case the Performance panel is already shown
+    // when AI Assistance is loaded.
+    UI.Context.Context.instance().addFlavorChangeListener(
+        TimelinePanel.TimelinePanel.TimelinePanel, this.#bindTimelineTraceListener, this);
+    this.#bindTimelineTraceListener();
+
     Host.userMetrics.actionTaken(Host.UserMetrics.Action.AiAssistancePanelOpened);
   }
 
@@ -752,24 +824,19 @@ export class AiAssistancePanel extends UI.Panel.Panel {
     this.#aiAssistanceEnabledSetting?.removeChangeListener(this.requestUpdate, this);
     Host.AidaClient.HostConfigTracker.instance().removeEventListener(
         Host.AidaClient.Events.AIDA_AVAILABILITY_CHANGED, this.#handleAidaAvailabilityChange);
-    this.#toggleSearchElementAction.removeEventListener(UI.ActionRegistration.Events.TOGGLED, this.requestUpdate, this);
+    this.#toggleSearchElementAction?.removeEventListener(
+        UI.ActionRegistration.Events.TOGGLED, this.requestUpdate, this);
     UI.Context.Context.instance().removeFlavorChangeListener(SDK.DOMModel.DOMNode, this.#handleDOMNodeFlavorChange);
     UI.Context.Context.instance().removeFlavorChangeListener(
         SDK.NetworkRequest.NetworkRequest, this.#handleNetworkRequestFlavorChange);
     UI.Context.Context.instance().removeFlavorChangeListener(
-        TimelineUtils.AICallTree.AICallTree, this.#handleTraceEntryNodeFlavorChange);
-    UI.Context.Context.instance().removeFlavorChangeListener(
-        TimelineUtils.InsightAIContext.ActiveInsight, this.#handlePerfInsightFlavorChange);
+        TimelineUtils.AIContext.AgentFocus, this.#handlePerformanceTraceFlavorChange);
     UI.Context.Context.instance().removeFlavorChangeListener(
         Workspace.UISourceCode.UISourceCode, this.#handleUISourceCodeFlavorChange);
+    UI.ViewManager.ViewManager.instance().removeEventListener(
+        UI.ViewManager.Events.VIEW_VISIBILITY_CHANGED, this.#selectDefaultAgentIfNeeded, this);
     UI.Context.Context.instance().removeFlavorChangeListener(
-        ElementsPanel.ElementsPanel.ElementsPanel, this.#selectDefaultAgentIfNeeded, this);
-    UI.Context.Context.instance().removeFlavorChangeListener(
-        NetworkPanel.NetworkPanel.NetworkPanel, this.#selectDefaultAgentIfNeeded, this);
-    UI.Context.Context.instance().removeFlavorChangeListener(
-        SourcesPanel.SourcesPanel.SourcesPanel, this.#selectDefaultAgentIfNeeded, this);
-    UI.Context.Context.instance().removeFlavorChangeListener(
-        TimelinePanel.TimelinePanel.TimelinePanel, this.#selectDefaultAgentIfNeeded, this);
+        TimelinePanel.TimelinePanel.TimelinePanel, this.#bindTimelineTraceListener, this);
     SDK.TargetManager.TargetManager.instance().removeModelListener(
         SDK.DOMModel.DOMModel,
         SDK.DOMModel.Events.AttrModified,
@@ -785,6 +852,12 @@ export class AiAssistancePanel extends UI.Panel.Panel {
     SDK.TargetManager.TargetManager.instance().removeModelListener(
         SDK.ResourceTreeModel.ResourceTreeModel, SDK.ResourceTreeModel.Events.PrimaryPageChanged,
         this.#onPrimaryPageChanged, this);
+
+    if (this.#timelinePanelInstance) {
+      this.#timelinePanelInstance.removeEventListener(
+          TimelinePanel.TimelinePanel.Events.IS_VIEWING_TRACE, this.requestUpdate, this);
+      this.#timelinePanelInstance = null;
+    }
   }
 
   #handleAidaAvailabilityChange = async(): Promise<void> => {
@@ -829,23 +902,14 @@ export class AiAssistancePanel extends UI.Panel.Panel {
         this.#updateConversationState(this.#conversationAgent);
       };
 
-  #handleTraceEntryNodeFlavorChange =
-      (ev: Common.EventTarget.EventTargetEvent<TimelineUtils.AICallTree.AICallTree>): void => {
-        if (this.#selectedCallTree?.getItem() === ev.data) {
+  #handlePerformanceTraceFlavorChange =
+      (ev: Common.EventTarget.EventTargetEvent<TimelineUtils.AIContext.AgentFocus>): void => {
+        if (this.#selectedPerformanceTrace?.getItem() === ev.data) {
           return;
         }
 
-        this.#selectedCallTree = Boolean(ev.data) ? new AiAssistanceModel.CallTreeContext(ev.data) : null;
-        this.#updateConversationState(this.#conversationAgent);
-      };
-
-  #handlePerfInsightFlavorChange =
-      (ev: Common.EventTarget.EventTargetEvent<TimelineUtils.InsightAIContext.ActiveInsight>): void => {
-        if (this.#selectedPerformanceInsight?.getItem() === ev.data) {
-          return;
-        }
-
-        this.#selectedPerformanceInsight = Boolean(ev.data) ? new AiAssistanceModel.InsightContext(ev.data) : null;
+        this.#selectedPerformanceTrace =
+            Boolean(ev.data) ? new AiAssistanceModel.PerformanceTraceContext(ev.data) : null;
         this.#updateConversationState(this.#conversationAgent);
       };
 
@@ -893,7 +957,7 @@ export class AiAssistancePanel extends UI.Panel.Panel {
           conversationType: this.#conversation?.type,
           isReadOnly: this.#conversation?.isReadOnly ?? false,
           changeSummary: this.#getChangeSummary(),
-          inspectElementToggled: this.#toggleSearchElementAction.toggled(),
+          inspectElementToggled: this.#toggleSearchElementAction?.toggled() ?? false,
           userInfo: this.#userInfo,
           canShowFeedbackForm: this.#serverSideLoggingEnabled,
           multimodalInputEnabled: isAiAssistanceMultimodalInputEnabled() &&
@@ -941,7 +1005,7 @@ export class AiAssistancePanel extends UI.Panel.Panel {
   }
 
   #handleSelectElementClick(): void {
-    void this.#toggleSearchElementAction.execute();
+    void this.#toggleSearchElementAction?.execute();
   }
 
   #isTextInputDisabled(): boolean {
@@ -1007,9 +1071,14 @@ export class AiAssistancePanel extends UI.Panel.Panel {
       case AiAssistanceModel.ConversationType.NETWORK:
         return this.#selectedContext ? lockedString(UIStringsNotTranslate.inputPlaceholderForNetwork) :
                                        lockedString(UIStringsNotTranslate.inputPlaceholderForNetworkNoContext);
-      case AiAssistanceModel.ConversationType.PERFORMANCE:
-        return this.#selectedContext ? lockedString(UIStringsNotTranslate.inputPlaceholderForPerformance) :
-                                       lockedString(UIStringsNotTranslate.inputPlaceholderForPerformanceNoContext);
+      case AiAssistanceModel.ConversationType.PERFORMANCE: {
+        const perfPanel = UI.Context.Context.instance().flavor(TimelinePanel.TimelinePanel.TimelinePanel);
+        if (perfPanel?.hasActiveTrace()) {
+          return this.#selectedContext ? lockedString(UIStringsNotTranslate.inputPlaceholderForPerformance) :
+                                         lockedString(UIStringsNotTranslate.inputPlaceholderForPerformanceNoContext);
+        }
+        return lockedString(UIStringsNotTranslate.inputPlaceholderForPerformanceWithNoRecording);
+      }
       case AiAssistanceModel.ConversationType.PERFORMANCE_INSIGHT:
         return this.#selectedContext ?
             lockedString(UIStringsNotTranslate.inputPlaceholderForPerformanceInsights) :
@@ -1078,20 +1147,22 @@ export class AiAssistancePanel extends UI.Panel.Panel {
     if (context instanceof AiAssistanceModel.FileContext) {
       return Common.Revealer.reveal(context.getItem().uiLocation(0, 0));
     }
-    if (context instanceof AiAssistanceModel.CallTreeContext) {
-      const item = context.getItem();
-      const event = item.selectedNode?.event ?? item.rootNode.event;
-      const trace = new SDK.TraceObject.RevealableEvent(event);
-      return Common.Revealer.reveal(trace);
-    }
-    if (context instanceof AiAssistanceModel.InsightContext) {
-      const item = context.getItem();
-      return Common.Revealer.reveal(item);
+    if (context instanceof AiAssistanceModel.PerformanceTraceContext) {
+      const focus = context.getItem().data;
+      if (focus.type === 'call-tree') {
+        const event = focus.callTree.selectedNode?.event ?? focus.callTree.rootNode.event;
+        const trace = new SDK.TraceObject.RevealableEvent(event);
+        return Common.Revealer.reveal(trace);
+      }
+      if (focus.type === 'insight') {
+        return Common.Revealer.reveal(focus.insight);
+      }
+      Platform.assertNever(focus, 'Unknown agent focus');
     }
     // Node picker is using linkifier.
   }
 
-  handleAction(actionId: string): void {
+  handleAction(actionId: string, opts?: Record<string, unknown>): void {
     if (this.#isLoading) {
       // If running some queries already, focus the input with the abort
       // button and do nothing.
@@ -1149,11 +1220,24 @@ export class AiAssistancePanel extends UI.Panel.Panel {
 
     let agent = this.#conversationAgent;
     if (!this.#conversation || !this.#conversationAgent || this.#conversation.type !== targetConversationType ||
-        this.#conversation?.isEmpty || targetConversationType === AiAssistanceModel.ConversationType.PERFORMANCE) {
+        this.#conversation?.isEmpty || targetConversationType === AiAssistanceModel.ConversationType.PERFORMANCE ||
+        (agent instanceof AiAssistanceModel.PerformanceAgent &&
+         agent.getConversationType() !== targetConversationType)) {
       agent = this.#createAgent(targetConversationType);
     }
     this.#updateConversationState(agent);
-    this.#viewOutput.chatView?.focusTextInput();
+    const predefinedPrompt = opts?.['prompt'];
+    if (predefinedPrompt && typeof predefinedPrompt === 'string') {
+      this.#imageInput = undefined;
+      this.#isTextInputEmpty = true;
+      Host.userMetrics.actionTaken(Host.UserMetrics.Action.AiAssistanceQuerySubmitted);
+      if (this.#blockedByCrossOrigin) {
+        this.#handleNewChatRequest();
+      }
+      void this.#startConversation(predefinedPrompt);
+    } else {
+      this.#viewOutput.chatView?.focusTextInput();
+    }
   }
 
   #populateHistoryMenu(contextMenu: UI.ContextMenu.ContextMenu): void {
@@ -1181,7 +1265,7 @@ export class AiAssistancePanel extends UI.Panel.Panel {
     contextMenu.footerSection().appendItem(
         i18nString(UIStrings.clearChatHistory),
         () => {
-          this.#clearHistory();
+          void AiAssistanceModel.AiHistoryStorage.instance().deleteAll();
         },
         {
           disabled: historyEmpty,
@@ -1189,9 +1273,8 @@ export class AiAssistancePanel extends UI.Panel.Panel {
     );
   }
 
-  #clearHistory(): void {
+  #onHistoryDeleted(): void {
     this.#historicalConversations = [];
-    void AiAssistanceModel.AiHistoryStorage.instance().deleteAll();
     this.#updateConversationState();
   }
 
@@ -1204,7 +1287,7 @@ export class AiAssistancePanel extends UI.Panel.Panel {
         this.#historicalConversations.filter(conversation => conversation !== this.#conversation);
     void AiAssistanceModel.AiHistoryStorage.instance().deleteHistoryEntry(this.#conversation.id);
     this.#updateConversationState();
-    UI.ARIAUtils.alert(i18nString(UIStrings.chatDeleted));
+    UI.ARIAUtils.LiveAnnouncer.alert(i18nString(UIStrings.chatDeleted));
   }
 
   async #openConversation(conversation: AiAssistanceModel.Conversation): Promise<void> {
@@ -1218,7 +1301,7 @@ export class AiAssistancePanel extends UI.Panel.Panel {
 
   #handleNewChatRequest(): void {
     this.#updateConversationState();
-    UI.ARIAUtils.alert(i18nString(UIStrings.newChatCreated));
+    UI.ARIAUtils.LiveAnnouncer.alert(i18nString(UIStrings.newChatCreated));
   }
 
   async #handleTakeScreenshot(): Promise<void> {
@@ -1365,10 +1448,8 @@ export class AiAssistancePanel extends UI.Panel.Panel {
         context = this.#selectedRequest;
         break;
       case AiAssistanceModel.ConversationType.PERFORMANCE:
-        context = this.#selectedCallTree;
-        break;
       case AiAssistanceModel.ConversationType.PERFORMANCE_INSIGHT:
-        context = this.#selectedPerformanceInsight;
+        context = this.#selectedPerformanceTrace;
         break;
     }
     return context;
@@ -1399,15 +1480,16 @@ export class AiAssistancePanel extends UI.Panel.Panel {
       type: multimodalInputType,
     } :
                                                                       undefined;
+    if (this.#conversation) {
+      void VisualLogging.logFunctionCall(`start-conversation-${this.#conversation.type}`, 'ui');
+    }
     const runner = this.#conversationAgent.run(
         text, {
           signal,
           selected: context,
         },
         multimodalInput);
-    UI.ARIAUtils.alert(lockedString(UIStringsNotTranslate.answerLoading));
     await this.#doConversation(this.#saveResponsesToCurrentConversation(runner));
-    UI.ARIAUtils.alert(lockedString(UIStringsNotTranslate.answerReady));
   }
 
   async *
@@ -1445,6 +1527,8 @@ export class AiAssistancePanel extends UI.Panel.Panel {
       }
 
       this.#isLoading = true;
+      let announcedAnswerLoading = false;
+      let announcedAnswerReady = false;
       for await (const data of items) {
         step.sideEffect = undefined;
         switch (data.type) {
@@ -1554,6 +1638,25 @@ export class AiAssistancePanel extends UI.Panel.Panel {
               data.type === AiAssistanceModel.ResponseType.SIDE_EFFECT) {
             this.#viewOutput.chatView?.scrollToBottom();
           }
+
+          // Announce as status update to screen readers when:
+          // * Context is received (e.g. Analyzing the prompt)
+          // * Answer started streaming
+          // * Answer finished streaming
+          switch (data.type) {
+            case AiAssistanceModel.ResponseType.CONTEXT:
+              UI.ARIAUtils.LiveAnnouncer.status(data.title);
+              break;
+            case AiAssistanceModel.ResponseType.ANSWER: {
+              if (!data.complete && !announcedAnswerLoading) {
+                announcedAnswerLoading = true;
+                UI.ARIAUtils.LiveAnnouncer.status(lockedString(UIStringsNotTranslate.answerLoading));
+              } else if (data.complete && !announcedAnswerReady) {
+                announcedAnswerReady = true;
+                UI.ARIAUtils.LiveAnnouncer.status(lockedString(UIStringsNotTranslate.answerReady));
+              }
+            }
+          }
         }
       }
 
@@ -1564,27 +1667,117 @@ export class AiAssistancePanel extends UI.Panel.Panel {
     }
   }
 
-  async handleExternalRequest(prompt: string, conversationType: AiAssistanceModel.ConversationType, selector?: string):
-      Promise<string> {
-    Snackbars.Snackbar.Snackbar.show({message: i18nString(UIStrings.externalRequestReceived)});
-    const disabledReasons = AiAssistanceModel.getDisabledReasons(this.#aidaAvailability);
-    const aiAssistanceSetting = this.#aiAssistanceEnabledSetting?.getIfNotDisabled();
-    if (!aiAssistanceSetting) {
-      disabledReasons.push(lockedString(UIStringsNotTranslate.enableInSettings));
-    }
-    if (disabledReasons.length > 0) {
-      throw new Error(disabledReasons.join(' '));
+  /**
+   * Handles an external request using the given prompt and uses the
+   * conversation type to use the correct agent. Note that the `selector` param
+   * is contextual; for styling it is a literal CSS selector, but for
+   * Performance Insights it is the name of the Insight that forms the
+   * context of the conversation.
+   */
+  handleExternalRequest(
+      parameters: ExternalStylingRequestParameters|ExternalNetworkRequestParameters|
+      ExternalPerformanceInsightsRequestParameters,
+      ): AsyncGenerator<AiAssistanceModel.ExternalRequestResponse, AiAssistanceModel.ExternalRequestResponse> {
+    // eslint-disable-next-line require-yield
+    async function*
+        generateErrorResponse(message: string):
+            AsyncGenerator<AiAssistanceModel.ExternalRequestResponse, AiAssistanceModel.ExternalRequestResponse> {
+      return {
+        type: AiAssistanceModel.ExternalRequestResponseType.ERROR,
+        message,
+      };
     }
 
-    switch (conversationType) {
-      case AiAssistanceModel.ConversationType.STYLING:
-        return await this.handleExternalStylingRequest(prompt, selector);
-      default:
-        throw new Error(`Debugging with an agent of type '${conversationType}' is not implemented yet.`);
+    try {
+      Snackbars.Snackbar.Snackbar.show({message: i18nString(UIStrings.externalRequestReceived)});
+      const disabledReasons = AiAssistanceModel.getDisabledReasons(this.#aidaAvailability);
+      const aiAssistanceSetting = this.#aiAssistanceEnabledSetting?.getIfNotDisabled();
+      if (!aiAssistanceSetting) {
+        disabledReasons.push(lockedString(UIStringsNotTranslate.enableInSettings));
+      }
+      if (disabledReasons.length > 0) {
+        return generateErrorResponse(disabledReasons.join(' '));
+      }
+
+      void VisualLogging.logFunctionCall(`start-conversation-${parameters.conversationType}`, 'external');
+      switch (parameters.conversationType) {
+        case AiAssistanceModel.ConversationType.STYLING:
+          return this.handleExternalStylingRequest(parameters.prompt, parameters.selector);
+        case AiAssistanceModel.ConversationType.PERFORMANCE_INSIGHT:
+          if (!parameters.insightTitle) {
+            return generateErrorResponse('The insightTitle parameter is required for debugging a Performance Insight.');
+          }
+          return this.handleExternalPerformanceInsightsRequest(parameters.prompt, parameters.insightTitle);
+        case AiAssistanceModel.ConversationType.NETWORK:
+          if (!parameters.requestUrl) {
+            return generateErrorResponse('The url is required for debugging a network request.');
+          }
+          return this.handleExternalNetworkRequest(parameters.prompt, parameters.requestUrl);
+      }
+    } catch (error) {
+      return generateErrorResponse(error.message);
     }
   }
 
-  async handleExternalStylingRequest(prompt: string, selector?: string): Promise<string> {
+  async *
+      handleExternalPerformanceInsightsRequest(prompt: string, insightTitle: string):
+          AsyncGenerator<AiAssistanceModel.ExternalRequestResponse, AiAssistanceModel.ExternalRequestResponse> {
+    const insightsAgent = this.#createAgent(AiAssistanceModel.ConversationType.PERFORMANCE_INSIGHT);
+    const externalConversation = new AiAssistanceModel.Conversation(
+        agentToConversationType(insightsAgent),
+        [],
+        insightsAgent.id,
+        /* isReadOnly */ true,
+        /* isExternal */ true,
+    );
+    this.#historicalConversations.push(externalConversation);
+
+    const timelinePanel = TimelinePanel.TimelinePanel.TimelinePanel.instance();
+
+    const focusOrError = await TimelinePanel.ExternalRequests.getInsightAgentFocusToDebug(
+        timelinePanel.model,
+        insightTitle,
+    );
+    if ('error' in focusOrError) {
+      return {
+        type: AiAssistanceModel.ExternalRequestResponseType.ERROR,
+        message: focusOrError.error,
+      };
+    }
+
+    const selectedContext = createPerformanceTraceContext(focusOrError.focus);
+    const runner = insightsAgent.run(prompt, {selected: selectedContext});
+
+    const devToolsLogs: object[] = [];
+    for await (const data of runner) {
+      // We don't want to save partial responses to the conversation history.
+      if (data.type !== AiAssistanceModel.ResponseType.ANSWER || data.complete) {
+        void externalConversation.addHistoryItem(data);
+        devToolsLogs.push(data);
+      }
+      if (data.type === AiAssistanceModel.ResponseType.ANSWER && data.complete) {
+        return {
+          type: AiAssistanceModel.ExternalRequestResponseType.ANSWER,
+          message: data.text,
+          devToolsLogs,
+        };
+      }
+      if (data.type === AiAssistanceModel.ResponseType.CONTEXT || data.type === AiAssistanceModel.ResponseType.TITLE) {
+        yield {
+          type: AiAssistanceModel.ExternalRequestResponseType.NOTIFICATION,
+          message: data.title,
+        };
+      }
+    }
+    return {
+      type: AiAssistanceModel.ExternalRequestResponseType.ERROR,
+      message: 'Something went wrong. No answer was generated.',
+    };
+  }
+
+  async *
+      handleExternalStylingRequest(prompt: string, selector = 'body'):
+          AsyncGenerator<AiAssistanceModel.ExternalRequestResponse, AiAssistanceModel.ExternalRequestResponse> {
     const stylingAgent = this.#createAgent(AiAssistanceModel.ConversationType.STYLING);
     const externalConversation = new AiAssistanceModel.Conversation(
         agentToConversationType(stylingAgent),
@@ -1595,42 +1788,106 @@ export class AiAssistancePanel extends UI.Panel.Panel {
     );
     this.#historicalConversations.push(externalConversation);
 
-    if (selector !== undefined) {
-      await inspectElementBySelector(selector);
+    const node = await inspectElementBySelector(selector);
+    if (node) {
+      await node.setAsInspectedNode();
     }
-
     const runner = stylingAgent.run(
         prompt,
         {
-          selected: this.#getConversationContext(externalConversation),
+          selected: createNodeContext(node),
         },
     );
+    const devToolsLogs: object[] = [];
     for await (const data of runner) {
       // We don't want to save partial responses to the conversation history.
       if (data.type !== AiAssistanceModel.ResponseType.ANSWER || data.complete) {
         void externalConversation.addHistoryItem(data);
+        devToolsLogs.push(data);
       }
-
+      if (data.type === AiAssistanceModel.ResponseType.CONTEXT || data.type === AiAssistanceModel.ResponseType.TITLE) {
+        yield {
+          type: AiAssistanceModel.ExternalRequestResponseType.NOTIFICATION,
+          message: data.title,
+        };
+      }
       if (data.type === AiAssistanceModel.ResponseType.SIDE_EFFECT) {
         data.confirm(true);
       }
       if (data.type === AiAssistanceModel.ResponseType.ANSWER && data.complete) {
-        await this.#changeManager.stashChanges();
-        this.#changeManager.dropStashedChanges();
-        return data.text;
+        return {
+          type: AiAssistanceModel.ExternalRequestResponseType.ANSWER,
+          message: data.text,
+          devToolsLogs,
+        };
       }
     }
-    await this.#changeManager.stashChanges();
-    this.#changeManager.dropStashedChanges();
-    throw new Error('Something went wrong. No answer was generated.');
+    return {
+      type: AiAssistanceModel.ExternalRequestResponseType.ERROR,
+      message: 'Something went wrong. No answer was generated.',
+    };
+  }
+
+  async *
+      handleExternalNetworkRequest(prompt: string, requestUrl: string):
+          AsyncGenerator<AiAssistanceModel.ExternalRequestResponse, AiAssistanceModel.ExternalRequestResponse> {
+    const networkAgent =
+        this.#createAgent(AiAssistanceModel.ConversationType.NETWORK) as AiAssistanceModel.NetworkAgent;
+    const externalConversation = new AiAssistanceModel.Conversation(
+        agentToConversationType(networkAgent),
+        [],
+        networkAgent.id,
+        /* isReadOnly */ true,
+        /* isExternal */ true,
+    );
+    this.#historicalConversations.push(externalConversation);
+
+    const request = await inspectNetworkRequestByUrl(requestUrl);
+    if (!request) {
+      return {
+        type: AiAssistanceModel.ExternalRequestResponseType.ERROR,
+        message: `Can't find request with the given selector ${requestUrl}`,
+      };
+    }
+    const runner = networkAgent.run(
+        prompt,
+        {
+          selected: createRequestContext(request),
+        },
+    );
+    const devToolsLogs: object[] = [];
+    for await (const data of runner) {
+      // We don't want to save partial responses to the conversation history.
+      if (data.type !== AiAssistanceModel.ResponseType.ANSWER || data.complete) {
+        void externalConversation.addHistoryItem(data);
+        devToolsLogs.push(data);
+      }
+      if (data.type === AiAssistanceModel.ResponseType.CONTEXT || data.type === AiAssistanceModel.ResponseType.TITLE) {
+        yield {
+          type: AiAssistanceModel.ExternalRequestResponseType.NOTIFICATION,
+          message: data.title,
+        };
+      }
+      if (data.type === AiAssistanceModel.ResponseType.SIDE_EFFECT) {
+        data.confirm(true);
+      }
+      if (data.type === AiAssistanceModel.ResponseType.ANSWER && data.complete) {
+        return {
+          type: AiAssistanceModel.ExternalRequestResponseType.ANSWER,
+          message: data.text,
+          devToolsLogs,
+        };
+      }
+    }
+    return {
+      type: AiAssistanceModel.ExternalRequestResponseType.ERROR,
+      message: 'Something went wrong. No answer was generated.',
+    };
   }
 }
 
 export class ActionDelegate implements UI.ActionRegistration.ActionDelegate {
-  handleAction(
-      _context: UI.Context.Context,
-      actionId: string,
-      ): boolean {
+  handleAction(_context: UI.Context.Context, actionId: string, opts?: Record<string, unknown>): boolean {
     switch (actionId) {
       case 'freestyler.elements-floating-button':
       case 'freestyler.element-panel-context':
@@ -1661,7 +1918,7 @@ export class ActionDelegate implements UI.ActionRegistration.ActionDelegate {
           }
 
           const widget = (await view.widget()) as AiAssistancePanel;
-          widget.handleAction(actionId);
+          widget.handleAction(actionId, opts);
         })();
         return true;
       }

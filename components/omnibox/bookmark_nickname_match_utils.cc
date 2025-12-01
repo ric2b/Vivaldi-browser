@@ -96,7 +96,7 @@ AutocompleteMatch NicknameMatchToAutocompleteMatch(
       inline_autocomplete_offset != std::u16string::npos) {
     match.inline_autocompletion = nickname.substr(inline_autocomplete_offset);
   }
-  match.allowed_to_be_default_match = true;
+  match.allowed_to_be_default_match = !input.prevent_inline_autocomplete();
 
   return match;
 }

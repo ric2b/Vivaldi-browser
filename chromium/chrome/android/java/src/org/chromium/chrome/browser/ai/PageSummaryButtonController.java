@@ -28,9 +28,11 @@ import org.chromium.components.feature_engagement.Tracker;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 
 // Vivaldi
+import static org.chromium.build.NullUtil.assertNonNull;
 import org.chromium.build.BuildConfig;
 import org.chromium.chrome.browser.dom_distiller.DomDistillerTabUtils;
 import org.chromium.components.dom_distiller.core.DomDistillerUrlUtils;
+import org.chromium.content_public.browser.WebContents;
 
 /** Controller for page summary toolbar button. */
 @NullMarked
@@ -114,8 +116,8 @@ public class PageSummaryButtonController extends BaseButtonDataProvider {
             if (DomDistillerUrlUtils.isDistilledPage(mActiveTabSupplier.get().getUrl())) {
                 mActiveTabSupplier.get().goBack();
             } else {
-                DomDistillerTabUtils.distillCurrentPageAndView(
-                        mActiveTabSupplier.get().getWebContents());
+                WebContents webContents = assertNonNull(mActiveTabSupplier.get().getWebContents());
+                DomDistillerTabUtils.distillCurrentPageAndView(webContents);
             }
             return;
         } // End Vivaldi

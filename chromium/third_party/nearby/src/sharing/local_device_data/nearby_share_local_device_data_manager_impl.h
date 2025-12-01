@@ -78,17 +78,10 @@ class NearbyShareLocalDeviceDataManagerImpl
   DeviceNameValidationResult ValidateDeviceName(
       absl::string_view name) override;
   DeviceNameValidationResult SetDeviceName(absl::string_view name) override;
-  void UploadContacts(std::vector<nearby::sharing::proto::Contact> contacts,
-                      UploadCompleteCallback callback) override;
-  void UploadCertificates(
-      std::vector<nearby::sharing::proto::PublicCertificate> certificates,
-      UploadCompleteCallback callback) override;
 
   void PublishDevice(
       std::vector<nearby::sharing::proto::PublicCertificate> certificates,
       bool force_update_contacts, PublishDeviceCallback callback) override;
-
-  bool UsingIdentityRpc() override;
 
   // Creates a default device name of the form "<given name>'s <device type>."
   // For example, "Josh's Chromebook." If a given name cannot be found, returns
@@ -99,7 +92,6 @@ class NearbyShareLocalDeviceDataManagerImpl
   nearby::sharing::api::PreferenceManager& preference_manager_;
   AccountManager& account_manager_;
   nearby::DeviceInfo& device_info_;
-  std::unique_ptr<nearby::sharing::api::SharingRpcClient> nearby_share_client_;
   std::unique_ptr<nearby::sharing::api::IdentityRpcClient>
       nearby_identity_client_;
   std::unique_ptr<TaskRunner> executor_;

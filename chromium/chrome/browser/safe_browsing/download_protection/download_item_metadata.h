@@ -52,6 +52,9 @@ class DownloadItemMetadata : public DeepScanningMetadata {
   void SetCallback(CheckDownloadRepeatingCallback callback);
   void ProcessScanResult(DownloadCheckResultReason reason,
                          DownloadCheckResult deep_scan_result) override;
+  google::protobuf::RepeatedPtrField<std::string> CollectFrameUrls()
+      const override;
+  content::WebContents* web_contents() const override;
   base::WeakPtr<DownloadItemMetadata> GetWeakPtr();
 
  private:

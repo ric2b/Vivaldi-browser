@@ -32,7 +32,7 @@ pub enum Pixels {
 
 impl Pixels {
     // This function may not be used in all configurations.
-    #[allow(unused)]
+    #[allow(dead_code)]
     pub(crate) fn from_raw_pointer(
         ptr: *mut u8,
         depth: u32,
@@ -104,7 +104,7 @@ impl Pixels {
     }
 
     // This function may not be used in all configurations.
-    #[allow(unused)]
+    #[allow(dead_code)]
     pub(crate) fn ptr(&self) -> *const u8 {
         match self {
             Pixels::Pointer(ptr) => ptr.ptr(),
@@ -114,7 +114,7 @@ impl Pixels {
     }
 
     // This function may not be used in all configurations.
-    #[allow(unused)]
+    #[allow(dead_code)]
     pub(crate) fn ptr16(&self) -> *const u16 {
         match self {
             Pixels::Pointer16(ptr) => ptr.ptr(),
@@ -124,7 +124,7 @@ impl Pixels {
     }
 
     // This function may not be used in all configurations.
-    #[allow(unused)]
+    #[allow(dead_code)]
     pub(crate) fn ptr_mut(&mut self) -> *mut u8 {
         match self {
             Pixels::Pointer(ptr) => ptr.ptr_mut(),
@@ -134,7 +134,7 @@ impl Pixels {
     }
 
     // This function may not be used in all configurations.
-    #[allow(unused)]
+    #[allow(dead_code)]
     pub(crate) fn ptr16_mut(&mut self) -> *mut u16 {
         match self {
             Pixels::Pointer16(ptr) => ptr.ptr_mut(),

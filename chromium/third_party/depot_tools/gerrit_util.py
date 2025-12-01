@@ -1407,12 +1407,6 @@ def GetChangeComments(host, change):
     return ReadHttpJsonResponse(CreateHttpConn(host, path))
 
 
-def GetChangeRobotComments(host, change):
-    """Gets the line- and file-level robot comments on a change."""
-    path = 'changes/%s/robotcomments' % change
-    return ReadHttpJsonResponse(CreateHttpConn(host, path))
-
-
 def GetRelatedChanges(host, change, revision='current'):
     """Gets the related changes for a given change and revision."""
     path = 'changes/%s/revisions/%s/related' % (change, revision)

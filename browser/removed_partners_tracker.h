@@ -13,7 +13,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profile_manager_observer.h"
-#endif  //! IS_IOS
+#endif  // !IS_IOS
 #include "components/bookmarks/browser/bookmark_model_observer.h"
 
 class PrefService;
@@ -30,7 +30,8 @@ class LegacyBookmarkModel;
 namespace vivaldi_partners {
 class RemovedPartnersTracker : public bookmarks::BookmarkModelObserver
 #if !BUILDFLAG(IS_IOS)
-    , public ProfileManagerObserver
+    ,
+                               public ProfileManagerObserver
 #endif  //! BUILDFLAG(IS_IOS)
 {
  public:

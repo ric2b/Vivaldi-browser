@@ -70,15 +70,16 @@ TEST(CreateModelExecutionResponder, Simple) {
       blink::scheduler::GetSequencedTaskRunnerForTesting(),
       AIMetrics::AISessionType::kLanguageModel,
       /*complete_callback=*/
-      base::BindOnce(
+      WTF::BindOnce(
           [](uint64_t expected_tokens, base::RunLoop* runloop,
              mojom::blink::ModelExecutionContextInfoPtr context_info) {
             EXPECT_TRUE(context_info);
             EXPECT_EQ(context_info->current_tokens, expected_tokens);
             runloop->Quit();
           },
-          kTestTokenNumber, &complete_runloop),
-      /*overflow_callback=*/overflow_runloop.QuitClosure());
+          kTestTokenNumber, WTF::Unretained(&complete_runloop)),
+      /*overflow_callback=*/overflow_runloop.QuitClosure(),
+      /*resolve_override_callback=*/base::NullCallback());
 
   mojo::Remote<blink::mojom::blink::ModelStreamingResponder> responder(
       std::move(pending_remote));
@@ -115,7 +116,8 @@ TEST(CreateModelExecutionResponder, ErrorPermissionDenied) {
       blink::scheduler::GetSequencedTaskRunnerForTesting(),
       AIMetrics::AISessionType::kLanguageModel,
       /*complete_callback=*/base::DoNothing(),
-      /*overflow_callback=*/base::DoNothing());
+      /*overflow_callback=*/base::DoNothing(),
+      /*resolve_override_callback=*/base::NullCallback());
 
   mojo::Remote<blink::mojom::blink::ModelStreamingResponder> responder(
       std::move(pending_remote));
@@ -152,7 +154,8 @@ TEST(CreateModelExecutionResponder, AbortWithoutResponse) {
       blink::scheduler::GetSequencedTaskRunnerForTesting(),
       AIMetrics::AISessionType::kLanguageModel,
       /*complete_callback=*/base::DoNothing(),
-      /*overflow_callback=*/base::DoNothing());
+      /*overflow_callback=*/base::DoNothing(),
+      /*resolve_override_callback=*/base::NullCallback());
 
   controller->abort(scope.GetScriptState());
 
@@ -188,7 +191,8 @@ TEST(CreateModelExecutionResponder, AbortAfterResponse) {
       blink::scheduler::GetSequencedTaskRunnerForTesting(),
       AIMetrics::AISessionType::kLanguageModel,
       /*complete_callback=*/base::DoNothing(),
-      /*overflow_callback=*/base::DoNothing());
+      /*overflow_callback=*/base::DoNothing(),
+      /*resolve_override_callback=*/base::NullCallback());
 
   mojo::Remote<blink::mojom::blink::ModelStreamingResponder> responder(
       std::move(pending_remote));

@@ -31,6 +31,7 @@
 
 import * as Common from '../../../../core/common/common.js';
 import * as Trace from '../../../../models/trace/trace.js';
+import * as TraceBounds from '../../../../services/trace_bounds/trace_bounds.js';
 import * as VisualLoggging from '../../../visual_logging/visual_logging.js';
 import * as UI from '../../legacy.js';
 import * as ThemeSupport from '../../theme_support/theme_support.js';
@@ -52,10 +53,12 @@ export class TimelineOverviewPane extends Common.ObjectWrapper.eventMixin<EventT
   private cursorEnabled = false;
   private cursorPosition = 0;
   private lastWidth = 0;
-  private windowStartTime = 0;
-  private windowEndTime = Infinity;
+  private windowStartTime = Trace.Types.Timing.Milli(0);
+  private windowEndTime = Trace.Types.Timing.Milli(Infinity);
   private muteOnWindowChanged = false;
+  private hasPointer = false;
   #dimHighlightSVG: Element;
+  readonly #boundOnThemeChanged = this.#onThemeChanged.bind(this);
 
   constructor(prefix: string) {
     super();
@@ -68,8 +71,11 @@ export class TimelineOverviewPane extends Common.ObjectWrapper.eventMixin<EventT
     this.element.appendChild(this.overviewGrid.element);
     this.cursorArea = this.overviewGrid.element.createChild('div', 'overview-grid-cursor-area');
     this.cursorElement = this.overviewGrid.element.createChild('div', 'overview-grid-cursor-position');
-    this.cursorArea.addEventListener('mousemove', this.onMouseMove.bind(this), true);
-    this.cursorArea.addEventListener('mouseleave', this.hideCursor.bind(this), true);
+    this.cursorArea.addEventListener('pointerdown', this.onMouseDown.bind(this), true);
+    this.cursorArea.addEventListener('pointerup', this.onMouseCancel.bind(this), true);
+    this.cursorArea.addEventListener('pointercancel', this.onMouseCancel.bind(this), true);
+    this.cursorArea.addEventListener('pointermove', this.onMouseMove.bind(this), true);
+    this.cursorArea.addEventListener('pointerleave', this.hideCursor.bind(this), true);
 
     this.overviewGrid.setResizeEnabled(false);
     this.overviewGrid.addEventListener(OverviewGridEvents.WINDOW_CHANGED_WITH_POSITION, this.onWindowChanged, this);
@@ -84,8 +90,31 @@ export class TimelineOverviewPane extends Common.ObjectWrapper.eventMixin<EventT
 
   enableCreateBreadcrumbsButton(): void {
     const breadcrumbsElement = this.overviewGrid.enableCreateBreadcrumbsButton();
-    breadcrumbsElement.addEventListener('mousemove', this.onMouseMove.bind(this), true);
-    breadcrumbsElement.addEventListener('mouseleave', this.hideCursor.bind(this), true);
+    breadcrumbsElement.addEventListener('pointerdown', this.onMouseDown.bind(this), true);
+    breadcrumbsElement.addEventListener('pointerup', this.onMouseCancel.bind(this), true);
+    breadcrumbsElement.addEventListener('pointercancel', this.onMouseCancel.bind(this), true);
+    breadcrumbsElement.addEventListener('pointermove', this.onMouseMove.bind(this), true);
+    breadcrumbsElement.addEventListener('pointerleave', this.hideCursor.bind(this), true);
+  }
+
+  private onMouseDown(event: PointerEvent): void {
+    if (!(event.target instanceof HTMLElement)) {
+      return;
+    }
+
+    event.target.setPointerCapture(event.pointerId);
+    this.overviewInfo.hide();
+    this.hasPointer = true;
+  }
+
+  private onMouseCancel(event: PointerEvent): void {
+    if (!(event.target instanceof HTMLElement)) {
+      return;
+    }
+
+    event.target.releasePointerCapture(event.pointerId);
+    this.overviewInfo.show();
+    this.hasPointer = false;
   }
 
   private onMouseMove(event: Event): void {
@@ -112,7 +141,9 @@ export class TimelineOverviewPane extends Common.ObjectWrapper.eventMixin<EventT
       this.dispatchEventToListeners(Events.OVERVIEW_PANE_MOUSE_LEAVE);
     }
 
-    void this.overviewInfo.setContent(this.buildOverviewInfo());
+    if (!this.hasPointer) {
+      void this.overviewInfo.setContent(this.buildOverviewInfo());
+    }
   }
 
   private async buildOverviewInfo(): Promise<DocumentFragment> {
@@ -131,12 +162,24 @@ export class TimelineOverviewPane extends Common.ObjectWrapper.eventMixin<EventT
     this.overviewInfo.hide();
   }
 
+  #onThemeChanged(): void {
+    this.scheduleUpdate();
+  }
+
   override wasShown(): void {
-    this.update();
+    super.wasShown();
+    const start = TraceBounds.TraceBounds.BoundsManager.instance().state()?.milli.minimapTraceBounds.min;
+    const end = TraceBounds.TraceBounds.BoundsManager.instance().state()?.milli.minimapTraceBounds.max;
+    this.update(start, end);
+    ThemeSupport.ThemeSupport.instance().addEventListener(
+        ThemeSupport.ThemeChangeEvent.eventName, this.#boundOnThemeChanged);
   }
 
   override willHide(): void {
+    ThemeSupport.ThemeSupport.instance().removeEventListener(
+        ThemeSupport.ThemeChangeEvent.eventName, this.#boundOnThemeChanged);
     this.overviewInfo.hide();
+    super.willHide();
   }
 
   override onResize(): void {
@@ -206,7 +249,7 @@ export class TimelineOverviewPane extends Common.ObjectWrapper.eventMixin<EventT
   /**
    * Dim the time marker outside the highlight time bounds.
    *
-   * @param highlightBounds the time bounds to highlight, if it is empty, it means to highlight everything.
+   * @param highlightBounds - the time bounds to highlight, if it is empty, it means to highlight everything.
    */
   #dimMarkers(highlightBounds?: Trace.Types.Timing.TraceWindowMicro): void {
     for (const time of this.markers.keys()) {
@@ -239,8 +282,8 @@ export class TimelineOverviewPane extends Common.ObjectWrapper.eventMixin<EventT
   }
 
   reset(): void {
-    this.windowStartTime = 0;
-    this.windowEndTime = Infinity;
+    this.windowStartTime = Trace.Types.Timing.Milli(0);
+    this.windowEndTime = Trace.Types.Timing.Milli(Infinity);
     this.overviewCalculator.reset();
     this.overviewGrid.reset();
     this.overviewGrid.setResizeEnabled(false);
@@ -274,10 +317,10 @@ export class TimelineOverviewPane extends Common.ObjectWrapper.eventMixin<EventT
       return;
     }
 
-    this.windowStartTime =
-        event.data.rawStartValue === this.overviewCalculator.minimumBoundary() ? 0 : event.data.rawStartValue;
-    this.windowEndTime =
-        event.data.rawEndValue === this.overviewCalculator.maximumBoundary() ? Infinity : event.data.rawEndValue;
+    this.windowStartTime = Trace.Types.Timing.Milli(
+        event.data.rawStartValue === this.overviewCalculator.minimumBoundary() ? 0 : event.data.rawStartValue);
+    this.windowEndTime = Trace.Types.Timing.Milli(
+        event.data.rawEndValue === this.overviewCalculator.maximumBoundary() ? Infinity : event.data.rawEndValue);
 
     const windowTimes = {
       startTime: Trace.Types.Timing.Milli(this.windowStartTime),
@@ -287,7 +330,7 @@ export class TimelineOverviewPane extends Common.ObjectWrapper.eventMixin<EventT
     this.dispatchEventToListeners(Events.OVERVIEW_PANE_WINDOW_CHANGED, windowTimes);
   }
 
-  setWindowTimes(startTime: number, endTime: number): void {
+  setWindowTimes(startTime: Trace.Types.Timing.Milli, endTime: Trace.Types.Timing.Milli): void {
     if (startTime === this.windowStartTime && endTime === this.windowEndTime) {
       return;
     }
@@ -549,5 +592,10 @@ export class OverviewInfo {
   hide(): void {
     this.visible = false;
     this.glassPane.hide();
+  }
+
+  show(): void {
+    this.visible = true;
+    this.glassPane.show(window.document);
   }
 }

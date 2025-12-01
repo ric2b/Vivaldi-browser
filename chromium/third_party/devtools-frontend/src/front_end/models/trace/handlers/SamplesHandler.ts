@@ -126,13 +126,9 @@ export function handleEvent(event: Types.Events.Event): void {
     // id and thread id are not really important, so we use the data
     // in the fake event. Should multi-thread CPU profiling be supported
     // we could use these fields in the event to pass thread info.
-    const pid = event.pid;
-    const tid = event.tid;
-    // Create an arbitrary profile id.
-    const profileId = '0x1' as Types.Events.ProfileID;
-    const profileData = getOrCreatePreProcessedData(pid, profileId);
+    const profileData = getOrCreatePreProcessedData(event.pid, event.id);
     profileData.rawProfile = event.args.data.cpuProfile;
-    profileData.threadId = tid;
+    profileData.threadId = event.tid;
     return;
   }
 
@@ -152,7 +148,7 @@ export function handleEvent(event: Types.Events.Event): void {
     const cdpProfile = profileData.rawProfile;
     const nodesAndSamples: Types.Events.PartialProfile|undefined = event.args?.data?.cpuProfile || {samples: []};
     const samples = nodesAndSamples?.samples || [];
-    const traceIds = event.args?.data?.cpuProfile?.trace_ids || {};
+    const traceIds = event.args?.data?.cpuProfile?.trace_ids;
     const nodes: CPUProfile.CPUProfileDataModel.ExtendedProfileNode[] = [];
     for (const n of nodesAndSamples?.nodes || []) {
       const lineNumber = typeof n.callFrame.lineNumber === 'undefined' ? -1 : n.callFrame.lineNumber;
@@ -179,7 +175,13 @@ export function handleEvent(event: Types.Events.Event): void {
     cdpProfile.samples?.push(...samples);
     cdpProfile.timeDeltas?.push(...timeDeltas);
     cdpProfile.lines?.push(...lines);
-    cdpProfile.traceIds = {...(cdpProfile.traceIds || {}), ...traceIds};
+
+    if (traceIds) {
+      cdpProfile.traceIds = cdpProfile.traceIds || {};
+      for (const [key, value] of Object.entries(traceIds)) {
+        cdpProfile.traceIds[key] = value;
+      }
+    }
     if (cdpProfile.samples && cdpProfile.timeDeltas && cdpProfile.samples.length !== cdpProfile.timeDeltas.length) {
       console.error('Failed to parse CPU profile.');
       return;

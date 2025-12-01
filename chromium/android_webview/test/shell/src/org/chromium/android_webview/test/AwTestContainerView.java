@@ -20,6 +20,7 @@ import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.View;
+import android.view.WindowInsets;
 import android.view.accessibility.AccessibilityNodeProvider;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
@@ -274,8 +275,8 @@ public class AwTestContainerView extends FrameLayout {
         return mAwContents;
     }
 
-    public AwContents.NativeDrawFunctorFactory getNativeDrawFunctorFactory() {
-        return new NativeDrawFunctorFactory();
+    public AwDrawFnImpl.DrawFnAccess getDrawFnAccess() {
+        return new DrawFnAccess();
     }
 
     public AwContents.InternalAccessDelegate getInternalAccessDelegate() {
@@ -379,6 +380,11 @@ public class AwTestContainerView extends FrameLayout {
     }
 
     @Override
+    public WindowInsets onApplyWindowInsets(WindowInsets insets) {
+        return mAwContents.onApplyWindowInsets(insets);
+    }
+
+    @Override
     public boolean onTouchEvent(MotionEvent ev) {
         super.onTouchEvent(ev);
         return mAwContents.getViewMethods().onTouchEvent(ev);
@@ -420,18 +426,6 @@ public class AwTestContainerView extends FrameLayout {
     @Override
     public boolean onDragEvent(DragEvent event) {
         return mAwContents.getViewMethods().onDragEvent(event);
-    }
-
-    private class NativeDrawFunctorFactory implements AwContents.NativeDrawFunctorFactory {
-        @Override
-        public AwContents.NativeDrawGLFunctor createGLFunctor(long context) {
-            return null;
-        }
-
-        @Override
-        public AwDrawFnImpl.DrawFnAccess getDrawFnAccess() {
-            return new DrawFnAccess();
-        }
     }
 
     private class DrawFnAccess implements AwDrawFnImpl.DrawFnAccess {

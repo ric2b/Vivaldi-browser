@@ -49,6 +49,9 @@
 #include "internal/platform/byte_array.h"
 #include "internal/platform/file.h"
 #include "internal/platform/logging.h"
+#if TARGET_OS_IOS
+#include "internal/platform/implementation/apple/nearby_logger.h"
+#endif  // TARGET_OS_IOS
 
 namespace nearby::connections {
 class Core;
@@ -221,6 +224,10 @@ NcContext* GetContext(NC_INSTANCE instance) {
 
 NC_INSTANCE NcCreateService() {
   NcContext nc_context;
+#if TARGET_OS_IOS
+  absl::SetGlobalVLogLevel(1);  // OS_LOG_TYPE_DEBUG
+  ::nearby::apple::EnableOsLog("com.google.nearby.connections");
+#endif  // TARGET_OS_IOS
 
 #if defined(NC_IOS_SDK)
   nearby::NearbyFlags::GetInstance().OverrideBoolFlagValue(
@@ -234,11 +241,11 @@ NC_INSTANCE NcCreateService() {
   nearby::NearbyFlags::GetInstance().OverrideBoolFlagValue(
       ::nearby::connections::config_package_nearby::nearby_connections_feature::
           kEnableDynamicRoleSwitch,
-      false);
+      true);
   nearby::NearbyFlags::GetInstance().OverrideBoolFlagValue(
       ::nearby::connections::config_package_nearby::nearby_connections_feature::
           kEnableBleL2cap,
-      false);
+      true);
   nearby::NearbyFlags::GetInstance().OverrideBoolFlagValue(
       ::nearby::connections::config_package_nearby::nearby_connections_feature::
           kEnableGattClientDisconnection,
@@ -249,7 +256,15 @@ NC_INSTANCE NcCreateService() {
       true);
   nearby::NearbyFlags::GetInstance().OverrideBoolFlagValue(
       ::nearby::connections::config_package_nearby::nearby_connections_feature::
-          kEnableStopBLEScanningOnWifiUpgrade,
+          kEnableStopBleScanningOnWifiUpgrade,
+      true);
+  nearby::NearbyFlags::GetInstance().OverrideBoolFlagValue(
+      ::nearby::connections::config_package_nearby::nearby_connections_feature::
+          kUseStableEndpointId,
+      true);
+  nearby::NearbyFlags::GetInstance().OverrideBoolFlagValue(
+      ::nearby::connections::config_package_nearby::nearby_connections_feature::
+          kEnableGattQueryInThread,
       true);
 #endif
 
@@ -263,13 +278,12 @@ NC_INSTANCE NcCreateService() {
 void NcCloseService(NC_INSTANCE instance) {
   NcContext* nc_context = GetContext(instance);
   if (nc_context == nullptr) {
-    NEARBY_LOGS(WARNING) << "Trying to close not existent service " << instance;
+    LOG(WARNING) << "Trying to close not existent service " << instance;
     return;
   }
 
   nc_context->core->StopAllEndpoints([](::nearby::connections::Status status) {
-    NEARBY_LOGS(INFO) << "Stopping all endpoints with status "
-                      << status.ToString();
+    LOG(INFO) << "Stopping all endpoints with status " << status.ToString();
   });
 
   kNcContextMap->erase(nc_context->core);

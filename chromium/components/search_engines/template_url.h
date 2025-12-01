@@ -21,6 +21,7 @@
 #include "components/search_engines/search_terms_data.h"
 #include "components/search_engines/template_url_data.h"
 #include "components/search_engines/template_url_id.h"
+#include "components/search_engines/template_url_starter_pack_data.h"
 #include "third_party/metrics_proto/omnibox_event.pb.h"
 #include "third_party/metrics_proto/omnibox_focus_type.pb.h"
 #include "third_party/metrics_proto/omnibox_input_type.pb.h"
@@ -123,6 +124,8 @@ class TemplateURLRef {
       // translation is forced using |source_lang|. Note that this only supports
       // Partial Translate and so may only be enabled for select clients on the
       // server.
+      // The |use_snippet_as_subtitle| specifies whether or not the entity
+      // snippet should be used as the subtitle of the card.
       ContextualSearchParams(int version,
                              int contextual_cards_version,
                              std::string home_country,
@@ -133,7 +136,8 @@ class TemplateURLRef {
                              std::string target_lang,
                              std::string fluent_languages,
                              std::string related_searches_stamp,
-                             bool apply_lang_hint);
+                             bool apply_lang_hint,
+                             bool use_snippet_as_subtitle);
       ContextualSearchParams(const ContextualSearchParams& other);
       ~ContextualSearchParams();
 
@@ -182,6 +186,9 @@ class TemplateURLRef {
 
       // Whether hinted language detection should be used on the backend.
       bool apply_lang_hint = false;
+
+      // Whether the snippet should be used as the subtitle.
+      bool use_snippet_as_subtitle = false;
     };
 
     // Estimates dynamic memory usage.
@@ -694,6 +701,7 @@ class TemplateURL {
 
   TemplateURL(const TemplateURL&) = delete;
   TemplateURL& operator=(const TemplateURL&) = delete;
+  TemplateURL(TemplateURL&& other);
 
   ~TemplateURL();
 
@@ -817,6 +825,12 @@ class TemplateURL {
   void set_is_active(TemplateURLData::ActiveStatus active_status);
 
   int starter_pack_id() const { return data().starter_pack_id; }
+  // Some starter packs are considered 'ask a question' kind of starter packs.
+  // This can be used to condition UI text or a11y strings.
+  bool is_ask_starter_pack() const {
+    return starter_pack_id() == template_url_starter_pack_data::kGemini ||
+           starter_pack_id() == template_url_starter_pack_data::kAiMode;
+  }
 
   const std::vector<TemplateURLRef>& url_refs() const { return url_refs_; }
   const TemplateURLRef& url_ref() const {
@@ -990,6 +1004,11 @@ class TemplateURL {
   const std::optional<TemplateURLData>& GetAccountData() const;
 
   void CopyActiveValueToLocalAndAccount();
+
+  // Returns whether this search engine can be overridden and added to the
+  // overridden keyword pref list. Should be used for engines that are created
+  // by an Enterprise policy that doesn't define the Default Search Provider.
+  bool CanPolicyBeOverridden() const;
 
   void set_vivaldi_position(syncer::UniquePosition position);
 

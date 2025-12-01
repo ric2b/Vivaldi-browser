@@ -8,11 +8,15 @@
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> 意外终止了连接。</translation>
 <translation id="1161325031994447685">重新连接到 Wi-Fi 网络</translation>
 <translation id="1175364870820465910">打印(&amp;P)...</translation>
+<translation id="1204778305310783648">“将互联网变成监视经济的错误”：谭咏文先生（Jon von Tetzchner）在2023年网络峰会上。</translation>
 <translation id="1285320974508926690">一律不翻译此网站</translation>
 <translation id="1375198122581997741">关于版本</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> 未发送数据。</translation>
+<translation id="1489123210863708132">激活跟踪器和广告拦截器来保护您的浏览并建立您的隐私统计数据。</translation>
+<translation id="1500787357908295021">您的隐私统计</translation>
 <translation id="1555191101192706055">您尝试访问的网站上的攻击者可能会诱骗您安装影响您浏览方式的有害软件，例如更改您的主页或在您访问的网站上向您展示额外的广告。</translation>
 <translation id="1559528461873125649">该文件或目录不存在</translation>
+<translation id="16328381871867323">立法者最终关注对我们的信息化数据的跟踪、收集和存储方式的担忧。找出改变对游戏规则的统治的含义以及它对我们的影响。</translation>
 <translation id="1640244768702815859">请尝试<ph name="BEGIN_LINK" />访问该网站的首页<ph name="END_LINK" />。</translation>
 <translation id="1645368109819982629">协议不受支持</translation>
 <translation id="1662550410081243962">保存并填写支付方式</translation>
@@ -20,6 +24,8 @@
 <translation id="1728677426644403582">您正在查看网页的源代码</translation>
 <translation id="1734878702283171397">请尝试联系系统管理员。</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />正在尝试运行Windows网络诊断<ph name="END_LINK" />.</translation>
+<translation id="1919345977826869612">广告</translation>
+<translation id="1970180444859658569">“不跟踪”的隐私设置原则在德国获得法律支持</translation>
 <translation id="1974060860693918893">高级</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />检查代理服务器和防火墙<ph name="END_LINK" /></translation>
 <translation id="2048261947532620704">已翻译网页</translation>
@@ -28,6 +34,7 @@
 <translation id="2178904466768126352">您尝试访问的网站上的攻击者可能会安装有害软件，以窃取或删除您的密码、照片、消息或信用卡号等内容。</translation>
 <translation id="2187317261103489799">检测（默认）</translation>
 <translation id="2224337661447660594">未连接到互联网</translation>
+<translation id="2225863440766607138">跟踪器</translation>
 <translation id="2283340219607151381">保存并填写地址</translation>
 <translation id="2292556288342944218">您被禁止访问互联网</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> 要求提供用户名和密码。</translation>
@@ -43,8 +50,11 @@
 <translation id="2634124572758952069">找不到 <ph name="HOST_NAME" /> 的服务器 IP 地址。</translation>
 <translation id="2649204054376361687"><ph name="COUNTRY" /><ph name="CITY" /></translation>
 <translation id="2650446666397867134">文件访问已被拒绝</translation>
+<translation id="2690699652723742414">最近 30 天</translation>
 <translation id="2705137772291741111">无法读取此网站的已保存（缓存）副本。</translation>
 <translation id="2730326759066348565"><ph name="BEGIN_LINK" />运行网络连接诊断<ph name="END_LINK" /></translation>
+<translation id="2741210449864955442">https://vivaldi.com/blog/technology/vivaldi-browser-at-the-web-summit/</translation>
+<translation id="2765309692777226484">跟踪器和广告拦截器已禁用。</translation>
 <translation id="2784949926578158345">连接已重置。</translation>
 <translation id="2826760142808435982">该连接使用 <ph name="CIPHER" /> 进行加密和身份验证，并使用 <ph name="KX" /> 作为密钥交换机制。</translation>
 <translation id="290376772003165898">网页语言不是<ph name="LANGUAGE" />吗？</translation>
@@ -57,12 +67,16 @@
 <translation id="3037605927509011580">喔唷，崩溃啦！</translation>
 <translation id="3041612393474885105">证书信息</translation>
 <translation id="3109728660330352905">您未获授权，无法查看此网页。</translation>
+<translation id="3119245580849443327">Vivaldi 隐私报告</translation>
 <translation id="31207688938192855"><ph name="BEGIN_LINK" />尝试运行网络连接诊断<ph name="END_LINK" />。</translation>
+<translation id="3126903660515914763">https://vivaldi.com/blog/news/alert-no-google-topics-in-vivaldi/</translation>
 <translation id="3154506275960390542">此页包含一个可能无法安全提交的表单。他人可能会在传输过程中查看您所发送的数据；攻击者也可能会修改这些数据，从而改变服务器收到的内容。</translation>
+<translation id="3156779787905856989">Manifest V3，webRequest，和广告拦截器</translation>
 <translation id="3176929007561373547">请检查您的代理服务器设置或与网络管理员联系，以确保代理服务器正常运行。
 如果您认为自己不需要使用代理服务器，
 请执行以下操作：
       <ph name="PLATFORM_TEXT" /></translation>
+<translation id="3191389212681074619">https://help.vivaldi.com/android/android-privacy/android-tracker-and-ad-blocker/</translation>
 <translation id="3226128629678568754">点击刷新按钮以重新提交加载该网页所需的数据。</translation>
 <translation id="3234666976984236645">始终检测此网站上的重要内容</translation>
 <translation id="3384522979010096022">您的组织不允许您查看此网站</translation>
@@ -80,6 +94,8 @@
     然后重新添加到其中。</translation>
 <translation id="3658742229777143148">修订版本</translation>
 <translation id="3681007416295224113">证书信息</translation>
+<translation id="3694122362646626770">网站</translation>
+<translation id="3716128635228495027">返回 Vivaldi</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />检查代理服务器、防火墙和 DNS 配置<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">如果您使用代理服务器…</translation>
 <translation id="3861977424605124250">启动时显示</translation>
@@ -99,9 +115,11 @@
 <translation id="4250431568374086873">您与此网站之间建立的连接并非完全安全</translation>
 <translation id="4265872034478892965">您的管理员允许</translation>
 <translation id="4305666528087210886">无法访问您的文件</translation>
+<translation id="430967081421617822">不限时</translation>
 <translation id="4312866146174492540">屏蔽（默认）</translation>
 <translation id="4408413947728134509"><ph name="NUM_COOKIES" />Cookie</translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> 不接受您的登录证书，或者您可能没有提供登录证书。</translation>
+<translation id="4474776280324528449">https://vivaldi.com/blog/do-no-track-gets-legal-backing-in-germany/</translation>
 <translation id="4506599922270137252">联系系统管理员</translation>
 <translation id="4522570452068850558">详细信息</translation>
 <translation id="4558551763791394412">尝试停用扩展程序。</translation>
@@ -121,8 +139,11 @@
 <translation id="5068778127327928576">{NUM_COOKIES,plural, =1{（使用了 1 个）}other{（使用了 # 个）}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />检查代理服务器地址<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">（64 位）</translation>
+<translation id="5216593085343845370">加入Vivaldi的立场，实现零跟踪并收回对您在线隐私的控制。
+    在以下文章中了解我们如何争取用户权利的更多信息。</translation>
 <translation id="5355557959165512791">您目前无法访问 <ph name="SITE" />，因为此证书已被撤消。网络错误和攻击行为通常是暂时的，因此，此网页稍后可能会恢复正常。</translation>
 <translation id="5386426401304769735">此网站的证书链包含使用 SHA-1 签署的证书。</translation>
+<translation id="5398772614898833570">条广告已拦截</translation>
 <translation id="5452270690849572955">找不到 <ph name="HOST_NAME" /> 的网页</translation>
 <translation id="5457113250005438886">无效</translation>
 <translation id="5492298309214877701">这个位于公司、组织或学校内网中的网站使用的网址与某个外部网站的网址相同。
@@ -130,9 +151,12 @@
     请尝试与您的系统管理员联系。</translation>
 <translation id="5510766032865166053">该文件可能已被移动或删除。</translation>
 <translation id="5556459405103347317">重新加载</translation>
+<translation id="5583322400766491358">个人见解数据可以牢靠地存储在您的设备上，并且绝不向第三方分享。</translation>
 <translation id="5610142619324316209">检查网络连接</translation>
 <translation id="5617949217645503996"><ph name="HOST_NAME" /> 将您重定向的次数过多。</translation>
+<translation id="5648166631817621825">最近 7 天</translation>
 <translation id="5675650730144413517">该网页无法正常运作</translation>
+<translation id="5741670635761443575">警告：Vivaldi 不支持 Google 主题。</translation>
 <translation id="5785756445106461925">而且，此页中包含其他不安全的资源。这些资源在传输过程中能被他人查看，攻击者也可以修改这些资源，从而改变此页的外观。</translation>
 <translation id="5799902971440853357">您目前无法访问 <ph name="SITE" />，因为此网站发送了 Vivaldi 无法处理的杂乱凭据。网络错误和攻击通常是暂时的，该网页稍后可能会恢复正常。</translation>
 <translation id="5810442152076338065">您与 <ph name="DOMAIN" /> 之间的连接采用过时的加密套件进行了加密。</translation>
@@ -162,11 +186,13 @@
 <translation id="6653655836861174026">您可以用 Vivaldi 配置文件将所有内容分开。为朋友及家人分别创建个人配置，或区分工作与娱乐。</translation>
 <translation id="6657585470893396449">密码</translation>
 <translation id="6711464428925977395">代理服务器出现问题，或者地址有误。</translation>
+<translation id="6736243959894955139">网址</translation>
 <translation id="6757797048963528358">您的设备已进入休眠模式。</translation>
 <translation id="6890956352250146925">Cookie 和网站数据的相关选项</translation>
 <translation id="6897140037006041989">用户代理</translation>
 <translation id="6935179587384421592"><ph name="SIZE" />。当您下次访问时，某些网站的加载速度可能会更慢。</translation>
 <translation id="6957624206566198865">在新隐身窗口中打开页面</translation>
+<translation id="7013466836883158999">可以在不监视用户的情况下制造可持续产品吗？浏览的未来是什么样的？观看我们的首席执行官谭咏文先生（Jon von Tetzchner）在2023网络峰会对这些问题的回答。</translation>
 <translation id="7053983685419859001">禁止</translation>
 <translation id="7066262000446496119">谁将使用 Vivaldi ？</translation>
 <translation id="7096937462164235847">此网站的身份未经验证。</translation>
@@ -176,15 +202,19 @@
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> 不符合相关安全标准。</translation>
 <translation id="7219179957768738017">该连接使用 <ph name="SSL_VERSION" />。</translation>
 <translation id="7221855153210829124">显示通知</translation>
+<translation id="7277237102285741596">https://vivaldi.com/blog/manifest-v3-webrequest-and-ad-blockers/</translation>
 <translation id="7283555985781738399">访客模式</translation>
 <translation id="7353601530677266744">命令行</translation>
 <translation id="7419106976560586862">配置文件路径</translation>
+<translation id="7421665776469827022">节省的数据量</translation>
+<translation id="7454640759045234067">个跟踪器被拦截</translation>
 <translation id="7455133967321480974">使用全局默认设置（阻止）</translation>
 <translation id="7518003948725431193">找不到与以下网址对应的网页：<ph name="URL" /></translation>
 <translation id="7549584377607005141">此网页需要使用您之前输入的数据才能正常显示。您可以重新发送这些数据，不过，这么做会重复执行此网页之前执行过的所有操作。</translation>
 <translation id="759889825892636187"><ph name="HOST_NAME" /> 目前无法处理此请求。</translation>
 <translation id="7662298039739062396">设置由某款扩展程序控制</translation>
 <translation id="7663736086183791259">证书<ph name="CERTIFICATE_VALIDITY" /></translation>
+<translation id="7698231949697067951">您在网上做什么，是您的私事！下面您可以看到我们如何帮助您保持安全。</translation>
 <translation id="7714464543167945231">证书</translation>
 <translation id="7716147886133743102">已被您的管理员阻止</translation>
 <translation id="7716424297397655342">无法从缓存中加载此网站</translation>
@@ -193,8 +223,11 @@
 <translation id="7800304661137206267">该连接是使用 <ph name="CIPHER" /> 进行加密的，同时使用 <ph name="MAC" /> 进行讯息身份验证并使用 <ph name="KX" /> 作为密钥交换机制。</translation>
 <translation id="7834399512844817676"><ph name="SITE" /> 通常会使用加密技术来保护您的信息。Vivaldi 此次尝试连接到 <ph name="SITE" /> 时，该网站发回了异常的错误凭据。这可能是因为有攻击者在试图冒充 <ph name="SITE" />，或者 Wi-Fi 登录屏幕中断了此次连接。请放心，您的信息仍然是安全的，因为 Vivaldi 尚未进行任何数据交换便停止了连接。</translation>
 <translation id="7878562273885520351">您的密码可能已泄露</translation>
+<translation id="788493840831967104">节省的时间</translation>
 <translation id="7951415247503192394">（32 位）</translation>
 <translation id="7953236668995583915">请重新加载此页面，以便在该网站上应用更新后的设置</translation>
+<translation id="7981965265950405093">Vivaldi配备了自己的内置广告和跟踪器的拦截器，有大量的自定义选项，还有一个内置邮件客户端和日历等等。它会遵循Google的严格依赖 Manifest V3吗？ Vivaldi开发人员Julien Picalausa深入研究了这一问题。</translation>
+<translation id="8034402064393340023">我们对您隐私权的承诺</translation>
 <translation id="8037357227543935929">询问（默认）</translation>
 <translation id="8041940743680923270">使用全局默认设置（询问）</translation>
 <translation id="808894953321890993">更改密码</translation>
@@ -204,6 +237,7 @@
 <translation id="8211406090763984747">连接是安全的</translation>
 <translation id="8241707690549784388">您所查找的网页要使用已输入的信息。返回此页可能需要重复已进行的所有操作。是否要继续操作？</translation>
 <translation id="8241712895048303527">在此网站上拦截</translation>
+<translation id="8248593573177859437">隐私报告</translation>
 <translation id="8286036467436129157">登录</translation>
 <translation id="8288807391153049143">显示证书</translation>
 <translation id="8289355894181816810">如果您不确定这是什么意思，请与您的网络管理员联系。</translation>
@@ -223,9 +257,11 @@
 <translation id="9062620674789239642">该文件可能已被移动、修改或删除。</translation>
 <translation id="9069693763241529744">已被某款扩展程序阻止</translation>
 <translation id="9073799351042754113">您已选择为此网站关闭安全警告。</translation>
+<translation id="9118360612142967597">监视人们的行为并分析他们是错误的。这就是我们确保在Vivaldi浏览器中以两种单独的方式禁用Google主题的原因。</translation>
 <translation id="9168814207360376865">允许网站检查您是否已保存付款方式</translation>
 <translation id="9169664750068251925">在此网站上始终阻止</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> 使用了不受支持的协议。</translation>
+<translation id="9188210215803842004">网站和跟踪器详情</translation>
 <translation id="936602727769022409">您可能会无法再访问自己的 Google 帐号。建议您立即更改密码。系统会要求您登录。</translation>
 <translation id="969892804517981540">官方版</translation>
 <translation id="984275831282074731">支付方式</translation>

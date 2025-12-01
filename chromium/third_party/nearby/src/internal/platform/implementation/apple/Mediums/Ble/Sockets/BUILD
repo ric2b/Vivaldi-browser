@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@rules_apple//apple:ios.bzl", "ios_unit_test")
+load("@rules_cc//cc:objc_library.bzl", "objc_library")
 load("//third_party/nearby:minimum_os.bzl", "IOS_MINIMUM_OS")
 load("//tools/build_defs/swift:swift_explicit_module_build_test.bzl", "swift_explicit_module_build_test")
 
@@ -29,11 +31,14 @@ objc_library(
     ]) + [
         "Source/GNSCentral.h",
     ],
+    copts = [
+        "-Wno-enum-compare",  # TODO(b/418286948): Remove this when the error is fixed.
+    ],
     deps = [
         ":Shared",
+        "//internal/platform/implementation/apple/Log:GNCLogger",
         "//third_party/apple_frameworks:CoreBluetooth",
         "//third_party/apple_frameworks:Foundation",
-        "//third_party/objective_c/google_toolbox_for_mac:GTM_Logger",
     ],
 )
 
@@ -47,13 +52,16 @@ objc_library(
     ]) + [
         "Source/GNSPeripheral.h",
     ],
+    copts = [
+        "-Wno-enum-compare",  # TODO(b/418286948): Remove this when the error is fixed.
+    ],
     deps = [
         ":Shared",
+        "//internal/platform/implementation/apple/Log:GNCLogger",
         "//third_party/apple_frameworks:CoreBluetooth",
         "//third_party/apple_frameworks:CoreFoundation",
         "//third_party/apple_frameworks:Foundation",
         "//third_party/apple_frameworks:QuartzCore",
-        "//third_party/objective_c/google_toolbox_for_mac:GTM_Logger",
     ] + select({
         "@platforms//os:platform_ios": [
             "//third_party/apple_frameworks:UIKit",
@@ -73,12 +81,56 @@ objc_library(
         "Source/GNSShared.h",
     ],
     deps = [
+        "//internal/platform/implementation/apple/Log:GNCLogger",
         "//third_party/apple_frameworks:CoreBluetooth",
         "//third_party/apple_frameworks:CoreFoundation",
         "//third_party/apple_frameworks:Foundation",
         "//third_party/apple_frameworks:QuartzCore",
-        "//third_party/objective_c/google_toolbox_for_mac:GTM_Logger",
     ],
+)
+
+objc_library(
+    name = "CentralTestsLib",
+    testonly = 1,
+    srcs = [
+        "Tests/Central/GNSCentralManagerTest.m",
+    ],
+    deps = [
+        ":Central",
+        ":Shared",
+        "//internal/platform/implementation/apple/Log:GNCLogger",
+        "//third_party/objective_c/ocmock/v3:OCMock",
+    ],
+)
+
+ios_unit_test(
+    name = "CentralTests",
+    google_create_srl_bindings_module = False,
+    minimum_os_version = IOS_MINIMUM_OS,
+    runner = "//testing/utp/ios:IOS_LATEST",
+    deps = [":CentralTestsLib"],
+)
+
+objc_library(
+    name = "SharedTestsLib",
+    testonly = 1,
+    srcs = [
+        "Tests/Shared/GNSSocketTest.m",
+        "Tests/Shared/GNSWeavePacketTest.m",
+    ],
+    deps = [
+        ":Shared",
+        "//internal/platform/implementation/apple/Log:GNCLogger",
+        "//third_party/objective_c/ocmock/v3:OCMock",
+    ],
+)
+
+ios_unit_test(
+    name = "SharedTests",
+    google_create_srl_bindings_module = False,
+    minimum_os_version = IOS_MINIMUM_OS,
+    runner = "//testing/utp/ios:IOS_LATEST",
+    deps = [":SharedTestsLib"],
 )
 
 swift_explicit_module_build_test(

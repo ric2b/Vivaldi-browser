@@ -50,12 +50,12 @@
 <translation id="292258461174562431">Hirviö 4</translation>
 <translation id="2923448633003185837">Liitä ja siirry</translation>
 <translation id="2953943267837858202">Videon automaattitoistoa ei ole sallittu</translation>
-<translation id="2977472760057091832">Avaa linkki yksityisikkunassa</translation>
+<translation id="2977472760057091832">Avaa linkki yksityisikkunaan</translation>
 <translation id="2978824962390592855">Opera</translation>
-<translation id="2989805286512600854">Avaa uuteen välilehteen</translation>
+<translation id="2989805286512600854">Avaa uudelle välilehdelle</translation>
 <translation id="3027988479108856431">Yandexin asetuksia ei valitettavasti voi lukea selaimen ollessa käynnissä. Tuodaksesi asetukset Vivaldiin tallenna työsi, sulje kaikki Yandex-ikkunat ja napsauta sitten Jatka.</translation>
 <translation id="3084011186245865060">Maisema 6</translation>
-<translation id="3085906383264247940">Opera (Beta)</translation>
+<translation id="3085906383264247940">Opera (beeta)</translation>
 <translation id="3093931836425623631">Vivaldin on tehnyt mahdolliseksi Chromium-projekti sekä muut avoimen lähdekoodin ohjelmat.</translation>
 <translation id="3127383884976966729">Eläin 7</translation>
 <translation id="3131120041041402952">Arc</translation>
@@ -98,7 +98,7 @@
 <translation id="4064545092083709582">Vivaldi ei voinut avata suojattua avainsäilöäsi. Ilman avainsäilöä menetät tallennetut kirjautumistietosi, suojatut evästeet ja jotkin ominaisuudet lakkaavat toimimasta (mm. Synkronointi, Sähköposti ja Kalenteri). Sulje sovellus nyt, avaa avainvarastosi lukitus tai korjaa se, ja yritä sitten uudelleen.
 
 Haluatko varmasti jatkaa tietojen menetyksestä huolimatta?</translation>
-<translation id="4074744496918018786">Avaa kuva yksityisikkunassa</translation>
+<translation id="4074744496918018786">Avaa kuva yksityisikkunaan</translation>
 <translation id="410351446219883937">Automaattitoisto</translation>
 <translation id="4281844954008187215">Palveluehdot</translation>
 <translation id="4324492550286218827">Maisema 2</translation>
@@ -127,7 +127,7 @@ Haluatko varmasti jatkaa tietojen menetyksestä huolimatta?</translation>
 <translation id="5238244642230426581">Tuodut kirjanmerkit</translation>
 <translation id="527605719918376753">Vaimenna välilehti</translation>
 <translation id="5305569355661722298">Vahvista ikkunan sulkeminen</translation>
-<translation id="5322922669477407077">Opera (Developer)</translation>
+<translation id="5322922669477407077">Opera (kehittäjä)</translation>
 <translation id="5388358297987318779">Avaa kuva</translation>
 <translation id="5416008465899576639">Vivaldista on saatavilla uusi versio.</translation>
 <translation id="5497042274492038489">Vahvista ikkunan sulkeminen</translation>
@@ -150,7 +150,7 @@ Haluatko varmasti jatkaa tietojen menetyksestä huolimatta?</translation>
 <translation id="6438786710866753178">Maisema 4</translation>
 <translation id="6477028720702061455">Valitse Operan profiilikansio tuomista varten</translation>
 <translation id="6510706699590490869">Päivitä &amp;Vivaldi</translation>
-<translation id="6538338088414940408">Avaa linkki taustavälilehdellä</translation>
+<translation id="6538338088414940408">Avaa linkki taustavälilehdelle</translation>
 <translation id="6551219277044048123">Lisää &amp;hakukoneena…</translation>
 <translation id="6630781781151951863">Maisema 18</translation>
 <translation id="6635049669875534328">Julkaisutiedot:</translation>
@@ -181,7 +181,7 @@ Haluatko varmasti jatkaa tietojen menetyksestä huolimatta?</translation>
 <translation id="8119307142152921512">seurannat ja mainokset</translation>
 <translation id="8197810018650377191">Lisää sivu kirjanmerkkeihin</translation>
 <translation id="8261506727792406068">Poista</translation>
-<translation id="8331671104904436324">Avaa taustavälilehdellä</translation>
+<translation id="8331671104904436324">Avaa taustavälilehdelle</translation>
 <translation id="8373293945112511707">Maisema 1</translation>
 <translation id="8388552048012645975">Ladataan päivitystä…</translation>
 <translation id="8392904568172593155">Ilman parametrejä</translation>

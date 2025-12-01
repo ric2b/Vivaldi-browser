@@ -154,7 +154,7 @@ export const NativeFunctions = [
   {
     name: "set",
     signatures: [["key","value"]],
-    receivers: ["Map","WeakMap"]
+    receivers: ["Map","WeakMap","CrashReportStorage"]
   },
   {
     name: "set",
@@ -697,6 +697,11 @@ export const NativeFunctions = [
     name: "parse",
     signatures: [["property","cssText"]],
     receivers: ["CSSStyleValue"]
+  },
+  {
+    name: "parse",
+    signatures: [["serializedOrigin"]],
+    receivers: ["Origin"]
   },
   {
     name: "parse",
@@ -1477,7 +1482,7 @@ export const NativeFunctions = [
   {
     name: "item",
     signatures: [["index"]],
-    receivers: ["CSSRuleList","CSSStyleDeclaration","DOMRectList","DOMStringList","DOMTokenList","FileList","HTMLCollectionBase","HTMLCollectionOf","HTMLSelectElement","MediaList","MimeTypeArray","NamedNodeMap","NodeList","NodeListOf","Plugin","PluginArray","SpeechRecognitionResult","SpeechRecognitionResultList","StyleSheetList","TouchList","HTMLCollection","SpeechGrammarList","SpeechRecognitionPhraseList"]
+    receivers: ["CSSRuleList","CSSStyleDeclaration","DOMRectList","DOMStringList","DOMTokenList","FileList","HTMLCollectionBase","HTMLCollectionOf","HTMLSelectElement","MediaList","MimeTypeArray","NamedNodeMap","NodeList","NodeListOf","Plugin","PluginArray","SpeechRecognitionResult","SpeechRecognitionResultList","StyleSheetList","TouchList","HTMLCollection","SpeechGrammarList"]
   },
   {
     name: "item",
@@ -1978,6 +1983,11 @@ export const NativeFunctions = [
   },
   {
     name: "remove",
+    signatures: [["key"]],
+    receivers: ["CrashReportStorage"]
+  },
+  {
+    name: "remove",
     signatures: [["?options"]],
     receivers: ["FileSystemHandle"]
   },
@@ -2002,7 +2012,7 @@ export const NativeFunctions = [
   },
   {
     name: "read",
-    signatures: [["view"]],
+    signatures: [["view","?options"]],
     receivers: ["ReadableStreamBYOBReader"]
   },
   {
@@ -2306,23 +2316,11 @@ export const NativeFunctions = [
   },
   {
     name: "createElement",
-    signatures: [["localName","?options"],["tagName","?options"]],
-    receivers: ["Document"]
-  },
-  {
-    name: "createElement",
-    signatures: [["localName","?options"]],
-    receivers: ["ShadowRoot"]
+    signatures: [["localName","?options"],["tagName","?options"]]
   },
   {
     name: "createElementNS",
-    signatures: [["namespaceURI","qualifiedName","?options"],["namespace","qualifiedName","?options"]],
-    receivers: ["Document"]
-  },
-  {
-    name: "createElementNS",
-    signatures: [["namespaceURI","qualifiedName","?options"]],
-    receivers: ["ShadowRoot"]
+    signatures: [["namespaceURI","qualifiedName","?options"],["namespace","qualifiedName","?options"]]
   },
   {
     name: "createEvent",
@@ -2762,7 +2760,7 @@ export const NativeFunctions = [
   },
   {
     name: "getAll",
-    signatures: [["?query","?count"]],
+    signatures: [["?query","?count"],["?query_or_options","?count"]],
     receivers: ["IDBIndex","IDBObjectStore"]
   },
   {
@@ -3013,7 +3011,7 @@ export const NativeFunctions = [
   },
   {
     name: "getAllKeys",
-    signatures: [["?query","?count"]]
+    signatures: [["?query","?count"],["?query_or_options","?count"]]
   },
   {
     name: "getKey",
@@ -3836,7 +3834,7 @@ export const NativeFunctions = [
   {
     name: "removeItem",
     signatures: [["index"]],
-    receivers: ["SVGLengthList","SVGNumberList","SVGPointList","SVGStringList","SVGTransformList","SpeechRecognitionPhraseList"]
+    receivers: ["SVGLengthList","SVGNumberList","SVGPointList","SVGStringList","SVGTransformList"]
   },
   {
     name: "removeItem",
@@ -6031,6 +6029,14 @@ export const NativeFunctions = [
     signatures: [["?options"]]
   },
   {
+    name: "addAnimation",
+    signatures: [["animation"]]
+  },
+  {
+    name: "removeAnimation",
+    signatures: [["animation"]]
+  },
+  {
     name: "Animation",
     signatures: [["?effect","?timeline"]]
   },
@@ -6492,6 +6498,10 @@ export const NativeFunctions = [
     signatures: [["?data"]]
   },
   {
+    name: "pseudo",
+    signatures: [["type"]]
+  },
+  {
     name: "parseHTMLUnsafe",
     signatures: [["html","?options"]]
   },
@@ -6582,6 +6592,18 @@ export const NativeFunctions = [
   {
     name: "moveBefore",
     signatures: [["node","child"]]
+  },
+  {
+    name: "patchBetween",
+    signatures: [["prev_child","next_child"]]
+  },
+  {
+    name: "patchAfter",
+    signatures: [["ref"]]
+  },
+  {
+    name: "patchBefore",
+    signatures: [["ref"]]
   },
   {
     name: "QuotaExceededError",
@@ -6708,10 +6730,6 @@ export const NativeFunctions = [
   {
     name: "MouseEvent",
     signatures: [["type","?eventInitDict"]]
-  },
-  {
-    name: "initMutationEvent",
-    signatures: [["type","?bubbles","?cancelable","?relatedNode","?prevValue","?newValue","?attrName","?attrChange"]]
   },
   {
     name: "OverscrollEvent",
@@ -7119,6 +7137,10 @@ export const NativeFunctions = [
     signatures: [["options_bounds","children_updated"]]
   },
   {
+    name: "PatchEvent",
+    signatures: [["type","init"]]
+  },
+  {
     name: "allowsFeature",
     signatures: [["feature","?origin"]]
   },
@@ -7177,6 +7199,14 @@ export const NativeFunctions = [
   {
     name: "TaskPriorityChangeEvent",
     signatures: [["type","eventInitDict"]]
+  },
+  {
+    name: "registerTool",
+    signatures: [["params"]]
+  },
+  {
+    name: "unregisterTool",
+    signatures: [["tool_name"]]
   },
   {
     name: "SnapEvent",
@@ -7271,8 +7301,28 @@ export const NativeFunctions = [
     signatures: [["?input","?options"],["input","baseURL","?options"]]
   },
   {
+    name: "generate",
+    signatures: [["component","groups"]]
+  },
+  {
     name: "compareComponent",
     signatures: [["component","left","right"]]
+  },
+  {
+    name: "Origin",
+    signatures: [["?serializedOrigin"]]
+  },
+  {
+    name: "fromURL",
+    signatures: [["serializedURL"]]
+  },
+  {
+    name: "isSameOrigin",
+    signatures: [["other"]]
+  },
+  {
+    name: "isSameSite",
+    signatures: [["other"]]
   },
   {
     name: "URLSearchParams",
@@ -7487,7 +7537,11 @@ export const NativeFunctions = [
   },
   {
     name: "drawElement",
-    signatures: [["element","x","y","?dwidth","?dheight"]]
+    signatures: [["element","x","y","?options"],["element","x","y","dwidth","dheight","?options"]]
+  },
+  {
+    name: "setHitTestRegions",
+    signatures: [["hitTestRegions"]]
   },
   {
     name: "Path2D",
@@ -7512,6 +7566,10 @@ export const NativeFunctions = [
   {
     name: "ContentIndexEvent",
     signatures: [["type","init"]]
+  },
+  {
+    name: "userAgentAllowsProtocol",
+    signatures: [["protocol"]]
   },
   {
     name: "FederatedCredential",
@@ -8522,10 +8580,6 @@ export const NativeFunctions = [
     signatures: [["string","?weight"]]
   },
   {
-    name: "SpeechRecognitionContext",
-    signatures: [["phrases"]]
-  },
-  {
     name: "SpeechRecognitionErrorEvent",
     signatures: [["type","?eventInitDict"]]
   },
@@ -8534,24 +8588,22 @@ export const NativeFunctions = [
     signatures: [["type","?initDict"]]
   },
   {
-    name: "SpeechRecognitionPhraseList",
-    signatures: [["phrases"]]
-  },
-  {
-    name: "addItem",
-    signatures: [["item"]]
-  },
-  {
     name: "SpeechRecognitionPhrase",
     signatures: [["phrase","?boost"]]
   },
   {
-    name: "availableOnDevice",
-    signatures: [["lang"]]
+    name: "available",
+    signatures: [["options"]]
   },
   {
-    name: "installOnDevice",
-    signatures: [["lang"]]
+    name: "install",
+    signatures: [["options"]],
+    receivers: ["SpeechRecognition"]
+  },
+  {
+    name: "install",
+    signatures: [["?install_url","?manifest_id"]],
+    receivers: ["Navigator"]
   },
   {
     name: "SpeechSynthesisErrorEvent",
@@ -8576,10 +8628,6 @@ export const NativeFunctions = [
   {
     name: "VirtualKeyboardGeometryChangeEvent",
     signatures: [["type"]]
-  },
-  {
-    name: "install",
-    signatures: [["?install_url","?manifest_id"]]
   },
   {
     name: "AnalyserNode",

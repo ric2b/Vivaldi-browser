@@ -66,7 +66,7 @@ UIControlEvents TabGridPageChangeByDragEvent = 1 << 25;
 // Given that, it's generally simpler to used fixed (frame-based) layout for
 // most of the content of this control. However, in order to accommodate RTL
 // layout, three layout guides are used to define the position of the
-// incognito, regular, and third panel sections. The layout frames of these
+// incognito, regular, and tab groups sections. The layout frames of these
 // guides are used to map points in the view to specific TabGridPage values.
 // This means that the initial view layout for this control happens in two
 // phases. -setupViews creates all of the subviews and the layout guides, but
@@ -141,12 +141,6 @@ UIImageView* ImageViewForSymbol(NSString* symbol_name,
   return [[UIImageView alloc] initWithImage:image];
 }
 
-// Returns the page that the third panel represents given the current
-// experiments.
-TabGridPage ThirdTabGridPage() {
-  return IsTabGroupSyncEnabled() ? TabGridPageTabGroups : TabGridPageRemoteTabs;
-}
-
 }  // namespace
 
 @interface TabGridPageControl () <UIGestureRecognizerDelegate,
@@ -154,18 +148,21 @@ TabGridPage ThirdTabGridPage() {
 
 // The grey background for all the segments.
 @property(nonatomic, weak) UIView* background;
+// The contentView in which views should be added.
+@property(nonatomic, weak) UIView* contentView;
 
 // Layout guides used to position segment-specific content.
 @property(nonatomic, weak) UILayoutGuide* incognitoGuide;
 @property(nonatomic, weak) UILayoutGuide* regularGuide;
-@property(nonatomic, weak) UILayoutGuide* thirdPanelGuide;
+@property(nonatomic, weak) UILayoutGuide* tabGroupsGuide;
 // The separator between incognito and regular tabs.
 @property(nonatomic, weak) UIView* firstSeparator;
-// The separator between the regular and third panels.
+// The separator between the regular and tab groups pages.
 @property(nonatomic, weak) UIView* secondSeparator;
 
 
 // Vivaldi
+@property(nonatomic, weak) UILayoutGuide* remoteTabsGuide;
 @property(nonatomic, weak) UILayoutGuide* closedGuide;
 // End Vivaldi
 
@@ -181,18 +178,12 @@ TabGridPage ThirdTabGridPage() {
 @property(nonatomic, weak) UIView* regularSelectedIcon;
 @property(nonatomic, weak) UILabel* regularLabel;
 @property(nonatomic, weak) UILabel* regularSelectedLabel;
-
-#if defined(VIVALDI_BUILD)
-// Declare as UIImageView since we want to update the icon for this panel
-// after setting up based on sync state.
-@property(nonatomic, weak) UIImageView* thirdPanelNotSelectedIcon;
-@property(nonatomic, weak) UIImageView* thirdPanelSelectedIcon;
-#else
-@property(nonatomic, weak) UIView* thirdPanelNotSelectedIcon;
-@property(nonatomic, weak) UIView* thirdPanelSelectedIcon;
-#endif // End Vivaldi
+@property(nonatomic, weak) UIView* tabGroupsNotSelectedIcon;
+@property(nonatomic, weak) UIView* tabGroupsSelectedIcon;
 
 // Vivaldi
+@property(nonatomic, weak) UIImageView* remoteTabsNotSelectedIcon;
+@property(nonatomic, weak) UIImageView* remoteTabsSelectedIcon;
 @property(nonatomic, weak) UIView* closedNotSelectedIcon;
 @property(nonatomic, weak) UIView* closedSelectedIcon;
 // End Vivaldi
@@ -204,9 +195,10 @@ TabGridPage ThirdTabGridPage() {
 // pointer.
 @property(nonatomic, weak) UIView* incognitoHoverView;
 @property(nonatomic, weak) UIView* regularHoverView;
-@property(nonatomic, weak) UIView* thirdPanelHoverView;
+@property(nonatomic, weak) UIView* tabGroupsHoverView;
 
 // Vivaldi
+@property(nonatomic, weak) UIView* remoteTabsHoverView;
 @property(nonatomic, weak) UIView* closedHoverView;
 // End Vivaldi
 
@@ -241,13 +233,14 @@ TabGridPage ThirdTabGridPage() {
 @implementation TabGridPageControl {
   UIAccessibilityElement* _incognitoAccessibilityElement;
   UIAccessibilityElement* _regularAccessibilityElement;
-  UIAccessibilityElement* _thirdPanelAccessibilityElement;
+  UIAccessibilityElement* _tabGroupsAccessibilityElement;
 
   // Highlighted view and associated icon.
   UIView* _highlightView;
   UIView* _highlightedIcon;
 
   // Vivaldi
+  UIAccessibilityElement* _remoteTabsAccessibilityElement;
   UIAccessibilityElement* _closedAccessibilityElement;
   // End Vivaldi
 
@@ -282,32 +275,22 @@ TabGridPage ThirdTabGridPage() {
     _regularAccessibilityElement.accessibilityTraits =
         UIAccessibilityTraitButton;
     _regularAccessibilityElement.accessibilityLabel =
-        IsTabGroupInGridEnabled()
-            ? l10n_util::GetNSString(
-                  IDS_IOS_TAB_GRID_REGULAR_TABS_WITH_GROUPS_TITLE)
-            : l10n_util::GetNSString(IDS_IOS_TAB_GRID_REGULAR_TABS_TITLE);
+        l10n_util::GetNSString(IDS_IOS_TAB_GRID_REGULAR_TABS_WITH_GROUPS_TITLE);
     _regularAccessibilityElement.accessibilityIdentifier =
         kTabGridRegularTabsPageButtonIdentifier;
 
-    _thirdPanelAccessibilityElement =
+    _tabGroupsAccessibilityElement =
         [[UIAccessibilityElement alloc] initWithAccessibilityContainer:self];
-    _thirdPanelAccessibilityElement.accessibilityTraits =
+    _tabGroupsAccessibilityElement.accessibilityTraits =
         UIAccessibilityTraitButton;
-    if (IsTabGroupSyncEnabled()) {
-      _thirdPanelAccessibilityElement.accessibilityLabel =
-          l10n_util::GetNSString(IDS_IOS_TAB_GRID_TAB_GROUPS_TITLE);
-      _thirdPanelAccessibilityElement.accessibilityIdentifier =
-          kTabGridTabGroupsPageButtonIdentifier;
-    } else {
-      _thirdPanelAccessibilityElement.accessibilityLabel =
-          l10n_util::GetNSString(IDS_IOS_TAB_GRID_REMOTE_TABS_TITLE);
-      _thirdPanelAccessibilityElement.accessibilityIdentifier =
-          kTabGridRemoteTabsPageButtonIdentifier;
-    }
+    _tabGroupsAccessibilityElement.accessibilityLabel =
+        l10n_util::GetNSString(IDS_IOS_TAB_GRID_TAB_GROUPS_TITLE);
+    _tabGroupsAccessibilityElement.accessibilityIdentifier =
+        kTabGridTabGroupsPageButtonIdentifier;
 
     self.accessibilityElements = @[
       _incognitoAccessibilityElement, _regularAccessibilityElement,
-      _thirdPanelAccessibilityElement
+      _tabGroupsAccessibilityElement
     ];
 
     [[NSNotificationCenter defaultCenter]
@@ -319,6 +302,7 @@ TabGridPage ThirdTabGridPage() {
     [self setupViews];
 
     // Vivaldi
+    [self setupRemoteTabsAccessibilityElement];
     [self setupRecentlyClosedTabAccessibilityElement];
     // End Vivaldi
 
@@ -333,15 +317,21 @@ TabGridPage ThirdTabGridPage() {
 
   _scrolledToEdge = scrolledToEdge;
 
-  if (IsVivaldiRunning()) {
-    self.background.backgroundColor = [UIColor colorNamed:vBackgroundColor];
+#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
+  if (@available(iOS 26, *)) {
   } else {
-  CGFloat backgroundAlpha =
-      scrolledToEdge ? kScrolledToTopBackgroundAlpha : kBackgroundAlpha;
-  self.background.backgroundColor = [UIColor colorWithWhite:1
-                                                      alpha:backgroundAlpha];
-  } // End Vivaldi
-
+#endif
+    if (IsVivaldiRunning()) {
+      self.background.backgroundColor = [UIColor colorNamed:vBackgroundColor];
+    } else {
+    CGFloat backgroundAlpha =
+        scrolledToEdge ? kScrolledToTopBackgroundAlpha : kBackgroundAlpha;
+    self.background.backgroundColor = [UIColor colorWithWhite:1
+                                                        alpha:backgroundAlpha];
+    } // End Vivaldi
+#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
+  }
+#endif
 }
 
 #pragma mark - Public Properties
@@ -367,11 +357,13 @@ TabGridPage ThirdTabGridPage() {
 
   // The position ranges from 0.0 to 1.0 for four tabs
   if (IsVivaldiRunning()) {
-    if (sliderPosition < 0.25)
+    if (sliderPosition < 0.20)
       _selectedPage = TabGridPageIncognitoTabs;
-    else if (sliderPosition < 0.50)
+    else if (sliderPosition < 0.40)
       _selectedPage = TabGridPageRegularTabs;
-    else if (sliderPosition < 0.75)
+    else if (sliderPosition < 0.60)
+      _selectedPage = TabGridPageTabGroups;
+    else if (sliderPosition < 0.80)
       _selectedPage = TabGridPageRemoteTabs;
     else
       _selectedPage = TabGridPageClosedTabs;
@@ -387,7 +379,7 @@ TabGridPage ThirdTabGridPage() {
   } else if (sliderPosition < 0.75) {
     _selectedPage = TabGridPageRegularTabs;
   } else {
-    _selectedPage = ThirdTabGridPage();
+    _selectedPage = TabGridPageTabGroups;
   }
 
   // Hide/show the separator based on the slider position. Add a delta for the
@@ -421,12 +413,12 @@ TabGridPage ThirdTabGridPage() {
     case TabGridPageRegularTabs:
       newPosition = 0.5;
       break;
-    case TabGridPageRemoteTabs:
     case TabGridPageTabGroups:
       newPosition = 1.0;
       break;
 
     // Vivaldi
+    case TabGridPageRemoteTabs:
     case TabGridPageClosedTabs:
       break;
     // End Vivaldi
@@ -463,9 +455,14 @@ TabGridPage ThirdTabGridPage() {
   UIView* highlightBackground = [[UIView alloc] init];
   highlightBackground.translatesAutoresizingMaskIntoConstraints = NO;
   highlightBackground.backgroundColor = [UIColor colorNamed:kBlueColor];
-  highlightBackground.layer.cornerRadius = kSliderCornerRadius;
 
-  [self insertSubview:highlightBackground aboveSubview:self.background];
+  if (IsVivaldiRunning()) {
+    highlightBackground.layer.cornerRadius = vSliderCornerRadius;
+  } else {
+  highlightBackground.layer.cornerRadius = kSliderCornerRadius;
+  } // End Vivaldi
+
+  [self.contentView insertSubview:highlightBackground atIndex:0];
 
   UILayoutGuide* pageGuide;
   [NSLayoutConstraint activateConstraints:@[
@@ -481,17 +478,26 @@ TabGridPage ThirdTabGridPage() {
       [NSLayoutConstraint activateConstraints:@[
         [highlightBackground.leadingAnchor
             constraintEqualToAnchor:pageGuide.leadingAnchor],
+#if defined(VIVALDI_BUILD)
+        [highlightBackground.trailingAnchor
+            constraintEqualToAnchor:self.regularGuide.leadingAnchor]
+#else
         [highlightBackground.trailingAnchor
             constraintEqualToAnchor:self.regularGuide.centerXAnchor]
+#endif // End Vivaldi
       ]];
       break;
-    case TabGridPageRemoteTabs:
     case TabGridPageTabGroups:
-      pageGuide = self.thirdPanelGuide;
-      _highlightedIcon = self.thirdPanelNotSelectedIcon;
+      pageGuide = self.tabGroupsGuide;
+      _highlightedIcon = self.tabGroupsNotSelectedIcon;
       [NSLayoutConstraint activateConstraints:@[
+#if defined(VIVALDI_BUILD)
+        [highlightBackground.leadingAnchor
+            constraintEqualToAnchor:self.regularGuide.trailingAnchor],
+#else
         [highlightBackground.leadingAnchor
             constraintEqualToAnchor:self.regularGuide.centerXAnchor],
+#endif // End Vivaldi
         [highlightBackground.trailingAnchor
             constraintEqualToAnchor:pageGuide.trailingAnchor]
       ]];
@@ -500,6 +506,16 @@ TabGridPage ThirdTabGridPage() {
       // Not supported right now.
       break;
       // Vivaldi
+    case TabGridPageRemoteTabs:
+      pageGuide = self.remoteTabsGuide;
+      _highlightedIcon = self.remoteTabsNotSelectedIcon;
+      [NSLayoutConstraint activateConstraints:@[
+        [highlightBackground.leadingAnchor
+            constraintEqualToAnchor:self.regularGuide.centerXAnchor],
+        [highlightBackground.trailingAnchor
+            constraintEqualToAnchor:pageGuide.trailingAnchor]
+      ]];
+      break;
     case TabGridPageClosedTabs:
       pageGuide = self.closedGuide;
       _highlightedIcon = self.closedNotSelectedIcon;
@@ -535,12 +551,17 @@ TabGridPage ThirdTabGridPage() {
         [highlightView removeFromSuperview];
       }];
   _highlightView = nil;
+
+  if (IsVivaldiRunning()) {
+    _highlightedIcon.tintColor = [UIColor colorNamed: vNotSelectedColor];
+  } else {
   _highlightedIcon.tintColor = [UIColor colorNamed:kStaticGrey300Color];
+  } // End Vivaldi
 }
 
 - (CGRect)lastSegmentFrame {
-  return [self.thirdPanelGuide.owningView
-      convertRect:self.thirdPanelGuide.layoutFrame
+  return [self.tabGroupsGuide.owningView
+      convertRect:self.tabGroupsGuide.layoutFrame
            toView:nil];
 }
 
@@ -633,12 +654,17 @@ TabGridPage ThirdTabGridPage() {
   self.regularSelectedLabel.center =
       [self centerOfSegment:TabGridPageRegularTabs];
 
-  self.thirdPanelNotSelectedIcon.center =
-      [self centerOfSegment:ThirdTabGridPage()];
-  self.thirdPanelSelectedIcon.center =
-      [self centerOfSegment:ThirdTabGridPage()];
+  self.tabGroupsNotSelectedIcon.center =
+      [self centerOfSegment:TabGridPageTabGroups];
+  self.tabGroupsSelectedIcon.center =
+      [self centerOfSegment:TabGridPageTabGroups];
 
   // Vivaldi
+  self.remoteTabsNotSelectedIcon.center =
+      [self centerOfSegment:TabGridPageRemoteTabs];
+  self.remoteTabsSelectedIcon.center =
+      [self centerOfSegment:TabGridPageRemoteTabs];
+
   self.closedNotSelectedIcon.center =
       [self centerOfSegment:TabGridPageClosedTabs];
   self.closedSelectedIcon.center = [self centerOfSegment:TabGridPageClosedTabs];
@@ -647,9 +673,11 @@ TabGridPage ThirdTabGridPage() {
   self.incognitoHoverView.center =
       [self centerOfSegment:TabGridPageIncognitoTabs];
   self.regularHoverView.center = [self centerOfSegment:TabGridPageRegularTabs];
-  self.thirdPanelHoverView.center = [self centerOfSegment:ThirdTabGridPage()];
+  self.tabGroupsHoverView.center = [self centerOfSegment:TabGridPageTabGroups];
 
   // Vivaldi
+  self.remoteTabsHoverView.center =
+      [self centerOfSegment:TabGridPageRemoteTabs];
   self.closedHoverView.center = [self centerOfSegment:TabGridPageClosedTabs];
   // End Vivaldi
 
@@ -657,7 +685,7 @@ TabGridPage ThirdTabGridPage() {
   // and can't be computed until they are determined.
   self.sliderOrigin = CGRectGetMidX(self.incognitoGuide.layoutFrame);
   self.sliderRange =
-      CGRectGetMidX(self.thirdPanelGuide.layoutFrame) - self.sliderOrigin;
+      CGRectGetMidX(self.tabGroupsGuide.layoutFrame) - self.sliderOrigin;
 
   // Set slider range from recently closed tab layout guide
   if (IsVivaldiRunning()) {
@@ -683,12 +711,12 @@ TabGridPage ThirdTabGridPage() {
       return kTabGridIncognitoTabsPageButtonIdentifier;
     case TabGridPageRegularTabs:
       return kTabGridRegularTabsPageButtonIdentifier;
-    case TabGridPageRemoteTabs:
-      return kTabGridRemoteTabsPageButtonIdentifier;
     case TabGridPageTabGroups:
       return kTabGridTabGroupsPageButtonIdentifier;
 
     // Vivaldi
+    case TabGridPageRemoteTabs:
+      return kTabGridRemoteTabsPageButtonIdentifier;
     case TabGridPageClosedTabs:
       return vTabGridRecentlyClosedTabsPageButtonIdentifier;
     // End Vivaldi
@@ -711,10 +739,12 @@ TabGridPage ThirdTabGridPage() {
       self.incognitoGuide.layoutFrame;
   _regularAccessibilityElement.accessibilityFrameInContainerSpace =
       self.regularGuide.layoutFrame;
-  _thirdPanelAccessibilityElement.accessibilityFrameInContainerSpace =
-      self.thirdPanelGuide.layoutFrame;
+  _tabGroupsAccessibilityElement.accessibilityFrameInContainerSpace =
+      self.tabGroupsGuide.layoutFrame;
 
   // Vivaldi
+  _remoteTabsAccessibilityElement.accessibilityFrameInContainerSpace =
+      self.remoteTabsGuide.layoutFrame;
   _closedAccessibilityElement.accessibilityFrameInContainerSpace =
       self.closedGuide.layoutFrame;
   // End Vivaldi
@@ -767,36 +797,29 @@ TabGridPage ThirdTabGridPage() {
       self.incognitoNotSelectedIcon = iconNotSelected;
       break;
     }
-    case TabGridPageRemoteTabs: {
-
-      if (IsVivaldiRunning()) {
-        NSString* imageSymbol =
-            self.syncEnabled ?
-                kImagePageControlRemoteSynced : kImagePageControlRemote;
-        iconSelected =
-            ImageViewForSymbol(imageSymbol, true);
-        iconNotSelected =
-            ImageViewForSymbol(imageSymbol, false);
-      } else {
-      iconSelected = ImageViewForSymbol(kRecentTabsSymbol, /*selected=*/true);
-      iconNotSelected =
-          ImageViewForSymbol(kRecentTabsSymbol, /*selected=*/false);
-      } // End Vivaldi
-      self.thirdPanelSelectedIcon = iconSelected;
-      self.thirdPanelNotSelectedIcon = iconNotSelected;
-      break;
-    }
     case TabGridPageTabGroups: {
       iconSelected = ImageViewForSymbol(kTabGroupsSymbol, /*selected=*/true,
                                         /*is_system_symbol=*/true);
       iconNotSelected = ImageViewForSymbol(kTabGroupsSymbol, /*selected=*/false,
                                            /*is_system_symbol=*/true);
-      self.thirdPanelSelectedIcon = iconSelected;
-      self.thirdPanelNotSelectedIcon = iconNotSelected;
+      self.tabGroupsSelectedIcon = iconSelected;
+      self.tabGroupsNotSelectedIcon = iconNotSelected;
       break;
     }
 
     // Vivaldi
+    case  TabGridPageRemoteTabs: {
+      NSString* imageSymbol =
+          self.syncEnabled ?
+              kImagePageControlRemoteSynced : kImagePageControlRemote;
+      iconSelected =
+          ImageViewForSymbol(imageSymbol, true);
+      iconNotSelected =
+          ImageViewForSymbol(imageSymbol, false);
+      self.remoteTabsSelectedIcon = iconSelected;
+      self.remoteTabsNotSelectedIcon = iconNotSelected;
+      break;
+      }
     case TabGridPageClosedTabs: {
       iconSelected =
           ImageViewForSymbol(kImagePageControlClosed, true);
@@ -810,14 +833,22 @@ TabGridPage ThirdTabGridPage() {
 
   }
 
-  iconNotSelected.tintColor = [UIColor colorNamed:kStaticGrey300Color];
+#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
+  if (@available(iOS 26, *)) {
+    iconNotSelected.tintColor = UIColor.whiteColor;
+  } else {
+#endif
+    iconNotSelected.tintColor = [UIColor colorNamed:kStaticGrey300Color];
+#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
+  }
+#endif
   iconSelected.tintColor = UIColor.blackColor;
 
   if (IsVivaldiRunning()) {
     iconNotSelected.tintColor = [UIColor colorNamed: vNotSelectedColor];
   } // End Vivaldi
 
-  [self insertSubview:iconNotSelected belowSubview:self.sliderView];
+  [self.contentView insertSubview:iconNotSelected belowSubview:self.sliderView];
   [self.selectedImageView addSubview:iconSelected];
 }
 
@@ -826,26 +857,58 @@ TabGridPage ThirdTabGridPage() {
 - (void)setupViews {
   self.scrolledToEdge = YES;
 
-  UIView* backgroundView = [[UIView alloc]
-      initWithFrame:CGRectMake(0, 0, kOverallWidth, kSegmentHeight)];
-  backgroundView.backgroundColor =
-      [UIColor colorWithWhite:1 alpha:kScrolledToTopBackgroundAlpha];
-  backgroundView.userInteractionEnabled = NO;
-  backgroundView.layer.cornerRadius = kBackgroundCornerRadius;
-  backgroundView.layer.masksToBounds = YES;
-  [self addSubview:backgroundView];
-  backgroundView.center =
-      CGPointMake(kOverallWidth / 2.0, kOverallHeight / 2.0);
-  self.background = backgroundView;
-
-  if (IsVivaldiRunning()) {
-    backgroundView.frame = CGRectMake(0, 0, vOverallWidth, vOverallHeight);
-    backgroundView.backgroundColor =
-        [UIColor colorNamed:vBackgroundColor];
-    backgroundView.layer.cornerRadius = vCornerRadius;
+#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
+  if (@available(iOS 26, *)) {
+    UIGlassEffect* glassEffect =
+        [UIGlassEffect effectWithStyle:UIGlassEffectStyleRegular];
+    glassEffect.interactive = YES;
+    glassEffect.tintColor = TabGridGlassButtonTintColor();
+    UIVisualEffectView* backgroundView =
+        [[UIVisualEffectView alloc] initWithEffect:glassEffect];
+    backgroundView.frame = CGRectMake(0, 0, kOverallWidth, kSegmentHeight);
+    [self addSubview:backgroundView];
     backgroundView.center =
-      CGPointMake(vOverallWidth / 2.0, vOverallHeight / 2.0);
-  } // End Vivaldi
+        CGPointMake(kOverallWidth / 2.0, kOverallHeight / 2.0);
+
+    if (IsVivaldiRunning()) {
+      backgroundView.frame = CGRectMake(0, 0, vOverallWidth, vOverallHeight);
+      backgroundView.cornerConfiguration =
+          [UICornerConfiguration configurationWithRadius:
+              [UICornerRadius fixedRadius:vCornerRadius]];
+
+      backgroundView.center =
+        CGPointMake(vOverallWidth / 2.0, vOverallHeight / 2.0);
+    } // End Vivaldi
+
+    self.background = backgroundView;
+    self.contentView = backgroundView.contentView;
+  } else {
+#endif
+    UIView* backgroundView = [[UIView alloc]
+        initWithFrame:CGRectMake(0, 0, kOverallWidth, kSegmentHeight)];
+    backgroundView.backgroundColor =
+        [UIColor colorWithWhite:1 alpha:kScrolledToTopBackgroundAlpha];
+    backgroundView.userInteractionEnabled = NO;
+    backgroundView.layer.cornerRadius = kBackgroundCornerRadius;
+    backgroundView.layer.masksToBounds = YES;
+    [self addSubview:backgroundView];
+    backgroundView.center =
+        CGPointMake(kOverallWidth / 2.0, kOverallHeight / 2.0);
+
+    if (IsVivaldiRunning()) {
+      backgroundView.frame = CGRectMake(0, 0, vOverallWidth, vOverallHeight);
+      backgroundView.backgroundColor =
+          [UIColor colorNamed:vBackgroundColor];
+      backgroundView.layer.cornerRadius = vCornerRadius;
+      backgroundView.center =
+        CGPointMake(vOverallWidth / 2.0, vOverallHeight / 2.0);
+    } // End Vivaldi
+
+    self.background = backgroundView;
+    self.contentView = backgroundView;
+#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
+  }
+#endif
 
   // Set up the layout guides for the segments.
   UILayoutGuide* incognitoGuide = [[UILayoutGuide alloc] init];
@@ -854,11 +917,15 @@ TabGridPage ThirdTabGridPage() {
   UILayoutGuide* regularGuide = [[UILayoutGuide alloc] init];
   [self addLayoutGuide:regularGuide];
   self.regularGuide = regularGuide;
-  UILayoutGuide* thirdPanelGuide = [[UILayoutGuide alloc] init];
-  [self addLayoutGuide:thirdPanelGuide];
-  self.thirdPanelGuide = thirdPanelGuide;
+  UILayoutGuide* tabGroupsGuide = [[UILayoutGuide alloc] init];
+  [self addLayoutGuide:tabGroupsGuide];
+  self.tabGroupsGuide = tabGroupsGuide;
 
   // Vivaldi
+  UILayoutGuide* remoteTabsGuide = [[UILayoutGuide alloc] init];
+  [self addLayoutGuide:remoteTabsGuide];
+  self.remoteTabsGuide = remoteTabsGuide;
+
   UILayoutGuide* closedGuide = [[UILayoutGuide alloc] init];
   [self addLayoutGuide:closedGuide];
   self.closedGuide = closedGuide;
@@ -867,16 +934,16 @@ TabGridPage ThirdTabGridPage() {
   // All of the guides are of the same height, and vertically centered in the
   // control.
   for (UILayoutGuide* guide in
-       @[ incognitoGuide, regularGuide, thirdPanelGuide ]) {
+       @[ incognitoGuide, regularGuide, tabGroupsGuide ]) {
 
     if (IsVivaldiRunning()) {
       [guide.heightAnchor
           constraintEqualToConstant:vOverallHeight].active = YES;
       [guide.widthAnchor constraintEqualToConstant:vSegmentWidth].active = YES;
-    } else {
+    } else { // Vivaldi
     [guide.heightAnchor constraintEqualToConstant:kOverallHeight].active = YES;
     // Guides are all the same width. The regular guide is centered in the
-    // control, and the incognito and third panel guides are on the leading and
+    // control, and the incognito and tab groups guides are on the leading and
     // trailing sides of it, with separators in between.
     [guide.widthAnchor constraintEqualToConstant:kSegmentWidth].active = YES;
     } // End Vivaldi
@@ -886,6 +953,13 @@ TabGridPage ThirdTabGridPage() {
   }
 
   if (IsVivaldiRunning()) {
+
+    [remoteTabsGuide.heightAnchor
+        constraintEqualToConstant:vOverallHeight].active = YES;
+    [remoteTabsGuide.widthAnchor
+        constraintEqualToConstant:vSegmentWidth].active = YES;
+    [remoteTabsGuide.centerYAnchor
+        constraintEqualToAnchor:self.centerYAnchor].active = YES;
 
     [closedGuide.heightAnchor
         constraintEqualToConstant:vOverallHeight].active = YES;
@@ -899,10 +973,12 @@ TabGridPage ThirdTabGridPage() {
           constraintEqualToAnchor:self.leadingAnchor],
       [regularGuide.leadingAnchor
           constraintEqualToAnchor:incognitoGuide.trailingAnchor],
-      [thirdPanelGuide.leadingAnchor
+      [tabGroupsGuide.leadingAnchor
           constraintEqualToAnchor:regularGuide.trailingAnchor],
+      [remoteTabsGuide.leadingAnchor
+          constraintEqualToAnchor:tabGroupsGuide.trailingAnchor],
       [closedGuide.leadingAnchor
-          constraintEqualToAnchor:thirdPanelGuide.trailingAnchor],
+          constraintEqualToAnchor:remoteTabsGuide.trailingAnchor],
     ]];
   } else {
   UIView* firstSeparator = [self newSeparator];
@@ -921,7 +997,7 @@ TabGridPage ThirdTabGridPage() {
     [regularGuide.trailingAnchor
         constraintEqualToAnchor:secondSeparator.leadingAnchor],
     [secondSeparator.trailingAnchor
-        constraintEqualToAnchor:thirdPanelGuide.leadingAnchor],
+        constraintEqualToAnchor:tabGroupsGuide.leadingAnchor],
 
     [firstSeparator.centerYAnchor constraintEqualToAnchor:self.centerYAnchor],
     [secondSeparator.centerYAnchor constraintEqualToAnchor:self.centerYAnchor],
@@ -929,21 +1005,34 @@ TabGridPage ThirdTabGridPage() {
   } // End Vivaldi
 
   // Add the slider above the section images and labels.
+  CGFloat verticalMargin = kSliderVerticalMargin;
   CGRect sliderFrame =
-      CGRectMake(0, kSliderVerticalMargin, kSliderWidth, kSliderHeight);
+      CGRectMake(0, verticalMargin, kSliderWidth, kSliderHeight);
 
   if (IsVivaldiRunning()) {
     sliderFrame = CGRectMake(0, 4, vSliderWidth, vSliderHeight);
   } // End Vivaldi
 
   UIView* slider = [[UIView alloc] initWithFrame:sliderFrame];
+#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
+  if (@available(iOS 26, *)) {
+    if (IsVivaldiRunning()) {
+      slider.layer.cornerRadius = vSliderCornerRadius;
+    } else {
+    slider.layer.cornerRadius = kSliderHeight / 2.0;
+    } // End Vivaldi
+  } else {
+#endif
 
-  slider.layer.cornerRadius = kSliderCornerRadius;
+    if (IsVivaldiRunning()) {
+      slider.layer.cornerRadius = vSliderCornerRadius;
+    } else {
+    slider.layer.cornerRadius = kSliderCornerRadius;
+    } // End Vivaldi
 
-  if (IsVivaldiRunning()) {
-    slider.layer.cornerRadius = vSliderCornerRadius;
-  } // End Vivaldi
-
+#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
+  }
+#endif
   slider.layer.masksToBounds = YES;
   if (IsVivaldiRunning()) {
     slider.backgroundColor = vSliderColor;
@@ -952,13 +1041,11 @@ TabGridPage ThirdTabGridPage() {
   } // End Vivaldi
 
   if (ios::provider::IsRaccoonEnabled()) {
-    if (@available(iOS 17.0, *)) {
-      slider.hoverStyle = [UIHoverStyle
-          styleWithShape:
-              [UIShape rectShapeWithCornerRadius:kBackgroundCornerRadius]];
-    }
+    slider.hoverStyle = [UIHoverStyle
+        styleWithShape:[UIShape
+                           rectShapeWithCornerRadius:kBackgroundCornerRadius]];
   }
-  [self addSubview:slider];
+  [self.contentView addSubview:slider];
   self.sliderView = slider;
 
   // Selected images and labels are added to the selected image view so they
@@ -976,14 +1063,15 @@ TabGridPage ThirdTabGridPage() {
 
   [self addTabsIcon:TabGridPageRegularTabs];
   [self addTabsIcon:TabGridPageIncognitoTabs];
-  [self addTabsIcon:ThirdTabGridPage()];
+  [self addTabsIcon:TabGridPageTabGroups];
 
   // Vivaldi
+  [self addTabsIcon:TabGridPageRemoteTabs];
   [self addTabsIcon:TabGridPageClosedTabs];
   // End Vivaldi
 
   UILabel* regularLabel = [self labelSelected:NO];
-  [self insertSubview:regularLabel belowSubview:self.sliderView];
+  [self.contentView insertSubview:regularLabel belowSubview:self.sliderView];
   self.regularLabel = regularLabel;
   UILabel* regularSelectedLabel = [self labelSelected:YES];
   [self.selectedImageView addSubview:regularSelectedLabel];
@@ -995,15 +1083,18 @@ TabGridPage ThirdTabGridPage() {
   [center referenceView:self.incognitoHoverView
               underName:kTabGridPageControlIncognitoGuide];
   self.regularHoverView = [self configureHoverView];
-  self.thirdPanelHoverView = [self configureHoverView];
-  [center referenceView:self.thirdPanelHoverView
-              underName:kTabGridPageControlThirdPanelGuide];
+  self.tabGroupsHoverView = [self configureHoverView];
+  [center referenceView:self.tabGroupsHoverView
+              underName:kTabGridPageControlTabGroupsGuide];
 
   // Vivaldi
+  self.remoteTabsHoverView = [self configureHoverView];;
   self.closedHoverView = [self configureHoverView];;
   // End Vivaldi
 
   // Vivaldi
+  [self.remoteTabsHoverView
+      addInteraction:[[UIPointerInteraction alloc] initWithDelegate:self]];
   [self.closedHoverView
       addInteraction:[[UIPointerInteraction alloc] initWithDelegate:self]];
   // End Vivaldi
@@ -1070,8 +1161,12 @@ TabGridPage ThirdTabGridPage() {
   TabGridPage page;
   if (CGRectContainsPoint(self.incognitoGuide.layoutFrame, point)) {
     page = TabGridPageIncognitoTabs;
-  } else if (CGRectContainsPoint(self.thirdPanelGuide.layoutFrame, point)) {
-    page = ThirdTabGridPage();
+  } else if (CGRectContainsPoint(self.tabGroupsGuide.layoutFrame, point)) {
+    page = TabGridPageTabGroups;
+  } else if (CGRectContainsPoint(self.remoteTabsGuide.layoutFrame, point)) {
+    page = TabGridPageRemoteTabs;
+  } else if (CGRectContainsPoint(self.closedGuide.layoutFrame, point)) {
+    page = TabGridPageClosedTabs;
   } else {
     // bug: taps in the left- or rightmost `kSliderOverhang` points of the
     // control will fall through to this case.
@@ -1096,11 +1191,12 @@ TabGridPage ThirdTabGridPage() {
       return RectCenter(self.incognitoGuide.layoutFrame);
     case TabGridPageRegularTabs:
       return RectCenter(self.regularGuide.layoutFrame);
-    case TabGridPageRemoteTabs:
     case TabGridPageTabGroups:
-      return RectCenter(self.thirdPanelGuide.layoutFrame);
+      return RectCenter(self.tabGroupsGuide.layoutFrame);
 
     // Vivaldi
+    case TabGridPageRemoteTabs:
+      return RectCenter(self.remoteTabsGuide.layoutFrame);
     case TabGridPageClosedTabs:
       return RectCenter(self.closedGuide.layoutFrame);
     // End Vivaldi
@@ -1137,13 +1233,11 @@ TabGridPage ThirdTabGridPage() {
 
   UIView* hoverView = [[UIView alloc] initWithFrame:segmentRect];
   if (ios::provider::IsRaccoonEnabled()) {
-    if (@available(iOS 17.0, *)) {
-      hoverView.hoverStyle = [UIHoverStyle
-          styleWithShape:
-              [UIShape rectShapeWithCornerRadius:kBackgroundCornerRadius]];
-    }
+    hoverView.hoverStyle = [UIHoverStyle
+        styleWithShape:[UIShape
+                           rectShapeWithCornerRadius:kBackgroundCornerRadius]];
   }
-  [self insertSubview:hoverView belowSubview:self.sliderView];
+  [self.contentView insertSubview:hoverView belowSubview:self.sliderView];
   [hoverView
       addInteraction:[[UIPointerInteraction alloc] initWithDelegate:self]];
   return hoverView;
@@ -1184,12 +1278,25 @@ TabGridPage ThirdTabGridPage() {
   NSString* imageSymbol =
       syncEnabled ? kImagePageControlRemoteSynced : kImagePageControlRemote;
 
-  self.thirdPanelSelectedIcon.image =
+  self.remoteTabsSelectedIcon.image =
       CustomSymbolTemplateWithPointSize(imageSymbol, kUnselectedSymbolSize);
-  self.thirdPanelNotSelectedIcon.image =
+  self.remoteTabsNotSelectedIcon.image =
       CustomSymbolTemplateWithPointSize(imageSymbol, kUnselectedSymbolSize);
 
   [self setNeedsLayout];
+}
+
+- (void)setupRemoteTabsAccessibilityElement {
+  _remoteTabsAccessibilityElement =
+      [[UIAccessibilityElement alloc] initWithAccessibilityContainer:self];
+  _remoteTabsAccessibilityElement.accessibilityTraits =
+      UIAccessibilityTraitButton;
+  _remoteTabsAccessibilityElement.accessibilityLabel =
+      l10n_util::GetNSString(IDS_VIVALDI_TAB_GRID_RECENTLY_CLOSED_TABS_TITLE);
+  _remoteTabsAccessibilityElement.accessibilityIdentifier =
+      vTabGridRecentlyClosedTabsPageButtonIdentifier;
+
+  [self.accessibilityElements arrayByAddingObject:_remoteTabsAccessibilityElement];
 }
 
 - (void)setupRecentlyClosedTabAccessibilityElement {
@@ -1198,24 +1305,25 @@ TabGridPage ThirdTabGridPage() {
   _closedAccessibilityElement.accessibilityTraits =
       UIAccessibilityTraitButton;
   _closedAccessibilityElement.accessibilityLabel =
-      l10n_util::GetNSString(IDS_VIVALDI_TAB_GRID_RECENTLY_CLOSED_TABS_TITLE);
+      l10n_util::GetNSString(IDS_IOS_TAB_GRID_REMOTE_TABS_TITLE);
   _closedAccessibilityElement.accessibilityIdentifier =
-      vTabGridRecentlyClosedTabsPageButtonIdentifier;
+      kTabGridRemoteTabsPageButtonIdentifier;
 
   [self.accessibilityElements arrayByAddingObject:_closedAccessibilityElement];
 }
 
 // Returns page position from selected page.
-// The position ranges from 0.0 to 1.0 for four pages/tabs
+// The position ranges from 0.0 to 1.0 for five pages/tabs
 - (CGFloat)getPositionFromPage:(TabGridPage)selectedPage {
   switch (selectedPage) {
     case TabGridPageIncognitoTabs:
       return 0.0;
     case TabGridPageRegularTabs:
-      return 0.33;
-    case TabGridPageRemoteTabs:
-      return 0.66;
+      return 0.25;
     case TabGridPageTabGroups:
+      return 0.50;
+    case TabGridPageRemoteTabs:
+      return 0.75;
     case TabGridPageClosedTabs:
       return 1.0;
   }
@@ -1225,7 +1333,9 @@ TabGridPage ThirdTabGridPage() {
 - (TabGridPage)getPageFromTouchPoint:(CGPoint)point {
   if (CGRectContainsPoint(self.incognitoGuide.layoutFrame, point)) {
     return TabGridPageIncognitoTabs;
-  } else if (CGRectContainsPoint(self.thirdPanelGuide.layoutFrame, point)) {
+  } else if (CGRectContainsPoint(self.tabGroupsGuide.layoutFrame, point)) {
+    return TabGridPageTabGroups;
+  } else if (CGRectContainsPoint(self.remoteTabsGuide.layoutFrame, point)) {
     return TabGridPageRemoteTabs;
   } else if (CGRectContainsPoint(self.closedGuide.layoutFrame, point)) {
     return TabGridPageClosedTabs;

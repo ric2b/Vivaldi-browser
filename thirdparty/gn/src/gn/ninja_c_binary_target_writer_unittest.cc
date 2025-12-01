@@ -2584,8 +2584,8 @@ TEST_F(NinjaCBinaryTargetWriterTest, DependOnModule) {
 include_dirs =
 cflags =
 cflags_cc =
-module_deps = -Xclang -fmodules-embed-all-files -fmodule-file=obj/blah/liba.a.pcm
-module_deps_no_self = -Xclang -fmodules-embed-all-files
+module_deps = -fmodule-file=obj/blah/liba.a.pcm
+module_deps_no_self =
 label = //blah$:a
 root_out_dir = withmodules
 target_out_dir = obj/blah
@@ -2616,6 +2616,7 @@ build obj/blah/liba.a: alink obj/blah/liba.a.o
   target2.sources().push_back(SourceFile("//stuff/b.h"));
   target2.source_types_used().Set(SourceFile::SOURCE_CPP);
   target2.source_types_used().Set(SourceFile::SOURCE_MODULEMAP);
+  target2.public_deps().push_back(LabelTargetPair(&target));
   target2.SetToolchain(&module_toolchain);
   ASSERT_TRUE(target2.OnResolved(&err));
 
@@ -2629,21 +2630,21 @@ build obj/blah/liba.a: alink obj/blah/liba.a.o
 include_dirs =
 cflags =
 cflags_cc =
-module_deps = -Xclang -fmodules-embed-all-files -fmodule-file=obj/stuff/libb.b.pcm
-module_deps_no_self = -Xclang -fmodules-embed-all-files
+module_deps = -fmodule-file=obj/blah/liba.a.pcm -fmodule-file=obj/stuff/libb.b.pcm
+module_deps_no_self = -fmodule-file=obj/blah/liba.a.pcm
 label = //stuff$:b
 root_out_dir = withmodules
 target_out_dir = obj/stuff
 target_output_name = libb
 
-build obj/stuff/libb.b.pcm: cxx_module ../../stuff/b.modulemap
+build obj/stuff/libb.b.pcm: cxx_module ../../stuff/b.modulemap | obj/blah/liba.a.pcm
   source_file_part = b.modulemap
   source_name_part = b
-build obj/stuff/libb.b.o: cxx ../../stuff/b.cc | obj/stuff/libb.b.pcm
+build obj/stuff/libb.b.o: cxx ../../stuff/b.cc | obj/blah/liba.a.pcm obj/stuff/libb.b.pcm
   source_file_part = b.cc
   source_name_part = b
 
-build obj/stuff/libb.a: alink obj/stuff/libb.b.o
+build obj/stuff/libb.a: alink obj/stuff/libb.b.o || obj/blah/liba.a
   arflags =
   output_extension =
   output_dir =
@@ -2658,7 +2659,7 @@ build obj/stuff/libb.a: alink obj/stuff/libb.b.o
   target3.visibility().SetPublic();
   target3.sources().push_back(SourceFile("//stuff/c.modulemap"));
   target3.source_types_used().Set(SourceFile::SOURCE_MODULEMAP);
-  target3.private_deps().push_back(LabelTargetPair(&target));
+  target3.public_deps().push_back(LabelTargetPair(&target2));
   target3.SetToolchain(&module_toolchain);
   ASSERT_TRUE(target3.OnResolved(&err));
 
@@ -2673,18 +2674,18 @@ build obj/stuff/libb.a: alink obj/stuff/libb.b.o
 include_dirs =
 cflags =
 cflags_cc =
-module_deps = -Xclang -fmodules-embed-all-files -fmodule-file=obj/stuff/libc.c.pcm -fmodule-file=obj/blah/liba.a.pcm
-module_deps_no_self = -Xclang -fmodules-embed-all-files -fmodule-file=obj/blah/liba.a.pcm
+module_deps = -fmodule-file=obj/blah/liba.a.pcm -fmodule-file=obj/stuff/libb.b.pcm -fmodule-file=obj/stuff/libc.c.pcm
+module_deps_no_self = -fmodule-file=obj/blah/liba.a.pcm -fmodule-file=obj/stuff/libb.b.pcm
 label = //things$:c
 root_out_dir = withmodules
 target_out_dir = obj/things
 target_output_name = libc
 
-build obj/stuff/libc.c.pcm: cxx_module ../../stuff/c.modulemap | obj/blah/liba.a.pcm
+build obj/stuff/libc.c.pcm: cxx_module ../../stuff/c.modulemap | obj/blah/liba.a.pcm obj/stuff/libb.b.pcm
   source_file_part = c.modulemap
   source_name_part = c
 
-build obj/things/libc.a: alink || obj/blah/liba.a
+build obj/things/libc.a: alink || obj/stuff/libb.a obj/blah/liba.a
   arflags =
   output_extension =
   output_dir =
@@ -2699,7 +2700,6 @@ build obj/things/libc.a: alink || obj/blah/liba.a
   depender.sources().push_back(SourceFile("//zap/x.cc"));
   depender.sources().push_back(SourceFile("//zap/y.cc"));
   depender.source_types_used().Set(SourceFile::SOURCE_CPP);
-  depender.private_deps().push_back(LabelTargetPair(&target));
   depender.private_deps().push_back(LabelTargetPair(&target2));
   depender.SetToolchain(&module_toolchain);
   ASSERT_TRUE(depender.OnResolved(&err));
@@ -2714,8 +2714,8 @@ build obj/things/libc.a: alink || obj/blah/liba.a
 include_dirs =
 cflags =
 cflags_cc =
-module_deps = -Xclang -fmodules-embed-all-files -fmodule-file=obj/blah/liba.a.pcm -fmodule-file=obj/stuff/libb.b.pcm
-module_deps_no_self = -Xclang -fmodules-embed-all-files -fmodule-file=obj/blah/liba.a.pcm -fmodule-file=obj/stuff/libb.b.pcm
+module_deps = -fmodule-file=obj/blah/liba.a.pcm -fmodule-file=obj/stuff/libb.b.pcm
+module_deps_no_self = -fmodule-file=obj/blah/liba.a.pcm -fmodule-file=obj/stuff/libb.b.pcm
 label = //zap$:c
 root_out_dir = withmodules
 target_out_dir = obj/zap
@@ -2728,7 +2728,7 @@ build obj/zap/c.y.o: cxx ../../zap/y.cc | obj/blah/liba.a.pcm obj/stuff/libb.b.p
   source_file_part = y.cc
   source_name_part = y
 
-build withmodules/c: link obj/zap/c.x.o obj/zap/c.y.o obj/blah/liba.a obj/stuff/libb.a
+build withmodules/c: link obj/zap/c.x.o obj/zap/c.y.o obj/stuff/libb.a obj/blah/liba.a
   ldflags =
   libs =
   frameworks =

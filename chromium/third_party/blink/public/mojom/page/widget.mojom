@@ -183,8 +183,6 @@ interface FrameWidget {
   // work.
   NotifyClearedDisplayedGraphics();
 
-  // Vivaldi: Force a reload of <image> under coordinate.
-  LoadImageAt(gfx.mojom.Point point_in_local_root);
   // Vivaldi: Enable or disable images in the current document.
   SetImagesEnabled(bool show_images);
   // Vivaldi: Enable images only from cache.

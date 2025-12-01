@@ -36,7 +36,6 @@
 #include "content/browser/child_process_host_impl.h"
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/in_memory_federated_permission_context.h"
-#include "content/browser/media/browser_feature_provider.h"
 #include "content/browser/preloading/prefetch/prefetch_container.h"
 #include "content/browser/preloading/prefetch/prefetch_service.h"
 #include "content/browser/preloading/prefetch/prefetch_type.h"
@@ -198,10 +197,12 @@ BrowserContext::StartBrowserPrefetchRequest(
     const std::string& embedder_histogram_suffix,
     bool javascript_enabled,
     std::optional<net::HttpNoVarySearchData> no_vary_search_hint,
+    std::optional<PrefetchPriority> priority,
     const net::HttpRequestHeaders& additional_headers,
     std::unique_ptr<PrefetchRequestStatusListener> request_status_listener,
-    base::TimeDelta ttl_in_sec,
-    bool should_append_variations_header) {
+    base::TimeDelta ttl,
+    bool should_append_variations_header,
+    bool should_disable_block_until_head_timeout) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   TRACE_EVENT0("loading", "BrowserContext::StartBrowserPrefetchRequest");
 
@@ -220,9 +221,10 @@ BrowserContext::StartBrowserPrefetchRequest(
       this, url, prefetch_type, embedder_histogram_suffix,
       blink::mojom::Referrer(), javascript_enabled,
       /*referring_origin=*/std::nullopt, std::move(no_vary_search_hint),
+      std::move(priority),
       /*attempt=*/nullptr, additional_headers,
-      std::move(request_status_listener), ttl_in_sec,
-      should_append_variations_header);
+      std::move(request_status_listener), ttl, should_append_variations_header,
+      should_disable_block_until_head_timeout);
   return prefetch_service->AddPrefetchContainerWithHandle(std::move(container));
 }
 
@@ -367,10 +369,6 @@ media::WebrtcVideoPerfHistory* BrowserContext::GetWebrtcVideoPerfHistory() {
   return impl()->GetWebrtcVideoPerfHistory();
 }
 
-media::learning::LearningSession* BrowserContext::GetLearningSession() {
-  return impl()->GetLearningSession();
-}
-
 std::unique_ptr<download::InProgressDownloadManager>
 BrowserContext::RetrieveInProgressDownloadManager() {
   return nullptr;
@@ -441,8 +439,7 @@ BrowserContext::CreateVideoDecodePerfHistory() {
         GetPath().Append(FILE_PATH_LITERAL("VideoDecodeStats")), db_provider);
   }
 
-  return std::make_unique<media::VideoDecodePerfHistory>(
-      std::move(stats_db), BrowserFeatureProvider::GetFactoryCB());
+  return std::make_unique<media::VideoDecodePerfHistory>(std::move(stats_db));
 }
 
 FederatedIdentityApiPermissionContextDelegate*

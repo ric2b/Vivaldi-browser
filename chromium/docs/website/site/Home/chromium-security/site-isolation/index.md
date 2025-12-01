@@ -51,7 +51,8 @@ communicate across multiple subdomains of a site.
 
 For more technical information about the protections offered by Site Isolation
 and how they are built, please see the [project's design
-document](/developers/design-documents/site-isolation).
+document](/developers/design-documents/site-isolation) and
+[documentation](https://chromium.googlesource.com/chromium/src/+/main/docs/process_model_and_site_isolation.md).
 
 [TOC]
 
@@ -131,9 +132,9 @@ defend against attacks that are able to read otherwise inaccessible data within
 a process, such as [speculative side-channel attack
 techniques](https://security.googleblog.com/2018/01/todays-cpu-vulnerability-what-you-need.html)
 like Spectre/Meltdown. As of Chrome 77, Site Isolation also now defends against
-fully compromised renderer processes and UXSS bugs on desktop platforms. In M92,
-Site Isolation expanded to isolate all extensions from each other as well.  In
-M110, Site Isolation support was added for [&lt;webview&gt;
+fully compromised renderer processes and UXSS bugs on desktop platforms. In
+Chrome 92, Site Isolation expanded to isolate all extensions from each other as
+well.  In Chrome 110, Site Isolation support was added for [&lt;webview&gt;
 tags](https://developer.chrome.com/docs/extensions/reference/webviewTag/).
 
 #### Android
@@ -166,6 +167,17 @@ adopt Cross-Origin-Opener-Policy headers.
   / [Privacy and performance, working together in
   Chrome](https://blog.google/products/chrome/privacy-and-performance-working-together-chrome/)
   \- July 2021
+
+## Videos
+
+* [What's Up with Site
+  Isolation](https://youtu.be/OH-bt7spDgo?si=T_mL39Sxr_JPit0K) - September 2023
+* [Chrome Security EDU: Site Isolation
+  101](https://youtu.be/-L-LwHiCl9E?si=wEv7gdc7lr_6yiAy) - June 2025
+* [Chrome Security EDU: Site Isolation
+  201](https://youtu.be/Als73-6bqD0?si=LajJlqJeXZe7RTIl) - June 2025
+* [Chrome Security EDU: Chrome's Process Model and Site
+  Isolation](https://youtu.be/2Ds_RIACLbk?si=kZWWF75slbRoZMa_) - June 2025
 
 ## Limitations
 

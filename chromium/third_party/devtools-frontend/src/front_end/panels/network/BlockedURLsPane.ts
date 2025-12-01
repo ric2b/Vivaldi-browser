@@ -80,10 +80,11 @@ export class BlockedURLsPane extends UI.Widget.VBox implements
   private blockedCountForUrl: Map<string, number>;
 
   constructor() {
-    super(true);
+    super({
+      jslog: `${VisualLogging.panel('network.blocked-urls').track({resize: true})}`,
+      useShadowDom: true,
+    });
     this.registerRequiredCSS(blockedURLsPaneStyles);
-
-    this.element.setAttribute('jslog', `${VisualLogging.panel('network.blocked-urls').track({resize: true})}`);
 
     this.manager = SDK.NetworkManager.MultitargetNetworkManager.instance();
     this.manager.addEventListener(
@@ -183,7 +184,7 @@ export class BlockedURLsPane extends UI.Widget.VBox implements
     const patterns = this.manager.blockedPatterns();
     patterns.splice(index, 1);
     this.manager.setBlockedPatterns(patterns);
-    UI.ARIAUtils.alert(UIStrings.itemDeleted);
+    UI.ARIAUtils.LiveAnnouncer.alert(UIStrings.itemDeleted);
   }
 
   beginEdit(pattern: SDK.NetworkManager.BlockedPattern): UI.ListWidget.Editor<SDK.NetworkManager.BlockedPattern> {

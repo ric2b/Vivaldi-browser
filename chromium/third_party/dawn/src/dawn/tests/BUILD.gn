@@ -26,6 +26,7 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import("../../../scripts/dawn_overrides_with_defaults.gni")
+import("../../../scripts/tint_overrides_with_defaults.gni")
 
 import("//testing/test.gni")
 import("${dawn_root}/generator/dawn_generator.gni")
@@ -142,12 +143,10 @@ if (build_with_chromium) {
 # Copy target for DXC
 ###############################################################################
 
-# When building with chromium under Windows, we need to copy the DXC from
-# Windows SDK into build folder, in order to ensure a DXC of version 1.6 is
-# available when running end-to-end tests in Chromium. Note that currently DXC
-# only provided for x86 and x64 in Windows SDK 20348.
-if (!dawn_use_built_dxc && build_with_chromium && is_win &&
-    (target_cpu == "x64" || target_cpu == "x86")) {
+# Chromium archive scripts are not able to determine whether dawn_built_dxc
+# is defined. Hence, we need to copy the DXC DLLs from the Windows SDK so the
+# scripts always have something to pick up.
+if (!dawn_use_built_dxc && build_with_chromium && is_win) {
   # The windows_sdk_path is acquired in visual_studio_version.gni.
   import("//build/config/win/visual_studio_version.gni")
 
@@ -162,7 +161,6 @@ if (!dawn_use_built_dxc && build_with_chromium && is_win &&
   # end-to-end test in Chromium.
   copy("copy_dxc_binary") {
     sources = [
-      "$windows_sdk_path/bin/$windows_sdk_version/$target_cpu/dxc.exe",
       "$windows_sdk_path/bin/$windows_sdk_version/$target_cpu/dxcompiler.dll",
       "$windows_sdk_path/bin/$windows_sdk_version/$target_cpu/dxil.dll",
     ]
@@ -196,15 +194,13 @@ template("dawn_test") {
 
     # Running Dawn tests within Chromium in Windows may require DXC, copy DXC
     # binary from Windows SDK.
-    if (build_with_chromium && is_win &&
-        (target_cpu == "x64" || target_cpu == "x86")) {
+    if (build_with_chromium && is_win) {
       if (dawn_use_built_dxc) {
         if (!defined(deps)) {
           deps = []
         }
         deps += [
           "$dawn_root/third_party/gn/dxc:copy_dxil_dll",
-          "$dawn_root/third_party/gn/dxc:dxc",
           "$dawn_root/third_party/gn/dxc:dxcompiler",
         ]
       } else {
@@ -472,6 +468,10 @@ dawn_test("dawn_unittests") {
     sources += [ "unittests/validation/YCbCrInfoValidationTests.cpp" ]
   }
 
+  if (tint_build_spv_reader) {
+    deps += [ "${dawn_spirv_tools_dir}:spvtools_opt" ]
+  }
+
   # When building inside Chromium, use their gtest main function because it is
   # needed to run in swarming correctly.
   if (build_with_chromium) {
@@ -657,6 +657,7 @@ source_set("end2end_tests_sources") {
     "end2end/PipelineLayoutTests.cpp",
     "end2end/PixelLocalStorageTests.cpp",
     "end2end/PolyfillBuiltinSimpleTests.cpp",
+    "end2end/PrimitiveIdTests.cpp",
     "end2end/PrimitiveStateTests.cpp",
     "end2end/PrimitiveTopologyTests.cpp",
     "end2end/QueryTests.cpp",
@@ -674,6 +675,8 @@ source_set("end2end_tests_sources") {
     "end2end/ShaderAtomicTests.cpp",
     "end2end/ShaderBuiltinPartialConstArgsErrorTests.cpp",
     "end2end/ShaderF16Tests.cpp",
+    "end2end/ShaderModuleCachingTests.cpp",
+    "end2end/ShaderPrintTests.cpp",
     "end2end/ShaderTests.cpp",
     "end2end/ShaderValidationTests.cpp",
     "end2end/StorageTextureTests.cpp",
@@ -682,8 +685,10 @@ source_set("end2end_tests_sources") {
     "end2end/SubresourceRenderAttachmentTests.cpp",
     "end2end/SupportedFeatureArch.cpp",
     "end2end/Texture3DTests.cpp",
+    "end2end/TextureComponentSwizzleTests.cpp",
     "end2end/TextureCorruptionTests.cpp",
     "end2end/TextureFormatTests.cpp",
+    "end2end/TextureFormatsTier1Tests.cpp",
     "end2end/TextureShaderBuiltinTests.cpp",
     "end2end/TextureSubresourceTests.cpp",
     "end2end/TextureViewTests.cpp",
@@ -694,6 +699,10 @@ source_set("end2end_tests_sources") {
     "end2end/ViewportOrientationTests.cpp",
     "end2end/ViewportTests.cpp",
   ]
+
+  if (!is_debug) {
+    sources += [ "end2end/RuntimeTimeoutCompute.cpp" ]
+  }
 
   libs = []
 
@@ -927,6 +936,7 @@ dawn_test("dawn_perf_tests") {
 
   sources = [
     "perf_tests/BufferUploadPerf.cpp",
+    "perf_tests/ConcurrentExecutionTest.cpp",
     "perf_tests/DawnPerfTest.cpp",
     "perf_tests/DawnPerfTest.h",
     "perf_tests/DawnPerfTestPlatform.cpp",

@@ -5,6 +5,7 @@
 <translation id="1016495303386450659">Kohdetta muokattiin</translation>
 <translation id="1033201038396796706">Tumman tilan, virkistystaajuuden tai teeman ongelmat</translation>
 <translation id="1041637248958093184">Yksityisvälilehtiä käytettäessä Vivaldi ei säilytä hakuja, avattuja sivustoja, evästeitä eikä väliaikaistiedostoja.</translation>
+<translation id="104766043551382253">Kuvake</translation>
 <translation id="1062373127858055283">Syötä kuvan verkko-osoite</translation>
 <translation id="1066692930984703744">Ota seuranta- ja mainosesto käyttöön nopeampaa ja turvallisempaa selausta varten</translation>
 <translation id="1116694919640316211">Tietoja</translation>
@@ -46,6 +47,7 @@
 <translation id="1470330357709335121">Vivaldi on hidas tai tahmaa</translation>
 <translation id="1502492982318476895">Synkronointi epäonnistui: <ph name="ERROR_MESSAGE" /></translation>
 <translation id="1521731267649138856">palautussähköpostiosoitteesi.</translation>
+<translation id="1534183273237573805">Valitsemalla jonkin näistä hakukoneista tuet Vivaldin kehitystä.</translation>
 <translation id="1535446875484049224">Tumma tila häiriöi tai ei näytä olevan kunnossa</translation>
 <translation id="1567659716528258242">Vivaldi saa laitteen lämpenemään</translation>
 <translation id="156793582229023040">Jäljitys tai tiedonkeruu huolestuttavat</translation>
@@ -88,16 +90,17 @@
 <translation id="2034405583989639424">Muokkaa pikavalintoja</translation>
 <translation id="2048247880942380698">Arabia (<ph name="ORIGIN" />)</translation>
 <translation id="2079545284768500474">Kumoa</translation>
-<translation id="2129408066358825297">Ikä</translation>
+<translation id="2138901399878617625">Istuta puita etsimällä</translation>
 <translation id="2148384276939959392">Synkronoi valitut</translation>
 <translation id="2195713384412091023">Tämä poistaa kaikki synkronointitiedot palvelimeltamme, tyhjentää salaussalasanasi ja kirjaa sinut ulos.</translation>
 <translation id="2228584369802328636">Pelit</translation>
+<translation id="2240680014596059312">Yksityinen. Nopea. Vähemmän mainoksia.</translation>
 <translation id="2243210264130642074">Muistiinpano tallennettiin</translation>
 <translation id="2272338747456392228">Tili on lukittu</translation>
 <translation id="2273327106802955778">Lisää-valikko</translation>
 <translation id="2283599456633275070">Matkailu</translation>
 <translation id="2324160330092901720">Vaihvistuskoodi lähetettiin osoitteeseen <ph name="EMAIL_ID" /></translation>
-<translation id="2324257568471626606">Lisää uusi hakukone</translation>
+<translation id="2326657631721795616">Voit edelleen tukea Vivaldia yksinkertaisesti valitsemalla yksityisyyspainotteisen, riippumattoman hakukoneen:</translation>
 <translation id="2330644510603114741">Välilehtien käyttäytyminen</translation>
 <translation id="233493642829799329">Tämän muuttuessa osa välilehdistä saatetaan ladata uudestaan</translation>
 <translation id="2336309953058658733">Tyhjennä roskakori</translation>
@@ -118,7 +121,6 @@
 <translation id="2563886993995570961">Sarakemäärä</translation>
 <translation id="257674075312929031">Ryhmä</translation>
 <translation id="2577446409661931381">Uusi muistiinpano</translation>
-<translation id="2578190116190373975">Jatka hakukoneella <ph name="OLD_SEARCH_ENGINE" /></translation>
 <translation id="2590350610957954839">Viimeksi käyty ryhmä</translation>
 <translation id="261264557609353020">Aloitussivu</translation>
 <translation id="2619628557366098325">Portugali (<ph name="ORIGIN" />)</translation>
@@ -128,7 +130,6 @@
 <translation id="2677862276555105603">Mainos
 estetty</translation>
 <translation id="2678542925523700624">Viro (<ph name="ORIGIN" />)</translation>
-<translation id="2697254781659515880">Tukeaksemme Vivaldin kehitystä, me ja <ph name="NEW_SEARCH_ENGINE" /> olemme sopineet sen käyttämisestä uutena oletushakukoneenasi.</translation>
 <translation id="2701366016894985129">Mainokset hakutuloksissa</translation>
 <translation id="2702801445560668637">Lukulista</translation>
 <translation id="2709516037105925701">Automaattinen täyttö</translation>
@@ -175,9 +176,9 @@ estetty</translation>
 <translation id="3270894089048358271">Aseta Vivaldi oletusselaimeksi</translation>
 <translation id="3270930591809084274">Synkronoidut välilehdet</translation>
 <translation id="3285898158753554866">Kopioi käännös</translation>
+<translation id="3288330578370776290">Avaa sivut ensisijaisesti selaimessa ulkoisten sovellusten sijaan.</translation>
 <translation id="3335772982573114336">Uusi muistiinpano</translation>
 <translation id="33451081266695216">Palvelin rajoittaa yYteyttä.</translation>
-<translation id="3346386541263128307">Sähköpostiosoitteiden on täsmättävä.</translation>
 <translation id="3363375699928395745">Anna otsikko</translation>
 <translation id="3365991203476235715">Englanti (<ph name="ORIGIN" />)</translation>
 <translation id="3368960138304620657">Liettua (<ph name="ORIGIN" />)</translation>
@@ -211,7 +212,6 @@ estetty</translation>
 <translation id="373855430416507951">Etsi sivulta</translation>
 <translation id="3745190878148784130">Piilota ”Suurenna tekstiä”</translation>
 <translation id="3766350025418769949">Voit käyttää Vivaldin Salasanahallintaan tallennettujan käyttäjätietoja myös muissa iPadisi sovelluksissa.</translation>
-<translation id="3782426324365706059">Käytä hakua <ph name="NEW_SEARCH_ENGINE" /></translation>
 <translation id="3815158430926662417">Kirjautuminen Vivaldin synkronointitilille ei onnistu</translation>
 <translation id="3817539520771282781">Tyyppi</translation>
 <translation id="383723620494271391">Mitä muuta haluaisit lisätä?</translation>
@@ -226,7 +226,6 @@ estetty</translation>
 <translation id="3897092660631435901">Valikko</translation>
 <translation id="3920366244737784074">Lisää <ph name="ITEM_TYPE" /></translation>
 <translation id="3921585859122905677">Osoitepalkin sijainti</translation>
-<translation id="3925725503020335904">Tukeaksemme Vivaldin kehitystä me ja <ph name="NEW_SEARCH_ENGINE_1" /> olemme tehneet sopimuksen, jonka johdosta se on asetettu uudeksi oletushakukoneeksesi. <ph name="NEW_SEARCH_ENGINE_2" /> on yksityinen hakukone, josta pidämme ja toivottavasti sinäkin pidät.</translation>
 <translation id="3934481038955624945">Palauta kaikki</translation>
 <translation id="3953599441418463312">Japani (<ph name="ORIGIN" />)</translation>
 <translation id="395506590020066151">Seuranta estetty</translation>
@@ -254,6 +253,7 @@ estetty</translation>
 <translation id="4152011295694446843">Löydät kirjanmerkkisi täältä</translation>
 <translation id="4152623049003960417">Seurannan tiedot</translation>
 <translation id="4176463684765177261">Poistettu käytöstä</translation>
+<translation id="4181792832006033883">Vivaldi toimii käyttäjien voimalla, ei digijättien tai sijoittajien. Jokainen lahjoitus tukee suoraan missiotamme avoimen ja yksityisen verkon puolesta. Osallistu muutokseen.</translation>
 <translation id="4184746246941929945">Vivaldi ja <ph name="PARTNER_NAME" /> ovat sopineet, ettei tämän sivun mainoksia estetä. Nämä mainokset auttavat rahoittamaan Vivaldin kehitystä.</translation>
 <translation id="4193549853510262477">Tunnistettu automaattisesti</translation>
 <translation id="4209092469652827314">Suuri</translation>
@@ -270,6 +270,7 @@ estetty</translation>
 <translation id="4316955624679873896">Lisättiin kirjanmerkkikansioon</translation>
 <translation id="432696242656678770">Venäjä (<ph name="ORIGIN" />)</translation>
 <translation id="4350751486125178847">Espanja (<ph name="ORIGIN" />)</translation>
+<translation id="4354058221156080376">Tue meitä paremman verkon puolesta</translation>
 <translation id="4376661454588260127">Vietnam (<ph name="ORIGIN" />)</translation>
 <translation id="4380745054983890306">Toivoisin voivani tallentaa sivuja PDF:iksi</translation>
 <translation id="4394049700291259645">Poista käytöstä</translation>
@@ -280,6 +281,7 @@ estetty</translation>
 <translation id="445620040230332178">Välilehden tyyli</translation>
 <translation id="4461652107878667683">Navigointi seuraavaan</translation>
 <translation id="4474581062946673155">Muilta laitteiltasi synkronoituja välilehtiä ei tällä hetkellä ole.</translation>
+<translation id="4478475525737953027">Tiukka estäminen</translation>
 <translation id="4488900295693536220">Käytettävissä osoitepalkin ollessa alhaalla. Helpottaa parhaiden ehdotusten käyttöä.</translation>
 <translation id="4497115807425788318">Sijainti</translation>
 <translation id="4507213865286211606">Koon esikatselu</translation>
@@ -288,6 +290,7 @@ estetty</translation>
 <translation id="4525945044609022380">Tämä sähköpostiosoite on jo liitetty toiseen tiliin.</translation>
 <translation id="4526803704855831732">Yksityisvälilehdet</translation>
 <translation id="4542001945479572846">Jokin muu</translation>
+<translation id="4548278119881373657">Vahvista valinta</translation>
 <translation id="4553717494760925411">Navigointi edelliseen</translation>
 <translation id="4563480492836333884">Sähköpostiosoite ei kelpaa. Käytä eri verkkotunnusta.</translation>
 <translation id="457386861538956877">Lisää...</translation>
@@ -342,6 +345,7 @@ estetty</translation>
 <translation id="5094376253685335202">Ota synkronointi käyttöön</translation>
 <translation id="5116316489033177455">Synkronoi kirjanmerkit ja pikavalinnat</translation>
 <translation id="5122095890854520072">Latvia (<ph name="ORIGIN" />)</translation>
+<translation id="5128025282874907098">100 % lahjoituksistasi käytetään Vivaldin pitkän tähtäimen kehitykseen ja taisteluumme paremman verkon puolesta.</translation>
 <translation id="5153806174841856652">Kirjautuminen epäonnistui</translation>
 <translation id="5160018607418677056"><ph name="BEGIN_LINK" />Lähetä koodi uudelleen<ph name="END_LINK" /></translation>
 <translation id="5166345991950198590">Näytä huippusivut</translation>
@@ -349,7 +353,6 @@ estetty</translation>
 <translation id="5195305454041437917">Näytä X ehdotusten poistamiseksi</translation>
 <translation id="5238642303473095117">Poista tiedot</translation>
 <translation id="5245732982828228444">Löydät muistiinpanosi täältä</translation>
-<translation id="5249199221558969362">Valitse eliniäksi realistinen luku.</translation>
 <translation id="5271549068863921519">Tallenna salasana</translation>
 <translation id="5290452628447338707">Muistiinpanoja ei ole</translation>
 <translation id="5317780077021120954">Tallenna</translation>
@@ -359,6 +362,7 @@ estetty</translation>
 <translation id="535312628536375213">Meillä on sivuston kanssa kumppauus, jonka mukaan hakutulosten mainoksia ei oletuksena estetä. Nämä mainokset tuottavat Vivaldille tuloa, jos käytät niitä.</translation>
 <translation id="5378841821586202982">Roskakori-kansio</translation>
 <translation id="5398772614898833570">Mainosta estetty</translation>
+<translation id="5415265829033764921">Salli estosääntöjen estää tiettyjä sivustoja.</translation>
 <translation id="5421638721143596928">Tietojesi salauksen purku epäonnistui. Kirjaudu uudelleen.</translation>
 <translation id="5439599923922718668">Usein avatut</translation>
 <translation id="5439835075346716808">Rekisteröityminen on tilapäisesti estetty tästä IP-osoitteesta. Yritä myöhemmin uudelleen.</translation>
@@ -408,11 +412,14 @@ Korjaa se astuksista.</translation>
 <translation id="6079696972035130497">Rajaton</translation>
 <translation id="6093557041367452381">Näyttää syöttöhistorian aloitussivun osoitekentän ollessa aktiivinen.</translation>
 <translation id="6110857187283700804">Syötteesi lähetetään hakupalvelulle ehdotusten saamiseksi. Tämä ei ole käytössä yksityisikkunoissa.</translation>
+<translation id="6119047040189002834">Irtaudu vakoilusta ja valitse arvoihisi sopiva hakukone:</translation>
 <translation id="614539368862754027"><ph name="NUMBER_OF_SELECTED_NOTES" /> kohdetta siirrettiin</translation>
 <translation id="6147094071357011481">Hiljattain suljetut välilehdet eivät ole käytettävissä</translation>
+<translation id="6171727814244883097">Helpompi tapa tukea meitä</translation>
 <translation id="6177301865411451337">Vivaldin synkronointipalvelussa saattaa olla ongelmia. Näet palvelun tilan täältä: <ph name="BEGIN_LINK" />VivaldiStatus.com<ph name="END_LINK" /></translation>
 <translation id="6180515952840978051">Sivuston tallentaminen pikavalinnaksi on vaikeaa</translation>
 <translation id="6193995664633100765">Intia (<ph name="ORIGIN" />)</translation>
+<translation id="6209408431919042972">Lahjoita nyt</translation>
 <translation id="6224086034182508647">Verkkosivuston ulkoasuasetukset</translation>
 <translation id="6253990869902066991">Vivaldi virkistää sivuja odottamatta</translation>
 <translation id="6257488392933423163">Näytä HTML-muodossa</translation>
@@ -427,7 +434,6 @@ Korjaa se astuksista.</translation>
 <translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" /> valittu</translation>
 <translation id="6442584491342758233">Paras tulos</translation>
 <translation id="6443682944493983866">Hyväksy kielet</translation>
-<translation id="6468130661190228905">Valitettavasti sinun on odotettava tovi ennen yhteisöömme liittymistä. Edellytämme jäseniltämme vähintään 16 vuoden ikää.</translation>
 <translation id="6487150267908786236"><ph name="BEGIN_LINK" />Tuo<ph name="END_LINK" /></translation>
 <translation id="6517411226162529295">Salauksen vara-avain</translation>
 <translation id="6527303717912515753">Jaa</translation>
@@ -436,6 +442,7 @@ Korjaa se astuksista.</translation>
 <translation id="6544880104552732240">Valitse kohdekieli</translation>
 <translation id="659351303388691480">Tyhjennä selaustiedot...</translation>
 <translation id="6602272356389933803">Ulkoasu ja teema</translation>
+<translation id="6609906162587123522">Älä avaa linkkejä ulkoisiin sovelluksiin</translation>
 <translation id="6614744450826097546">Mainoksen tiedot</translation>
 <translation id="6631760746795162665">Kolumbia (<ph name="ORIGIN" />)</translation>
 <translation id="6639866709520319699">Seurannat ja mainokset estetään. Jotkin sivustot eivät ehkä toimi oikein.</translation>
@@ -545,6 +552,7 @@ Korjaa se astuksista.</translation>
 <translation id="7791543448312431591">Lisää</translation>
 <translation id="7801111502975417831">Haluan toistaa videoita taustalla</translation>
 <translation id="7801204999757211519">Onko sivulla jo tili? <ph name="BEGIN_LINK" />Kirjaudu sisään ➔<ph name="END_LINK" /></translation>
+<translation id="780301667611848630">Ei kiitos</translation>
 <translation id="7850070199083838600">Luodaanko uusi ryhmä?</translation>
 <translation id="7862984977194621600">Käytä hakuehdotuksia</translation>
 <translation id="7870765213383950011">Ensimmäinen ryhmä</translation>
@@ -555,7 +563,6 @@ Korjaa se astuksista.</translation>
 <translation id="7961270736686975887">Vaihda kielet keskenään</translation>
 <translation id="7967161908152532036">Verkkosivuston osoite</translation>
 <translation id="7979036127916589816">Synkronointivirhe</translation>
-<translation id="8008214489230610096">Vahvista palautussähköpostiosoite</translation>
 <translation id="8038592796033755028">Käyttäjän <ph name="USERNAME" /> laitteet</translation>
 <translation id="8041093619605951337">Tyytyväinen</translation>
 <translation id="8046542428651654244">Päivitä pienoiskuva</translation>
@@ -570,9 +577,9 @@ Korjaa se astuksista.</translation>
 <translation id="8131740175452115882">Vahvista</translation>
 <translation id="8134672010161840864">Leikkaa ja kohdista kuva nipistyseleellä</translation>
 <translation id="8142291334394582384">Käänteinen hakuehdotusten järjestys</translation>
-<translation id="8147118677117542370">Ilmoita ikäsi.</translation>
 <translation id="8165573437634525334">Tiedot on suojattu salaussalasanalla</translation>
 <translation id="8237090677709100373">Oma värikoodi</translation>
+<translation id="8255101384731542819">Riippumaton Ranskassa kehitetty haku</translation>
 <translation id="8257908958623224237">Ristiriita toisen päätteen tietojen kanssa.</translation>
 <translation id="8261506727792406068">Poista</translation>
 <translation id="8273666073173891138">Muistiinpano tallennettiin kansioon <ph name="FOLDER_TITLE" /></translation>
@@ -580,6 +587,7 @@ Korjaa se astuksista.</translation>
 <translation id="8284356787013856231">Tiedoston avaukseen ei ole oikeutta</translation>
 <translation id="8289933454364510719">Alhaalla tai ylhäällä</translation>
 <translation id="8304044605002588416">Aloitussivun mukautuspainike</translation>
+<translation id="8304538706952727936">Irtaudu digijäteistä</translation>
 <translation id="8323167517179506834">Syötä URL-osoite</translation>
 <translation id="8326104954595890674">Uusi yksityisvälilehti</translation>
 <translation id="8329813750766387010">Päivitetty: <ph name="DATE" /></translation>
@@ -622,6 +630,7 @@ Korjaa se astuksista.</translation>
 <translation id="8818152010000655963">Tausta</translation>
 <translation id="8819841443522803117">Olisiko aika vaihtaa oletusselaintasi? Valitse Vivaldi.</translation>
 <translation id="8820817407110198400">Kirjanmerkit</translation>
+<translation id="8828442094222036738">Yksityiset Google-tulokset, kehitetty Euroopassa</translation>
 <translation id="8855707633300847215">Näytä välilehtipalkki</translation>
 <translation id="8861211142470908937">Salasanan tulee sisältää vähintään 12 merkkiä</translation>
 <translation id="8892354889971902600">Viimeksi suljetut välilehdet näytetään tässä.</translation>

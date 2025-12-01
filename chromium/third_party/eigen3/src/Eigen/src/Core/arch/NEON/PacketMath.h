@@ -1287,6 +1287,14 @@ template <>
 EIGEN_STRONG_INLINE Packet2f pmadd(const Packet2f& a, const Packet2f& b, const Packet2f& c) {
   return vfma_f32(c, a, b);
 }
+template <>
+EIGEN_STRONG_INLINE Packet4f pnmadd(const Packet4f& a, const Packet4f& b, const Packet4f& c) {
+  return vfmsq_f32(c, a, b);
+}
+template <>
+EIGEN_STRONG_INLINE Packet2f pnmadd(const Packet2f& a, const Packet2f& b, const Packet2f& c) {
+  return vfms_f32(c, a, b);
+}
 #else
 template <>
 EIGEN_STRONG_INLINE Packet4f pmadd(const Packet4f& a, const Packet4f& b, const Packet4f& c) {
@@ -1296,7 +1304,31 @@ template <>
 EIGEN_STRONG_INLINE Packet2f pmadd(const Packet2f& a, const Packet2f& b, const Packet2f& c) {
   return vmla_f32(c, a, b);
 }
+template <>
+EIGEN_STRONG_INLINE Packet4f pnmadd(const Packet4f& a, const Packet4f& b, const Packet4f& c) {
+  return vmlsq_f32(c, a, b);
+}
+template <>
+EIGEN_STRONG_INLINE Packet2f pnmadd(const Packet2f& a, const Packet2f& b, const Packet2f& c) {
+  return vmls_f32(c, a, b);
+}
 #endif
+template <>
+EIGEN_STRONG_INLINE Packet4f pmsub(const Packet4f& a, const Packet4f& b, const Packet4f& c) {
+  return pnegate(pnmadd(a, b, c));
+}
+template <>
+EIGEN_STRONG_INLINE Packet2f pmsub(const Packet2f& a, const Packet2f& b, const Packet2f& c) {
+  return pnegate(pnmadd(a, b, c));
+}
+template <>
+EIGEN_STRONG_INLINE Packet4f pnmsub(const Packet4f& a, const Packet4f& b, const Packet4f& c) {
+  return pnegate(pmadd(a, b, c));
+}
+template <>
+EIGEN_STRONG_INLINE Packet2f pnmsub(const Packet2f& a, const Packet2f& b, const Packet2f& c) {
+  return pnegate(pmadd(a, b, c));
+}
 
 // No FMA instruction for int, so use MLA unconditionally.
 template <>
@@ -5242,13 +5274,28 @@ template <>
 EIGEN_STRONG_INLINE Packet2d pmadd(const Packet2d& a, const Packet2d& b, const Packet2d& c) {
   return vfmaq_f64(c, a, b);
 }
+template <>
+EIGEN_STRONG_INLINE Packet2d pnmadd(const Packet2d& a, const Packet2d& b, const Packet2d& c) {
+  return vfmsq_f64(c, a, b);
+}
 #else
 template <>
 EIGEN_STRONG_INLINE Packet2d pmadd(const Packet2d& a, const Packet2d& b, const Packet2d& c) {
   return vmlaq_f64(c, a, b);
 }
+template <>
+EIGEN_STRONG_INLINE Packet2d pnmadd(const Packet2d& a, const Packet2d& b, const Packet2d& c) {
+  return vmlsq_f64(c, a, b);
+}
 #endif
-
+template <>
+EIGEN_STRONG_INLINE Packet2d pmsub(const Packet2d& a, const Packet2d& b, const Packet2d& c) {
+  return pnegate(pnmadd(a, b, c));
+}
+template <>
+EIGEN_STRONG_INLINE Packet2d pnmsub(const Packet2d& a, const Packet2d& b, const Packet2d& c) {
+  return pnegate(pmadd(a, b, c));
+}
 template <>
 EIGEN_STRONG_INLINE Packet2d pmin<Packet2d>(const Packet2d& a, const Packet2d& b) {
   return vminq_f64(a, b);
@@ -5657,18 +5704,33 @@ EIGEN_STRONG_INLINE Packet4hf pmadd(const Packet4hf& a, const Packet4hf& b, cons
 }
 
 template <>
-EIGEN_STRONG_INLINE Packet8hf pmsub(const Packet8hf& a, const Packet8hf& b, const Packet8hf& c) {
-  return vfmaq_f16(pnegate(c), a, b);
+EIGEN_STRONG_INLINE Packet8hf pnmadd(const Packet8hf& a, const Packet8hf& b, const Packet8hf& c) {
+  return vfmsq_f16(c, a, b);
 }
 
 template <>
 EIGEN_STRONG_INLINE Packet4hf pnmadd(const Packet4hf& a, const Packet4hf& b, const Packet4hf& c) {
-  return vfma_f16(c, pnegate(a), b);
+  return vfms_f16(c, a, b);
+}
+
+template <>
+EIGEN_STRONG_INLINE Packet8hf pmsub(const Packet8hf& a, const Packet8hf& b, const Packet8hf& c) {
+  return pnegate(pnmadd(a, b, c));
+}
+
+template <>
+EIGEN_STRONG_INLINE Packet4hf pmsub(const Packet4hf& a, const Packet4hf& b, const Packet4hf& c) {
+  return pnegate(pnmadd(a, b, c));
+}
+
+template <>
+EIGEN_STRONG_INLINE Packet8hf pnmsub(const Packet8hf& a, const Packet8hf& b, const Packet8hf& c) {
+  return pnegate(pmadd(a, b, c));
 }
 
 template <>
 EIGEN_STRONG_INLINE Packet4hf pnmsub(const Packet4hf& a, const Packet4hf& b, const Packet4hf& c) {
-  return vfma_f16(pnegate(c), pnegate(a), b);
+  return pnegate(pmadd(a, b, c));
 }
 
 template <>

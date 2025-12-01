@@ -7,7 +7,7 @@
 #include "build/build_config.h"
 
 #if BUILDFLAG(IS_ANDROID)
-#include "base/android/pre_freeze_background_memory_trimmer.h"
+#include "base/android/self_compaction_manager.h"
 #endif
 #include "base/feature_list.h"
 #include "base/memory/memory_pressure_listener.h"
@@ -28,7 +28,7 @@ BASE_FEATURE(kMemoryPurgeInBackground,
              "MemoryPurgeInBackground",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-// The time of first purging after a renderer is backgrounded. The value was
+// The delay for the first purge after a renderer is backgrounded. The value was
 // initially set to 30 minutes, but it was reduced to 1 minute because this
 // reduced the memory usage of a renderer 15 minutes after it was backgrounded.
 //
@@ -89,9 +89,7 @@ void MemoryPurgeManager::OnPageFrozen(
   if (CanPurge()) {
     if (called_from == base::MemoryReductionTaskContext::kProactive) {
       PerformMemoryPurge();
-    } else if (!did_purge_with_page_frozen_since_backgrounded_ ||
-               !base::FeatureList::IsEnabled(
-                   features::kMemoryPurgeOnFreezeLimit)) {
+    } else {
       RequestMemoryPurgeWithDelay(kFreezePurgeDelay);
     }
   }
@@ -110,11 +108,11 @@ void MemoryPurgeManager::OnPageResumed() {
 
   base::MemoryPressureListener::SetNotificationsSuppressed(false);
 #if BUILDFLAG(IS_ANDROID)
-  // Cancel a pending compaction, since we are resuming now, and will
-  // presumably touch most of that memory soon.
-  base::android::PreFreezeBackgroundMemoryTrimmer::MaybeCancelCompaction(
-      base::android::PreFreezeBackgroundMemoryTrimmer::
-          CompactCancellationReason::kPageResumed);
+  // Cancel a pending compaction, since the page is now active and its memory
+  // will likely be accessed soon.
+  base::android::SelfCompactionManager::MaybeCancelCompaction(
+      base::android::SelfCompactionManager::CompactCancellationReason::
+          kPageResumed);
 #endif
 }
 
@@ -128,12 +126,11 @@ void MemoryPurgeManager::SetRendererBackgrounded(bool backgrounded) {
 }
 
 void MemoryPurgeManager::OnRendererBackgrounded() {
-  if (!kPurgeEnabled || purge_disabled_for_testing_) {
+  if (!kPurgeOnBackgroundingEnabled || purge_disabled_for_testing_) {
     return;
   }
 
-  // A spare renderer has no pages. We would like to avoid purging memory
-  // on a spare renderer.
+  // Do not purge memory on an empty renderer (e.g. spare renderer).
   if (total_page_count_ == 0) {
     return;
   }
@@ -166,13 +163,28 @@ void MemoryPurgeManager::PerformMemoryPurge() {
   TRACE_EVENT0("blink", "MemoryPurgeManager::PerformMemoryPurge()");
   DCHECK(CanPurge());
 
-  base::MemoryPressureListener::NotifyMemoryPressure(
-      base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_CRITICAL);
+  // Don't purge if "purge on freeze" is disabled and this is not a
+  // "backgrounded purge".
+  const bool purge_inhibited_because_purge_on_freeze_disabled =
+      !backgrounded_purge_pending_ &&
+      !base::FeatureList::IsEnabled(features::kMemoryPurgeOnFreeze);
+
+  // Don't purge if not the first purge with a frozen page in the current
+  // background session, and we have a limit of purges with a frozen page.
+  const bool purge_inhibited_because_already_purged_with_frozen_page =
+      did_purge_with_page_frozen_since_backgrounded_ &&
+      base::FeatureList::IsEnabled(features::kMemoryPurgeOnFreezeLimit);
+
+  if (!purge_inhibited_because_purge_on_freeze_disabled &&
+      !purge_inhibited_because_already_purged_with_frozen_page) {
+    base::MemoryPressureListener::NotifyMemoryPressure(
+        base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_CRITICAL);
+  }
 
   if (AreAllPagesFrozen()) {
     base::MemoryPressureListener::SetNotificationsSuppressed(true);
 #if BUILDFLAG(IS_ANDROID)
-    base::android::PreFreezeBackgroundMemoryTrimmer::OnRunningCompact();
+    base::android::SelfCompactionManager::OnRunningCompact();
 #endif
   }
 
@@ -209,8 +221,7 @@ bool MemoryPurgeManager::CanPurge() const {
 void MemoryPurgeManager::MaybeRunAllPagesFrozenCallback(bool were_all_frozen) {
 #if BUILDFLAG(IS_ANDROID)
   const bool are_all_frozen = AreAllPagesFrozen();
-  // We check for a change in the "all pages frozen" vs "not all pages frozen"
-  // state here, then run the callback with the current state if we changed.
+  // Run the callback if the "all pages frozen" state changed.
   if (were_all_frozen != are_all_frozen && all_pages_frozen_callback_) {
     all_pages_frozen_callback_.Run(are_all_frozen);
   }

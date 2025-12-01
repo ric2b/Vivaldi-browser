@@ -10,7 +10,6 @@ import * as Trace from '../../../../models/trace/trace.js';
 import * as Buttons from '../../../../ui/components/buttons/buttons.js';
 import * as Lit from '../../../../ui/lit/lit.js';
 import * as VisualLogging from '../../../../ui/visual_logging/visual_logging.js';
-import type * as Overlays from '../../overlays/overlays.js';
 import * as Utils from '../../utils/utils.js';
 
 import {BaseInsightComponent} from './BaseInsightComponent.js';
@@ -34,6 +33,10 @@ export class DuplicatedJavaScript extends BaseInsightComponent<DuplicatedJavaScr
     return this.model.scripts.some(script => !!script.url);
   }
 
+  protected override hasAskAiSupport(): boolean {
+    return true;
+  }
+
   #openTreemap(): void {
     if (!this.model) {
       return;
@@ -49,21 +52,6 @@ export class DuplicatedJavaScript extends BaseInsightComponent<DuplicatedJavaScr
 
   override getEstimatedSavingsTime(): Trace.Types.Timing.Milli|null {
     return this.model?.metricSavings?.FCP ?? null;
-  }
-
-  override createOverlays(): Overlays.Overlays.TimelineOverlay[] {
-    if (!this.model) {
-      return [];
-    }
-
-    const requests = this.model.scriptsWithDuplication.map(script => script.request).filter(e => !!e);
-    return requests.map(request => {
-      return {
-        type: 'ENTRY_OUTLINE',
-        entry: request,
-        outlineReason: 'ERROR',
-      };
-    });
   }
 
   override renderContent(): Lit.LitTemplate {
@@ -86,7 +74,7 @@ export class DuplicatedJavaScript extends BaseInsightComponent<DuplicatedJavaScr
             values: [source, i18n.ByteUtilities.bytesToString(data.estimatedDuplicateBytes)],
             overlays: [...scriptToOverlay.values()],
             subRows: data.duplicates.map(({script, attributedSize}, index) => {
-              let overlays: Overlays.Overlays.TimelineOverlay[]|undefined;
+              let overlays: Trace.Types.Overlays.Overlay[]|undefined;
               const overlay = scriptToOverlay.get(script);
               if (overlay) {
                 overlays = [overlay];

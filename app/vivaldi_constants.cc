@@ -36,6 +36,8 @@ const char kVivaldiNewTabURL[] = "chrome://vivaldi-webui/startpage";
 
 const char kVivaldiCrashStartPageURL[] = "chrome-extension://" VIVALDI_APP_ID
                                "/components/session-recovery/session-recovery.html";
+const char kVivaldiUIWindowURL[] =
+    "chrome-extension://" VIVALDI_APP_ID "/window.html";
 
 // Error message reported to extensions trying to use Vivaldi reserved APIs
 const char kVivaldiReservedApiError[] =

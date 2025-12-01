@@ -37,12 +37,14 @@
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/storage_partition.h"
 #include "ui/lazy_load_service.h"
+#include "ui/vivaldi_browser_ui_data.h"
 #include "ui/vivaldi_browser_window.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "components/tabs/tab_helpers.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #endif
+
 
 using content::NavigationEntry;
 using sessions::ContentSerializedNavigationBuilder;
@@ -509,9 +511,11 @@ void VivaldiSessionService::BuildCommandsForBrowser(
     ScheduleCommand(sessions::CreateSetWindowAppNameCommand(
         browser->session_id(), browser->app_name()));
   }
-  if (!browser->viv_ext_data().empty()) {
+  vivaldi::VivaldiBrowserUiData* browser_ui_data =
+      vivaldi::VivaldiBrowserUiData::From(browser);
+  if (browser_ui_data && !browser_ui_data->viv_ext_data().empty()) {
     ScheduleCommand(sessions::CreateSetWindowVivExtDataCommand(
-        browser->session_id(), browser->viv_ext_data()));
+        browser->session_id(), browser_ui_data->viv_ext_data()));
   }
 
   BuildCommandsForTabs(browser, ids);
@@ -682,9 +686,10 @@ void VivaldiSessionService::RestoreTabsToBrowser(
         continue;
 
       std::optional<tab_groups::TabGroupId> group;
+      std::optional<split_tabs::SplitTabId> split;
       SessionRestoreDelegate::RestoredTab restored_tab(
           contents, is_selected_tab, tab.extension_app_id.empty(), tab.pinned,
-          group);
+          group, split);
       created_contents->push_back(restored_tab);
 
       // If this isn't the selected tab, there's nothing else to do.
@@ -710,9 +715,11 @@ void VivaldiSessionService::RestoreTabsToBrowser(
           RestoreTab(tab, tab_index_offset + i, browser, false);
       if (contents) {
         std::optional<tab_groups::TabGroupId> group;
+        std::optional<split_tabs::SplitTabId> split;
         // Sanitize the last active time.
         SessionRestoreDelegate::RestoredTab restored_tab(
-            contents, false, tab.extension_app_id.empty(), tab.pinned, group);
+            contents, false, tab.extension_app_id.empty(), tab.pinned, group,
+            split);
         created_contents->push_back(restored_tab);
         num_restored ++;
       }
@@ -877,7 +884,11 @@ Browser* VivaldiSessionService::ProcessSessionWindows(
     if ((*i)->window_id == active_window_id) {
       browser_to_activate = browser;
     }
-    browser->set_viv_ext_data((*i)->viv_ext_data);
+
+    vivaldi::VivaldiBrowserUiData* browser_ui_data =
+        vivaldi::VivaldiBrowserUiData::From(
+        browser);
+    browser_ui_data->set_viv_ext_data((*i)->viv_ext_data);
 
     RestoreTabsToBrowser(*(*i), browser, initial_tab_count, selected_tab_index,
                          created_contents);

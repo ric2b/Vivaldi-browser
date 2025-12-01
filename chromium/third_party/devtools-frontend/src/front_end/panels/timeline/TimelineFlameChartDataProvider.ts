@@ -32,8 +32,8 @@
 import * as Common from '../../core/common/common.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import * as Root from '../../core/root/root.js';
-import * as Bindings from '../../models/bindings/bindings.js';
 import * as Trace from '../../models/trace/trace.js';
+import * as Workspace from '../../models/workspace/workspace.js';
 import * as PerfUI from '../../ui/legacy/components/perf_ui/perf_ui.js';
 import * as UI from '../../ui/legacy/legacy.js';
 import * as ThemeSupport from '../../ui/legacy/theme_support/theme_support.js';
@@ -50,6 +50,7 @@ import {
   selectionsEqual,
   type TimelineSelection,
 } from './TimelineSelection.js';
+import {buildPersistedConfig, keyForTraceConfig} from './TrackConfiguration.js';
 import * as Utils from './utils/utils.js';
 
 const UIStrings = {
@@ -101,6 +102,26 @@ const UIStrings = {
    *@description Text for an action that shows all of the hidden entries of the Flame Chart
    */
   resetTrace: 'Reset trace',
+  /**
+   *@description Text of a context menu item to redirect to the AI assistance panel and to start a chat.
+   */
+  startAChat: 'Start a chat',
+  /**
+   *@description Context menu item in Performance panel to label an entry.
+   */
+  labelEntry: 'Label entry',
+  /**
+   *@description Context menu item in Performance panel to assess the purpose of an entry via AI.
+   */
+  assessThePurpose: 'Assess the purpose',
+  /**
+   *@description Context menu item in Performance panel to identify time spent in a call tree via AI.
+   */
+  identifyTimeSpent: 'Identify time spent',
+  /**
+   *@description Context menu item in Performance panel to find improvements for a call tree via AI.
+   */
+  findImprovements: 'Find improvements',
 } as const;
 const str_ = i18n.i18n.registerUIStrings('panels/timeline/TimelineFlameChartDataProvider.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
@@ -146,6 +167,7 @@ export class TimelineFlameChartDataProvider extends Common.ObjectWrapper.ObjectW
    * have to recalculate. This is reset when the trace changes.
    */
   #initiatorsCache = new Map<number, PerfUI.FlameChart.FlameChartInitiatorData[]>();
+  #persistedGroupConfigSetting: Common.Settings.Setting<PerfUI.FlameChart.PersistedConfigPerTrace>|null = null;
 
   constructor() {
     super();
@@ -186,6 +208,25 @@ export class TimelineFlameChartDataProvider extends Common.ObjectWrapper.ObjectW
     Common.Settings.Settings.instance()
         .moduleSetting('skip-anonymous-scripts')
         .addChangeListener(this.#onIgnoreListChanged.bind(this));
+  }
+
+  handleTrackConfigurationChange(groups: readonly PerfUI.FlameChart.Group[], indexesInVisualOrder: number[]): void {
+    if (!this.#persistedGroupConfigSetting) {
+      return;
+    }
+    if (!this.parsedTrace) {
+      return;
+    }
+    const persistedDataForTrace = buildPersistedConfig(groups, indexesInVisualOrder);
+    const traceKey = keyForTraceConfig(this.parsedTrace);
+
+    const setting = this.#persistedGroupConfigSetting.get();
+    setting[traceKey] = persistedDataForTrace;
+    this.#persistedGroupConfigSetting.set(setting);
+  }
+
+  setPersistedGroupConfigSetting(setting: Common.Settings.Setting<PerfUI.FlameChart.PersistedConfigPerTrace>): void {
+    this.#persistedGroupConfigSetting = setting;
   }
 
   hasTrackConfigurationMode(): boolean {
@@ -237,15 +278,44 @@ export class TimelineFlameChartDataProvider extends Common.ObjectWrapper.ObjectW
       const aiCallTree = Utils.AICallTree.AICallTree.fromEvent(entry, this.parsedTrace);
       if (aiCallTree) {
         const action = UI.ActionRegistry.ActionRegistry.instance().getAction(PERF_AI_ACTION_ID);
-        contextMenu.footerSection().appendItem(action.title(), () => {
-          const event = this.eventByIndex(entryIndex);
-          if (!event || !this.parsedTrace) {
-            return;
+        // The other side of setFlavor is handleTraceEntryNodeFlavorChange() in FreestylerPanel
+        const context = Utils.AIContext.AgentFocus.fromCallTree(aiCallTree);
+        UI.Context.Context.instance().setFlavor(Utils.AIContext.AgentFocus, context);
+
+        if (Root.Runtime.hostConfig.devToolsAiSubmenuPrompts?.enabled) {
+          function appendSubmenuPromptAction(
+              submenu: UI.ContextMenu.SubMenu, action: UI.ActionRegistration.Action,
+              label: Common.UIString.LocalizedString, prompt: string, jslogContext: string): void {
+            submenu.defaultSection().appendItem(
+                label, () => action.execute({prompt}), {disabled: !action.enabled(), jslogContext});
           }
-          // The other side of setFlavor is handleTraceEntryNodeFlavorChange() in FreestylerPanel
-          UI.Context.Context.instance().setFlavor(Utils.AICallTree.AICallTree, aiCallTree);
-          return action.execute();
-        }, {jslogContext: PERF_AI_ACTION_ID});
+
+          const submenu = contextMenu.footerSection().appendSubMenuItem(
+              action.title(), false, PERF_AI_ACTION_ID,
+              Root.Runtime.hostConfig.devToolsAiAssistancePerformanceAgent?.featureName);
+          submenu.defaultSection().appendAction(PERF_AI_ACTION_ID, i18nString(UIStrings.startAChat));
+          submenu.defaultSection().appendItem(i18nString(UIStrings.labelEntry), () => {
+            this.dispatchEventToListeners(
+                Events.ENTRY_LABEL_ANNOTATION_ADDED, {entryIndex, withLinkCreationButton: false});
+          }, {
+            jslogContext: 'timeline.annotations.create-entry-label',
+          });
+          appendSubmenuPromptAction(
+              submenu, action, i18nString(UIStrings.assessThePurpose), 'What\'s the purpose of this entry?',
+              PERF_AI_ACTION_ID + '.purpose');
+          appendSubmenuPromptAction(
+              submenu, action, i18nString(UIStrings.identifyTimeSpent),
+              'Where is most time being spent in this call tree?', PERF_AI_ACTION_ID + '.time-spent');
+          appendSubmenuPromptAction(
+              submenu, action, i18nString(UIStrings.findImprovements), 'How can I reduce the time of this call tree?',
+              PERF_AI_ACTION_ID + '.improvements');
+        } else if (Root.Runtime.hostConfig.devToolsAiDebugWithAi?.enabled) {
+          contextMenu.footerSection().appendAction(
+              PERF_AI_ACTION_ID, undefined, false, undefined,
+              Root.Runtime.hostConfig.devToolsAiAssistancePerformanceAgent?.featureName);
+        } else {
+          contextMenu.footerSection().appendAction(PERF_AI_ACTION_ID);
+        }
       }
     }
 
@@ -311,14 +381,14 @@ export class TimelineFlameChartDataProvider extends Common.ObjectWrapper.ObjectW
     }
     if (Utils.IgnoreList.isIgnoreListedEntry(entry)) {
       contextMenu.defaultSection().appendItem(i18nString(UIStrings.removeScriptFromIgnoreList), () => {
-        Bindings.IgnoreListManager.IgnoreListManager.instance().unIgnoreListURL(url);
+        Workspace.IgnoreListManager.IgnoreListManager.instance().unIgnoreListURL(url);
         this.#onIgnoreListChanged();
       }, {
         jslogContext: 'remove-from-ignore-list',
       });
     } else {
       contextMenu.defaultSection().appendItem(i18nString(UIStrings.addScriptToIgnoreList), () => {
-        Bindings.IgnoreListManager.IgnoreListManager.instance().ignoreListURL(url);
+        Workspace.IgnoreListManager.IgnoreListManager.instance().ignoreListURL(url);
         this.#onIgnoreListChanged();
       }, {
         jslogContext: 'add-to-ignore-list',
@@ -331,23 +401,6 @@ export class TimelineFlameChartDataProvider extends Common.ObjectWrapper.ObjectW
   #onIgnoreListChanged(): void {
     this.timelineData(/* rebuild= */ true);
     this.dispatchEventToListeners(Events.DATA_CHANGED);
-  }
-
-  entryHasAnnotations(entryIndex: number): boolean {
-    const event = this.eventByIndex(entryIndex);
-    if (!event) {
-      return false;
-    }
-    const annotations = ModificationsManager.activeManager()?.annotationsForEntry(event);
-    return annotations ? annotations.length > 0 : false;
-  }
-
-  deleteAnnotationsForEntry(entryIndex: number): void {
-    const event = this.eventByIndex(entryIndex);
-    if (!event) {
-      return;
-    }
-    ModificationsManager.activeManager()?.deleteEntryAnnotations(event);
   }
 
   modifyTree(action: PerfUI.FlameChart.FilterAction, entryIndex: number): void {
@@ -538,6 +591,7 @@ export class TimelineFlameChartDataProvider extends Common.ObjectWrapper.ObjectW
           threadAppender => threadAppender.setHeaderAppended(false));
     }
   }
+
   /**
    * Reset all data other than the UI elements.
    * This should be called when
@@ -590,6 +644,9 @@ export class TimelineFlameChartDataProvider extends Common.ObjectWrapper.ObjectW
 
     if (this.parsedTrace) {
       this.compatibilityTracksAppender = this.compatibilityTracksAppenderInstance();
+      // Note for readers: NodeJS CpuProfiles are purposefully NOT generic.
+      // We wrap them in a `TracingStartedInPage` event, which causes them to
+      // be treated like "real" Chrome traces. This is by design!
       if (this.parsedTrace.Meta.traceIsGeneric) {
         this.#processGenericTrace();
       } else {
@@ -599,10 +656,6 @@ export class TimelineFlameChartDataProvider extends Common.ObjectWrapper.ObjectW
     return this.timelineDataInternal;
   }
 
-  /**
-   * Register the groups (aka tracks) with the VisualElements framework so
-   * later on we can log when an entry inside this group is selected.
-   */
   #processGenericTrace(): void {
     if (!this.compatibilityTracksAppender) {
       return;
@@ -1091,7 +1144,7 @@ export class TimelineFlameChartDataProvider extends Common.ObjectWrapper.ObjectW
       context.lineTo(end, y);
     }
 
-    // The left whisker starts at the enty timestamp, and continues until the start of the box (processingStart).
+    // The left whisker starts at the entry timestamp, and continues until the start of the box (processingStart).
     const leftWhiskerX = timeToPixel(entry.ts);
     // The right whisker ends at (entry.ts + entry.dur). We draw the line from the end of the box (processingEnd).
     const rightWhiskerX = timeToPixel(Trace.Types.Timing.Micro(entry.ts + entry.dur));
@@ -1213,7 +1266,7 @@ export class TimelineFlameChartDataProvider extends Common.ObjectWrapper.ObjectW
     // If the index is -1 and the selection is a TraceEvent, it might be
     // the case that this Entry is hidden by the Context Menu action.
     // Try revealing the entry and getting the index again.
-    if (index > -1) {
+    if (index === -1) {
       if (this.timelineDataInternal?.selectedGroup) {
         ModificationsManager.activeManager()?.getEntriesFilter().revealEntry(selection.event);
         this.timelineData(true);
@@ -1362,11 +1415,16 @@ export const InstantEventVisibleDurationMs = Trace.Types.Timing.Milli(0.001);
 export const enum Events {
   DATA_CHANGED = 'DataChanged',
   FLAME_CHART_ITEM_HOVERED = 'FlameChartItemHovered',
+  ENTRY_LABEL_ANNOTATION_ADDED = 'EntryLabelAnnotationAdded'
 }
 
 export interface EventTypes {
   [Events.DATA_CHANGED]: void;
   [Events.FLAME_CHART_ITEM_HOVERED]: Trace.Types.Events.Event|null;
+  [Events.ENTRY_LABEL_ANNOTATION_ADDED]: {
+    entryIndex: number,
+    withLinkCreationButton: boolean,
+  };
 }
 
 // an entry is a trace event, they are classified into "entry types"

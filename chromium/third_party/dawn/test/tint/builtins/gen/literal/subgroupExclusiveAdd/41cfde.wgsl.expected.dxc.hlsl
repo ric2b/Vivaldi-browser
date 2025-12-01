@@ -1,8 +1,8 @@
 //
 // fragment_main
 //
-RWByteAddressBuffer prevent_dce : register(u0);
 
+RWByteAddressBuffer prevent_dce : register(u0);
 float3 subgroupExclusiveAdd_41cfde() {
   float3 res = WavePrefixSum((1.0f).xxx);
   return res;
@@ -10,13 +10,13 @@ float3 subgroupExclusiveAdd_41cfde() {
 
 void fragment_main() {
   prevent_dce.Store3(0u, asuint(subgroupExclusiveAdd_41cfde()));
-  return;
 }
+
 //
 // compute_main
 //
-RWByteAddressBuffer prevent_dce : register(u0);
 
+RWByteAddressBuffer prevent_dce : register(u0);
 float3 subgroupExclusiveAdd_41cfde() {
   float3 res = WavePrefixSum((1.0f).xxx);
   return res;
@@ -25,5 +25,5 @@ float3 subgroupExclusiveAdd_41cfde() {
 [numthreads(1, 1, 1)]
 void compute_main() {
   prevent_dce.Store3(0u, asuint(subgroupExclusiveAdd_41cfde()));
-  return;
 }
+

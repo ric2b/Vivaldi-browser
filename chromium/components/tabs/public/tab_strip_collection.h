@@ -7,12 +7,16 @@
 
 #include <memory>
 #include <optional>
+#include <set>
 #include <unordered_map>
 
+#include "base/types/pass_key.h"
 #include "components/tab_groups/tab_group_id.h"
 #include "components/tabs/public/split_tab_data.h"
 #include "components/tabs/public/split_tab_id.h"
 #include "components/tabs/public/tab_collection.h"
+
+class TabStripModel;
 
 namespace tabs {
 
@@ -55,10 +59,12 @@ class TabStripCollection : public TabCollection {
                         size_t final_index,
                         std::optional<tab_groups::TabGroupId> new_group_id,
                         bool new_pinned_state);
-  void MoveTabsRecursive(const std::vector<int>& tab_indices,
-                         size_t destination_index,
-                         std::optional<tab_groups::TabGroupId> new_group_id,
-                         bool new_pinned_state);
+  void MoveTabsRecursive(
+      const std::vector<int>& tab_indices,
+      size_t destination_index,
+      std::optional<tab_groups::TabGroupId> new_group_id,
+      bool new_pinned_state,
+      const std::set<TabCollection::Type>& retain_collection_types);
 
   // Removes the tab present at a recursive index in the collection and
   // returns the unique_ptr to the tab model. If there is no tab present
@@ -85,6 +91,8 @@ class TabStripCollection : public TabCollection {
       std::unique_ptr<tabs::TabGroupTabCollection> tab_group_collection);
 
   // Group operations.
+  // NOTE: These operations only work for attached tab groups.
+
   // Use AddTabGroup and RemoveGroup to add/remove groups to the collection
   // structure while keeping track of the group ids in group_mapping_ so that
   // they can be looked up with GetTabGroupCollection.
@@ -93,7 +101,9 @@ class TabStripCollection : public TabCollection {
       int index);
   std::unique_ptr<TabCollection> RemoveGroup(TabGroupTabCollection* group);
   TabGroupTabCollection* GetTabGroupCollection(tab_groups::TabGroupId group_id);
-
+  // Returns a list of all tab group IDs, the order of the IDs is not
+  // guaranteed.
+  std::vector<tab_groups::TabGroupId> GetAllTabGroupIds() const;
   void MoveTabGroupTo(const tab_groups::TabGroupId& group, int to_index);
 
   // Adds the `tab_group_collection` to the collection hierarchy
@@ -101,8 +111,15 @@ class TabStripCollection : public TabCollection {
   void InsertTabGroupAt(std::unique_ptr<TabGroupTabCollection> group_collection,
                         int index);
 
-  // Clears all detached groups present in `detached_group_collections_`.
+  // Detached tab group operations.
+
+  // Clears the detached group with `group_id` in `detached_group_collections_`.
+  // Crashes if the group is not found in the detached tab groups list.
   void CloseDetachedTabGroup(const tab_groups::TabGroupId& group_id);
+  // Returns the detached tab group with `group_id` if it exists, returns
+  // nullptr otherwise.
+  TabGroupTabCollection* GetDetachedTabGroup(
+      const tab_groups::TabGroupId& group_id);
 
   // Split tab operations.
   SplitTabCollection* GetSplitTabCollection(split_tabs::SplitTabId split_id);
@@ -117,10 +134,16 @@ class TabStripCollection : public TabCollection {
   std::unique_ptr<TabCollection> RemoveSplit(SplitTabCollection* split);
   void ValidateData() const;
 
+  std::optional<const tab_groups::TabGroupId> FindGroupIdFor(
+      const tabs::TabCollection::Handle& collection_handle,
+      base::PassKey<TabStripModel>) const;
+
+
   // NOTE(ondrej@vivaldi.com): Support for the vivaldi panels. They are placed
   // in vivaldi_collection_ and they should not move.
   bool AreMovable(const std::vector<int>&) const;
   bool IsMovable(int index) const;
+
  private:
   // If the group specified by new_group is detached, pop it from the detached
   // groups vector and add it to the collections structure at the specified
@@ -137,10 +160,12 @@ class TabStripCollection : public TabCollection {
       const tab_groups::TabGroupId& group_id);
 
   // Returns the list of tabs and collection to remove for `MoveTabsRecursive`.
-  // Collections might be present instead of tabs to retain certain collections
-  // during drag.
+  // `retain_collection_types` adds the fully selected collections based on the
+  // types passed in and adds the collection to be moved instead of the tabs
+  // in the collection.
   ChildrenPtrs GetTabsAndCollectionsForMove(
-      const std::vector<int>& tab_indices);
+      const std::vector<int>& tab_indices,
+      const std::set<TabCollection::Type>& retain_collection_types);
 
   // Helper to centralize updates to `group_mapping_` and `split_mapping_`. If
   // `root_collection` is a group, the appropriate splits need to group need to

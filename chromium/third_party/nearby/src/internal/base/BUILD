@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+
 licenses(["notice"])
 
 cc_library(
@@ -55,11 +58,31 @@ cc_library(
 )
 
 cc_library(
+    name = "compatible_u8_string",
+    hdrs = ["compatible_u8_string.h"],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "file_path",
+    srcs = ["file_path.cc"],
+    hdrs = ["file_path.h"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":compatible_u8_string",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+cc_library(
     name = "files",
     srcs = ["files.cc"],
     hdrs = ["files.h"],
     visibility = ["//visibility:public"],
-    deps = ["//internal/platform:logging"],
+    deps = [
+        ":file_path",
+        "//internal/platform:logging",
+    ],
 )
 
 cc_test(
@@ -79,6 +102,20 @@ cc_test(
 )
 
 cc_test(
+    name = "file_path_test",
+    size = "small",
+    timeout = "short",
+    srcs = [
+        "file_path_test.cc",
+    ],
+    deps = [
+        ":file_path",
+        "@com_github_protobuf_matchers//protobuf-matchers",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_test(
     name = "files_test",
     size = "small",
     timeout = "short",
@@ -86,6 +123,7 @@ cc_test(
         "files_test.cc",
     ],
     deps = [
+        ":file_path",
         ":files",
         "@com_github_protobuf_matchers//protobuf-matchers",
         "@com_google_googletest//:gtest_main",

@@ -13,6 +13,7 @@ typedef NS_ENUM(NSUInteger, AdaptiveToolbarButtonType) {
   AdaptiveToolbarButtonTypeForward,
   AdaptiveToolbarButtonTypeNewTab,
   AdaptiveToolbarButtonTypeTabGrid,
+  AdaptiveToolbarButtonTypeSearch, // Vivaldi
 };
 
 // Provider of menus for the toolbar.

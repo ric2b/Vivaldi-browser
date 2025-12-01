@@ -219,7 +219,7 @@ void BoundSessionCookieRefreshServiceImpl::Initialize() {
 
   for (const auto& params : bound_session_params) {
     if (IsSessionInitializationEnabled(profile_prefs_, params.is_wsbeta())) {
-      InitializeBoundSession(params);
+      InitializeBoundSession(params, /*is_new_session=*/false);
     }
   }
   UpdateAllRenderers();
@@ -244,7 +244,7 @@ void BoundSessionCookieRefreshServiceImpl::RegisterNewBoundSession(
     // starting with the same scope.
   }
 
-  InitializeBoundSession(params);
+  InitializeBoundSession(params, /*is_new_session=*/true);
   UpdateAllRenderers();
 }
 
@@ -497,7 +497,10 @@ void BoundSessionCookieRefreshServiceImpl::OnStorageKeyDataCleared(
     // Only terminate a session if its URL matches `storage_key_matcher`.
     // Bound sessions are only supported in first-party contexts, so it's
     // acceptable to use `blink::StorageKey::CreateFirstParty()`.
-    if (!storage_key_matcher.Run(blink::StorageKey::CreateFirstParty(
+    // NOTE(andre@vivaldi.com) : Added check for callback since
+    // |CreateGenericStorageKeyMatcher| can return nullcallbacks. VB-119801.
+    if (storage_key_matcher.is_null() ||
+        !storage_key_matcher.Run(blink::StorageKey::CreateFirstParty(
             url::Origin::Create(controller->scope_url())))) {
       continue;
     }
@@ -525,7 +528,8 @@ BoundSessionCookieRefreshServiceImpl::CreateBoundSessionCookieController(
 }
 
 void BoundSessionCookieRefreshServiceImpl::InitializeBoundSession(
-    const bound_session_credentials::BoundSessionParams& bound_session_params) {
+    const bound_session_credentials::BoundSessionParams& bound_session_params,
+    bool is_new_session) {
   CHECK(IsSessionInitializationEnabled(profile_prefs_,
                                        bound_session_params.is_wsbeta()));
   if (bound_session_params.is_wsbeta()) {
@@ -543,7 +547,7 @@ void BoundSessionCookieRefreshServiceImpl::InitializeBoundSession(
   auto [it, inserted] =
       cookie_controllers_.emplace(std::move(key), std::move(controller));
   CHECK(inserted);
-  it->second->Initialize();
+  it->second->Initialize(is_new_session);
 }
 
 void BoundSessionCookieRefreshServiceImpl::UpdateAllRenderers() {

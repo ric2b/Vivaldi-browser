@@ -92,7 +92,7 @@ class XcodeWriter {
   // significant performance improvement).
   //
   // Extra behaviour is controlled by the |options| parameter. See comments
-  // of the Options type for more informations.
+  // of the Options type for more information.
   //
   // Returns true on success, fails on failure. |err| is set in that case.
   static bool RunAndWriteFiles(const BuildSettings* build_settings,

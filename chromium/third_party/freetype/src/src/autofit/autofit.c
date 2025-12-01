@@ -25,6 +25,7 @@
 #include "afcjk.c"
 #include "afdummy.c"
 #include "afglobal.c"
+#include "afgsub.c"
 #include "afhints.c"
 #include "afindic.c"
 #include "aflatin.c"

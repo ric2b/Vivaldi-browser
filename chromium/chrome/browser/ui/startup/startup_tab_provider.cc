@@ -238,11 +238,6 @@ StartupTabs StartupTabProviderImpl::GetNewTabPageTabs(
       StartupBrowserCreator::GetSessionStartupPref(command_line, profile));
 }
 
-StartupTabs StartupTabProviderImpl::GetPostCrashTabs(
-    bool has_incompatible_applications) const {
-  return GetPostCrashTabsForState(has_incompatible_applications);
-}
-
 StartupTabs StartupTabProviderImpl::GetCommandLineTabs(
     const base::CommandLine& command_line,
     const base::FilePath& cur_dir,
@@ -386,16 +381,6 @@ StartupTabs StartupTabProviderImpl::GetNewTabPageTabsForState(
   StartupTabs tabs;
   if (!pref.ShouldRestoreLastSession()) {
     tabs.emplace_back(GURL(chrome::kChromeUINewTabURL));
-  }
-  return tabs;
-}
-
-// static
-StartupTabs StartupTabProviderImpl::GetPostCrashTabsForState(
-    bool has_incompatible_applications) {
-  StartupTabs tabs;
-  if (has_incompatible_applications) {
-    AddIncompatibleApplicationsUrl(&tabs);
   }
   return tabs;
 }

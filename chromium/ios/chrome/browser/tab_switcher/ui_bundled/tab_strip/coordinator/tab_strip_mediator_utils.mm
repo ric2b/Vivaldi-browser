@@ -13,6 +13,27 @@
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_strip/ui/swift.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_strip/ui/tab_strip_tab_item.h"
 
+#if defined(VIVALDI_BUILD)
+TabStripItemIdentifier* CreateTabItemIdentifier(web::WebState* web_state,
+                                                WebStateList* web_state_list) {
+  TabSwitcherItem* tab_item =
+      [[TabStripTabItem alloc] initWithWebState:web_state];
+  web::WebState* pinnedWebState = GetWebState(
+      web_state_list,
+      WebStateSearchCriteria{
+          .identifier = web_state->GetUniqueIdentifier(),
+          .pinned_state = WebStateSearchCriteria::PinnedState::kPinned,
+      });
+  if (pinnedWebState) {
+    tab_item.isPinned = YES;
+  } else {
+    tab_item.isPinned = NO;
+  }
+  TabStripItemIdentifier* tab_item_identifier =
+      [TabStripItemIdentifier tabIdentifier:tab_item];
+  return tab_item_identifier;
+}
+#else
 TabStripItemIdentifier* CreateTabItemIdentifier(web::WebState* web_state) {
   TabSwitcherItem* tab_item =
       [[TabStripTabItem alloc] initWithWebState:web_state];
@@ -20,6 +41,7 @@ TabStripItemIdentifier* CreateTabItemIdentifier(web::WebState* web_state) {
       [TabStripItemIdentifier tabIdentifier:tab_item];
   return tab_item_identifier;
 }
+#endif // End Vivaldi
 
 TabStripItemIdentifier* CreateGroupItemIdentifier(const TabGroup* group) {
   TabGroupItem* group_item = [[TabGroupItem alloc] initWithTabGroup:group];

@@ -4,9 +4,12 @@
 
 package org.chromium.components.messages;
 
+import static android.view.View.LAYOUT_DIRECTION_RTL;
+
 import static androidx.test.espresso.Espresso.onView;
 import static androidx.test.espresso.action.ViewActions.click;
-import static androidx.test.espresso.matcher.ViewMatchers.withChild;
+import static androidx.test.espresso.assertion.ViewAssertions.matches;
+import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
 import static androidx.test.espresso.matcher.ViewMatchers.withId;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
 
@@ -39,6 +42,7 @@ import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.components.browser_ui.widget.BrowserUiListMenuUtils;
+import org.chromium.components.browser_ui.widget.ListItemBuilder;
 import org.chromium.ui.listmenu.BasicListMenu;
 import org.chromium.ui.listmenu.ListMenu;
 import org.chromium.ui.listmenu.ListMenuButton;
@@ -104,6 +108,26 @@ public class MessageBannerViewTest {
                             mMessageBannerView.findViewById(
                                     R.id.message_primary_progress_indicator);
                 });
+    }
+
+    @Test
+    @MediumTest
+    public void testRtl() {
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    mMessageBannerView.setLayoutDirection(LAYOUT_DIRECTION_RTL);
+                    PropertyModel propertyModel =
+                            new PropertyModel.Builder(MessageBannerProperties.ALL_KEYS)
+                                    .with(
+                                            MessageBannerProperties.MESSAGE_IDENTIFIER,
+                                            MessageIdentifier.TEST_MESSAGE)
+                                    .with(MessageBannerProperties.TITLE, "test")
+                                    .with(MessageBannerProperties.DESCRIPTION, "Description")
+                                    .build();
+                    PropertyModelChangeProcessor.create(
+                            propertyModel, mMessageBannerView, MessageBannerViewBinder::bind);
+                });
+        onView(withId(R.id.message_banner)).check(matches(isDisplayed()));
     }
 
     @Test
@@ -271,7 +295,7 @@ public class MessageBannerViewTest {
 
         // Click on the message banner view holding the popup menu to dismiss the menu, verify that
         // #onPopupMenuDismissed is invoked.
-        onView(withChild(withText(SECONDARY_BUTTON_MENU_TEXT))).perform(click());
+        onView(withText(SECONDARY_BUTTON_MENU_TEXT)).perform(click());
         Mockito.verify(listener).onPopupMenuDismissed();
     }
 
@@ -286,8 +310,7 @@ public class MessageBannerViewTest {
                 () -> {
                     MVCListAdapter.ModelList menuItems = new MVCListAdapter.ModelList();
                     menuItems.add(
-                            BrowserUiListMenuUtils.buildMenuListItem(
-                                    SECONDARY_BUTTON_MENU_TEXT, 0, 0, true));
+                            new ListItemBuilder().withTitle(SECONDARY_BUTTON_MENU_TEXT).build());
 
                     BasicListMenu listMenu =
                             BrowserUiListMenuUtils.getBasicListMenu(

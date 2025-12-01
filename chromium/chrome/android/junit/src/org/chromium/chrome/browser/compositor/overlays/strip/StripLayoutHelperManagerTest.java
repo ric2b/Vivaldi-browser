@@ -61,6 +61,7 @@ import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
+import org.chromium.chrome.browser.browser_controls.TopControlsStacker;
 import org.chromium.chrome.browser.collaboration.CollaborationServiceFactory;
 import org.chromium.chrome.browser.compositor.LayerTitleCache;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManagerHost;
@@ -116,13 +117,11 @@ import java.util.List;
 /** Tests for {@link StripLayoutHelperManager}. */
 @RunWith(BaseRobolectricTestRunner.class)
 @Config(manifest = Config.NONE, qualifiers = "sw600dp")
-// TODO(crbug.com/419289558): Re-enable color surface feature flags
 @DisableFeatures({
     ChromeFeatureList.TAB_STRIP_INCOGNITO_MIGRATION,
     ChromeFeatureList.DATA_SHARING,
     ChromeFeatureList.ANDROID_SURFACE_COLOR_UPDATE,
-    ChromeFeatureList.GRID_TAB_SWITCHER_SURFACE_COLOR_UPDATE,
-    ChromeFeatureList.GRID_TAB_SWITCHER_UPDATE
+    ChromeFeatureList.TAB_STRIP_MOUSE_CLOSE_RESIZE_DELAY
 })
 public class StripLayoutHelperManagerTest {
     @Rule public MockitoRule mMockitoRule = MockitoJUnit.rule();
@@ -146,7 +145,6 @@ public class StripLayoutHelperManagerTest {
     @Mock private Tab mSelectedTab;
     @Mock private StripLayoutTab mHoveredStripTab;
     @Mock private ViewStub mTabHoverCardViewStub;
-    @Mock private ViewStub mTooltipViewStub;
     @Mock private ObservableSupplierImpl<TabContentManager> mTabContentManagerSupplier;
     @Mock private BrowserControlsStateProvider mBrowserControlStateProvider;
     @Mock private WindowAndroid mWindowAndroid;
@@ -161,6 +159,7 @@ public class StripLayoutHelperManagerTest {
     @Mock private TabGroupSyncService mTabGroupSyncService;
     @Mock private ServiceStatus mServiceStatus;
     @Mock private Tracker mTracker;
+    @Mock private TopControlsStacker mTopControlsStacker;
     @Captor private ArgumentCaptor<List<Rect>> mSystemExclusionRectCaptor;
 
     private StripLayoutHelperManager mStripLayoutHelperManager;
@@ -237,7 +236,6 @@ public class StripLayoutHelperManagerTest {
                         mDragDropDelegate,
                         mToolbarContainerView,
                         mTabHoverCardViewStub,
-                        mTooltipViewStub,
                         mTabContentManagerSupplier,
                         mBrowserControlStateProvider,
                         mWindowAndroid,
@@ -246,7 +244,9 @@ public class StripLayoutHelperManagerTest {
                         mActionConfirmationManager,
                         mDataSharingTabManager,
                         mBottomSheetController,
-                        () -> mShareDelegate);
+                        () -> mShareDelegate,
+                        /* xrSpaceModeObservableSupplier= */ null,
+                        mTopControlsStacker);
         mStripLayoutHelperManager.setTabModelSelector(mTabModelSelector, mTabCreatorManager);
         mStripLayoutHelperManager.setIsTabStripHiddenByHeightTransition(false);
     }
@@ -315,11 +315,7 @@ public class StripLayoutHelperManagerTest {
         var appHeaderState = Mockito.mock(AppHeaderState.class);
         doReturn(true).when(appHeaderState).isInDesktopWindow();
         when(mDesktopWindowStateManager.getAppHeaderState()).thenReturn(appHeaderState);
-        @ColorInt
-        int focusedColor =
-                isNightMode
-                        ? SemanticColorUtils.getColorSurfaceContainer(mActivity)
-                        : SemanticColorUtils.getColorSurfaceContainerHigh(mActivity);
+        @ColorInt int focusedColor = SemanticColorUtils.getColorSurfaceContainerHigh(mActivity);
         @ColorInt
         int unfocusedColor =
                 isNightMode
@@ -794,7 +790,7 @@ public class StripLayoutHelperManagerTest {
         initializeTest();
         assertNotNull(
                 "Tab drag source should be set.",
-                mStripLayoutHelperManager.getTabDragSourceForTesting());
+                mStripLayoutHelperManager.getTabStripDragHandlerForTesting());
     }
 
     @Test
@@ -803,7 +799,7 @@ public class StripLayoutHelperManagerTest {
         initializeTest();
         assertNull(
                 "Tab drag source should not be set.",
-                mStripLayoutHelperManager.getTabDragSourceForTesting());
+                mStripLayoutHelperManager.getTabStripDragHandlerForTesting());
     }
 
     @Test
@@ -1132,16 +1128,16 @@ public class StripLayoutHelperManagerTest {
                 "Ensure top padding increase the entire height",
                 motionEventHandled(SCREEN_WIDTH / 2, topPadding + TAB_STRIP_HEIGHT_PX - 1));
 
-        // topBound(1) = msbOffsetY(3) + topPadding(10) - touchSlop(12)
-        // bottomBound(57) = msbOffsetY(3) + topPadding(10) + msbHeight(32) + touchSlop(12)
+        // topBound(5) = msbOffsetY(3) + topPadding(10) - touchSlop(8)
+        // bottomBound(53) = msbOffsetY(3) + topPadding(10) + msbHeight(32) + touchSlop(8)
         assertEquals(
                 "Touch target top bound for MSB is incorrect.",
-                1,
+                5,
                 mStripLayoutHelperManager.getModelSelectorButton().getTouchTargetBounds().top,
                 0f);
         assertEquals(
                 "Touch target bottom bound for MSB is incorrect.",
-                57,
+                53,
                 mStripLayoutHelperManager.getModelSelectorButton().getTouchTargetBounds().bottom,
                 0f);
     }
@@ -1207,16 +1203,16 @@ public class StripLayoutHelperManagerTest {
                     rect.bottom);
 
             Rect rect2 = mSystemExclusionRectCaptor.getValue().get(1);
-            // Left: 728 = width(800) - rightPadding(20) - modelSelectorWidth(32) - endPadding(8) -
-            // clickSlop(12)
+            // Left: 732 = width(800) - rightPadding(20) - modelSelectorWidth(32) - endPadding(8) -
+            // clickSlop(8)
             // Top: 5 = max(topPadding(5) , topPadding(5) + modelSelectorYOffset(3) -
-            // clickSlop(12)))
-            // Right: 784 =  width(800) - rightPadding(20) - endPadding(8) + clickSlop(12)
+            // clickSlop(8)))
+            // Right: 780 =  width(800) - rightPadding(20) - endPadding(8) + clickSlop(8)
             // Bottom: 45 = min(height(45),  topPadding(5) + modelSelectorHeight(32) +
-            // clickSlop(12))
+            // clickSlop(8))
             assertEquals(
                     "2nd rect should represent model selector button.",
-                    new Rect(728, 5, 784, 45),
+                    new Rect(732, 5, 780, 45),
                     rect2);
         } else {
             assertEquals(
@@ -1274,6 +1270,65 @@ public class StripLayoutHelperManagerTest {
                 "rect.bottom should be the height of the strip.",
                 TAB_STRIP_HEIGHT_PX + topPadding,
                 rect.bottom);
+    }
+
+    @Test
+    @Config(sdk = Build.VERSION_CODES.Q)
+    public void testUpdateTouchableAreas_WithNewTabButton() {
+        int leftPadding = 10;
+        int rightPadding = 20;
+        int topPadding = 5;
+        var appHeaderState =
+                new AppHeaderState(
+                        new Rect(0, 0, (int) SCREEN_WIDTH, (int) SCREEN_HEIGHT),
+                        new Rect(
+                                leftPadding,
+                                0,
+                                (int) (SCREEN_WIDTH - rightPadding),
+                                TAB_STRIP_HEIGHT_PX + topPadding),
+                        true);
+        ToolbarFeatures.setIsTabStripLayoutOptimizationEnabledForTesting(true);
+        initializeTest();
+
+        // Set startup info with 1 tab, which should make the new tab button visible.
+        TabModelStartupInfo startupInfo = new TabModelStartupInfo(1, 0, 0, -1, false, false);
+        mTabModelStartupInfoSupplier.set(startupInfo);
+
+        // Ensure incognito icon is NOT showing.
+        mStripLayoutHelperManager.setModelSelectorButtonVisibleForTesting(false);
+
+        mStripLayoutHelperManager.onSizeChanged(
+                SCREEN_WIDTH, SCREEN_HEIGHT, VISIBLE_VIEWPORT_Y, ORIENTATION);
+        mStripLayoutHelperManager.onAppHeaderStateChanged(appHeaderState);
+        mStripLayoutHelperManager.onHeightChanged(
+                TAB_STRIP_HEIGHT_PX + topPadding, /* applyScrimOverlay= */ true);
+        mStripLayoutHelperManager.onHeightTransitionFinished();
+        mStripLayoutHelperManager.updateOverlay(0, 0);
+
+        verify(mToolbarContainerView)
+                .setSystemGestureExclusionRects(mSystemExclusionRectCaptor.capture());
+        assertEquals(
+                "Number of exclusion rects is wrong.",
+                2,
+                mSystemExclusionRectCaptor.getValue().size());
+
+        Rect rect = mSystemExclusionRectCaptor.getValue().get(0);
+        assertEquals("rect.top should be the top padding of the strip.", topPadding, rect.top);
+        assertEquals(
+                "rect.bottom should be the height of the strip.",
+                TAB_STRIP_HEIGHT_PX + topPadding,
+                rect.bottom);
+
+        Rect ntbRect = mSystemExclusionRectCaptor.getValue().get(1);
+        // The NTB touch target is calculated based on its draw position, expanded by click slop,
+        // and then offset by the top padding.
+        // Expected drawX for NTB with one tab is ~271dp.
+        // Left: 271 (drawX) - 8 (clickSlop) = 263
+        // Top: 3 (drawY) + 5 (topPadding) - 8 (clickSlop) = 0
+        // Right: 271 (drawX) + 32 (width) + 8 (clickSlop) = 311
+        // Bottom: 3 (drawY) + 5 (topPadding) + 32 (height) + 8 (clickSlop) = 48
+        assertEquals(
+                "2nd rect should represent new tab button.", new Rect(263, 0, 311, 48), ntbRect);
     }
 
     @Test

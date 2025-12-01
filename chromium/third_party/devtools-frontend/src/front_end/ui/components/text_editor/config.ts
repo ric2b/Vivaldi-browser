@@ -131,6 +131,7 @@ function moveCompletionSelectionIfNotConservative(
     if (CM.completionStatus(view.state) !== 'active') {
       return false;
     }
+    view.dispatch({effects: setAiAutoCompleteSuggestion.of(null)});
     if (view.state.field(conservativeCompletion, false)) {
       view.dispatch({effects: disableConservativeCompletion.of(null)});
       announceSelectedCompletionInfo(view);
@@ -147,6 +148,7 @@ function moveCompletionSelectionBackwardWrapper(): ((view: CM.EditorView) => boo
     if (CM.completionStatus(view.state) !== 'active') {
       return false;
     }
+    view.dispatch({effects: setAiAutoCompleteSuggestion.of(null)});
     CM.moveCompletionSelection(false)(view);
     announceSelectedCompletionInfo(view);
     return true;
@@ -160,7 +162,7 @@ function announceSelectedCompletionInfo(view: CM.EditorView): void {
     PH3: CM.currentCompletions(view.state).length,
   });
 
-  UI.ARIAUtils.alert(ariaMessage);
+  UI.ARIAUtils.LiveAnnouncer.alert(ariaMessage);
 }
 
 export const autocompletion = new DynamicSetting<boolean>(
@@ -481,3 +483,109 @@ export function contentIncludingHint(view: CM.EditorView): string {
   }
   return content;
 }
+
+export const setAiAutoCompleteSuggestion = CM.StateEffect.define<ActiveSuggestion|null>();
+
+interface ActiveSuggestion {
+  text: string;
+  from: number;
+}
+
+export const aiAutoCompleteSuggestionState = CM.StateField.define<ActiveSuggestion|null>({
+  create: () => null,
+  update(value, tr) {
+    for (const effect of tr.effects) {
+      if (effect.is(setAiAutoCompleteSuggestion)) {
+        if (effect.value) {
+          return effect.value;
+        }
+        return null;
+      }
+    }
+
+    if (!value) {
+      return value;
+    }
+
+    // A suggestion from an effect can be stale if the document was changed
+    // between when the request was sent and the response was received.
+    // We check if the position is still valid before trying to map it.
+    if (value.from > tr.startState.doc.length) {
+      return null;
+    }
+
+    // If deletion occurs, set to null. Otherwise, the mapping might fail if
+    // the position is inside the deleted range.
+    if (tr.docChanged && tr.state.doc.length < tr.startState.doc.length) {
+      return null;
+    }
+
+    const from = tr.changes.mapPos(value.from);
+    const {head} = tr.state.selection.main;
+
+    // If a change happened before the position from which suggestion was generated, set to null.
+    if (tr.changes.touchesRange(0, from - 1) || head < from) {
+      return null;
+    }
+
+    // Check if what's typed is a prefix of the suggestion.
+    const typedText = tr.state.doc.sliceString(from, head);
+    return value.text.startsWith(typedText) ? value : null;
+  },
+});
+
+export function hasActiveAiSuggestion(state: CM.EditorState): boolean {
+  return state.field(aiAutoCompleteSuggestionState) !== null;
+}
+
+export function acceptAiAutoCompleteSuggestion(view: CM.EditorView): boolean {
+  const suggestion = view.state.field(aiAutoCompleteSuggestionState);
+  if (!suggestion) {
+    return false;
+  }
+
+  const {text, from} = suggestion;
+  const {head} = view.state.selection.main;
+  const typedText = view.state.doc.sliceString(from, head);
+  if (!text.startsWith(typedText)) {
+    return false;
+  }
+
+  const remainingText = text.slice(typedText.length);
+  view.dispatch({
+    changes: {from: head, insert: remainingText},
+    selection: {anchor: head + remainingText.length},
+    effects: setAiAutoCompleteSuggestion.of(null),
+    userEvent: 'input.complete',
+  });
+  return true;
+}
+
+export const aiAutoCompleteSuggestion: CM.Extension = [
+  aiAutoCompleteSuggestionState,
+  CM.ViewPlugin.fromClass(
+      class {
+        decorations: CM.DecorationSet = CM.Decoration.none;
+
+        update(update: CM.ViewUpdate): void {
+          const activeSuggestion = update.state.field(aiAutoCompleteSuggestionState);
+          const {head, empty} = update.state.selection.main;
+          let hint = '';
+          if (activeSuggestion && empty && head >= activeSuggestion.from) {
+            const {text, from} = activeSuggestion;
+            const typedText = update.state.doc.sliceString(from, head);
+            if (text.startsWith(typedText)) {
+              hint = text.slice(typedText.length);
+            }
+          }
+
+          if (!hint) {
+            this.decorations = CM.Decoration.none;
+          } else {
+            this.decorations =
+                CM.Decoration.set([CM.Decoration.widget({widget: new CompletionHint(hint), side: 1}).range(head)]);
+          }
+        }
+      },
+      {decorations: p => p.decorations}),
+];

@@ -81,7 +81,6 @@
 <translation id="2034405583989639424">Рэдагаванне старонкі для хуткага адкрыцця</translation>
 <translation id="2048247880942380698">Арабская (<ph name="ORIGIN" />)</translation>
 <translation id="2079545284768500474">Адрабіць</translation>
-<translation id="2129408066358825297">Узрост</translation>
 <translation id="2148384276939959392">Сінхранізаваць абранае</translation>
 <translation id="2195713384412091023">З сервера сінхранізацыі выдаляцца ўсе даныя, будзе скінуты пароль шыфравання і выкананы выхад з акаўнта.</translation>
 <translation id="2228584369802328636">Гульні</translation>
@@ -158,7 +157,6 @@
 <translation id="3270930591809084274">Сінхранізаваныя ўкладкі</translation>
 <translation id="3335772982573114336">Новая нататка</translation>
 <translation id="33451081266695216">Злучэнне абмежавана серверам.</translation>
-<translation id="3346386541263128307">Адрасы электроннай пошты мусяць супадаць.</translation>
 <translation id="3363375699928395745">Увядзіце назву</translation>
 <translation id="3365991203476235715">Англійскі (<ph name="ORIGIN" />)</translation>
 <translation id="3368960138304620657">Летувіскі (<ph name="ORIGIN" />)</translation>
@@ -315,7 +313,6 @@
 <translation id="5191012692655103305">Атрыманне даных ўкладак і гісторыі...</translation>
 <translation id="5238642303473095117">Выдаліць даныя</translation>
 <translation id="5245732982828228444">Вашыя нататкі будуць тут</translation>
-<translation id="5249199221558969362">Калі ласка, увядзіце сапраўдны ўзрост.</translation>
 <translation id="5271549068863921519">Захаваць пароль</translation>
 <translation id="5290452628447338707">Няма нататак</translation>
 <translation id="5317780077021120954">Захаваць</translation>
@@ -378,7 +375,6 @@
 <translation id="6438416544409849235">Абрана <ph name="NUMBER_OF_SELECTED_NOTES" /></translation>
 <translation id="6442584491342758233">Дакладнае супадзенне</translation>
 <translation id="6443682944493983866">Пажаданыя Мовы</translation>
-<translation id="6468130661190228905">Выбачайце, але пакуль што вы не можаце далучыцца да нашай супольнасці. Вам павінна быць не менш за 16 гадоў.</translation>
 <translation id="6487150267908786236"><ph name="BEGIN_LINK" />Імпартаванне<ph name="END_LINK" /></translation>
 <translation id="6517411226162529295">Рэзервовы ключ шыфравання</translation>
 <translation id="6527303717912515753">Падзяліцца</translation>
@@ -496,7 +492,6 @@
 <translation id="7931102520806266819">Адкрыць у прыватнай укладцы</translation>
 <translation id="7961270736686975887">Памяняць мовы месцамі</translation>
 <translation id="7967161908152532036">Адрас старонкі</translation>
-<translation id="8008214489230610096">Пацвердзіце рэзервовы адрас электроннай пошты</translation>
 <translation id="8038592796033755028">Прылады <ph name="USERNAME" /></translation>
 <translation id="8041093619605951337">Шчаслівы</translation>
 <translation id="8046542428651654244">Абнавіць мініяцюру</translation>
@@ -511,7 +506,6 @@
 <translation id="8131740175452115882">Пацвердзіць</translation>
 <translation id="8134672010161840864">Каб абрэзаць або змяніць пазіцыю, павялічце выяву</translation>
 <translation id="8142291334394582384">Змяніць парадак прапаноў пошуку</translation>
-<translation id="8147118677117542370">Пазначце свой узрост.</translation>
 <translation id="8165573437634525334">Даныя зашыфраваны паролем</translation>
 <translation id="8237090677709100373">Адвольны код колеру</translation>
 <translation id="8257908958623224237">Канфлікт з іншымі данымі кліента.</translation>

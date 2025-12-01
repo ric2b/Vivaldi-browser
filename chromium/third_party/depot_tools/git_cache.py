@@ -317,8 +317,18 @@ class Mirror(object):
         if not self.exists():
             return False
 
-        # If the cache population is in progress, this will raise LockError().
-        with lockfile.lock(self.mirror_path, timeout=0):
+        # This will raise LockError(), if another process is
+        # 1) sync()-ing or
+        # 2) calling contains_revision().
+        #
+        # In case (1), the caller is responsible for handling the LockError().
+        # As per (2), the below gives 20 secs timeout just to cover most
+        # practical cases.
+        #
+        # Ideally, read-write locks should be used, Then, the below would
+        # - acquire the read lock immediately or
+        # - raise LockError() if there is an ongoing sync()-ing.
+        with lockfile.lock(self.mirror_path, timeout=20):
             # If the sentinent file exists at this point, it indicates that
             # the bootstrapping process was interrupted, leaving the cache
             # entries in a bad state.

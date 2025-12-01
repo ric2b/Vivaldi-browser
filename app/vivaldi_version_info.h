@@ -14,8 +14,12 @@
 *   ]
 *
 */
+#ifndef VIVALDI_RELEASE
+#error "VIVALDI_RELEASE must be defined (missing config:release_kind)."
+#endif
 
-#include <string>
+#include <string_view>
+#include "components/version_info/version_info_values.h"
 
 // Defines used when determining build versions.
 #define BUILD_VERSION_normal 0
@@ -74,13 +78,16 @@ enum class Release {
 };
 
 // Returns a version string to be displayed in "About Vivaldi" dialog.
-std::string GetVivaldiVersionString();
+constexpr std::string_view GetVivaldiVersionString() {
+  return VIVALDI_VERSION_STRING;
+}
 
 // Return the Vivaldi build version as base::Version instance.
 const base::Version& GetVivaldiVersion();
 
-Release ReleaseKind();
-
+constexpr Release ReleaseKind() {
+  return BUILD_RELEASE_KIND(VIVALDI_RELEASE);
+}
 }  // namespace vivaldi
 
 #endif  // APP_VIVALDI_VERSION_INFO_H_

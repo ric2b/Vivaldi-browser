@@ -9,12 +9,16 @@
 // LICENSE file in the root directory of this source tree.
 
 #include <assert.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #include <immintrin.h>
 
 #include "src/xnnpack/common.h"
-#include "src/xnnpack/reduce.h"
+#include "src/xnnpack/intrinsics-polyfill.h"
 #include "src/xnnpack/math.h"
+#include "src/xnnpack/microparams.h"
+#include "src/xnnpack/reduce.h"
 
 
 void xnn_f16_f32acc_rdsum_ukernel_7p7x__avx512skx_c16(
@@ -24,7 +28,7 @@ void xnn_f16_f32acc_rdsum_ukernel_7p7x__avx512skx_c16(
     size_t input_stride,
     const xnn_float16* zero,
     float* output,
-    const struct xnn_f16_f32acc_scale_params params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f16_f32acc_scale_params* restrict params)
 {
   assert(rows != 0);
   assert(channels != 0);

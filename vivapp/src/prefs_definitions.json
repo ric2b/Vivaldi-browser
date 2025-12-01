@@ -1237,6 +1237,14 @@
     "vivaldi.startpage.navigation_shorcuts": {
       "id": 329,
       "merge_method": "none"
+    },
+    "vivaldi.quick_commands.show_closed_tabs": {
+      "id": 330,
+      "merge_method": "none"
+    },
+    "vivaldi.quick_commands.show_synced_tabs": {
+      "id": 331,
+      "merge_method": "none"
     }
   },
 
@@ -4178,6 +4186,11 @@
         "description": "Replace the page load progress indicator with a rainbow indicator.",
         "type": "boolean",
         "default": false
+      },
+      "force_tab_button_suggestion": {
+        "description": "Force show a specific suggestion in the tab button.",
+        "type": "string",
+        "default": ""
       }
     },
     "calendar": {
@@ -5311,14 +5324,26 @@
         },
         "tree": {
           "height": {
-            "description": "Notes manager tree height",
+            "description": "[DEPRECATED 07/2025] Notes manager tree height",
             "type": "integer",
             "default": 40
           },
           "width": {
-            "description": "Notes manager tree width",
+            "description": "[DEPRECATED 07/2025] Notes manager tree width",
             "type": "integer",
             "default": 50
+          }
+        },
+        "editor": {
+          "height": {
+            "description": "Notes manager editor height",
+            "type": "integer",
+            "default": 600
+          },
+          "width": {
+            "description": "Notes manager editor width",
+            "type": "integer",
+            "default": 600
           }
         },
         "show_markdown": {
@@ -5911,6 +5936,16 @@
         "type": "boolean",
         "default": true
       },
+      "show_closed_tabs": {
+        "description": "Include closed tabs (trash) in QC search results",
+        "type": "boolean",
+        "default": true
+      },
+      "show_synced_tabs": {
+        "description": "Include synced tabs in QC search results",
+        "type": "boolean",
+        "default": true
+      },
       "use_notes_manager": {
         "description": "Open notes in Notes Manager",
         "type": "boolean",
@@ -6310,6 +6345,16 @@
         "description": "An actual last seen version of the browser (for compatibility reasons, crash detection uses a separate pref to store and update the version, because last_seen_version is updated after the JS UI is displayed).",
         "type": "string",
         "default": ""
+      },
+      "has_seen_welcome_page": {
+        "description": "The user has seen the welcome screen.",
+        "type": "boolean",
+        "default": false
+      },
+      "seen_os_deprecation_page": {
+        "description": "The user has seen the page about the deprecation of their OS.",
+        "type": "boolean",
+        "default": false
       }
     },
     "status_bar": {
@@ -6666,6 +6711,11 @@
           "description": "Expand accordions automatically when tab is activated",
           "type": "boolean",
           "default": true
+        },
+        "auto_editor": {
+          "description": "Expand stack editor automatically when creating stacks",
+          "type": "boolean",
+          "default": true
         }
       },
       "thumbnails": {
@@ -6713,10 +6763,20 @@
         "default": false
       },
       "button": {
-        "hide_suggestions": {
-          "description": "Hide suggestion to create stack/workspace in tabs button.",
-          "type": "boolean",
-          "default": false
+        "dismissed_suggestions": {
+          "description": "Tab Button suggestions that the user doesn't want to see anymore.",
+          "type": "list",
+          "default": []
+        },
+        "last_suggestion_time": {
+          "description": "Timestamp when last suggestion was shown. 0 means none shown yet.",
+          "type": "double",
+          "default": 0.0
+        },
+        "read_feature_suggestions": {
+          "description": "A list of items in the features suggestion dialog that the user has clicked",
+          "type": "list",
+          "default": []
         },
         "hidden_groups": {
           "description": "A list of groups that the user does not want to see in tabs button.",
@@ -7150,7 +7210,9 @@
               "SearchField": "/resources/theme/vivaldi/SearchField.svg",
               "Settings": "/resources/theme/vivaldi/Settings.svg",
               "Stop": "/resources/theme/vivaldi/Stop.svg",
+              "SyncedTabs": "/resources/theme/vivaldi/SyncStatus.svg",
               "SyncStatus": "/resources/theme/vivaldi/SyncStatus.svg",
+              "TabsTrash": "/resources/theme/vivaldi/MailMsgTrash.svg",
               "TilingToggle": "/resources/theme/vivaldi/TilingToggle.svg",
               "UpdateButton": "/resources/theme/vivaldi/UpdateButton.svg",
               "WorkspaceButton": "/resources/theme/vivaldi/WorkspaceButton.svg"
@@ -7242,7 +7304,9 @@
               "SearchField": "/resources/theme/vivaldi/SearchField.svg",
               "Settings": "/resources/theme/vivaldi/Settings.svg",
               "Stop": "/resources/theme/vivaldi/Stop.svg",
+              "SyncedTabs": "/resources/theme/vivaldi/SyncStatus.svg",
               "SyncStatus": "/resources/theme/vivaldi/SyncStatus.svg",
+              "TabsTrash": "/resources/theme/vivaldi/MailMsgTrash.svg",
               "TilingToggle": "/resources/theme/vivaldi/TilingToggle.svg",
               "UpdateButton": "/resources/theme/vivaldi/UpdateButton.svg",
               "WorkspaceButton": "/resources/theme/vivaldi/WorkspaceButton.svg"
@@ -7334,7 +7398,9 @@
               "SearchField": "/resources/theme/vivaldi/SearchField.svg",
               "Settings": "/resources/theme/vivaldi/Settings.svg",
               "Stop": "/resources/theme/vivaldi/Stop.svg",
+              "SyncedTabs": "/resources/theme/vivaldi/SyncStatus.svg",
               "SyncStatus": "/resources/theme/vivaldi/SyncStatus.svg",
+              "TabsTrash": "/resources/theme/vivaldi/MailMsgTrash.svg",
               "TilingToggle": "/resources/theme/vivaldi/TilingToggle.svg",
               "UpdateButton": "/resources/theme/vivaldi/UpdateButton.svg",
               "WorkspaceButton": "/resources/theme/vivaldi/WorkspaceButton.svg"
@@ -7517,8 +7583,6 @@
         "default": [
           "NewTab",
           "FlexibleSpacer",
-          "SyncedTabs",
-          "TabsTrash",
           "TabButton"
         ]
       },
@@ -8263,6 +8327,10 @@
     "kExceptionsWindowManagement": {
       "path": "profile.content_settings.exceptions.window_placement",
       "type": "dictionary"
+    },
+    "kProfileName": {
+      "path": "profile.name",
+      "type": "string"
     },
     "kExtensionURLOverrides": {
       "path": "extensions.chrome_url_overrides",

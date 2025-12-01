@@ -7,6 +7,7 @@
 #import "base/apple/bundle_locations.h"
 #import "base/apple/foundation_util.h"
 #import "base/strings/sys_string_conversions.h"
+#import "components/application_locale_storage/application_locale_storage.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/grit/ios_strings.h"
@@ -99,7 +100,8 @@ std::string GetTermsOfServicePath() {
   if (vivaldi::IsVivaldiRunning())
     return vivaldiTosFilePath; // End Vivaldi
 
-  const std::string& locale = GetApplicationContext()->GetApplicationLocale();
+  const std::string& locale =
+      GetApplicationContext()->GetApplicationLocaleStorage()->Get();
   return GetLocalizedFileName(kChromeTosFilePrefix, locale, kHtmlFileExtension);
 }
 

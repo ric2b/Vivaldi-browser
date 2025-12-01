@@ -75,12 +75,15 @@ if (!is_ios) {
     _targets = [
       "//chrome/browser:test_support",
       "//chrome/browser/ui:test_support",
-      # "//apps:apps"
+      "//chrome/app:test_support"
     ]
 
     foreach(_target, _targets) {
       update_target(_target) {
         deps += [ "//base/version_info:generate_version_info" ]
+        configs += [
+          "//vivaldi/gn/config:release_kind"
+        ]
       }
     }
   }
@@ -220,6 +223,5 @@ if (!is_ios) {
 
 } else { # !is_ios
   import("//vivaldi/ios/deps_update_ios.gni")
-  import("//vivaldi/ios/chrome/browser/features/deps_updates.gni")
   import("//vivaldi/thirdparty/deps_updates.gni")
 } # is_ios

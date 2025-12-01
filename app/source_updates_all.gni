@@ -110,7 +110,9 @@ foreach(_target_config, CHROMIUM_VIVALDI_RESOURCE_LIST) {
       } else if (locale == "ca-valencia" || locale == "ca@valencia") {
         locale_postfix = "ca-valencia"
       }
-      extra_outputs += [ locale_prefix+_flags.pak_file_prefix+"$locale_postfix.$pakext" ]
+      foreach(_gender_suffix, gender_suffixes) {
+        extra_outputs += [ locale_prefix+_flags.pak_file_prefix+"$locale_postfix${_gender_suffix}.$pakext" ]
+      }
     }
   }
   extra_inputs = []

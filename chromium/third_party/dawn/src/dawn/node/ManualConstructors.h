@@ -37,6 +37,9 @@ struct ManualConstructors {
     explicit ManualConstructors(Napi::Env env);
 
     Napi::FunctionReference GPUUncapturedErrorEvent_ctor;
+    Napi::FunctionReference GPUPipelineError_ctor;
+    Napi::FunctionReference DOMException_ctor;
+    Napi::FunctionReference EventTarget_ctor;
 };
 
 }  // namespace wgpu::interop

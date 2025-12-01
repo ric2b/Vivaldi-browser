@@ -542,7 +542,7 @@ static void adjustOrderByCol(ExprList *pOrderBy, ExprList *pEList){
 /*
 ** pX is an expression of the form:  (vector) IN (SELECT ...)
 ** In other words, it is a vector IN operator with a SELECT clause on the
-** LHS.  But not all terms in the vector are indexable and the terms might
+** RHS.  But not all terms in the vector are indexable and the terms might
 ** not be in the correct order for indexing.
 **
 ** This routine makes a copy of the input pX expression and then adjusts
@@ -600,7 +600,7 @@ static Expr *removeUnindexableInClauseTerms(
           iField = pLoop->aLTerm[i]->u.x.iField - 1;
           if( pOrigRhs->a[iField].pExpr==0 ) continue; /* Duplicate PK column */
           pRhs = sqlite3ExprListAppend(pParse, pRhs, pOrigRhs->a[iField].pExpr);
-          pOrigRhs->a[iField].pExpr = 0;	
+          pOrigRhs->a[iField].pExpr = 0;
           if( pRhs ) pRhs->a[pRhs->nExpr-1].u.x.iOrderByCol = iField+1;
           if( pOrigLhs ){
             assert( pOrigLhs->a[iField].pExpr!=0 );
@@ -1608,6 +1608,9 @@ Bitmask sqlite3WhereCodeOneLoopStart(
     }
     sqlite3VdbeAddOp2(v, OP_Integer, pLoop->u.vtab.idxNum, iReg);
     sqlite3VdbeAddOp2(v, OP_Integer, nConstraint, iReg+1);
+    /* The instruction immediately prior to OP_VFilter must be an OP_Integer
+    ** that sets the "argc" value for xVFilter.  This is necessary for
+    ** resolveP2() to work correctly.  See tag-20250207a. */
     sqlite3VdbeAddOp4(v, OP_VFilter, iCur, addrNotFound, iReg,
                       pLoop->u.vtab.idxStr,
                       pLoop->u.vtab.needFree ? P4_DYNAMIC : P4_STATIC);
@@ -2310,8 +2313,7 @@ Bitmask sqlite3WhereCodeOneLoopStart(
       int nNotReady;                 /* The number of notReady tables */
       SrcItem *origSrc;              /* Original list of tables */
       nNotReady = pWInfo->nLevel - iLevel - 1;
-      pOrTab = sqlite3DbMallocRawNN(db,
-                            sizeof(*pOrTab)+ nNotReady*sizeof(pOrTab->a[0]));
+      pOrTab = sqlite3DbMallocRawNN(db, SZ_SRCLIST(nNotReady+1));
       if( pOrTab==0 ) return notReady;
       pOrTab->nAlloc = (u8)(nNotReady + 1);
       pOrTab->nSrc = pOrTab->nAlloc;
@@ -2362,7 +2364,7 @@ Bitmask sqlite3WhereCodeOneLoopStart(
     **
     ** This optimization also only applies if the (x1 OR x2 OR ...) term
     ** is not contained in the ON clause of a LEFT JOIN.
-    ** See ticket http://www.sqlite.org/src/info/f2369304e4
+    ** See ticket http://sqlite.org/src/info/f2369304e4
     **
     ** 2022-02-04:  Do not push down slices of a row-value comparison.
     ** In other words, "w" or "y" may not be a slice of a vector.  Otherwise,
@@ -2854,7 +2856,8 @@ SQLITE_NOINLINE void sqlite3WhereRightJoinLoop(
   WhereInfo *pSubWInfo;
   WhereLoop *pLoop = pLevel->pWLoop;
   SrcItem *pTabItem = &pWInfo->pTabList->a[pLevel->iFrom];
-  SrcList sFrom;
+  SrcList *pFrom;
+  u8 fromSpace[SZ_SRCLIST_1];
   Bitmask mAll = 0;
   int k;
 
@@ -2898,13 +2901,14 @@ SQLITE_NOINLINE void sqlite3WhereRightJoinLoop(
                                  sqlite3ExprDup(pParse->db, pTerm->pExpr, 0));
     }
   }
-  sFrom.nSrc = 1;
-  sFrom.nAlloc = 1;
-  memcpy(&sFrom.a[0], pTabItem, sizeof(SrcItem));
-  sFrom.a[0].fg.jointype = 0;
+  pFrom = (SrcList*)fromSpace;
+  pFrom->nSrc = 1;
+  pFrom->nAlloc = 1;
+  memcpy(&pFrom->a[0], pTabItem, sizeof(SrcItem));
+  pFrom->a[0].fg.jointype = 0;
   assert( pParse->withinRJSubrtn < 100 );
   pParse->withinRJSubrtn++;
-  pSubWInfo = sqlite3WhereBegin(pParse, &sFrom, pSubWhere, 0, 0, 0,
+  pSubWInfo = sqlite3WhereBegin(pParse, pFrom, pSubWhere, 0, 0, 0,
                                 WHERE_RIGHT_JOIN, 0);
   if( pSubWInfo ){
     int iCur = pLevel->iTabCur;

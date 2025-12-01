@@ -421,22 +421,9 @@ NoteModelMerger::RemoteTreeNode NoteModelMerger::RemoteTreeNode::BuildTree(
   return node;
 }
 
-// static
-NoteModelMerger::RemoteTreeNode
-NoteModelMerger::RemoteTreeNode::BuildForTesting(
-    syncer::UpdateResponseData update,
-    std::vector<RemoteTreeNode> children) {
-  RemoteTreeNode node;
-  node.update_ = std::move(update);
-  node.children_ = std::move(children);
-  return node;
-}
-
 NoteModelMerger::NoteModelMerger(UpdateResponseDataList updates,
                                  NoteModelView* notes_model,
-                                 SyncedNoteTracker* note_tracker,
-                                 syncer::PreviouslySyncingGaiaIdInfoForMetrics
-                                     previously_syncing_gaia_id_info)
+                                 SyncedNoteTracker* note_tracker)
     : notes_model_(notes_model),
       note_tracker_(note_tracker),
       remote_forest_(BuildRemoteForest(std::move(updates), note_tracker)),

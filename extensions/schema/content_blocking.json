@@ -338,41 +338,6 @@
     ],
     "functions": [
       {
-        "name": "setRuleGroupEnabled",
-        "type": "function",
-        "description": "Changes whether a particular type of blocking is in effect.",
-        "parameters": [
-          {
-            "name": "rule_group",
-            "$ref": "RuleGroup"
-          },
-          {
-            "name": "enabled",
-            "type": "boolean"
-          }
-        ]
-      },
-      {
-        "name": "isRuleGroupEnabled",
-        "type": "function",
-        "description": "Checks whether a specific type of blocking is in effect.",
-        "parameters": [
-          {
-            "name": "rule_group",
-            "$ref": "RuleGroup"
-          }
-        ],
-        "returns_async": {
-          "name": "callback",
-          "parameters": [
-            {
-              "name": "enabled",
-              "type": "boolean"
-            }
-          ]
-        }
-      },
-      {
         "name": "addKnownSourceFromURL",
         "type": "function",
         "description": "Adds an online rule source. Newly added sources are automatically enabled.",
@@ -1004,7 +969,7 @@
       {
         "name": "onStateChanged",
         "type": "function",
-        "description": "Fired when a group has been enabled/disabled or when an exception state has changed.",
+        "description": "Fired when an exception state has changed.",
         "parameters": [
           {
             "name": "rule_group",

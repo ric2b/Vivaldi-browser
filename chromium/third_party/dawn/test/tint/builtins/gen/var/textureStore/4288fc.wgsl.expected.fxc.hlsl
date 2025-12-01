@@ -1,8 +1,8 @@
 //
 // fragment_main
 //
-RWTexture3D<float4> arg_0 : register(u0, space1);
 
+RWTexture3D<float4> arg_0 : register(u0, space1);
 void textureStore_4288fc() {
   uint3 arg_1 = (1u).xxx;
   float4 arg_2 = (1.0f).xxxx;
@@ -11,13 +11,13 @@ void textureStore_4288fc() {
 
 void fragment_main() {
   textureStore_4288fc();
-  return;
 }
+
 //
 // compute_main
 //
-RWTexture3D<float4> arg_0 : register(u0, space1);
 
+RWTexture3D<float4> arg_0 : register(u0, space1);
 void textureStore_4288fc() {
   uint3 arg_1 = (1u).xxx;
   float4 arg_2 = (1.0f).xxxx;
@@ -27,5 +27,5 @@ void textureStore_4288fc() {
 [numthreads(1, 1, 1)]
 void compute_main() {
   textureStore_4288fc();
-  return;
 }
+

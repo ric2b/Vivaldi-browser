@@ -30,19 +30,15 @@
 #include "components/search_engines/template_url.h"
 #include "components/supervised_user/core/browser/supervised_user_url_filter.h"
 #include "content/public/browser/context_menu_params.h"
+#include "content/public/common/buildflags.h"
 #include "extensions/buildflags/buildflags.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
-#include "ppapi/buildflags/buildflags.h"
 #include "printing/buildflags/buildflags.h"
 #include "third_party/blink/public/mojom/frame/frame.mojom-forward.h"
 #include "ui/base/interaction/element_identifier.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/gfx/geometry/vector2d.h"
 #include "ui/menus/simple_menu_model.h"
-
-#if BUILDFLAG(ENABLE_COMPOSE)
-#include "chrome/browser/compose/chrome_compose_client.h"
-#endif
 
 #if BUILDFLAG(ENABLE_LENS_DESKTOP_GOOGLE_BRANDED_FEATURES)
 #include "chrome/browser/lens/region_search/lens_region_search_controller.h"
@@ -55,6 +51,9 @@
 
 class AccessibilityLabelsMenuObserver;
 class Browser;
+#if BUILDFLAG(ENABLE_COMPOSE)
+class ChromeComposeClient;
+#endif
 class ClickToCallContextMenuObserver;
 class LinkToTextMenuObserver;
 class PrintPreviewContextMenuObserver;
@@ -73,7 +72,6 @@ class WebContents;
 
 namespace extensions {
 class Extension;
-class MenuItem;
 }  // namespace extensions
 
 namespace gfx {
@@ -234,14 +232,6 @@ class RenderViewContextMenu
   friend class FormatUrlForClipboardTest;
 
   static bool IsDevToolsURL(const GURL& url);
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-  static bool ExtensionContextAndPatternMatch(
-      const content::ContextMenuParams& params,
-      const extensions::MenuItem::ContextList& contexts,
-      const extensions::URLPatternSet& target_url_patterns);
-  static bool MenuItemMatchesParams(const content::ContextMenuParams& params,
-                                    const extensions::MenuItem* item);
-#endif
 
   // Returns true if the command id is gated by fenced frame untrusted network
   // status.
@@ -267,6 +257,20 @@ class RenderViewContextMenu
   void HandleAuthorizeAllPlugins() override;
 #endif
   void NotifyMenuShown() override;
+
+  // Returns whether the feature is new and should be shown with a "new" badge.
+  //
+  // When generating context menu items, we want to show a "new" badge next to
+  // the item if the feature is new. Some of these items are generated
+  // by this base class, and there we don't have direct access to the user
+  // education service. Instead, we need to delegate to the platform-specific
+  // implementation of this method to determine if the item should be marked
+  // as "new".
+  // This method accepts the feature name, and not the base::Feature.
+  // The reason is that in DevTools, we don't have access to base::Features
+  // directly, so features are stored by name and will be mapped accordingly.
+  ui::IsNewFeatureAtValue GetIsNewFeatureAtValue(
+      const std::string& feature_name) const override;
 
   // Gets the extension (if any) associated with the WebContents that we're in.
   const extensions::Extension* GetExtension() const;
@@ -316,7 +320,6 @@ class RenderViewContextMenu
   bool AppendAccessibilityLabelsItems();
   void AppendSearchProvider();
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-  void AppendAllExtensionItems();
   void AppendCurrentExtensionItems();
 #endif
   void AppendPrintPreviewItems();
@@ -346,6 +349,11 @@ class RenderViewContextMenu
   // status. For context menu commands that are gated on fenced frame untrusted
   // network status, this check should be applied.
   bool IsUntrustedNetworkDisabled() const;
+
+  // Helper function for checking if text query should be opened in Lens. Checks
+  // whether Lens is available and whether the text selection entrypoint flag is
+  // enabled.
+  bool ShouldOpenTextQueryInLens() const;
 
   // Command enabled query functions.
   bool IsReloadEnabled() const;
@@ -413,6 +421,7 @@ class RenderViewContextMenu
                            const gfx::Rect& region_bounds);
   void PluginActionAt(const gfx::Point& location,
                       blink::mojom::PluginActionType plugin_action);
+  void OpenTextQueryInLens();
 
   // Returns a list of registered ProtocolHandlers that can handle the clicked
   // on URL.

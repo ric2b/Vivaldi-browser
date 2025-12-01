@@ -155,7 +155,7 @@ enum SelectedProjectType {
   /**
    * The selected project is a disconnected automatic workspace project
    */
-  AUTOMATIC_DISCONNECTED = 'automaticDisconncted',
+  AUTOMATIC_DISCONNECTED = 'automaticDisconnected',
   /**
    * The selected project is a connected automatic workspace project
    */
@@ -217,7 +217,7 @@ export class PatchWidget extends UI.Widget.Widget {
   constructor(element?: HTMLElement, view?: View, opts?: {
     aidaClient: Host.AidaClient.AidaClient,
   }) {
-    super(false, false, element);
+    super(element);
     this.#aidaClient = opts?.aidaClient ?? new Host.AidaClient.AidaClient();
     this.#noLogging = Root.Runtime.hostConfig.aidaAvailability?.enterprisePolicyValue ===
         Root.Runtime.GenAiEnterprisePolicyValue.ALLOW_WITHOUT_LOGGING;

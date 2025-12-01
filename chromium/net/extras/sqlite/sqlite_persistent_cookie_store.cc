@@ -960,11 +960,30 @@ bool SQLitePersistentCookieStore::Backend::LoadCookiesForDomains(
   }
   delete_statement.Assign(db()->GetCachedStatement(
       SQL_FROM_HERE, "DELETE FROM cookies WHERE host_key = ?"));
-  if (!smt.is_valid() || !delete_statement.is_valid()) {
+
+  sql::Statement delete_insecure_prefixed_statement;
+  delete_insecure_prefixed_statement.Assign(db()->GetCachedStatement(
+      SQL_FROM_HERE,
+      "DELETE FROM cookies WHERE "
+      "(LOWER(name) LIKE '__host-http-%' OR LOWER(name) LIKE '__http-%') "
+      "AND (is_httponly = 0 OR is_secure = 0)"));
+
+  if (!smt.is_valid() || !delete_statement.is_valid() ||
+      !delete_insecure_prefixed_statement.is_valid()) {
     delete_statement.Clear();
+    delete_insecure_prefixed_statement.Clear();
     smt.Clear();  // Disconnect smt_ref from db_.
     Reset();
     return false;
+  }
+
+  // Delete cookies with __host-http- or __http- prefixes that are not httponly
+  // These cookies are potentially insecure and should be removed.
+  // Do this BEFORE loading cookies to ensure deleted cookies don't get loaded.
+  if (!delete_insecure_prefixed_statement.Run()) {
+    // Log the failure but don't treat it as fatal since this is a cleanup
+    // operation
+    RecordCookieLoadProblem(CookieLoadProblem::KRecoveryFailed);
   }
 
   std::vector<std::unique_ptr<CanonicalCookie>> cookies;
@@ -1037,16 +1056,11 @@ bool SQLitePersistentCookieStore::Backend::MakeCookiesFromSQLStatement(
     UMA_HISTOGRAM_BOOLEAN("Cookie.EncryptedAndPlaintextValues",
                           encrypted_and_plaintext_values);
 
-    // Ensure feature is fully activated for all users who load cookies, before
-    // checking the validity of the row.
-    if (base::FeatureList::IsEnabled(
-            features::kEncryptedAndPlaintextValuesAreInvalid)) {
-      if (encrypted_and_plaintext_values) {
-        RecordCookieLoadProblem(
-            CookieLoadProblem::kValuesExistInBothEncryptedAndPlaintext);
-        ok = false;
-        continue;
-      }
+    if (encrypted_and_plaintext_values) {
+      RecordCookieLoadProblem(
+          CookieLoadProblem::kValuesExistInBothEncryptedAndPlaintext);
+      ok = false;
+      continue;
     }
 
     if (!encrypted_value.empty()) {
@@ -1617,8 +1631,7 @@ void SQLitePersistentCookieStore::Backend::DoCommit() {
               continue;
             }
             add_statement.BindCString(4, "");  // value
-            // BindBlob() immediately makes an internal copy of the data.
-            add_statement.BindBlob(5, encrypted_value);
+            add_statement.BindBlob(5, std::move(encrypted_value));
           } else {
             add_statement.BindString(4, po->cc().Value());
             add_statement.BindBlob(5,

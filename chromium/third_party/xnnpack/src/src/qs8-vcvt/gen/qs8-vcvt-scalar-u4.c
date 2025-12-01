@@ -9,8 +9,12 @@
 // LICENSE file in the root directory of this source tree.
 
 #include <assert.h>
+#include <stddef.h>
+#include <stdint.h>
 
+#include "src/xnnpack/common.h"
 #include "src/xnnpack/math.h"
+#include "src/xnnpack/microparams.h"
 #include "src/xnnpack/vcvt.h"
 
 
@@ -18,16 +22,16 @@ void xnn_qs8_vcvt_ukernel__scalar_u4(
     size_t batch,
     const int8_t* input,
     int8_t* output,
-    const struct xnn_qs8_cvt_params params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_qs8_cvt_params* restrict params)
 {
   assert(batch != 0);
   assert(batch % sizeof(int8_t) == 0);
   assert(input != NULL);
   assert(output != NULL);
 
-  const int32_t vbias = 
+  const int32_t vbias =
       (int32_t) (((uint32_t) (int32_t) params->scalar.output_zero_point) << 8) -
-      (int32_t) params->scalar.multiplier * (int32_t) params->scalar.input_zero_point + 
+      (int32_t) params->scalar.multiplier * (int32_t) params->scalar.input_zero_point +
       INT32_C(0x80);
   const int32_t vmultiplier = params->scalar.multiplier;
   for (; batch >= 4 * sizeof(int8_t); batch -= 4 * sizeof(int8_t)) {

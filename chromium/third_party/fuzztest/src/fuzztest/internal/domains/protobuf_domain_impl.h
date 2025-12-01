@@ -15,6 +15,7 @@
 #ifndef FUZZTEST_FUZZTEST_INTERNAL_DOMAINS_PROTOBUF_DOMAIN_IMPL_H_
 #define FUZZTEST_FUZZTEST_INTERNAL_DOMAINS_PROTOBUF_DOMAIN_IMPL_H_
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -206,7 +207,9 @@ Predicate<T> IncludeAll() {
 
 template <typename T>
 Predicate<T> IsOptional() {
-  return [](const T* field) { return field->is_optional(); };
+  return [](const T* field) {
+    return !field->is_required() && !field->is_repeated();
+  };
 }
 
 template <typename T>
@@ -235,8 +238,8 @@ class ProtoPolicy {
   ProtoPolicy()
       : optional_policies_({{/*filter=*/IncludeAll<FieldDescriptor>(),
                              /*value=*/OptionalPolicy::kWithNull}}) {
-    static int64_t next_id = 0;
-    id_ = next_id++;
+    ABSL_CONST_INIT static std::atomic<int64_t> next_id{0};
+    id_ = next_id.fetch_add(1, std::memory_order_relaxed);
   }
 
   void SetOptionalPolicy(OptionalPolicy optional_policy) {
@@ -282,7 +285,7 @@ class ProtoPolicy {
 
   OptionalPolicy GetOptionalPolicy(const FieldDescriptor* field) const {
     FUZZTEST_INTERNAL_CHECK(
-        field->is_optional(),
+        !field->is_required() && !field->is_repeated(),
         "GetOptionalPolicy should apply to optional fields only!");
     std::optional<OptionalPolicy> result =
         GetPolicyValue(optional_policies_, field);
@@ -1629,8 +1632,11 @@ class ProtobufDomainUntypedImpl
   auto GetBaseDefaultDomainForFieldType(const FieldDescriptor* field) const {
     if constexpr (std::is_same_v<T, std::string>) {
       if (field->type() == FieldDescriptor::TYPE_STRING) {
-        // Can only use UTF-8. For now, simplify as just ASCII.
-        return Domain<T>(AsciiString());
+        if (field->requires_utf8_validation()) {
+          return Domain<T>(Utf8String());
+        } else {
+          return Domain<T>(String());
+        }
       }
     }
 
@@ -1800,7 +1806,7 @@ class ProtobufDomainUntypedImpl
       return true;
     } else if (field->containing_oneof()) {
       return GetOneofFieldPolicy(field) == OptionalPolicy::kWithoutNull;
-    } else if (field->is_optional()) {
+    } else if (!field->is_required() && !field->is_repeated()) {
       return policy_.GetOptionalPolicy(field) == OptionalPolicy::kWithoutNull;
     } else if (field->is_repeated()) {
       return policy_.GetMinRepeatedFieldSize(field).has_value() &&
@@ -1824,7 +1830,7 @@ class ProtobufDomainUntypedImpl
       return false;
     } else if (field->containing_oneof()) {
       return GetOneofFieldPolicy(field) == OptionalPolicy::kAlwaysNull;
-    } else if (field->is_optional()) {
+    } else if (!field->is_required() && !field->is_repeated()) {
       return policy_.GetOptionalPolicy(field) == OptionalPolicy::kAlwaysNull;
     } else if (field->is_repeated()) {
       return policy_.GetMaxRepeatedFieldSize(field).has_value() &&

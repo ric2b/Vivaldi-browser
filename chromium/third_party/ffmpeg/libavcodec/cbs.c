@@ -261,7 +261,7 @@ static int cbs_fill_fragment_data(CodedBitstreamFragment *frag,
 
 static int cbs_read_data(CodedBitstreamContext *ctx,
                          CodedBitstreamFragment *frag,
-                         AVBufferRef *buf,
+                         const AVBufferRef *buf,
                          const uint8_t *data, size_t size,
                          int header)
 {
@@ -329,9 +329,10 @@ int CBS_FUNC(read_packet_side_data)(CodedBitstreamContext *ctx,
 
 int CBS_FUNC(read)(CodedBitstreamContext *ctx,
                 CodedBitstreamFragment *frag,
+                const AVBufferRef *buf,
                 const uint8_t *data, size_t size)
 {
-    return cbs_read_data(ctx, frag, NULL,
+    return cbs_read_data(ctx, frag, buf,
                          data, size, 0);
 }
 #endif
@@ -782,14 +783,12 @@ static int cbs_insert_unit(CodedBitstreamFragment *frag,
         if (position < frag->nb_units)
             memcpy(units + position + 1, frag->units + position,
                    (frag->nb_units - position) * sizeof(*units));
-    }
 
-    memset(units + position, 0, sizeof(*units));
-
-    if (units != frag->units) {
         av_free(frag->units);
         frag->units = units;
     }
+
+    memset(units + position, 0, sizeof(*units));
 
     ++frag->nb_units;
 

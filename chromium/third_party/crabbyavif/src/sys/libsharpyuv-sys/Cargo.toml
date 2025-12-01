@@ -1,0 +1,11 @@
+[package]
+name = "libsharpyuv-sys"
+version = "0.1.0"
+edition = "2021"
+
+[build-dependencies]
+bindgen = "0.69.2"
+pkg-config = "0.3.29"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(google3)'] }

@@ -35,6 +35,9 @@
 [submodule "third_party/anonymous_tokens/src"]
 	path = third_party/anonymous_tokens/src
 	url = ../../external/github.com/google/anonymous-tokens.git
+[submodule "third_party/readability/src"]
+	path = third_party/readability/src
+	url = ../../external/github.com/mozilla/readability.git
 [submodule "third_party/content_analysis_sdk/src"]
 	path = third_party/content_analysis_sdk/src
 	url = ../../external/github.com/chromium/content_analysis_sdk.git
@@ -337,9 +340,6 @@
 [submodule "third_party/vulkan_memory_allocator"]
 	path = third_party/vulkan_memory_allocator
 	url = ../../external/github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git
-[submodule "third_party/wasm_tts_engine/src"]
-	path = third_party/wasm_tts_engine/src
-	url = ../wasm-tts-engine.git
 [submodule "third_party/wayland/src"]
 	path = third_party/wayland/src
 	url = ../../external/anongit.freedesktop.org/git/wayland/wayland.git

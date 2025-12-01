@@ -13,12 +13,14 @@
 #include <random>
 #include <vector>
 
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include "include/xnnpack.h"
 #include "src/xnnpack/allocation-type.h"
 #include "src/xnnpack/buffer.h"
 #include "src/xnnpack/common.h"
-#include "src/xnnpack/math.h"
+#include "src/xnnpack/node-type.h"
+#include "src/xnnpack/operator.h"
 #include "src/xnnpack/subgraph.h"
 #include "test/replicable_random_device.h"
 #include "test/subgraph/runtime-flags.h"
@@ -104,7 +106,7 @@ void DefineGraphWithStaticData(xnn_subgraph_t* subgraph,
                               static_value_id, output_id, /*flags=*/0));
 }
 
-testing::AssertionResult ValueInWorkspace(xnn_value* value,
+testing::AssertionResult ValueInWorkspace(xnn_runtime_value* value,
                                           xnn_workspace_t workspace) {
   if ((value->data >= workspace->data) &&
       ((uintptr_t)value->data + value->size) <=
@@ -200,7 +202,7 @@ TEST(WORKSPACE, static_data_not_moved_does_not_segv) {
 
   // Try to access all the values and ensure that we don't segfault.
   for (size_t i = 0; i < runtime1->num_values; i++) {
-    xnn_value* value = &runtime1->values[i];
+    xnn_runtime_value* value = &runtime1->values[i];
     if (value->allocation_type == xnn_allocation_type_external) {
       continue;
     }
@@ -210,7 +212,7 @@ TEST(WORKSPACE, static_data_not_moved_does_not_segv) {
   }
 
   for (size_t i = 0; i < runtime2->num_values; i++) {
-    xnn_value* value = &runtime2->values[i];
+    xnn_runtime_value* value = &runtime2->values[i];
     if (value->allocation_type == xnn_allocation_type_external) {
       continue;
     }
@@ -279,12 +281,12 @@ TEST(WORKSPACE, workspace_no_growth) {
 
   ASSERT_EQ(runtime1->num_values, runtime2->num_values);
   for (size_t i = 0; i < runtime1->num_values; i++) {
-    xnn_value* value1 = &runtime1->values[i];
+    xnn_runtime_value* value1 = &runtime1->values[i];
     if (value1->allocation_type != xnn_allocation_type_workspace) {
       continue;
     }
     ASSERT_TRUE(ValueInWorkspace(value1, runtime1->workspace));
-    xnn_value* value2 = &runtime2->values[i];
+    xnn_runtime_value* value2 = &runtime2->values[i];
     ASSERT_TRUE(ValueInWorkspace(value2, runtime2->workspace));
   }
 
@@ -374,14 +376,14 @@ TEST(WORKSPACE, workspace_grow) {
 
   // Check that both runtime's value pointers are within range.
   for (size_t i = 0; i < runtime1->num_values; i++) {
-    xnn_value* value = &runtime1->values[i];
+    xnn_runtime_value* value = &runtime1->values[i];
     if (value->allocation_type != xnn_allocation_type_workspace) {
       continue;
     }
     ASSERT_TRUE(ValueInWorkspace(value, runtime1->workspace));
   }
   for (size_t i = 0; i < runtime2->num_values; i++) {
-    xnn_value* value = &runtime2->values[i];
+    xnn_runtime_value* value = &runtime2->values[i];
     if (value->allocation_type != xnn_allocation_type_workspace) {
       continue;
     }
@@ -741,7 +743,7 @@ TEST(WORKSPACE, internally_allocated_dynamic_quantization_parameters) {
 
   size_t dq_tensors = 0;
   for (size_t i = 0; i < runtime->num_values; i++) {
-    const xnn_value* value = &runtime->values[i];
+    const xnn_runtime_value* value = &runtime->values[i];
     switch (value->datatype) {
       case xnn_datatype_qdint8:
       case xnn_datatype_qduint8:
@@ -754,5 +756,18 @@ TEST(WORKSPACE, internally_allocated_dynamic_quantization_parameters) {
         break;
     }
   }
-  ASSERT_EQ(dq_tensors, 1);
+  if (dq_tensors == 0) {
+    // If no quantized datatype tensor was found, maybe it was inlined?
+    for (size_t i = 0; i < subgraph->num_nodes; i++) {
+      const xnn_node* node = &subgraph->nodes[i];
+      if (node->type == xnn_node_type_fully_connected) {
+        EXPECT_TRUE(node->flags & XNN_FLAG_INLINE_LHS_PACKING);
+        EXPECT_THAT(node->packed_input_datatype,
+                    testing::AnyOf(xnn_datatype_qdint8, xnn_datatype_qduint8,
+                                   xnn_datatype_qpint8));
+      }
+    }
+  } else {
+    ASSERT_EQ(dq_tensors, 1);
+  }
 }

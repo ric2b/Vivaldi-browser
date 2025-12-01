@@ -56,8 +56,7 @@ import org.vivaldi.browser.speeddial.SpeedDialPage;
 import org.vivaldi.browser.themes.VivaldiAccentColor;
 
 // Vivaldi
-import org.chromium.chrome.browser.app.ChromeActivity;
-import org.chromium.build.BuildConfig;
+import org.chromium.components.browser_ui.styles.ChromeColors;
 
 /**
  * Maintains the status bar color for a {@link Window}.
@@ -66,7 +65,6 @@ import org.chromium.build.BuildConfig;
  */
 public class StatusBarColorController
         implements DestroyObserver,
-                TopToolbarCoordinator.UrlExpansionObserver,
                 StatusIndicatorCoordinator.StatusIndicatorObserver,
                 UrlFocusChangeListener,
                 OmniboxSuggestionsDropdownScrollListener,
@@ -136,6 +134,7 @@ public class StatusBarColorController
 
     // Vivaldi
     private boolean mAnimateTransition;
+    private boolean mIsInOverviewMode;
 
     private final LayoutStateObserver mLayoutStateObserver =
             new LayoutStateObserver() {
@@ -144,6 +143,7 @@ public class StatusBarColorController
                     if (layoutType != LayoutType.TAB_SWITCHER) {
                         return;
                     }
+                    mIsInOverviewMode = false;
                     updateStatusBarColor();
                     // Note(david@vivaldi.com): After finish hiding turn off the animation.
                     mAnimateTransition = false;
@@ -156,8 +156,9 @@ public class StatusBarColorController
                         return;
                     }
                     mAnimateTransition = true;
+                    mIsInOverviewMode = false;
                     updateStatusBarColor();
-                } // End Vivaldi
+                }
 
                 /** Vivaldi */
                 @Override
@@ -167,6 +168,19 @@ public class StatusBarColorController
                     }
                     // No more animation required once we are done showing the tab switcher.
                     mAnimateTransition = false;
+                }
+
+                /** Vivaldi */
+                @Override
+                public void onStartedShowing(@LayoutType int layoutType) {
+                    if (layoutType != LayoutType.TAB_SWITCHER) {
+                        return;
+                    }
+                    mIsInOverviewMode = true;
+                    // Note(david@vivaldi.com): We recalculate the status bar color when in overview
+                    // mode. Also indicating that we about to animate the color transition.
+                    mAnimateTransition = true;
+                    updateStatusBarColor();
                 }
                 // End Vivaldi
             };
@@ -340,15 +354,6 @@ public class StatusBarColorController
         updateStatusBarColor();
     }
 
-    // TopToolbarCoordinator.UrlExpansionObserver implementation.
-    @Override
-    public void onUrlExpansionProgressChanged() {
-        // Note (david@vivaldi.com): This is not required and would only lead into blinking effects.
-        if (!ChromeApplicationImpl.isVivaldi()) {
-        if (mShouldUpdateStatusBarColorForNtp) updateStatusBarColor();
-        } // End Vivaldi
-    }
-
     // TopToolbarCoordinator.ToolbarColorObserver implementation.
     @Override
     public void onToolbarColorChanged(@ColorInt int color) {
@@ -452,12 +457,8 @@ public class StatusBarColorController
         } else
         setStatusBarColor(mEdgeToEdgeSystemBarColorHelper, mWindow, statusBarColor);
 
-        // Note(david@vivaldi.com): We also apply color to the navigation bar.
-        boolean isInOverviewMode = false;
-        if (mLayoutStateProvider != null)
-            isInOverviewMode = mLayoutStateProvider.isLayoutVisible(LayoutType.TAB_SWITCHER);
         VivaldiColorUtils.setNavigationBarColor(
-                mWindow, mCurrentTab, isInOverviewMode, mAnimateTransition);
+                mWindow, mCurrentTab, mIsInOverviewMode, mAnimateTransition);
     }
 
     /**
@@ -521,6 +522,10 @@ public class StatusBarColorController
             if (mToolbarColorChanged) return mToolbarColor;
             return calculateDefaultStatusBarColor();
         }
+
+        if (mIsInOverviewMode)
+            return ChromeColors.getDefaultThemeColor(
+                    mWindow.getContext(), mIsIncognitoBranded);
 
         // Return New Tab Page background color in New Tab Page.
         if (!ChromeApplicationImpl.isVivaldi()) // Vivaldi VAB-9742

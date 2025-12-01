@@ -17,6 +17,7 @@
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/transitions/tab_grid_transition_layout_providing.h"
 
 @protocol ApplicationCommands;
+@class ChromeAppBarPrototype;
 @class GridContainerViewController;
 @protocol GridCommands;
 class GURL;
@@ -28,8 +29,6 @@ enum class IPHDismissalReasonType;
 @class LayoutGuideCenter;
 @class PinnedTabsViewController;
 @protocol PriceCardDataSource;
-@protocol RecentTabsConsumer;
-@class RecentTabsTableViewController;
 @class RegularGridViewController;
 @class TabGridBottomToolbar;
 @protocol TabCollectionConsumer;
@@ -42,6 +41,11 @@ enum class IPHDismissalReasonType;
 @protocol TabGridToolbarsCommandsWrangler;
 @class TabGridTopToolbar;
 @class TabGroupsPanelViewController;
+
+// Vivaldi
+@protocol RecentTabsConsumer;
+@class RecentTabsTableViewController;
+// End Vivaldi
 
 // Configurations for tab grid pages.
 enum class TabGridPageConfiguration {
@@ -92,8 +96,7 @@ enum class TabGridPageConfiguration {
 @end
 
 // View controller representing a tab switcher. The tab switcher has an
-// incognito tab grid, regular tab grid, and a third panel (either Tab Groups or
-// Recent Tabs).
+// incognito tab grid, regular tab grid, and tab groups grid.
 @interface TabGridViewController
     : UIViewController <DisabledGridViewControllerDelegate,
                         GridConsumer,
@@ -120,10 +123,9 @@ enum class TabGridPageConfiguration {
 // Mutator to apply all user change in the model.
 @property(nonatomic, weak) id<TabGridMutator> mutator;
 
+// Vivaldi
 // Consumers send updates from the model layer to the UI layer.
 @property(nonatomic, readonly) id<RecentTabsConsumer> remoteTabsConsumer;
-
-// Vivaldi
 @property(nonatomic, readonly) id<RecentTabsConsumer> closedTabsConsumer;
 // End Vivaldi
 
@@ -147,17 +149,14 @@ enum class TabGridPageConfiguration {
     IncognitoGridViewController* incognitoTabsViewController;
 @property(nonatomic, strong)
     TabGroupsPanelViewController* tabGroupsPanelViewController;
-// The view controller for Recent Tabs.
-// TODO(crbug.com/41390276) : This was only exposed in the public interface so
-// that TabGridViewController does not need to know about model objects. The
-// model objects used in this view controller should be factored out.
-@property(nonatomic, readonly)
-    RecentTabsTableViewController* remoteTabsViewController;
 
 // Vivaldi
-// The view controller for recentyly closed tabs.
+// The view controller for recently closed tabs.
 @property(nonatomic, strong)
     RecentTabsTableViewController* closedTabsViewController;
+// The view controller for remote tabs.
+@property(nonatomic, strong)
+    RecentTabsTableViewController* remoteTabsViewController;
 // End Vivaldi
 
 // The layout guide center to use to refer to the bottom toolbar.
@@ -184,8 +183,6 @@ enum class TabGridPageConfiguration {
     UIViewController* incognitoGridContainerViewController;
 @property(nonatomic, weak)
     UIViewController* tabGroupsGridContainerViewController;
-@property(nonatomic, weak)
-    GridContainerViewController* remoteGridContainerViewController;
 
 // Active page of the tab grid. The active page is the page that
 // contains the most recent active tab.
@@ -195,7 +192,11 @@ enum class TabGridPageConfiguration {
 
 // Vivaldi
 @property(nonatomic, weak)
+    GridContainerViewController* remoteGridContainerViewController;
+@property(nonatomic, weak)
     GridContainerViewController* closedGridContainerViewController;
+// Dismisses any modal UI which may be presented.
+- (void)dismissModals;
 // End Vivaldi
 
 // Init with tab grid view configuration, which decides which sub view
@@ -214,15 +215,15 @@ enum class TabGridPageConfiguration {
 - (void)contentDidAppear;
 - (void)contentWillDisappearAnimated:(BOOL)animated;
 
-// Dismisses any modal UI which may be presented.
-- (void)dismissModals;
-
 // Sets both the current page and page control's selected page to `page`.
 // Animation is used if `animated` is YES.
 - (void)setCurrentPageAndPageControl:(TabGridPage)page animated:(BOOL)animated;
 
 // Updates the active page to be the current page.
 - (void)updateActivePageToCurrent;
+
+// Sets the app bar.
+- (void)setAppBar:(ChromeAppBarPrototype*)appBar;
 
 @end
 

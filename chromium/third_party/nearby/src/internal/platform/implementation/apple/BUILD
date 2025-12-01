@@ -1,3 +1,7 @@
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+load("@rules_cc//cc:objc_library.bzl", "objc_library")
+
 # Copyright 2020 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +20,7 @@ licenses(["notice"])
 package(default_visibility = [
     "//connections:__subpackages__",
     "//googlemac/iPhone/Nearby:__subpackages__",
-    "//internal/platform/implementation/apple:__subpackages__",
+    "//internal/platform:__subpackages__",
     "//location/nearby:__subpackages__",
     "//sharing:__subpackages__",
 ])
@@ -67,13 +71,14 @@ objc_library(
         "//third_party/apple_frameworks:Foundation",
         "//third_party/apple_frameworks:Network",
         "@nlohmann_json//:json",
+        "//internal/base:file_path",
         "//internal/platform:base",
         "//internal/platform/implementation:comm",
         "//internal/platform/implementation:platform",
         "//internal/platform/implementation:types",
         "//internal/platform/implementation/apple/Mediums",
         "//internal/platform/implementation/shared:file",
-        "//third_party/objective_c/google_toolbox_for_mac:GTM_Logger",
+        "//internal/platform/implementation/apple/Log:GNCLogger",
     ] + select({
         "@platforms//os:platform_ios": [
             "//third_party/apple_frameworks:UIKit",
@@ -119,12 +124,12 @@ objc_library(
         "//internal/platform:uuid",
         "//internal/platform/implementation:comm",
         "//internal/platform/implementation/apple/Flags",
+        "//internal/platform/implementation/apple/Log:GNCLogger",
         "//internal/platform/implementation/apple/Mediums",
         "//internal/platform/implementation/apple/Mediums/Ble/Sockets:Central",
         "//internal/platform/implementation/apple/Mediums/Ble/Sockets:Peripheral",
         "//third_party/apple_frameworks:CoreBluetooth",
         "//third_party/apple_frameworks:Foundation",
-        "//third_party/objective_c/google_toolbox_for_mac:GTM_Logger",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/strings",
@@ -157,9 +162,41 @@ objc_library(
         "//internal/platform:base",
         "//internal/platform:cancellation_flag",
         "//internal/platform/implementation:comm",
+        "//internal/platform/implementation/apple/Log:GNCLogger",
         "//internal/platform/implementation/apple/Mediums",
-        "//third_party/objective_c/google_toolbox_for_mac:GTM_Logger",
         "@com_google_absl//absl/functional:any_invocable",
+    ],
+)
+
+objc_library(
+    name = "os_log_sink",
+    srcs = [
+        "os_log_sink.mm",
+    ],
+    hdrs = [
+        "os_log_sink.h",
+    ],
+    # Prevent Objective-C++ headers from being pulled into swift.
+    aspect_hints = ["//tools/build_defs/swift:no_module"],
+    deps = [
+        "//internal/platform:logging",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+objc_library(
+    name = "nearby_logger",
+    srcs = [
+        "nearby_logger.mm",
+    ],
+    hdrs = [
+        "nearby_logger.h",
+    ],
+    # Prevent Objective-C++ headers from being pulled into swift.
+    aspect_hints = ["//tools/build_defs/swift:no_module"],
+    deps = [
+        ":os_log_sink",
+        "//internal/platform:logging",
     ],
 )
 

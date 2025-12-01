@@ -157,6 +157,10 @@ static const FormatEntry format_entries[] = {
     [AV_PIX_FMT_YUV444P12LE]    = { 1, 1 },
     [AV_PIX_FMT_YUV444P14BE]    = { 1, 1 },
     [AV_PIX_FMT_YUV444P14LE]    = { 1, 1 },
+    [AV_PIX_FMT_YUV444P10MSBBE] = { 1, 1 },
+    [AV_PIX_FMT_YUV444P10MSBLE] = { 1, 1 },
+    [AV_PIX_FMT_YUV444P12MSBBE] = { 1, 1 },
+    [AV_PIX_FMT_YUV444P12MSBLE] = { 1, 1 },
     [AV_PIX_FMT_GBRP]           = { 1, 1 },
     [AV_PIX_FMT_GBRP9LE]        = { 1, 1 },
     [AV_PIX_FMT_GBRP9BE]        = { 1, 1 },
@@ -164,8 +168,12 @@ static const FormatEntry format_entries[] = {
     [AV_PIX_FMT_GBRP10BE]       = { 1, 1 },
     [AV_PIX_FMT_GBRAP10LE]      = { 1, 1 },
     [AV_PIX_FMT_GBRAP10BE]      = { 1, 1 },
+    [AV_PIX_FMT_GBRP10MSBLE]    = { 1, 1 },
+    [AV_PIX_FMT_GBRP10MSBBE]    = { 1, 1 },
     [AV_PIX_FMT_GBRP12LE]       = { 1, 1 },
     [AV_PIX_FMT_GBRP12BE]       = { 1, 1 },
+    [AV_PIX_FMT_GBRP12MSBLE]    = { 1, 1 },
+    [AV_PIX_FMT_GBRP12MSBBE]    = { 1, 1 },
     [AV_PIX_FMT_GBRAP12LE]      = { 1, 1 },
     [AV_PIX_FMT_GBRAP12BE]      = { 1, 1 },
     [AV_PIX_FMT_GBRP14LE]       = { 1, 1 },
@@ -483,7 +491,7 @@ static int infer_trc_ref(SwsColor *csp, const SwsColor *ref)
     return 1;
 }
 
-int ff_infer_colors(SwsColor *src, SwsColor *dst)
+bool ff_infer_colors(SwsColor *src, SwsColor *dst)
 {
     int incomplete = 0;
 

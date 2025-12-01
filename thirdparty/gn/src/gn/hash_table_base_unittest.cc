@@ -145,8 +145,9 @@ class TestHashTable : public HashTableBase<TestHashNode> {
     if (node->is_valid())
       return false;
 
+    bool was_tombstone = node->is_tombstone();
     node->int_ptr = new Int(x);
-    UpdateAfterInsert();
+    UpdateAfterInsert(was_tombstone);
     return true;
   }
 
@@ -353,4 +354,14 @@ TEST(HashTableBaseTest, Iteration) {
   EXPECT_EQ(values[0], 1);
   EXPECT_EQ(values[1], 5);
   EXPECT_EQ(values[2], 7);
+}
+
+TEST(HashTableBaseTest, Erase) {
+  TestHashTable table;
+  // Use sequention hashes to test that tombstone_count_ grows the hash table.
+  for (int i = 0; i < 16; ++i) {
+    table.insert(i);
+    table.erase(i);
+    EXPECT_EQ(table.size(), 0u);
+  }
 }

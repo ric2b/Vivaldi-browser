@@ -19,3 +19,15 @@ update_target("//chrome/browser/ui:ui") {
     "//vivaldi/ui",
   ]
 }
+
+update_target("//chrome/browser/ui/startup:impl") {
+  configs += [
+    "//vivaldi/gn/config:release_kind",
+  ]
+}
+
+update_target("//chrome/browser/profiles:profile_util_impl") {
+  sources += [
+    "//vivaldi/ui/webui/nuke_profile_directory_utils.inc"
+  ]
+}

@@ -8,4 +8,7 @@ source_set("signature") {
   deps = [
     "//base",
   ]
+  configs += [
+     "//vivaldi/gn/config:release_kind"
+  ]
 }

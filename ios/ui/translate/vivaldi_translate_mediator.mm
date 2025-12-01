@@ -4,6 +4,7 @@
 
 #import "base/strings/sys_string_conversions.h"
 #import "base/uuid.h"
+#import "components/application_locale_storage/application_locale_storage.h"
 #import "components/language/core/browser/language_model_manager.h"
 #import "components/prefs/pref_service.h"
 #import "components/translate/core/browser/translate_download_manager.h"
@@ -19,13 +20,30 @@
 #import "ios/ui/translate/vivaldi_translate_consumer.h"
 #import "ios/ui/translate/vivaldi_translate_language_item.h"
 #import "ios/ui/translate/vivaldi_translate_swift.h"
+#import "prefs/vivaldi_pref_names.h"
 #import "translate_history/th_node.h"
 
-using translate_history::TH_Node;
 using translate_history::NodeList;
+using translate_history::TH_Node;
 
-@interface VivaldiTranslateMediator ()<VivaldiIOSTHServiceBridgeObserver> {
+namespace {
+// Language code mapping - maps various codes to canonical codes for consistency
+const std::unordered_map<std::string, std::string> kLanguageCodeMapping = {
+    {"sr", "sr-Cyrl"}, // Serbian
+    {"zh-CN", "zh-Hans"}, // Chinese (Simplified)
+    {"zh-TW", "zh-Hant"}, // Chinese (Traditional)
+    {"iw", "he"}, // Hebrew
+    {"jw", "jv"}, // Javanese
+};
 
+// Get canonical code for consistency
+std::string getCanonicalCode(const std::string& code) {
+  auto it = kLanguageCodeMapping.find(code);
+  return (it != kLanguageCodeMapping.end()) ? it->second : code;
+}
+}  // namespace
+
+@interface VivaldiTranslateMediator () <VivaldiIOSTHServiceBridgeObserver> {
   // Profile for getting the prefs
   ProfileIOS* _profile;
 
@@ -36,8 +54,8 @@ using translate_history::NodeList;
   std::unique_ptr<translate::TranslatePrefs> _translatePrefs;
 
   // Translation request instance
-  std::unique_ptr<
-      vivaldi::VivaldiIOSTranslateServerRequest> _translationRequest;
+  std::unique_ptr<vivaldi::VivaldiIOSTranslateServerRequest>
+      _translationRequest;
 
   // The LanguageModelManager for the translation
   language::LanguageModelManager* _languageModelManager;
@@ -63,14 +81,15 @@ using translate_history::NodeList;
 @property(nonatomic, strong) VivaldiTranslateLanguageItem* destinationLanguage;
 
 // Cached supported languages
-@property (nonatomic, strong)
-  NSArray<VivaldiTranslateLanguageItem*> *supportedLanguages;
-@property (nonatomic, strong)
-  NSDictionary<NSString*, VivaldiTranslateLanguageItem*> *languageCodeToItemMap;
+@property(nonatomic, strong)
+    NSArray<VivaldiTranslateLanguageItem*>* supportedLanguages;
+@property(nonatomic, strong)
+    NSDictionary<NSString*, VivaldiTranslateLanguageItem*>*
+        languageCodeToItemMap;
 
 // Loaded translate history items.
-@property (nonatomic, strong)
-    NSArray<VivaldiTranslateHistoryItem*> *translateHistoryItems;
+@property(nonatomic, strong)
+    NSArray<VivaldiTranslateHistoryItem*>* translateHistoryItems;
 
 @end
 
@@ -83,10 +102,8 @@ using translate_history::NodeList;
     _profile = profile;
     _prefs = profile->GetPrefs();
 
-    _translatePrefs =
-        VivaldiIOSTranslateClient::CreateTranslatePrefs(_prefs);
-    _languageModelManager =
-        LanguageModelManagerFactory::GetForProfile(profile);
+    _translatePrefs = VivaldiIOSTranslateClient::CreateTranslatePrefs(_prefs);
+    _languageModelManager = LanguageModelManagerFactory::GetForProfile(profile);
 
     _translateHistoryModel =
         translate_history::VivaldiIOSTHServiceFactory::GetForProfile(_profile);
@@ -100,7 +117,10 @@ using translate_history::NodeList;
     std::string targetLanguageCode =
         VivaldiIOSTranslateService::GetTargetLanguage(
             _prefs, _languageModelManager->GetPrimaryModel());
-    self.destinationLanguage = [self languageForCode:targetLanguageCode];
+
+    // Apply canonical mapping to target language
+    std::string canonicalTargetCode = getCanonicalCode(targetLanguageCode);
+    self.destinationLanguage = [self languageForCode:canonicalTargetCode];
 
     // Notify consumers so that translate view is updated with source,
     // destination language and initial text.
@@ -112,10 +132,9 @@ using translate_history::NodeList;
     if ([_selectedText length] > 0) {
       [self didSelectTranslateWith:_selectedText
                         sourceLang:@""
-                          destLang:base::SysUTF8ToNSString(targetLanguageCode)
+                          destLang:base::SysUTF8ToNSString(canonicalTargetCode)
                   autoDetectSource:YES];
     }
-
   }
   return self;
 }
@@ -136,6 +155,7 @@ using translate_history::NodeList;
   _consumer = consumer;
 
   // Notify consumers
+  [self initializeSupportedLanguages];
   [self notifyConsumersIfNeeded];
 }
 
@@ -147,38 +167,56 @@ using translate_history::NodeList;
 
   // Notify consumer that translation will begin
   [self.consumer translationWillBeginWithSourceText:self.selectedText
-                                    sourceLang:nil
-                                      destLang:self.destinationLanguage];
+                                         sourceLang:nil
+                                           destLang:self.destinationLanguage];
 }
 
 - (void)initializeSupportedLanguages {
   // Get the supported languages.
   std::vector<translate::TranslateLanguageInfo> languages;
   translate::TranslatePrefs::GetLanguageInfoList(
-      GetApplicationContext()->GetApplicationLocale(),
-      _translatePrefs->IsTranslateAllowedByPolicy(), &languages);
+      GetApplicationContext()->GetApplicationLocaleStorage()->Get(),
+      true /*translate_allowed*/, &languages);
 
+  PrefService* prefs = GetApplicationContext()->GetLocalState();
+  auto& list = prefs->GetList(vivaldiprefs::kVivaldiTranslateLanguageList);
   std::vector<std::string> language_codes;
-  translate::TranslateDownloadManager::GetSupportedLanguages(
-      _translatePrefs->IsTranslateAllowedByPolicy(), &language_codes);
+  for (const auto& value : list) {
+    if (value.is_string()) {
+      language_codes.push_back(value.GetString());
+    }
+  }
 
   // Convert language_codes vector to an unordered_set for lookups.
-  std::unordered_set<std::string> language_codes_set(language_codes.begin(),
-                                                     language_codes.end());
+  std::unordered_set<std::string> language_codes_set;
+  for (const auto& code : language_codes)
+    language_codes_set.insert(getCanonicalCode(code));
 
-  NSMutableArray<VivaldiTranslateLanguageItem*> *supportedLanguages =
+  NSMutableArray<VivaldiTranslateLanguageItem*>* supportedLanguages =
       [NSMutableArray array];
-  NSMutableDictionary<NSString*, VivaldiTranslateLanguageItem*> *languageMap =
+  NSMutableDictionary<NSString*, VivaldiTranslateLanguageItem*>* languageMap =
       [NSMutableDictionary dictionary];
 
   for (const auto& language : languages) {
-    if (language_codes_set.find(language.code) !=
-        language_codes_set.end() && language.supports_translate) {
-      VivaldiTranslateLanguageItem *languageItem =
-          [self languageItemFromLanguage:language];
-      [supportedLanguages addObject:languageItem];
-      languageMap[languageItem.languageCode] = languageItem;
-    }
+    std::string canonicalCode = getCanonicalCode(language.code);
+
+    // Skip languages that are not in the prefs list
+    if (language_codes_set.find(canonicalCode) == language_codes_set.end())
+      continue;
+
+    // Skip duplicates
+    NSString* canonicalCodeNS = base::SysUTF8ToNSString(canonicalCode);
+    if (languageMap[canonicalCodeNS])
+      continue;
+
+    // Use the canonical code in the UI object
+    translate::TranslateLanguageInfo canonLang = language;
+    canonLang.code = canonicalCode;
+
+    VivaldiTranslateLanguageItem* item =
+        [self languageItemFromLanguage:canonLang];
+    [supportedLanguages addObject:item];
+    languageMap[item.languageCode] = item;
   }
 
   self.supportedLanguages = [supportedLanguages copy];
@@ -191,7 +229,6 @@ using translate_history::NodeList;
                               sourceText:(NSString*)sourceText
                           translatedText:(NSString*)translatedText
                         autoDetectSource:(BOOL)autoDetectSource {
-
   if (error != vivaldi::TranslateError::kNoError) {
     self.translatedText = nil;
     [self.consumer translationDidFail];
@@ -199,8 +236,13 @@ using translate_history::NodeList;
   }
 
   self.translatedText = translatedText;
-  self.sourceLanguage = [self languageForCode:sourceLanguage];
-  self.destinationLanguage = [self languageForCode:destinationLanguage];
+
+  // Apply canonical mapping for consistency
+  std::string canonicalSourceCode = getCanonicalCode(sourceLanguage);
+  std::string canonicalDestCode = getCanonicalCode(destinationLanguage);
+
+  self.sourceLanguage = [self languageForCode:canonicalSourceCode];
+  self.destinationLanguage = [self languageForCode:canonicalDestCode];
 
   [self.consumer translationDidFinishWithSourceText:sourceText
                                      translatedText:translatedText
@@ -208,8 +250,8 @@ using translate_history::NodeList;
                                            destLang:self.destinationLanguage
                                    autoDetectSource:autoDetectSource];
 
-  [self addTranslationToHistory:sourceLanguage
-            destinationLanguage:destinationLanguage
+  [self addTranslationToHistory:canonicalSourceCode
+            destinationLanguage:canonicalDestCode
                      sourceText:sourceText
                  translatedText:translatedText];
 }
@@ -218,7 +260,6 @@ using translate_history::NodeList;
             destinationLanguage:(const std::string&)destinationLanguage
                      sourceText:(NSString*)sourceText
                  translatedText:(NSString*)translatedText {
-
   if (!_translateHistoryModel || !_translateHistoryModel->loaded())
     return;
 
@@ -241,38 +282,43 @@ using translate_history::NodeList;
     return;
 
   NodeList* nodeList = _translateHistoryModel->list();
-  if (!nodeList) return;
+  if (!nodeList)
+    return;
 
   __weak __typeof(self) weakSelf = self;
 
-  dispatch_async(
-    dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+  dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0),
+                 ^{
+                   NSMutableArray<VivaldiTranslateHistoryItem*>* historyItems =
+                       [NSMutableArray array];
+                   for (const auto& node : *nodeList) {
+                     VivaldiTranslateHistoryItem* item =
+                         [weakSelf historyItemForNode:node];
+                     [historyItems addObject:item];
+                   }
 
-    NSMutableArray<VivaldiTranslateHistoryItem*> *historyItems =
-          [NSMutableArray array];
-    for (const auto& node : *nodeList) {
-      VivaldiTranslateHistoryItem *item = [weakSelf historyItemForNode:node];
-      [historyItems addObject:item];
-    }
-
-    dispatch_async(dispatch_get_main_queue(), ^{
-      weakSelf.translateHistoryItems = [historyItems copy];
-      [weakSelf.consumer translateHistoryDidLoad:historyItems];
-    });
-  });
-
+                   dispatch_async(dispatch_get_main_queue(), ^{
+                     weakSelf.translateHistoryItems = [historyItems copy];
+                     [weakSelf.consumer translateHistoryDidLoad:historyItems];
+                   });
+                 });
 }
 
 - (VivaldiTranslateHistoryItem*)historyItemForNode:(TH_Node*)node {
   NSString* itemId = base::SysUTF8ToNSString(node->id());
 
+  // Apply canonical mapping to ensure consistency with current language list
+  std::string canonicalSourceCode = getCanonicalCode(node->src().code);
+  std::string canonicalDestCode = getCanonicalCode(node->translated().code);
+
   VivaldiTranslateHistoryItem* historyItem =
-      [[VivaldiTranslateHistoryItem alloc] initWithItemId:itemId
-          source:[self languageForCode:node->src().code]
-              sourceText: base::SysUTF8ToNSString(node->src().text)
-                destination: [self languageForCode:node->translated().code]
-                    destinationText: base::SysUTF8ToNSString(node->translated().text)
-                        createdAt:node->date_added().ToNSDate()];
+      [[VivaldiTranslateHistoryItem alloc]
+           initWithItemId:itemId
+                   source:[self languageForCode:canonicalSourceCode]
+               sourceText:base::SysUTF8ToNSString(node->src().text)
+              destination:[self languageForCode:canonicalDestCode]
+          destinationText:base::SysUTF8ToNSString(node->translated().text)
+                createdAt:node->date_added().ToNSDate()];
   return historyItem;
 }
 
@@ -281,8 +327,23 @@ using translate_history::NodeList;
 }
 
 - (VivaldiTranslateLanguageItem*)languageForCode:(const std::string&)code {
-  NSString *codeNSString = base::SysUTF8ToNSString(code);
-  return self.languageCodeToItemMap[codeNSString];
+  if (code.empty())
+    return nil;
+
+  // First try the exact code
+  NSString* codeNSString = base::SysUTF8ToNSString(code);
+  VivaldiTranslateLanguageItem* item = self.languageCodeToItemMap[codeNSString];
+
+  if (!item) {
+    // Try canonical version of the code
+    std::string canonicalCode = getCanonicalCode(code);
+    if (canonicalCode != code) {
+      NSString* canonicalCodeNSString = base::SysUTF8ToNSString(canonicalCode);
+      item = self.languageCodeToItemMap[canonicalCodeNSString];
+    }
+  }
+
+  return item;
 }
 
 - (VivaldiTranslateLanguageItem*)languageItemFromLanguage:
@@ -293,43 +354,44 @@ using translate_history::NodeList;
   languageItem.displayName = base::SysUTF8ToNSString(language.display_name);
   languageItem.nativeDisplayName =
       base::SysUTF8ToNSString(language.native_display_name);
-  languageItem.supportsTranslate = language.supports_translate;
   return languageItem;
 }
 
-- (void)splitSourceText:(NSString *)sourceText
-          intoDataArray:(std::vector<std::string> &)data {
-  NSMutableArray<NSString *> *chunks = [NSMutableArray array];
-  NSMutableString *currentChunk = [NSMutableString string];
+- (void)splitSourceText:(NSString*)sourceText
+          intoDataArray:(std::vector<std::string>&)data {
+  NSMutableArray<NSString*>* chunks = [NSMutableArray array];
+  NSMutableString* currentChunk = [NSMutableString string];
 
-  [sourceText enumerateSubstringsInRange:NSMakeRange(0, sourceText.length)
-                                 options:NSStringEnumerationByWords |
-                                      NSStringEnumerationSubstringNotRequired
-                              usingBlock:^(
-    NSString *substring, NSRange substringRange,
-          NSRange enclosingRange, BOOL *stop) {
+  [sourceText
+      enumerateSubstringsInRange:NSMakeRange(0, sourceText.length)
+                         options:NSStringEnumerationByWords |
+                                 NSStringEnumerationSubstringNotRequired
+                      usingBlock:^(NSString* substring, NSRange substringRange,
+                                   NSRange enclosingRange, BOOL* stop) {
+                        // Get the range of the current word
+                        NSRange wordRange = enclosingRange;
+                        // Extract the word
+                        NSString* word =
+                            [sourceText substringWithRange:wordRange];
 
-    // Get the range of the current word
-    NSRange wordRange = enclosingRange;
-    // Extract the word
-    NSString *word = [sourceText substringWithRange:wordRange];
+                        if (currentChunk.length + word.length >
+                            kMaxCharactersLimitPerChunk) {
+                          // Current chunk is full, add it to the chunks array
+                          [chunks addObject:[currentChunk copy]];
+                          // Reset current chunk
+                          [currentChunk setString:@""];
+                        }
 
-    if (currentChunk.length + word.length > kMaxCharactersLimitPerChunk) {
-      // Current chunk is full, add it to the chunks array
-      [chunks addObject:[currentChunk copy]];
-      // Reset current chunk
-      [currentChunk setString:@""];
-    }
-
-    // Check if the word itself exceeds the max length
-    if (word.length > kMaxCharactersLimitPerChunk) {
-      // Handle long words (rare case)
-      [self splitLongWord:word intoChunks:chunks
-           maxChunkLength:kMaxCharactersLimitPerChunk];
-    } else {
-      [currentChunk appendString:word];
-    }
-  }];
+                        // Check if the word itself exceeds the max length
+                        if (word.length > kMaxCharactersLimitPerChunk) {
+                          // Handle long words (rare case)
+                          [self splitLongWord:word
+                                   intoChunks:chunks
+                               maxChunkLength:kMaxCharactersLimitPerChunk];
+                        } else {
+                          [currentChunk appendString:word];
+                        }
+                      }];
 
   // Add the last chunk if it's not empty
   if (currentChunk.length > 0) {
@@ -337,26 +399,28 @@ using translate_history::NodeList;
   }
 
   // Convert the chunks to std::string and store in the data vector
-  for (NSString *chunk in chunks) {
+  for (NSString* chunk in chunks) {
     std::string utf8String = base::SysNSStringToUTF8(chunk);
     data.push_back(utf8String);
   }
 }
 
-- (void)splitLongWord:(NSString *)word
-           intoChunks:(NSMutableArray<NSString *> *)chunks
+- (void)splitLongWord:(NSString*)word
+           intoChunks:(NSMutableArray<NSString*>*)chunks
        maxChunkLength:(NSUInteger)maxChunkLength {
-  NSMutableString *currentChunk = [NSMutableString string];
-  [word enumerateSubstringsInRange:NSMakeRange(0, word.length)
-        options:NSStringEnumerationByComposedCharacterSequences
-             usingBlock:^(NSString *substring, NSRange substringRange,
-                          NSRange enclosingRange, BOOL *stop) {
-    if (currentChunk.length + substring.length > maxChunkLength) {
-      [chunks addObject:[currentChunk copy]];
-      [currentChunk setString:@""];
-    }
-    [currentChunk appendString:substring];
-  }];
+  NSMutableString* currentChunk = [NSMutableString string];
+  [word
+      enumerateSubstringsInRange:NSMakeRange(0, word.length)
+                         options:NSStringEnumerationByComposedCharacterSequences
+                      usingBlock:^(NSString* substring, NSRange substringRange,
+                                   NSRange enclosingRange, BOOL* stop) {
+                        if (currentChunk.length + substring.length >
+                            maxChunkLength) {
+                          [chunks addObject:[currentChunk copy]];
+                          [currentChunk setString:@""];
+                        }
+                        [currentChunk appendString:substring];
+                      }];
 
   if (currentChunk.length > 0) {
     [chunks addObject:[currentChunk copy]];
@@ -369,7 +433,6 @@ using translate_history::NodeList;
                     sourceLang:(NSString*)sourceLang
                       destLang:(NSString*)destLang
               autoDetectSource:(BOOL)autoDetectSource {
-
   // Convert NSString* to std::string
   std::string source_lang = base::SysNSStringToUTF8(sourceLang);
   std::string dest_lang = base::SysNSStringToUTF8(destLang);
@@ -384,53 +447,53 @@ using translate_history::NodeList;
 
   // Create the block
   vivaldi::VivaldiTranslateTextCallback callback =
-  ^(vivaldi::TranslateError error,
-    const std::string& detected_source_language,
-    const std::vector<std::string>& source_text,
-    const std::vector<std::string>& translated_text) {
+      ^(vivaldi::TranslateError error,
+        const std::string& detected_source_language,
+        const std::vector<std::string>& source_text,
+        const std::vector<std::string>& translated_text) {
+        // Capture variables by value
+        auto local_error = error;
+        auto local_detected_source_language = detected_source_language;
+        auto local_source_text = source_text;
+        auto local_translated_text = translated_text;
 
-    // Capture variables by value
-    auto local_error = error;
-    auto local_detected_source_language = detected_source_language;
-    auto local_source_text = source_text;
-    auto local_translated_text = translated_text;
+        // Join the source text
+        std::string concatenated_source_text = "";
+        for (const auto& text : local_source_text) {
+          concatenated_source_text += text;
+        }
 
-    // Join the source text
-    std::string concatenated_source_text = "";
-    for (const auto& text : local_source_text) {
-      concatenated_source_text += text;
-    }
+        // Join the translated text
+        std::string concatenated_translated_text = "";
+        for (const auto& text : local_translated_text) {
+          concatenated_translated_text += text;
+        }
 
-    // Join the translated text
-    std::string concatenated_translated_text = "";
-    for (const auto& text : local_translated_text) {
-      concatenated_translated_text += text;
-    }
+        dispatch_async(dispatch_get_main_queue(), ^{
+          __typeof(self) strongSelf = weakSelf;
+          if (!strongSelf) {
+            return;
+          }
 
-    dispatch_async(dispatch_get_main_queue(), ^{
-      __typeof(self) strongSelf = weakSelf;
-      if (!strongSelf) {
-        return;
-      }
+          NSString* sourceTextNSString =
+              base::SysUTF8ToNSString(concatenated_source_text);
+          NSString* translatedTextNSString =
+              base::SysUTF8ToNSString(concatenated_translated_text);
 
-      NSString *sourceTextNSString =
-          base::SysUTF8ToNSString(concatenated_source_text);
-      NSString *translatedTextNSString =
-          base::SysUTF8ToNSString(concatenated_translated_text);
-
-      [strongSelf handleTranslationResultWithError:local_error
-                                  sourceLanguage:local_detected_source_language
-                               destinationLanguage:dest_lang
-                                        sourceText:sourceTextNSString
-                                    translatedText:translatedTextNSString
-                                  autoDetectSource:autoDetectSource];
-    });
-  };
+          [strongSelf
+              handleTranslationResultWithError:local_error
+                                sourceLanguage:local_detected_source_language
+                           destinationLanguage:dest_lang
+                                    sourceText:sourceTextNSString
+                                translatedText:translatedTextNSString
+                              autoDetectSource:autoDetectSource];
+        });
+      };
 
   // Create the translation request
   _translationRequest =
-      std::make_unique<
-        vivaldi::VivaldiIOSTranslateServerRequest>(_prefs, callback);
+      std::make_unique<vivaldi::VivaldiIOSTranslateServerRequest>(_prefs,
+                                                                  callback);
 
   // Start the request
   _translationRequest->StartRequest(data, source_lang, dest_lang);
@@ -441,7 +504,7 @@ using translate_history::NodeList;
     return;
 
   std::vector<std::string> ids;
-  for (NSString *itemId in historyItems) {
+  for (NSString* itemId in historyItems) {
     std::string utf8String = base::SysNSStringToUTF8(itemId);
     ids.push_back(utf8String);
   }

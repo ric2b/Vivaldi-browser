@@ -2,12 +2,11 @@
 
 #include "extensions/api/runtime/runtime_api.h"
 
-#include <memory>
-#include <string>
 #include <utility>
-#include <vector>
 
+#include "app/vivaldi_apptools.h"
 #include "base/base64.h"
+#include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/no_destructor.h"
 #include "base/path_service.h"
@@ -16,6 +15,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/thread_pool.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
+#include "browser/features/vivaldi_features.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/lifetime/application_lifetime_desktop.h"
@@ -35,27 +35,19 @@
 #include "chrome/browser/ui/profiles/profile_picker.h"
 #include "chrome/browser/ui/webui/profile_helper.h"
 #include "chrome/common/pref_names.h"
-#include "components/download/public/background_service/background_download_service.h"
-#include "components/keep_alive_registry/keep_alive_types.h"
-#include "components/keep_alive_registry/scoped_keep_alive.h"
-#include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+#include "extensions/api/window/window_private_api.h"
+#include "extensions/schema/runtime_private.h"
+#include "extensions/tools/vivaldi_tools.h"
+#include "prefs/vivaldi_pref_names.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/devtools/devtools_connector.h"
 #include "ui/vivaldi_browser_window.h"
-#include "app/vivaldi_apptools.h"
-#include "browser/vivaldi_runtime_feature.h"
-#include "extensions/api/window/window_private_api.h"
-#include "extensions/schema/runtime_private.h"
-#include "extensions/tools/vivaldi_tools.h"
-#include "prefs/vivaldi_gen_prefs.h"
-#include "prefs/vivaldi_pref_names.h"
 #include "ui/vivaldi_rootdocument_handler.h"
-#include "ui/vivaldi_ui_utils.h"
 
 #if BUILDFLAG(IS_MAC)
 #include "chrome/common/chrome_paths.h"
@@ -193,38 +185,29 @@ RuntimePrivateGetAllFeatureFlagsFunction::Run() {
   namespace Results = vivaldi::runtime_private::GetAllFeatureFlags::Results;
   using vivaldi::runtime_private::FeatureFlagInfo;
 
+  const std::vector<const base::Feature*> desktop_features{
+      &vivaldi_features::kChromePages,
+      &vivaldi_features::kCssMods,
+      &vivaldi_features::kDoubleClickMenu,
+      &vivaldi_features::kInternalPageReaderMode,
+      &vivaldi_features::kLocationOverride,
+      &vivaldi_features::kNewPrivacyReport,
+      &vivaldi_features::kSpeeddialWidgets,
+      &vivaldi_features::kTabsButton,
+      &vivaldi_features::kNoteEditor,
+  };
+
   std::vector<FeatureFlagInfo> results;
-  const vivaldi_runtime_feature::FeatureMap& feature_map =
-      vivaldi_runtime_feature::GetAllFeatures();
-  const vivaldi_runtime_feature::EnabledSet* enabled_set =
-      vivaldi_runtime_feature::GetEnabled(browser_context());
-  for (auto& i : feature_map) {
-    if (i.second.inactive)
-      continue;
-    const std::string& name = i.first;
-    const vivaldi_runtime_feature::Feature& feature = i.second;
-    FeatureFlagInfo flag;
-    flag.name = name;
-    flag.friendly_name = feature.friendly_name;
-    flag.description = feature.description;
-    flag.locked = feature.locked;
-    flag.value = enabled_set && enabled_set->contains(name);
-    results.push_back(std::move(flag));
-  }
+
+  std::transform(desktop_features.begin(), desktop_features.end(),
+                 std::back_inserter(results), [](const auto& feature) {
+                   FeatureFlagInfo feature_flag_info;
+                   feature_flag_info.name = feature->name;
+                   feature_flag_info.enabled =
+                       base::FeatureList::IsEnabled(*feature);
+                   return feature_flag_info;
+                 });
   return RespondNow(ArgumentList(Results::Create(results)));
-}
-
-ExtensionFunction::ResponseAction
-RuntimePrivateSetFeatureEnabledFunction::Run() {
-  using vivaldi::runtime_private::SetFeatureEnabled::Params;
-  namespace Results = vivaldi::runtime_private::SetFeatureEnabled::Results;
-
-  std::optional<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params);
-
-  bool found = vivaldi_runtime_feature::Enable(
-      browser_context(), params->feature_name, params->enable);
-  return RespondNow(ArgumentList(Results::Create(found)));
 }
 
 ExtensionFunction::ResponseAction RuntimePrivateIsGuestSessionFunction::Run() {
@@ -235,7 +218,8 @@ ExtensionFunction::ResponseAction RuntimePrivateIsGuestSessionFunction::Run() {
   DCHECK(service);
   if (service->GetBoolean(prefs::kBrowserGuestModeEnabled)) {
     content::WebContents* web_contents = GetSenderWebContents();
-    Profile* profile = Profile::FromBrowserContext(web_contents->GetBrowserContext());
+    Profile* profile =
+        Profile::FromBrowserContext(web_contents->GetBrowserContext());
     is_guest = profile->IsGuestSession();
   }
   return RespondNow(ArgumentList(Results::Create(is_guest)));
@@ -581,9 +565,8 @@ ExtensionFunction::ResponseAction RuntimePrivateCreateProfileFunction::Run() {
   return RespondLater();
 }
 
-void RuntimePrivateCreateProfileFunction::OnProfileCreated(
-    bool create_shortcut,
-    Profile* profile) {
+void RuntimePrivateCreateProfileFunction::OnProfileCreated(bool create_shortcut,
+                                                           Profile* profile) {
   CreateShortcutAndShowSuccess(create_shortcut, profile);
 }
 
@@ -611,7 +594,6 @@ void RuntimePrivateCreateProfileFunction::OpenNewWindowForProfile(
       base::BindOnce(
           &RuntimePrivateCreateProfileFunction::OnBrowserReadyCallback, this),
       false,  // Don't create a window if one already exists.
-      true,   // Create a first run window.
       false,  // There is no need to unblock all extensions because we only open
               // browser window if the Profile is not locked. Hence there is no
               // extension blocked.

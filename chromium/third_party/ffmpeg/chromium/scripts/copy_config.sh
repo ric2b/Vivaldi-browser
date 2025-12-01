@@ -10,7 +10,7 @@ for os in android linux linux-noasm mac win; do
     # Copy config files for various architectures:
     #   - ia32/x64 have config.asm, config.h
     #   - arm/arm-neon have config.h
-    for arch in arm arm-neon arm64 ia32 x64 mipsel mips64el; do
+    for arch in arm arm-neon arm64 ia32 x64 mipsel mips64el riscv64; do
       # Don't waste time on non-existent configs, if no config.h then skip.
       [ ! -e "build.$arch.$os/$target/config.h" ] && continue
       for f in config.h config_components.h config.asm libavutil/avconfig.h libavutil/ffversion.h libavcodec/bsf_list.c libavcodec/codec_list.c libavcodec/parser_list.c libavformat/demuxer_list.c libavformat/muxer_list.c libavformat/protocol_list.c; do

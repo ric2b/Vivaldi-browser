@@ -1,0 +1,24 @@
+# Copyright (c) 2025 Vivaldi Technologies AS. All rights reserved
+
+static_library("content") {
+  sources = [
+    "adblock_rule_service.cc",
+    "adblock_rule_service.h",
+    "adblock_state_and_logs.cc",
+    "adblock_state_and_logs.h",
+    "adblock_tab_state_and_logs.cc",
+    "adblock_tab_state_and_logs.h",
+  ]
+
+  public_deps = [
+    "//vivaldi/components/ad_blocker/public/core",
+  ]
+
+  deps = [
+    "//base",
+    "//content/public/browser",
+    "//components/keyed_service/core",
+    "//url",
+    "//vivaldi/components/ad_blocker/public/content/mojom:mojom",
+  ]
+}

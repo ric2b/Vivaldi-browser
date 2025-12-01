@@ -1102,6 +1102,13 @@ export namespace Audits {
     ValidationFailedIntegrityMismatch = 'ValidationFailedIntegrityMismatch',
   }
 
+  export const enum UnencodedDigestError {
+    MalformedDictionary = 'MalformedDictionary',
+    UnknownAlgorithm = 'UnknownAlgorithm',
+    IncorrectDigestType = 'IncorrectDigestType',
+    IncorrectDigestLength = 'IncorrectDigestLength',
+  }
+
   /**
    * Details for issues around "Attribution Reporting API" usage.
    * Explainer: https://github.com/WICG/attribution-reporting-api
@@ -1143,6 +1150,11 @@ export namespace Audits {
     error: SRIMessageSignatureError;
     signatureBase: string;
     integrityAssertions: string[];
+    request: AffectedRequest;
+  }
+
+  export interface UnencodedDigestIssueDetails {
+    error: UnencodedDigestError;
     request: AffectedRequest;
   }
 
@@ -1336,20 +1348,21 @@ export namespace Audits {
     partitioningBlobURLInfo: PartitioningBlobURLInfo;
   }
 
-  export const enum SelectElementAccessibilityIssueReason {
+  export const enum ElementAccessibilityIssueReason {
     DisallowedSelectChild = 'DisallowedSelectChild',
     DisallowedOptGroupChild = 'DisallowedOptGroupChild',
     NonPhrasingContentOptionChild = 'NonPhrasingContentOptionChild',
     InteractiveContentOptionChild = 'InteractiveContentOptionChild',
     InteractiveContentLegendChild = 'InteractiveContentLegendChild',
+    InteractiveContentSummaryDescendant = 'InteractiveContentSummaryDescendant',
   }
 
   /**
-   * This issue warns about errors in the select element content model.
+   * This issue warns about errors in the select or summary element content model.
    */
-  export interface SelectElementAccessibilityIssueDetails {
+  export interface ElementAccessibilityIssueDetails {
     nodeId: DOM.BackendNodeId;
-    selectElementAccessibilityIssueReason: SelectElementAccessibilityIssueReason;
+    elementAccessibilityIssueReason: ElementAccessibilityIssueReason;
     hasDisallowedAttributes: boolean;
   }
 
@@ -1447,8 +1460,9 @@ export namespace Audits {
     FederatedAuthUserInfoRequestIssue = 'FederatedAuthUserInfoRequestIssue',
     PropertyRuleIssue = 'PropertyRuleIssue',
     SharedDictionaryIssue = 'SharedDictionaryIssue',
-    SelectElementAccessibilityIssue = 'SelectElementAccessibilityIssue',
+    ElementAccessibilityIssue = 'ElementAccessibilityIssue',
     SRIMessageSignatureIssue = 'SRIMessageSignatureIssue',
+    UnencodedDigestIssue = 'UnencodedDigestIssue',
     UserReidentificationIssue = 'UserReidentificationIssue',
   }
 
@@ -1480,8 +1494,9 @@ export namespace Audits {
     propertyRuleIssueDetails?: PropertyRuleIssueDetails;
     federatedAuthUserInfoRequestIssueDetails?: FederatedAuthUserInfoRequestIssueDetails;
     sharedDictionaryIssueDetails?: SharedDictionaryIssueDetails;
-    selectElementAccessibilityIssueDetails?: SelectElementAccessibilityIssueDetails;
+    elementAccessibilityIssueDetails?: ElementAccessibilityIssueDetails;
     sriMessageSignatureIssueDetails?: SRIMessageSignatureIssueDetails;
+    unencodedDigestIssueDetails?: UnencodedDigestIssueDetails;
     userReidentificationIssueDetails?: UserReidentificationIssueDetails;
   }
 
@@ -2270,6 +2285,23 @@ export namespace Browser {
     bounds: Bounds;
   }
 
+  export interface SetContentsSizeRequest {
+    /**
+     * Browser window id.
+     */
+    windowId: WindowID;
+    /**
+     * The window contents width in DIP. Assumes current width if omitted.
+     * Must be specified if 'height' is omitted.
+     */
+    width?: integer;
+    /**
+     * The window contents height in DIP. Assumes current height if omitted.
+     * Must be specified if 'width' is omitted.
+     */
+    height?: integer;
+  }
+
   export interface SetDockTileRequest {
     badgeLabel?: string;
     /**
@@ -2345,6 +2377,12 @@ export namespace Browser {
      * Download status.
      */
     state: DownloadProgressEventState;
+    /**
+     * If download is "completed", provides the path of the downloaded file.
+     * Depending on the platform, it is not guaranteed to be set, nor the file
+     * is guaranteed to exist.
+     */
+    filePath?: string;
   }
 }
 
@@ -2923,6 +2961,10 @@ export namespace CSS {
      * true if the query contains scroll-state() queries.
      */
     queriesScrollState?: boolean;
+    /**
+     * true if the query contains anchored() queries.
+     */
+    queriesAnchored?: boolean;
   }
 
   /**
@@ -3607,6 +3649,10 @@ export namespace CSS {
     cssFunctionRules?: CSSFunctionRule[];
   }
 
+  export interface GetEnvironmentVariablesResponse extends ProtocolResponseWithError {
+    environmentVariables: any;
+  }
+
   export interface GetMediaQueriesResponse extends ProtocolResponseWithError {
     medias: CSSMedia[];
   }
@@ -4176,12 +4222,14 @@ export namespace DOM {
     ViewTransition = 'view-transition',
     ViewTransitionGroup = 'view-transition-group',
     ViewTransitionImagePair = 'view-transition-image-pair',
+    ViewTransitionGroupChildren = 'view-transition-group-children',
     ViewTransitionOld = 'view-transition-old',
     ViewTransitionNew = 'view-transition-new',
     Placeholder = 'placeholder',
     FileSelectorButton = 'file-selector-button',
     DetailsContent = 'details-content',
     Picker = 'picker',
+    PermissionIcon = 'permission-icon',
   }
 
   /**
@@ -4770,6 +4818,10 @@ export namespace DOM {
      * JavaScript object id of the node wrapper.
      */
     objectId?: Runtime.RemoteObjectId;
+    /**
+     * Include all shadow roots. Equals to false if not specified.
+     */
+    includeShadowDOM?: boolean;
   }
 
   export interface GetOuterHTMLResponse extends ProtocolResponseWithError {
@@ -5188,6 +5240,7 @@ export namespace DOM {
     physicalAxes?: PhysicalAxes;
     logicalAxes?: LogicalAxes;
     queriesScrollState?: boolean;
+    queriesAnchored?: boolean;
   }
 
   export interface GetContainerForNodeResponse extends ProtocolResponseWithError {
@@ -5230,6 +5283,25 @@ export namespace DOM {
      * The anchor element of the given anchor query.
      */
     nodeId: NodeId;
+  }
+
+  export interface ForceShowPopoverRequest {
+    /**
+     * Id of the popover HTMLElement
+     */
+    nodeId: NodeId;
+    /**
+     * If true, opens the popover and keeps it open. If false, closes the
+     * popover if it was previously force-opened.
+     */
+    enable: boolean;
+  }
+
+  export interface ForceShowPopoverResponse extends ProtocolResponseWithError {
+    /**
+     * List of popovers that were closed in order to respect popover stacking order.
+     */
+    nodeIds: NodeId[];
   }
 
   /**
@@ -6395,6 +6467,11 @@ export namespace Emulation {
     mobile: boolean;
     bitness?: string;
     wow64?: boolean;
+    /**
+     * Used to specify User Agent form-factor values.
+     * See https://wicg.github.io/ua-client-hints/#sec-ch-ua-form-factors
+     */
+    formFactors?: string[];
   }
 
   /**
@@ -6637,6 +6714,10 @@ export namespace Emulation {
     type: SetEmulatedVisionDeficiencyRequestType;
   }
 
+  export interface SetEmulatedOSTextScaleRequest {
+    scale?: number;
+  }
+
   export interface SetGeolocationOverrideRequest {
     /**
      * Mock latitude
@@ -6805,6 +6886,13 @@ export namespace Emulation {
      * Image types to disable.
      */
     imageTypes: DisabledImageType[];
+  }
+
+  export interface SetDataSaverOverrideRequest {
+    /**
+     * Override value. Omitting the parameter disables the override.
+     */
+    dataSaverEnabled?: boolean;
   }
 
   export interface SetHardwareConcurrencyOverrideRequest {
@@ -9156,6 +9244,11 @@ export namespace Network {
      * Security details for the request.
      */
     securityDetails?: SecurityDetails;
+    /**
+     * Indicates whether the request was sent through IP Protection proxies. If
+     * set to true, the request used the IP Protection privacy feature.
+     */
+    isIpProtectionUsed?: boolean;
   }
 
   /**
@@ -9757,6 +9850,11 @@ export namespace Network {
      */
     outerResponse: Response;
     /**
+     * Whether network response for the signed exchange was accompanied by
+     * extra headers.
+     */
+    hasExtraInfo: boolean;
+    /**
      * Information about the signed exchange header.
      */
     header?: SignedExchangeHeader;
@@ -9851,8 +9949,8 @@ export namespace Network {
   }
 
   export const enum IPAddressSpace {
+    Loopback = 'Loopback',
     Local = 'Local',
-    Private = 'Private',
     Public = 'Public',
     Unknown = 'Unknown',
   }
@@ -11766,7 +11864,6 @@ export namespace Overlay {
     SearchForNode = 'searchForNode',
     SearchForUAShadowDOM = 'searchForUAShadowDOM',
     CaptureAreaScreenshot = 'captureAreaScreenshot',
-    ShowDistances = 'showDistances',
     None = 'none',
   }
 
@@ -12118,19 +12215,40 @@ export namespace Page {
   }
 
   /**
-   * Identifies the bottom-most script which caused the frame to be labelled
-   * as an ad.
+   * Identifies the script which caused a script or frame to be labelled as an
+   * ad.
    */
   export interface AdScriptId {
     /**
-     * Script Id of the bottom-most script which caused the frame to be labelled
-     * as an ad.
+     * Script Id of the script which caused a script or frame to be labelled as
+     * an ad.
      */
     scriptId: Runtime.ScriptId;
     /**
-     * Id of adScriptId's debugger.
+     * Id of scriptId's debugger.
      */
     debuggerId: Runtime.UniqueDebuggerId;
+  }
+
+  /**
+   * Encapsulates the script ancestry and the root script filterlist rule that
+   * caused the frame to be labelled as an ad. Only created when `ancestryChain`
+   * is not empty.
+   */
+  export interface AdScriptAncestry {
+    /**
+     * A chain of `AdScriptId`s representing the ancestry of an ad script that
+     * led to the creation of a frame. The chain is ordered from the script
+     * itself (lower level) up to its root ancestor that was flagged by
+     * filterlist.
+     */
+    ancestryChain: AdScriptId[];
+    /**
+     * The filterlist rule that caused the root (last) script in
+     * `ancestryChain` to be ad-tagged. Only populated if the rule is
+     * available.
+     */
+    rootScriptFilterlistRule?: string;
   }
 
   /**
@@ -12168,6 +12286,7 @@ export namespace Page {
     Accelerometer = 'accelerometer',
     AllScreensCapture = 'all-screens-capture',
     AmbientLightSensor = 'ambient-light-sensor',
+    AriaNotify = 'aria-notify',
     AttributionReporting = 'attribution-reporting',
     Autoplay = 'autoplay',
     Bluetooth = 'bluetooth',
@@ -12228,6 +12347,7 @@ export namespace Page {
     JoinAdInterestGroup = 'join-ad-interest-group',
     KeyboardMap = 'keyboard-map',
     LanguageDetector = 'language-detector',
+    LanguageModel = 'language-model',
     LocalFonts = 'local-fonts',
     LocalNetworkAccess = 'local-network-access',
     Magnetometer = 'magnetometer',
@@ -12977,16 +13097,6 @@ export namespace Page {
   }
 
   /**
-   * Enum of possible auto-response for permission / prompt dialogs.
-   */
-  export const enum AutoResponseMode {
-    None = 'none',
-    AutoAccept = 'autoAccept',
-    AutoReject = 'autoReject',
-    AutoOptOut = 'autoOptOut',
-  }
-
-  /**
    * The type of a frameNavigated event.
    */
   export const enum NavigationType {
@@ -13078,6 +13188,7 @@ export namespace Page {
     BroadcastChannel = 'BroadcastChannel',
     WebXR = 'WebXR',
     SharedWorker = 'SharedWorker',
+    SharedWorkerMessage = 'SharedWorkerMessage',
     WebLocks = 'WebLocks',
     WebHID = 'WebHID',
     WebShare = 'WebShare',
@@ -13381,18 +13492,19 @@ export namespace Page {
     recommendedId?: string;
   }
 
-  export interface GetAdScriptAncestryIdsRequest {
+  export interface GetAdScriptAncestryRequest {
     frameId: FrameId;
   }
 
-  export interface GetAdScriptAncestryIdsResponse extends ProtocolResponseWithError {
+  export interface GetAdScriptAncestryResponse extends ProtocolResponseWithError {
     /**
      * The ancestry chain of ad script identifiers leading to this frame's
-     * creation, ordered from the most immediate script (in the frame creation
+     * creation, along with the root script's filterlist rule. The ancestry
+     * chain is ordered from the most immediate script (in the frame creation
      * stack) to more distant ancestors (that created the immediately preceding
      * script). Only sent if frame is labelled as an ad and ids are available.
      */
-    adScriptAncestryIds: AdScriptId[];
+    adScriptAncestry?: AdScriptAncestry;
   }
 
   export interface GetFrameTreeResponse extends ProtocolResponseWithError {
@@ -13518,6 +13630,10 @@ export namespace Page {
      * User friendly error message, present if and only if navigation has failed.
      */
     errorText?: string;
+    /**
+     * Whether the navigation resulted in a download.
+     */
+    isDownload?: boolean;
   }
 
   export interface NavigateToHistoryEntryRequest {
@@ -13927,12 +14043,26 @@ export namespace Page {
     data: binary;
   }
 
+  export const enum SetSPCTransactionModeRequestMode {
+    None = 'none',
+    AutoAccept = 'autoAccept',
+    AutoChooseToAuthAnotherWay = 'autoChooseToAuthAnotherWay',
+    AutoReject = 'autoReject',
+    AutoOptOut = 'autoOptOut',
+  }
+
   export interface SetSPCTransactionModeRequest {
-    mode: AutoResponseMode;
+    mode: SetSPCTransactionModeRequestMode;
+  }
+
+  export const enum SetRPHRegistrationModeRequestMode {
+    None = 'none',
+    AutoAccept = 'autoAccept',
+    AutoReject = 'autoReject',
   }
 
   export interface SetRPHRegistrationModeRequest {
-    mode: AutoResponseMode;
+    mode: SetRPHRegistrationModeRequestMode;
   }
 
   export interface GenerateTestReportRequest {
@@ -14394,8 +14524,7 @@ export namespace Page {
   }
 
   /**
-   * Issued for every compilation cache generated. Is only available
-   * if Page.setGenerateCompilationCache is enabled.
+   * Issued for every compilation cache generated.
    */
   export interface CompilationCacheProducedEvent {
     url: string;
@@ -14951,10 +15080,6 @@ export namespace ServiceWorker {
     tag: string;
   }
 
-  export interface InspectWorkerRequest {
-    versionId: string;
-  }
-
   export interface SetForceUpdateOnPageLoadRequest {
     forceUpdateOnPageLoad: boolean;
   }
@@ -15257,15 +15382,10 @@ export namespace Storage {
      */
     ignoreIfPresent?: boolean;
     /**
-     * If the method is called on a shared storage worklet, or as part of
-     * a shared storage worklet script, it will have a number for the
-     * associated worklet, denoting the (0-indexed) order of the worklet's
+     * A number denoting the (0-based) order of the worklet's
      * creation relative to all other shared storage worklets created by
      * documents using the current storage partition.
-     * Present only for SharedStorageAccessMethods: addModule, createWorklet,
-     * run, selectURL, and any other SharedStorageAccessMethod when the
-     * SharedStorageAccessScope is sharedStorageWorklet.
-     * TODO(crbug.com/401011862): Pass this only for addModule & createWorklet.
+     * Present only for SharedStorageAccessMethods: addModule, createWorklet.
      */
     workletOrdinal?: integer;
     /**
@@ -16136,6 +16256,14 @@ export namespace Storage {
     netErrorName?: string;
     httpStatusCode?: integer;
   }
+
+  export interface AttributionReportingVerboseDebugReportSentEvent {
+    url: string;
+    body?: any[];
+    netError?: integer;
+    netErrorName?: string;
+    httpStatusCode?: integer;
+  }
 }
 
 /**
@@ -16704,6 +16832,20 @@ export namespace Target {
     locations: RemoteLocation[];
   }
 
+  export interface OpenDevToolsRequest {
+    /**
+     * This can be the page or tab target ID.
+     */
+    targetId: TargetID;
+  }
+
+  export interface OpenDevToolsResponse extends ProtocolResponseWithError {
+    /**
+     * The targetId of DevTools page target.
+     */
+    targetId: TargetID;
+  }
+
   /**
    * Issued when attached to target because of auto-attach or `attachToTarget` command.
    */
@@ -16837,7 +16979,7 @@ export namespace Tracing {
 
   export interface TraceConfig {
     /**
-     * Controls how the trace buffer stores data.
+     * Controls how the trace buffer stores data. The default is `recordUntilFull`.
      */
     recordMode?: TraceConfigRecordMode;
     /**
@@ -18149,6 +18291,7 @@ export namespace Preload {
   export const enum RuleSetErrorType {
     SourceIsNotJsonObject = 'SourceIsNotJsonObject',
     InvalidRulesSkipped = 'InvalidRulesSkipped',
+    InvalidRulesetLevelTag = 'InvalidRulesetLevelTag',
   }
 
   /**
@@ -18286,6 +18429,7 @@ export namespace Preload {
     V8OptimizerDisabled = 'V8OptimizerDisabled',
     PrerenderFailedDuringPrefetch = 'PrerenderFailedDuringPrefetch',
     BrowsingDataRemoved = 'BrowsingDataRemoved',
+    PrerenderHostReused = 'PrerenderHostReused',
   }
 
   /**

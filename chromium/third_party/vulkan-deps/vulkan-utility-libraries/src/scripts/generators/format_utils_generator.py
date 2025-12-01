@@ -311,7 +311,7 @@ struct VKU_FORMAT_INFO {
         out.append(f'const struct VKU_FORMAT_INFO vku_formats[{len(self.vk.formats) + 1}] = {{\n')
         for f in formats_in_order.values():
             className = getClassName(f.className)
-            blockExtent = ', '.join(f.blockExtent) if f.blockExtent is not None else '1, 1, 1'
+            blockExtent = ', '.join(f.blockExtent) if len(f.blockExtent) > 0 else '1, 1, 1'
             out.extend(f'    {{ VKU_FORMAT_COMPATIBILITY_CLASS_{className}, {f.blockSize}, {f.texelsPerBlock}, {{{blockExtent}}}, {len(f.components)}, {{')
             for index, component in enumerate(f.components):
                 bits = 'VKU_FORMAT_COMPRESSED_COMPONENT' if component.bits == 'compressed' else component.bits

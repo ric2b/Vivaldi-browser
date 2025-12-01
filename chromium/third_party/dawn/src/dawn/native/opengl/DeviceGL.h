@@ -86,11 +86,11 @@ class Device final : public DeviceBase {
 
     MaybeError TickImpl() override;
 
-    MaybeError CopyFromStagingToBufferImpl(BufferBase* source,
-                                           uint64_t sourceOffset,
-                                           BufferBase* destination,
-                                           uint64_t destinationOffset,
-                                           uint64_t size) override;
+    MaybeError CopyFromStagingToBuffer(BufferBase* source,
+                                       uint64_t sourceOffset,
+                                       BufferBase* destination,
+                                       uint64_t destinationOffset,
+                                       uint64_t size) override;
 
     MaybeError CopyFromStagingToTextureImpl(const BufferBase* source,
                                             const TexelCopyBufferLayout& src,
@@ -132,8 +132,7 @@ class Device final : public DeviceBase {
     ResultOrError<Ref<ShaderModuleBase>> CreateShaderModuleImpl(
         const UnpackedPtr<ShaderModuleDescriptor>& descriptor,
         const std::vector<tint::wgsl::Extension>& internalExtensions,
-        ShaderModuleParseResult* parseResult,
-        std::unique_ptr<OwnedCompilationMessages>* compilationMessages) override;
+        ShaderModuleParseResult* parseResult) override;
     ResultOrError<Ref<SwapChainBase>> CreateSwapChainImpl(
         Surface* surface,
         SwapChainBase* previousSwapChain,

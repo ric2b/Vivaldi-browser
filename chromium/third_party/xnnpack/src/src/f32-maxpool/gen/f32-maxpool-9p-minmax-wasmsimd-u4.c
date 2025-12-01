@@ -20,10 +20,10 @@
 #define xnn_load_tail_safe_impl(x, c) xnn_load_tail_safe_f32(x, c)
 #define xnn_pre_store_impl(x) x
 
-#include "src/xnnpack/simd/f32-wasmsimd.h"
-
 #include "src/xnnpack/common.h"
+#include "src/xnnpack/math.h"
 #include "src/xnnpack/microparams.h"
+#include "src/xnnpack/simd/f32-wasmsimd.h"
 
 void xnn_f32_maxpool_minmax_ukernel_9p__wasmsimd_u4(
     size_t output_pixels,
@@ -35,7 +35,7 @@ void xnn_f32_maxpool_minmax_ukernel_9p__wasmsimd_u4(
     float* output,
     size_t input_increment,
     size_t output_increment,
-    const struct xnn_f32_minmax_params params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f32_minmax_params* restrict params)
 {
   assert(output_pixels != 0);
   assert(channels != 0);

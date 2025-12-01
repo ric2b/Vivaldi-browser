@@ -60,15 +60,15 @@ CJBig2_GRDProc::~CJBig2_GRDProc() = default;
 bool CJBig2_GRDProc::UseTemplate0Opt3() const {
   return (GBAT[0] == 3) && (GBAT[1] == -1) && (GBAT[2] == -3) &&
          (GBAT[3] == -1) && (GBAT[4] == 2) && (GBAT[5] == -2) &&
-         (GBAT[6] == -2) && (GBAT[7] == -2);
+         (GBAT[6] == -2) && (GBAT[7] == -2) && !USESKIP;
 }
 
 bool CJBig2_GRDProc::UseTemplate1Opt3() const {
-  return (GBAT[0] == 3) && (GBAT[1] == -1);
+  return (GBAT[0] == 3) && (GBAT[1] == -1) && !USESKIP;
 }
 
 bool CJBig2_GRDProc::UseTemplate23Opt3() const {
-  return (GBAT[0] == 2) && (GBAT[1] == -1);
+  return (GBAT[0] == 2) && (GBAT[1] == -1) && !USESKIP;
 }
 
 std::unique_ptr<CJBig2_Image> CJBig2_GRDProc::DecodeArith(
@@ -506,7 +506,12 @@ FXCODEC_STATUS CJBig2_GRDProc::StartDecodeMMR(
   for (uint32_t i = 0; i < image->stride() * GBH; ++i) {
     UNSAFE_TODO(image->data()[i] = ~image->data()[i]);
   }
+
   progressive_status_ = FXCODEC_STATUS::kDecodeFinished;
+  replace_rect_.left = 0;
+  replace_rect_.right = image->width();
+  replace_rect_.top = 0;
+  replace_rect_.bottom = image->height();
   *pImage = std::move(image);
   return progressive_status_;
 }

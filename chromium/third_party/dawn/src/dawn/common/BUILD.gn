@@ -133,6 +133,9 @@ config("internal_config") {
   if (is_clang) {
     # We use __builtin_assume liberally in DAWN_ASSERT, allow ignoring side-effects there.
     cflags += [ "-Wno-assume" ]
+
+    # Dawn doesn't have the annotations to work with this analysis.
+    cflags_cc = [ "-Wno-thread-safety" ]
   }
 
   # Enable more warnings that were found when using Dawn in other projects.
@@ -191,6 +194,9 @@ config("internal_config") {
     # the respective clang warning tells us where to add switch cases
     # (otherwise we have to add default: DAWN_UNREACHABLE() that silences clang too)
     cflags += [ "/wd4715" ]
+
+    # MSVC needs a flag to enable a standard-compliant preprocessor.
+    cflags += [ "/Zc:preprocessor" ]
 
     if (dawn_is_winuwp) {
       # /ZW makes sure we don't add calls that are forbidden in UWP.
@@ -251,6 +257,7 @@ group("abseil") {
       "${dawn_root}/third_party/gn/abseil-cpp:flat_hash_set",
       "${dawn_root}/third_party/gn/abseil-cpp:inlined_vector",
       "${dawn_root}/third_party/gn/abseil-cpp:no_destructor",
+      "${dawn_root}/third_party/gn/abseil-cpp:overload",
     ]
   }
 }
@@ -267,12 +274,15 @@ if (is_win || is_linux || is_chromeos || is_mac || is_fuchsia || is_android ||
       "Alloc.h",
       "Assert.cpp",
       "Assert.h",
+      "Atomic.h",
       "BitSetRangeIterator.h",
       "Compiler.h",
       "Constants.h",
       "ContentLessObjectCache.h",
       "ContentLessObjectCacheable.h",
       "CoreFoundationRef.h",
+      "Defer.cpp",
+      "Defer.h",
       "DynamicLib.cpp",
       "DynamicLib.h",
       "Enumerator.h",
@@ -282,13 +292,13 @@ if (is_win || is_linux || is_chromeos || is_mac || is_fuchsia || is_android ||
       "GPUInfo.h",
       "HashUtils.h",
       "IOKitRef.h",
+      "LRUCache.h",
       "LinkedList.h",
       "Log.cpp",
       "Log.h",
       "MatchVariant.h",
       "Math.cpp",
       "Math.h",
-      "Mutex.cpp",
       "Mutex.h",
       "MutexProtected.h",
       "NSRef.h",

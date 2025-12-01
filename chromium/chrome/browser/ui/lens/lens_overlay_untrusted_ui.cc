@@ -11,6 +11,7 @@
 #include "chrome/browser/ui/lens/lens_overlay_controller.h"
 #include "chrome/browser/ui/lens/lens_overlay_theme_utils.h"
 #include "chrome/browser/ui/lens/lens_search_controller.h"
+#include "chrome/browser/ui/lens/lens_search_feature_flag_utils.h"
 #include "chrome/browser/ui/lens/lens_searchbox_controller.h"
 #include "chrome/browser/ui/webui/searchbox/lens_searchbox_handler.h"
 #include "chrome/common/pref_names.h"
@@ -74,6 +75,9 @@ LensOverlayUntrustedUI::LensOverlayUntrustedUI(content::WebUI* web_ui)
   html_source->AddLocalizedString("translate", IDS_LENS_OVERLAY_TRANSLATE);
   html_source->AddLocalizedString("translateButtonLabel",
                                   IDS_LENS_OVERLAY_TRANSLATE_BUTTON_LABEL);
+  html_source->AddLocalizedString(
+      "searchScreenshot",
+      IDS_LENS_OVERLAY_SEARCH_SCREENSHOT_ACCESSIBILITY_LABEL);
   html_source->AddLocalizedString("selectText", IDS_LENS_OVERLAY_SELECT_TEXT);
   html_source->AddLocalizedString(
       "networkErrorPageTopLine",
@@ -213,9 +217,8 @@ LensOverlayUntrustedUI::LensOverlayUntrustedUI(content::WebUI* web_ui)
       "darkMode",
       lens::LensOverlayShouldUseDarkMode(
           ThemeServiceFactory::GetForProfile(Profile::FromWebUI(web_ui))));
-  html_source->AddBoolean(
-      "enableOverlayContextualSearchbox",
-      lens::features::IsLensOverlayContextualSearchboxEnabled());
+  html_source->AddBoolean("enableOverlayContextualSearchbox",
+                          lens::IsLensOverlayContextualSearchboxEnabled());
   html_source->AddBoolean(
       "enableGhostLoader",
       lens::features::EnableContextualSearchboxGhostLoader());
@@ -264,6 +267,11 @@ LensOverlayUntrustedUI::LensOverlayUntrustedUI(content::WebUI* web_ui)
   html_source->AddBoolean(
       "enableSummarizeSuggestionHint",
       lens::features::ShouldEnableSummarizeHintForContextualSuggest());
+  html_source->AddBoolean(
+      "enableKeyboardSelection",
+      lens::features::IsLensOverlayKeyboardSelectionEnabled());
+  html_source->AddBoolean("isBackToPageEnabled",
+                          lens::features::IsLensOverlayBackToPageEnabled());
 
   LensOverlayController& controller = GetLensOverlayController();
   html_source->AddDouble("invocationTime",
@@ -307,6 +315,9 @@ LensOverlayUntrustedUI::LensOverlayUntrustedUI(content::WebUI* web_ui)
   html_source->AddBoolean(
       "enableCsbMotionTweaks",
       lens::features::GetVisualSelectionUpdatesEnableCsbMotionTweaks());
+  html_source->AddBoolean(
+      "enableVisualSelectionUpdates",
+      lens::features::IsLensOverlayVisualSelectionUpdatesEnabled());
   html_source->AddBoolean("reportMetrics", false);
   html_source->AddLocalizedString("searchBoxHintDefault",
                                   IDS_GOOGLE_SEARCH_BOX_EMPTY_HINT_CONTEXTUAL);

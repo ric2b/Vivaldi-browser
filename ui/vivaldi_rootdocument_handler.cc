@@ -11,6 +11,7 @@
 #include "chrome/browser/extensions/external_install_error_desktop.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
+#include "content/public/browser/web_contents.h"
 #include "extensions/browser/extension_registry_factory.h"
 #include "extensions/browser/extensions_browser_client.h"
 #include "extensions/browser/extension_registry.h"
@@ -330,13 +331,19 @@ VivaldiExtensionDisabledGlobalError::VivaldiExtensionDisabledGlobalError(
     content::BrowserContext* context,
     base::WeakPtr<ExternalInstallError> error)
     : browser_context_(context) {
-  external_install_error_ = std::move(error);
-
-  registry_observation_.Observe(ExtensionRegistry::Get(browser_context_));
 
   VivaldiRootDocumentHandler* root_doc_handler =
       extensions::VivaldiRootDocumentHandlerFactory::GetForBrowserContext(
           browser_context_);
+
+  if (!root_doc_handler) {
+    // VivaldiRootDocumentHandler might not yet exist.
+    return;
+  }
+
+  external_install_error_ = std::move(error);
+
+  registry_observation_.Observe(ExtensionRegistry::Get(browser_context_));
 
   int unique_id = root_doc_handler->GetExtensionToIdProvider().AddOrGetId(
       external_install_error_->extension_id());

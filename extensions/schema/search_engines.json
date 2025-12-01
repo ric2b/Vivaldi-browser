@@ -64,6 +64,13 @@
           },
           "prepopulateId" : {
             "type": "integer"
+          },
+          "starterPackId": {
+            "type": "integer"
+          },
+          "isActive": {
+            "type": "integer",
+            "description": "0 is unspecified, 1 is active, 2 is inactive."
           }
         }
       },
@@ -72,6 +79,12 @@
         "type": "object",
         "properties": {
           "templateUrls": {
+            "type": "array",
+            "items": {
+              "$ref": "TemplateURL"
+            }
+          },
+          "starterPackEngines": {
             "type": "array",
             "items": {
               "$ref": "TemplateURL"
@@ -345,6 +358,21 @@
         "type": "function",
         "description": "Mark current switch prompt as seen.",
         "parameters": []
+      },
+      {
+        "name": "setIsActive",
+        "type": "function",
+        "description": "Used to enable or disable a starter pack engine.",
+        "parameters": [
+          {
+            "name": "guid",
+            "type": "string"
+          },
+          {
+            "name": "isActive",
+            "type": "boolean"
+          }
+        ]
       }
     ],
     "events": [

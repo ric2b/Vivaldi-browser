@@ -538,6 +538,12 @@ def main():
                       default=False,
                       dest='allow_multiple_vs_installs',
                       help='Specify if multiple VS installs are allowed.')
+    parser.add_option('--dump_file_list',
+                      action='store',
+                      type='string',
+                      dest='dump_file_list',
+                      default='',
+                      help='Specify a file to dump the ZIP file\'s file list.')
     (options, args) = parser.parse_args()
 
     if options.repackage_dir:
@@ -578,9 +584,14 @@ def main():
 
         AddEnvSetup(files, options.arm)
 
-    if False:
-        for f in files:
-            print(f[0], '->', f[1])
+    # Dump file list if requested
+    if options.dump_file_list:
+        print('Dumping file list to %s...' % options.dump_file_list)
+        with open(options.dump_file_list, 'wt', newline='',
+                  encoding='utf-8') as f:
+            for disk_name, archive_name in files:
+                f.write('%s -> %s\n' % (disk_name, archive_name))
+        print('File list dumped successfully.')
         return 0
 
     output = 'out.zip'

@@ -221,7 +221,7 @@ struct State {
             auto* strct =
                 core::type::CreateAtomicCompareExchangeResult(ty, ir.symbols, val->Type());
 
-            auto* bi = b.Call(strct, core::BuiltinFn::kAtomicCompareExchangeWeak, var, val, comp);
+            auto* bi = b.Call(strct, core::BuiltinFn::kAtomicCompareExchangeWeak, var, comp, val);
             b.AccessWithResult(call->DetachResult(), bi, 0_u);
         });
         call->Destroy();
@@ -399,6 +399,12 @@ struct State {
                 },
                 [&](core::ir::UserCall* uc) { user_calls_to_convert_.Add(uc); },
                 [&](core::ir::CoreBuiltinCall* bc) {
+                    // The only non-atomic builtin that can touch something that contains an atomic
+                    // is arrayLength.
+                    if (bc->Func() == core::BuiltinFn::kArrayLength) {
+                        return;
+                    }
+
                     // This was converted when we switched from a SPIR-V intrinsic to core
                     TINT_ASSERT(core::IsAtomic(bc->Func()));
                     TINT_ASSERT(bc->Args()[0]->Type()->UnwrapPtr()->Is<core::type::Atomic>());
@@ -550,6 +556,7 @@ Result<SuccessType> Atomics(core::ir::Module& ir) {
     auto result = ValidateAndDumpIfNeeded(ir, "spirv.Atomics",
                                           core::ir::Capabilities{
                                               core::ir::Capability::kAllowOverrides,
+                                              core::ir::Capability::kAllowNonCoreTypes,
                                           });
     if (result != Success) {
         return result.Failure();

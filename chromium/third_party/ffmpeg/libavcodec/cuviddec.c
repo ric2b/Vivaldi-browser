@@ -424,6 +424,7 @@ static int CUDAAPI cuvid_handle_picture_display(void *opaque, CUVIDPARSERDISPINF
     AVCodecContext *avctx = opaque;
     CuvidContext *ctx = avctx->priv_data;
     CuvidParsedFrame parsed_frame = { { 0 } };
+    int ret;
 
     parsed_frame.dispinfo = *dispinfo;
     ctx->internal_error = 0;
@@ -432,13 +433,20 @@ static int CUDAAPI cuvid_handle_picture_display(void *opaque, CUVIDPARSERDISPINF
     parsed_frame.dispinfo.progressive_frame = ctx->progressive_sequence;
 
     if (ctx->deint_mode_current == cudaVideoDeinterlaceMode_Weave) {
-        av_fifo_write(ctx->frame_queue, &parsed_frame, 1);
+        ret = av_fifo_write(ctx->frame_queue, &parsed_frame, 1);
+        if (ret < 0)
+            av_log(avctx, AV_LOG_ERROR, "Writing frame to fifo failed!\n");
     } else {
         parsed_frame.is_deinterlacing = 1;
-        av_fifo_write(ctx->frame_queue, &parsed_frame, 1);
+        ret = av_fifo_write(ctx->frame_queue, &parsed_frame, 1);
+        if (ret < 0)
+            av_log(avctx, AV_LOG_ERROR, "Writing first frame to fifo failed!\n");
+
         if (!ctx->drop_second_field) {
             parsed_frame.second_field = 1;
-            av_fifo_write(ctx->frame_queue, &parsed_frame, 1);
+            ret = av_fifo_write(ctx->frame_queue, &parsed_frame, 1);
+            if (ret < 0)
+                av_log(avctx, AV_LOG_ERROR, "Writing second frame to fifo failed!\n");
         }
     }
 
@@ -497,7 +505,12 @@ static int cuvid_decode_packet(AVCodecContext *avctx, const AVPacket *avpkt)
         ctx->decoder_flushing = 1;
     }
 
-    ret = CHECK_CU(ctx->cvdl->cuvidParseVideoData(ctx->cuparser, &cupkt));
+    // When flushing, only actually flush cuvid when the output buffer has been fully emptied.
+    // CUVID happily dumps out a ton of frames with no regard for its own available surfaces.
+    if (!ctx->decoder_flushing || (ctx->decoder_flushing && !av_fifo_can_read(ctx->frame_queue)))
+        ret = CHECK_CU(ctx->cvdl->cuvidParseVideoData(ctx->cuparser, &cupkt));
+    else
+        ret = 0;
 
     if (ret < 0)
         goto error;
@@ -894,10 +907,18 @@ static av_cold int cuvid_decode_init(AVCodecContext *avctx)
     // Pick pixel format based on bit depth and chroma sampling.
     switch (probed_bit_depth) {
     case 10:
+#if FF_API_NVDEC_OLD_PIX_FMTS
         pix_fmts[1] = is_yuv444 ? AV_PIX_FMT_YUV444P16 : (is_yuv422 ? AV_PIX_FMT_P216 : AV_PIX_FMT_P010);
+#else
+        pix_fmts[1] = is_yuv444 ? AV_PIX_FMT_YUV444P10MSB : (is_yuv422 ? AV_PIX_FMT_P210 : AV_PIX_FMT_P010);
+#endif
         break;
     case 12:
+#if FF_API_NVDEC_OLD_PIX_FMTS
         pix_fmts[1] = is_yuv444 ? AV_PIX_FMT_YUV444P16 : (is_yuv422 ? AV_PIX_FMT_P216 : AV_PIX_FMT_P016);
+#else
+        pix_fmts[1] = is_yuv444 ? AV_PIX_FMT_YUV444P12MSB : (is_yuv422 ? AV_PIX_FMT_P212 : AV_PIX_FMT_P012);
+#endif
         break;
     default:
         pix_fmts[1] = is_yuv444 ? AV_PIX_FMT_YUV444P : (is_yuv422 ? AV_PIX_FMT_NV16 : AV_PIX_FMT_NV12);

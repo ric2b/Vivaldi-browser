@@ -6,7 +6,8 @@
 // This source code is licensed under the BSD-style license found in the
 // LICENSE file in the root directory of this source tree.
 
-#pragma once
+#ifndef XNNPACK_BENCH_GEMM_H_
+#define XNNPACK_BENCH_GEMM_H_
 
 #include <cstdint>
 #include <functional>
@@ -152,8 +153,8 @@ inline void Configure(benchmark::internal::Benchmark* benchmark,
 
 
 // ShuffleNet v1 with 1 group.
-//static void ShuffleNetV1G1GemmArguments(benchmark::internal::Benchmark* b) {
-static void ShuffleNetV1G1GemmArguments(BenchmarkWrapper* b) {
+//inline void ShuffleNetV1G1GemmArguments(benchmark::internal::Benchmark* b) {
+inline void ShuffleNetV1G1GemmArguments(BenchmarkWrapper* b) {
   b->ArgNames({"M", "N", "K"});
 
   /*           M       N         K    */
@@ -173,7 +174,7 @@ static void ShuffleNetV1G1GemmArguments(BenchmarkWrapper* b) {
 }
 
 // ShuffleNet v1 with 2 groups.
-static void ShuffleNetV1G2GemmArguments(BenchmarkWrapper* b) {
+inline void ShuffleNetV1G2GemmArguments(BenchmarkWrapper* b) {
   b->ArgNames({"M", "N", "K"});
 
   /*           M       N         K    */
@@ -193,7 +194,7 @@ static void ShuffleNetV1G2GemmArguments(BenchmarkWrapper* b) {
 }
 
 // ShuffleNet v1 with 3 groups.
-static void ShuffleNetV1G3GemmArguments(BenchmarkWrapper* b) {
+inline void ShuffleNetV1G3GemmArguments(BenchmarkWrapper* b) {
   b->ArgNames({"M", "N", "K"});
 
   /*           M       N         K    */
@@ -213,7 +214,7 @@ static void ShuffleNetV1G3GemmArguments(BenchmarkWrapper* b) {
 }
 
 // ShuffleNet v1 with 4 groups.
-static void ShuffleNetV1G4GemmArguments(BenchmarkWrapper* b) {
+inline void ShuffleNetV1G4GemmArguments(BenchmarkWrapper* b) {
   b->ArgNames({"M", "N", "K"});
 
   /*           M       N         K    */
@@ -233,7 +234,7 @@ static void ShuffleNetV1G4GemmArguments(BenchmarkWrapper* b) {
 }
 
 // ShuffleNet v1 with 8 groups.
-static void ShuffleNetV1G8GemmArguments(BenchmarkWrapper* b) {
+inline void ShuffleNetV1G8GemmArguments(BenchmarkWrapper* b) {
   b->ArgNames({"M", "N", "K"});
 
   /*           M       N         K    */
@@ -253,7 +254,7 @@ static void ShuffleNetV1G8GemmArguments(BenchmarkWrapper* b) {
 }
 
 // ShuffleNet v2 (0.5X scale)
-static void ShuffleNetV2X05GemmArguments(BenchmarkWrapper* b) {
+inline void ShuffleNetV2X05GemmArguments(BenchmarkWrapper* b) {
   b->ArgNames({"M", "N", "K"});
 
   /*           M        N         K    */
@@ -268,7 +269,7 @@ static void ShuffleNetV2X05GemmArguments(BenchmarkWrapper* b) {
 }
 
 // ShuffleNet v2 (1.0X scale)
-static void ShuffleNetV2X10GemmArguments(BenchmarkWrapper* b) {
+inline void ShuffleNetV2X10GemmArguments(BenchmarkWrapper* b) {
   b->ArgNames({"M", "N", "K"});
 
   /*           M        N         K    */
@@ -284,7 +285,7 @@ static void ShuffleNetV2X10GemmArguments(BenchmarkWrapper* b) {
 }
 
 // ShuffleNet v2 (1.5X scale)
-static void ShuffleNetV2X15GemmArguments(BenchmarkWrapper* b) {
+inline void ShuffleNetV2X15GemmArguments(BenchmarkWrapper* b) {
   b->ArgNames({"M", "N", "K"});
 
   /*           M        N         K    */
@@ -300,7 +301,7 @@ static void ShuffleNetV2X15GemmArguments(BenchmarkWrapper* b) {
 }
 
 // ShuffleNet v2 (2.0X scale)
-static void ShuffleNetV2X20GemmArguments(BenchmarkWrapper* b) {
+inline void ShuffleNetV2X20GemmArguments(BenchmarkWrapper* b) {
   b->ArgNames({"M", "N", "K"});
 
   /*           M        N         K    */
@@ -315,7 +316,7 @@ static void ShuffleNetV2X20GemmArguments(BenchmarkWrapper* b) {
   b->Args({  7 *   7, 2048, 976 * 1 * 1});
 }
 
-static void MobileNetV1GemmArguments(BenchmarkWrapper* b) {
+inline void MobileNetV1GemmArguments(BenchmarkWrapper* b) {
   b->ArgNames({"M", "N", "K"});
 
   /*           M        N          K    */
@@ -331,7 +332,7 @@ static void MobileNetV1GemmArguments(BenchmarkWrapper* b) {
   b->Args({  7 *   7, 1024, 1024 * 1 * 1});
 }
 
-static void MobileNetV2GemmArguments(BenchmarkWrapper* b) {
+inline void MobileNetV2GemmArguments(BenchmarkWrapper* b) {
   b->ArgNames({"M", "N", "K"});
 
   /*********** Initial Stage ************/
@@ -377,7 +378,7 @@ static void MobileNetV2GemmArguments(BenchmarkWrapper* b) {
   b->Args({  1 *   1, 1000, 1280 * 1 * 1});
 }
 
-static void MobileNetV3SmallGemmArguments(BenchmarkWrapper* b) {
+inline void MobileNetV3SmallGemmArguments(BenchmarkWrapper* b) {
   b->ArgNames({"M", "N", "K"});
 
   /************ Initial Stage ************/
@@ -451,7 +452,7 @@ static void MobileNetV3SmallGemmArguments(BenchmarkWrapper* b) {
   b->Args({  1 *   1, 1001, 1024 * 1 * 1});
 }
 
-static void MobileNetV3LargeGemmArguments(BenchmarkWrapper* b) {
+inline void MobileNetV3LargeGemmArguments(BenchmarkWrapper* b) {
   b->ArgNames({"M", "N", "K"});
 
   /************ Initial Stage ************/
@@ -540,7 +541,7 @@ static void MobileNetV3LargeGemmArguments(BenchmarkWrapper* b) {
 }
 
 // SqueezeNet 1.0
-static void SqueezeNetV10GemmArguments(BenchmarkWrapper* b) {
+inline void SqueezeNetV10GemmArguments(BenchmarkWrapper* b) {
   b->ArgNames({"M", "N", "K"});
 
   /************** Conv 1 ***************/
@@ -588,7 +589,7 @@ static void SqueezeNetV10GemmArguments(BenchmarkWrapper* b) {
 }
 
 // SqueezeNet 1.1
-static void SqueezeNetV11GemmArguments(BenchmarkWrapper* b) {
+inline void SqueezeNetV11GemmArguments(BenchmarkWrapper* b) {
   b->ArgNames({"M", "N", "K"});
 
   /************** Conv 1 ***************/
@@ -631,7 +632,7 @@ static void SqueezeNetV11GemmArguments(BenchmarkWrapper* b) {
   b->Args({ 13 *  13, 1000, 512 * 1 * 1});
 }
 
-static void InceptionV3GemmArguments(BenchmarkWrapper* b) {
+inline void InceptionV3GemmArguments(BenchmarkWrapper* b) {
   /*           M        N          K   */
   b->Args({150 * 150,   32,    3 * 3 * 3});
   b->Args({149 * 149,   32,   32 * 3 * 3});
@@ -679,7 +680,7 @@ static void InceptionV3GemmArguments(BenchmarkWrapper* b) {
   b->Args({  3 *   3, 1001, 2048 * 1 * 1});
 }
 
-static void ResNet18GemmArguments(BenchmarkWrapper* b) {
+inline void ResNet18GemmArguments(BenchmarkWrapper* b) {
   b->ArgNames({"M", "N", "K"});
 
   /*           M       N         K    */
@@ -696,7 +697,7 @@ static void ResNet18GemmArguments(BenchmarkWrapper* b) {
   b->Args({  7 *   7, 512, 256 * 1 * 1});
 }
 
-static void ResNet50GemmArguments(BenchmarkWrapper* b) {
+inline void ResNet50GemmArguments(BenchmarkWrapper* b) {
   b->ArgNames({"M", "N", "K"});
 
   /*************** Conv 1 ***************/
@@ -731,7 +732,7 @@ static void ResNet50GemmArguments(BenchmarkWrapper* b) {
   b->Args({  7 *   7,  512, 2048 * 1 * 1});
 }
 
-static void VGGGemmArguments(BenchmarkWrapper* b) {
+inline void VGGGemmArguments(BenchmarkWrapper* b) {
   b->ArgNames({"M", "N", "K"});
 
   /************** Conv 1.1 *************/
@@ -770,7 +771,7 @@ static void VGGGemmArguments(BenchmarkWrapper* b) {
 }
 
 // SRCNN (9-1-5)
-static void SRCNN915GemmArguments(BenchmarkWrapper* b) {
+inline void SRCNN915GemmArguments(BenchmarkWrapper* b) {
   b->ArgNames({"M", "N", "K"});
 
   /*           M       N       K    */
@@ -780,7 +781,7 @@ static void SRCNN915GemmArguments(BenchmarkWrapper* b) {
 }
 
 // SRCNN (9-3-5)
-static void SRCNN935GemmArguments(BenchmarkWrapper* b) {
+inline void SRCNN935GemmArguments(BenchmarkWrapper* b) {
   b->ArgNames({"M", "N", "K"});
 
   /*           M       N       K    */
@@ -790,7 +791,7 @@ static void SRCNN935GemmArguments(BenchmarkWrapper* b) {
 }
 
 // SRCNN (9-5-5)
-static void SRCNN955GemmArguments(BenchmarkWrapper* b) {
+inline void SRCNN955GemmArguments(BenchmarkWrapper* b) {
   b->ArgNames({"M", "N", "K"});
 
   /*           M       N       K    */
@@ -800,7 +801,7 @@ static void SRCNN955GemmArguments(BenchmarkWrapper* b) {
 }
 
 // Large Language Model (Generic)
-static void LLMGemmArguments(BenchmarkWrapper* b) {
+inline void LLMGemmArguments(BenchmarkWrapper* b) {
   b->ArgNames({"M", "N", "K", "Bl"});
 
   b->Args({ 128, 16, 1024, 32 });
@@ -818,3 +819,5 @@ static void LLMGemmArguments(BenchmarkWrapper* b) {
   b->Args({ 128, 32000, 4096, 32 });
   b->Args({ 128, 32000, 4096, 256 });
 }
+
+#endif  // XNNPACK_BENCH_GEMM_H_

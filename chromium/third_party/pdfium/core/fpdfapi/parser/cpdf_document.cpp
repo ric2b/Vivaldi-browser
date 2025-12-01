@@ -472,8 +472,8 @@ uint32_t CPDF_Document::GetUserPermissions(bool get_owner_perms) const {
 }
 
 RetainPtr<CPDF_StreamAcc> CPDF_Document::GetFontFileStreamAcc(
-    RetainPtr<const CPDF_Stream> pFontStream) {
-  return doc_page_->GetFontFileStreamAcc(std::move(pFontStream));
+    RetainPtr<const CPDF_Stream> font_stream) {
+  return doc_page_->GetFontFileStreamAcc(std::move(font_stream));
 }
 
 void CPDF_Document::MaybePurgeFontFileStreamAcc(
@@ -500,14 +500,14 @@ void CPDF_Document::CreateNewDoc() {
 }
 
 RetainPtr<CPDF_Dictionary> CPDF_Document::CreateNewPage(int iPage) {
-  auto pDict = NewIndirect<CPDF_Dictionary>();
-  pDict->SetNewFor<CPDF_Name>("Type", "Page");
-  uint32_t dwObjNum = pDict->GetObjNum();
-  if (!InsertNewPage(iPage, pDict)) {
+  auto dict = NewIndirect<CPDF_Dictionary>();
+  dict->SetNewFor<CPDF_Name>("Type", "Page");
+  uint32_t dwObjNum = dict->GetObjNum();
+  if (!InsertNewPage(iPage, dict)) {
     DeleteIndirectObject(dwObjNum);
     return nullptr;
   }
-  return pDict;
+  return dict;
 }
 
 bool CPDF_Document::InsertDeletePDFPage(

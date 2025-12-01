@@ -1440,7 +1440,7 @@
     "message": "初始服务器响应用时较短"
   },
   "core/audits/third-party-cookies.js | description": {
-    "message": "Chrome 将推出新的用户体验，使用户可以选择不使用第三方 Cookie 来浏览网页。[详细了解第三方 Cookie](https://developers.google.com/privacy-sandbox/cookies)。"
+    "message": "在某些情况下，第三方 Cookie 可能会被屏蔽。[详细了解如何为第三方 Cookie 限制做好准备](https://privacysandbox.google.com/cookies/prepare/overview)。"
   },
   "core/audits/third-party-cookies.js | displayValue": {
     "message": "{itemCount,plural, =1{找到 1 个 Cookie}other{找到 # 个 Cookie}}"
@@ -1492,6 +1492,18 @@
   },
   "core/audits/third-party-summary.js | title": {
     "message": "尽量减少第三方使用"
+  },
+  "core/audits/trusted-types-xss.js | columnSeverity": {
+    "message": "严重程度"
+  },
+  "core/audits/trusted-types-xss.js | description": {
+    "message": "`Content-Security-Policy` (CSP) 标头中的 `require-trusted-types-for` 指令会指示用户代理控制传递给 DOM XSS 接收器函数的数据。[详细了解如何使用 Trusted Types 缓解基于 DOM 的 XSS 攻击](https://developer.chrome.com/docs/lighthouse/best-practices/trusted-types-xss)。"
+  },
+  "core/audits/trusted-types-xss.js | noTrustedTypesToMitigateXss": {
+    "message": "未找到包含 Trusted Types 指令的 `Content-Security-Policy` 标头"
+  },
+  "core/audits/trusted-types-xss.js | title": {
+    "message": "使用 Trusted Types 缓解基于 DOM 的 XSS 攻击"
   },
   "core/audits/unsized-images.js | description": {
     "message": "请为图片元素设置明确的宽度值和高度值，以减少布局偏移并改善 CLS。[了解如何设置图片尺寸](https://web.dev/articles/optimize-cls#images_without_dimensions)"
@@ -1676,11 +1688,17 @@
   "core/config/default-config.js | firstPaintImprovementsGroupTitle": {
     "message": "改进首次绘制"
   },
+  "core/config/default-config.js | insightsGroupDescription": {
+    "message": "您还可在 Chrome 开发者工具的“性能”面板中查看这些数据分析。只要[记录跟踪信息](https://developer.chrome.com/docs/devtools/performance/reference)，即可查看更详细的信息。"
+  },
+  "core/config/default-config.js | insightsGroupTitle": {
+    "message": "数据分析"
+  },
   "core/config/default-config.js | metricGroupTitle": {
     "message": "指标"
   },
   "core/config/default-config.js | overallImprovementsGroupDescription": {
-    "message": "改善整体的加载体验，使该网页响应迅速且可尽快投入使用。关键指标：可交互前的耗时、速度指数"
+    "message": "改善整体的加载体验，使该网页响应迅速且可尽快投入使用。关键指标：可交互前的耗时、Speed Index"
   },
   "core/config/default-config.js | overallImprovementsGroupTitle": {
     "message": "整体改进"
@@ -1857,22 +1875,22 @@
     "message": "网址"
   },
   "core/lib/i18n/i18n.js | columnWastedBytes": {
-    "message": "可能达到的节省程度"
+    "message": "预计节省的字节数"
   },
   "core/lib/i18n/i18n.js | columnWastedMs": {
-    "message": "可能达到的节省程度"
+    "message": "预计缩短的毫秒数"
   },
   "core/lib/i18n/i18n.js | cumulativeLayoutShiftMetric": {
     "message": "Cumulative Layout Shift"
   },
   "core/lib/i18n/i18n.js | displayValueByteSavings": {
-    "message": "有望节省 {wastedBytes, number, bytes} KiB"
+    "message": "预计节省 {wastedBytes, number, bytes} KiB"
   },
   "core/lib/i18n/i18n.js | displayValueElementsFound": {
     "message": "{nodeCount,plural, =1{发现了 1 个元素}other{发现了 # 个元素}}"
   },
   "core/lib/i18n/i18n.js | displayValueMsSavings": {
-    "message": "有望节省 {wastedMs, number, milliseconds} 毫秒"
+    "message": "预计缩短 {wastedMs, number, milliseconds} 毫秒"
   },
   "core/lib/i18n/i18n.js | documentResourceType": {
     "message": "文档"
@@ -2192,9 +2210,6 @@
   "node_modules/@paulirish/trace_engine/generated/Deprecation.js | CrossOriginWindowConfirm": {
     "message": "从跨源 iframe 触发 window.confirm 的功能已被弃用，日后将被移除。"
   },
-  "node_modules/@paulirish/trace_engine/generated/Deprecation.js | DOMMutationEvents": {
-    "message": "DOM 变更事件（包括 DOMSubtreeModified、DOMNodeInserted、DOMNodeRemoved、DOMNodeRemovedFromDocument、DOMNodeInsertedIntoDocument 和 DOMCharacterDataModified，详见 https://w3c.github.io/uievents/#legacy-event-types）已被弃用，并将被移除。请改用 MutationObserver。"
-  },
   "node_modules/@paulirish/trace_engine/generated/Deprecation.js | DataUrlInSvgUse": {
     "message": "对 SVGUseElement 中 data: URL 的支持已被弃用，日后将被移除。"
   },
@@ -2336,9 +2351,6 @@
   "node_modules/@paulirish/trace_engine/models/trace/insights/CLSCulprits.js | description": {
     "message": "当元素在没有任何用户互动的情况下移动时，就会发生布局偏移。[调查布局偏移的原因](https://web.dev/articles/optimize-cls)，例如在网页加载时添加、移除元素或元素字体发生了变化。"
   },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/CLSCulprits.js | fontRequest": {
-    "message": "字体请求"
-  },
   "node_modules/@paulirish/trace_engine/models/trace/insights/CLSCulprits.js | injectedIframe": {
     "message": "注入的 iframe"
   },
@@ -2357,8 +2369,8 @@
   "node_modules/@paulirish/trace_engine/models/trace/insights/CLSCulprits.js | topCulprits": {
     "message": "导致布局偏移的首要原因"
   },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/CLSCulprits.js | unsizedImages": {
-    "message": "未设置尺寸的图片"
+  "node_modules/@paulirish/trace_engine/models/trace/insights/CLSCulprits.js | unsizedImage": {
+    "message": "Unsized image element"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/CLSCulprits.js | worstCluster": {
     "message": "最糟糕的集群"
@@ -2412,10 +2424,10 @@
     "message": "您的第一个网络请求最为重要。您可通过避免重定向、确保服务器快速响应以及启用文本压缩，缩短其延迟时间。"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/DocumentLatency.js | failedRedirects": {
-    "message": "有重定向"
+    "message": "有重定向 ({PH1} 次重定向，+{PH2})"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/DocumentLatency.js | failedServerResponseTime": {
-    "message": "服务器响应缓慢"
+    "message": "服务器响应缓慢（观察结果：{PH1}）"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/DocumentLatency.js | failedTextCompression": {
     "message": "未应用任何压缩"
@@ -2424,7 +2436,7 @@
     "message": "避免重定向"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/DocumentLatency.js | passingServerResponseTime": {
-    "message": "服务器响应迅速"
+    "message": "服务器响应迅速（观察结果：{PH1}）"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/DocumentLatency.js | passingTextCompression": {
     "message": "应用文本压缩"
@@ -2465,6 +2477,9 @@
   "node_modules/@paulirish/trace_engine/models/trace/insights/FontDisplay.js | wastedTimeColumn": {
     "message": "浪费的时间"
   },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/ForcedReflow.js | anonymous": {
+    "message": "（匿名）"
+  },
   "node_modules/@paulirish/trace_engine/models/trace/insights/ForcedReflow.js | description": {
     "message": "许多 API（通常用于读取布局几何图形信息）会强制渲染引擎暂停脚本执行，以便计算样式和布局。详细了解[强制自动重排](https://developers.google.com/web/fundamentals/performance/rendering/avoid-large-complex-layouts-and-layout-thrashing#avoid-forced-synchronous-layouts)及其缓解措施。"
   },
@@ -2481,7 +2496,7 @@
     "message": "总自动重排时间"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/ForcedReflow.js | unattributed": {
-    "message": "无法归因"
+    "message": "[未归因]"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/ImageDelivery.js | description": {
     "message": "缩短图片下载时间可优化网页的感知加载时间和 LCP。[详细了解图片大小优化](https://developer.chrome.com/docs/lighthouse/performance/uses-optimized-images/)"
@@ -2513,30 +2528,6 @@
   "node_modules/@paulirish/trace_engine/models/trace/insights/ImageDelivery.js | useVideoFormat": {
     "message": "使用视频格式而非 GIF 格式可以优化动画内容的下载大小。"
   },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/InteractionToNextPaint.js | description": {
-    "message": "请从持续时间最长的阶段开始检查。[几处延迟可降低到最小](https://web.dev/articles/optimize-inp#optimize_interactions)。如需缩短处理时长，请[优化主线程（通常是 JS）成本](https://web.dev/articles/optimize-long-tasks)。"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/InteractionToNextPaint.js | duration": {
-    "message": "时长"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/InteractionToNextPaint.js | inputDelay": {
-    "message": "输入延迟"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/InteractionToNextPaint.js | noInteractions": {
-    "message": "未检测到任何互动"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/InteractionToNextPaint.js | phase": {
-    "message": "阶段"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/InteractionToNextPaint.js | presentationDelay": {
-    "message": "展示延迟时间"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/InteractionToNextPaint.js | processingDuration": {
-    "message": "处理用时"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/InteractionToNextPaint.js | title": {
-    "message": "按阶段划分的 INP"
-  },
   "node_modules/@paulirish/trace_engine/models/trace/insights/LCPDiscovery.js | description": {
     "message": "使 LCP 图像能够立即从 HTML 中[被发现](https://web.dev/articles/optimize-lcp#1_eliminate_resource_load_delay)，并[避免延迟加载](https://web.dev/articles/lcp-lazy-loading)，以此优化 LCP"
   },
@@ -2564,36 +2555,6 @@
   "node_modules/@paulirish/trace_engine/models/trace/insights/LCPDiscovery.js | title": {
     "message": "发现 LCP 请求"
   },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | description": {
-    "message": "每个[阶段都有特定的改进策略](https://web.dev/articles/optimize-lcp#lcp-breakdown)。理想情况下，大部分 LCP 时间应该花在加载资源上，而不是浪费在延迟上。"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | duration": {
-    "message": "时长"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | elementRenderDelay": {
-    "message": "元素渲染延迟"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | fieldDuration": {
-    "message": "现场数据第 75 百分位数"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | noLcp": {
-    "message": "未检测到 LCP"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | phase": {
-    "message": "阶段"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | resourceLoadDelay": {
-    "message": "资源加载延迟"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | resourceLoadDuration": {
-    "message": "资源加载时长"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | timeToFirstByte": {
-    "message": "第一字节时间 (Time to First Byte)"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | title": {
-    "message": "按阶段划分的 LCP"
-  },
   "node_modules/@paulirish/trace_engine/models/trace/insights/LegacyJavaScript.js | columnScript": {
     "message": "脚本"
   },
@@ -2601,7 +2562,7 @@
     "message": "浪费的字节数"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/LegacyJavaScript.js | description": {
-    "message": "polyfill 和 transform 让旧版浏览器能够使用新的 JavaScript 功能。不过，很多功能对现代浏览器而言并不是必需的。请考虑修改 JavaScript 构建流程，以便不转译 [Baseline](https://web.dev/articles/baseline-and-polyfills) 功能，除非您知道必须支持旧版浏览器。[了解为什么大多数网站可以部署 ES6+ 代码而无需转译](https://philipwalton.com/articles/the-state-of-es5-on-the-web/)"
+    "message": "Polyfill 和 transform 让旧版浏览器能够使用新的 JavaScript 功能。不过，其中的很多函数对现代浏览器而言并不是必需的。请考虑修改 JavaScript 构建流程，以便不转译 [Baseline](https://web.dev/articles/baseline-and-polyfills) 功能，除非您知道必须支持旧版浏览器。[了解为什么大多数网站可以部署 ES6+ 代码而无需转译](https://philipwalton.com/articles/the-state-of-es5-on-the-web/)"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/LegacyJavaScript.js | title": {
     "message": "旧版 JavaScript"
@@ -2621,8 +2582,32 @@
   "node_modules/@paulirish/trace_engine/models/trace/insights/ModernHTTP.js | title": {
     "message": "现代 HTTP"
   },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | columnOrigin": {
+    "message": "源"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | columnRequest": {
+    "message": "请求"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | columnSource": {
+    "message": "来源"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | columnTime": {
+    "message": "时间"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | columnWastedMs": {
+    "message": "预计 LCP 节省毫秒数"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | crossoriginWarning": {
+    "message": "未使用的 preconnect。请检查并确保正确使用了 crossorigin 属性。"
+  },
   "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | description": {
     "message": "[避免链接关键请求](https://developer.chrome.com/docs/lighthouse/performance/critical-request-chains)，方法是缩短链长、缩减资源的下载文件大小，或者推迟下载不必要的资源，从而提高网页加载速度。"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | estSavingTableDescription": {
+    "message": "为最重要的源添加 [preconnect](https://developer.chrome.com/docs/lighthouse/performance/uses-rel-preconnect/) 提示，但请尽量不要超过 4 个。"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | estSavingTableTitle": {
+    "message": "预连接候选项"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | maxCriticalPathLatency": {
     "message": "关键路径延迟时间上限："
@@ -2630,14 +2615,32 @@
   "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | noNetworkDependencyTree": {
     "message": "没有任何渲染任务受到网络依赖项的影响"
   },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | noPreconnectCandidates": {
+    "message": "没有其他源是预连接的合适候选对象"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | noPreconnectOrigins": {
+    "message": "未预连接任何源"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | preconnectOriginsTableDescription": {
+    "message": "[preconnect](https://developer.chrome.com/docs/lighthouse/performance/uses-rel-preconnect/) 提示可帮助浏览器在加载网页时尽早建立连接，从而在向该源发出第一个请求时节省时间。以下是该网页预先连接到的源。"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | preconnectOriginsTableTitle": {
+    "message": "预连接的源"
+  },
   "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | title": {
     "message": "网络依赖关系树"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | tooManyPreconnectLinksWarning": {
+    "message": "发现了超过 4 个 preconnect 连接。此类连接应尽量少用，且应仅用于指向最重要的源。"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | unusedWarning": {
+    "message": "未使用的 preconnect。请仅针对网页可能会请求的源使用 preconnect。"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | warningDescription": {
     "message": "避免链接关键请求，方法是缩短链长、缩减资源的下载文件大小，或者推迟下载不必要的资源，从而提高网页加载速度。"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/RenderBlocking.js | description": {
-    "message": "请求正在屏蔽网页的初始渲染，这可能会延迟 LCP。[延迟或内嵌](https://web.dev/learn/performance/understanding-the-critical-path#render-blocking_resources/)可以将这些网络请求移出关键路径。"
+    "message": "请求正在屏蔽网页的初始渲染，这可能会延迟 LCP。[延迟或内嵌](https://web.dev/learn/performance/understanding-the-critical-path#render-blocking_resources)可以将这些网络请求移出关键路径。"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/RenderBlocking.js | duration": {
     "message": "时长"
@@ -2685,7 +2688,7 @@
     "message": "传输大小"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/ThirdParties.js | description": {
-    "message": "第三方代码可能会显著影响加载性能。[请减少并推迟加载第三方代码](https://developers.google.com/web/fundamentals/performance/optimizing-content-efficiency/loading-third-party-javascript/)，以优先渲染您的网页内容。"
+    "message": "第三方代码可能会显著影响加载性能。[请减少并推迟加载第三方代码](https://web.dev/articles/optimizing-content-efficiency-loading-third-party-javascript/)，以优先渲染您的网页内容。"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/ThirdParties.js | noThirdParties": {
     "message": "未找到第三方内容"
@@ -2695,6 +2698,9 @@
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/Viewport.js | description": {
     "message": "如果视口未针对移动设备进行优化，点按互动可能会[延迟最多 300 毫秒](https://developer.chrome.com/blog/300ms-tap-delay-gone-away/)。"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/Viewport.js | mobileTapDelayLabel": {
+    "message": "移动设备点按延迟"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/Viewport.js | title": {
     "message": "针对移动设备优化视口"
@@ -3587,8 +3593,14 @@
   "report/renderer/report-utils.js | footerIssue": {
     "message": "提交问题"
   },
+  "report/renderer/report-utils.js | goBackToAudits": {
+    "message": "返回审核部分"
+  },
   "report/renderer/report-utils.js | hide": {
     "message": "隐藏"
+  },
+  "report/renderer/report-utils.js | insightsNotice": {
+    "message": "今年晚些时候，数据分析将取代效果审核。[点击此处了解详情并提供反馈](https://github.com/GoogleChrome/lighthouse/discussions/16462)。"
   },
   "report/renderer/report-utils.js | labDataTitle": {
     "message": "实验室数据"
@@ -3689,6 +3701,9 @@
   "report/renderer/report-utils.js | toplevelWarningsMessage": {
     "message": "此次 Lighthouse 运行并不顺利，原因如下："
   },
+  "report/renderer/report-utils.js | tryInsights": {
+    "message": "试用数据分析功能"
+  },
   "report/renderer/report-utils.js | unattributable": {
     "message": "无法归因"
   },
@@ -3719,6 +3734,9 @@
   "treemap/app/src/util.js | duplicateModulesLabel": {
     "message": "重复的模块"
   },
+  "treemap/app/src/util.js | duplicatedBytesLabel": {
+    "message": "重复的字节数"
+  },
   "treemap/app/src/util.js | resourceBytesLabel": {
     "message": "资源字节数"
   },
@@ -3727,6 +3745,9 @@
   },
   "treemap/app/src/util.js | toggleTableButtonLabel": {
     "message": "显示/隐藏表格"
+  },
+  "treemap/app/src/util.js | transferBytesLabel": {
+    "message": "传输字节数"
   },
   "treemap/app/src/util.js | unusedBytesLabel": {
     "message": "未使用的字节数"

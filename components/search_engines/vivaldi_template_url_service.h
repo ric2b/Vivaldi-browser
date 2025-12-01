@@ -15,6 +15,8 @@ syncer::UniquePosition::Suffix VivaldiGetPositionSuffix(
     const TemplateURL* template_url);
 const char* VivaldiGetDefaultProviderGuidPrefForType(
   TemplateURLService::DefaultSearchType type);
+void RegisterTemplateURLServiceProfilePrefs(
+    user_prefs::PrefRegistrySyncable* registry);
 
 }  // namespace vivaldi
 

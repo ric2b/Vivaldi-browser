@@ -64,7 +64,7 @@ bool WifiHotspotServerSocket::Connect(WifiHotspotSocket& socket) {
   absl::MutexLock lock(&mutex_);
   if (closed_) return false;
   if (socket.IsConnected()) {
-    NEARBY_LOGS(ERROR)
+    LOG(ERROR)
         << "Failed to connect to WifiHotspot server socket: already connected";
     return true;  // already connected.
   }
@@ -133,8 +133,8 @@ bool WifiHotspotMedium::StartWifiHotspot(
   std::string password = absl::StrFormat("%08x", Prng().NextUint32());
   hotspot_credentials->SetPassword(password);
 
-  NEARBY_LOGS(INFO) << "G3 StartWifiHotspot: ssid=" << ssid
-                    << ",  password:" << password;
+  LOG(INFO) << "G3 StartWifiHotspot: ssid=" << ssid
+            << ",  password:" << password;
 
   auto& env = MediumEnvironment::Instance();
   env.UpdateWifiHotspotMediumForStartOrConnect(*this, hotspot_credentials,
@@ -146,7 +146,7 @@ bool WifiHotspotMedium::StartWifiHotspot(
 
 bool WifiHotspotMedium::StopWifiHotspot() {
   absl::MutexLock lock(&mutex_);
-  NEARBY_LOGS(INFO) << "G3 StopWifiHotspot";
+  LOG(INFO) << "G3 StopWifiHotspot";
 
   if (!IsInterfaceValid()) return false;
 
@@ -161,9 +161,8 @@ bool WifiHotspotMedium::ConnectWifiHotspot(
     HotspotCredentials* hotspot_credentials) {
   absl::MutexLock lock(&mutex_);
 
-  NEARBY_LOGS(INFO) << "G3 ConnectWifiHotspot: ssid="
-                    << hotspot_credentials->GetSSID()
-                    << ",  password:" << hotspot_credentials->GetPassword();
+  LOG(INFO) << "G3 ConnectWifiHotspot: ssid=" << hotspot_credentials->GetSSID()
+            << ",  password:" << hotspot_credentials->GetPassword();
 
   auto& env = MediumEnvironment::Instance();
   auto* remote_medium = static_cast<WifiHotspotMedium*>(
@@ -184,7 +183,7 @@ bool WifiHotspotMedium::ConnectWifiHotspot(
 bool WifiHotspotMedium::DisconnectWifiHotspot() {
   absl::MutexLock lock(&mutex_);
 
-  NEARBY_LOGS(INFO) << "G3 DisconnectWifiHotspot";
+  LOG(INFO) << "G3 DisconnectWifiHotspot";
 
   auto& env = MediumEnvironment::Instance();
   env.UpdateWifiHotspotMediumForStartOrConnect(*this, /*credentials*/ nullptr,
@@ -197,8 +196,8 @@ std::unique_ptr<api::WifiHotspotSocket> WifiHotspotMedium::ConnectToService(
     absl::string_view ip_address, int port,
     CancellationFlag* cancellation_flag) {
   std::string socket_name = WifiHotspotServerSocket::GetName(ip_address, port);
-  NEARBY_LOGS(INFO) << "G3 WifiHotspot ConnectToService [self]: medium=" << this
-                    << ", ip address + port=" << socket_name;
+  LOG(INFO) << "G3 WifiHotspot ConnectToService [self]: medium=" << this
+            << ", ip address + port=" << socket_name;
   // First, find an instance of remote medium, that exposed this service.
   auto& env = MediumEnvironment::Instance();
   auto* remote_medium =
@@ -208,9 +207,8 @@ std::unique_ptr<api::WifiHotspotSocket> WifiHotspotMedium::ConnectToService(
   }
 
   WifiHotspotServerSocket* server_socket = nullptr;
-  NEARBY_LOGS(INFO) << "G3 WifiHotspot ConnectToService [peer]: medium="
-                    << remote_medium
-                    << ", remote ip address + port=" << socket_name;
+  LOG(INFO) << "G3 WifiHotspot ConnectToService [peer]: medium="
+            << remote_medium << ", remote ip address + port=" << socket_name;
   // Then, find our server socket context in this medium.
   {
     absl::MutexLock medium_lock(&remote_medium->mutex_);
@@ -218,22 +216,21 @@ std::unique_ptr<api::WifiHotspotSocket> WifiHotspotMedium::ConnectToService(
     server_socket =
         item != remote_medium->server_sockets_.end() ? item->second : nullptr;
     if (server_socket == nullptr) {
-      NEARBY_LOGS(ERROR) << "G3 WifiHotspot Failed to find WifiHotspot Server "
-                            "socket: socket_name="
-                         << socket_name;
+      LOG(ERROR) << "G3 WifiHotspot Failed to find WifiHotspot Server "
+                    "socket: socket_name="
+                 << socket_name;
       return {};
     }
   }
 
   if (cancellation_flag->Cancelled()) {
-    NEARBY_LOGS(ERROR)
-        << "G3 WifiHotspot Connect: Has been cancelled: socket_name="
-        << socket_name;
+    LOG(ERROR) << "G3 WifiHotspot Connect: Has been cancelled: socket_name="
+               << socket_name;
     return {};
   }
 
   CancellationFlagListener listener(cancellation_flag, [&server_socket]() {
-    NEARBY_LOGS(INFO) << "G3 WifiHotspot Cancel Connect.";
+    LOG(INFO) << "G3 WifiHotspot Cancel Connect.";
     if (server_socket != nullptr) {
       server_socket->Close();
     }
@@ -242,14 +239,13 @@ std::unique_ptr<api::WifiHotspotSocket> WifiHotspotMedium::ConnectToService(
   auto socket = std::make_unique<WifiHotspotSocket>();
   // Finally, Request to connect to this socket.
   if (!server_socket->Connect(*socket)) {
-    NEARBY_LOGS(ERROR)
-        << "G3 WifiHotspot Failed to connect to existing WifiHotspot "
-           "Server socket: name="
-        << socket_name;
+    LOG(ERROR) << "G3 WifiHotspot Failed to connect to existing WifiHotspot "
+                  "Server socket: name="
+               << socket_name;
     return {};
   }
-  NEARBY_LOGS(INFO) << "G3 WifiHotspot ConnectToService: connected: socket="
-                    << socket.get();
+  LOG(INFO) << "G3 WifiHotspot ConnectToService: connected: socket="
+            << socket.get();
   return socket;
 }
 
@@ -275,8 +271,8 @@ WifiHotspotMedium::ListenForService(int port) {
     absl::MutexLock lock(&mutex_);
     server_sockets_.erase(socket_name);
   });
-  NEARBY_LOGS(INFO) << "G3 WifiHotspot Adding server socket: medium=" << this
-                    << ", socket_name=" << socket_name;
+  LOG(INFO) << "G3 WifiHotspot Adding server socket: medium=" << this
+            << ", socket_name=" << socket_name;
   absl::MutexLock lock(&mutex_);
   server_sockets_.insert({socket_name, server_socket.get()});
   return server_socket;

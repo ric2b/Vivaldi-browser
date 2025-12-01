@@ -12,6 +12,12 @@ import {Events, OverlayModel} from './OverlayModel.js';
 import {SDKModel} from './SDKModel.js';
 import {Capability, type Target} from './Target.js';
 
+export const enum DataSaverOverride {
+  UNSET = 'unset',
+  ENABLED = 'enabled',
+  DISABLED = 'disabled',
+}
+
 export class EmulationModel extends SDKModel<void> {
   readonly #emulationAgent: ProtocolProxyApi.EmulationApi;
   readonly #deviceOrientationAgent: ProtocolProxyApi.DeviceOrientationApi;
@@ -168,6 +174,14 @@ export class EmulationModel extends SDKModel<void> {
     visionDeficiencySetting.addChangeListener(() => this.emulateVisionDeficiency(visionDeficiencySetting.get()));
     if (visionDeficiencySetting.get()) {
       void this.emulateVisionDeficiency(visionDeficiencySetting.get());
+    }
+
+    const osTextScaleSetting = Common.Settings.Settings.instance().moduleSetting('emulated-os-text-scale');
+    osTextScaleSetting.addChangeListener(() => {
+      void this.emulateOSTextScale(parseFloat(osTextScaleSetting.get()) || undefined);
+    });
+    if (osTextScaleSetting.get()) {
+      void this.emulateOSTextScale(parseFloat(osTextScaleSetting.get()) || undefined);
     }
 
     const localFontsDisabledSetting = Common.Settings.Settings.instance().moduleSetting('local-fonts-disabled');
@@ -346,6 +360,10 @@ export class EmulationModel extends SDKModel<void> {
     await this.#emulationAgent.invoke_setEmulatedVisionDeficiency({type});
   }
 
+  private async emulateOSTextScale(scale: number|undefined): Promise<void> {
+    await this.#emulationAgent.invoke_setEmulatedOSTextScale({scale: scale || undefined});
+  }
+
   private setLocalFontsDisabled(disabled: boolean): void {
     if (!this.#cssModel) {
       return;
@@ -355,6 +373,13 @@ export class EmulationModel extends SDKModel<void> {
 
   private setDisabledImageTypes(imageTypes: Protocol.Emulation.DisabledImageType[]): void {
     void this.#emulationAgent.invoke_setDisabledImageTypes({imageTypes});
+  }
+
+  async setDataSaverOverride(dataSaverOverride: DataSaverOverride): Promise<void> {
+    const dataSaverEnabled = dataSaverOverride === DataSaverOverride.UNSET ? undefined :
+        dataSaverOverride === DataSaverOverride.ENABLED                    ? true :
+                                                                             false;
+    await this.#emulationAgent.invoke_setDataSaverOverride({dataSaverEnabled});
   }
 
   async setCPUThrottlingRate(rate: number): Promise<void> {

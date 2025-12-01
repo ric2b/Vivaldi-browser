@@ -5,6 +5,9 @@
 #ifndef CHROME_BROWSER_UI_LENS_LENS_OVERLAY_SIDE_PANEL_COORDINATOR_H_
 #define CHROME_BROWSER_UI_LENS_LENS_OVERLAY_SIDE_PANEL_COORDINATOR_H_
 
+#include <vector>
+
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/lens/core/mojom/geometry.mojom.h"
 #include "chrome/browser/lens/core/mojom/lens_side_panel.mojom.h"
@@ -129,6 +132,11 @@ class LensOverlaySidePanelCoordinator
     return lens_search_controller_->lens_searchbox_controller();
   }
 
+  // Return the LensComposeboxController that is part of this tab.
+  LensComposeboxController* GetLensComposeboxController() {
+    return lens_search_controller_->lens_composebox_controller();
+  }
+
   // Handles rendering text highlights on the main browser window based on
   // navigations from the side panel. Returns true if handled, false otherwise.
   // `nav_url` refers to the URL that the side panel was set to navigate to. It
@@ -151,6 +159,7 @@ class LensOverlaySidePanelCoordinator
   void OnScrollToMessage(const std::vector<std::string>& text_fragments,
       uint32_t pdf_page_number) override;
   void RequestSendFeedback() override;
+  void OnAimMessage(const std::vector<uint8_t>& message) override;
 
   // This method is used to set up communication between this instance and the
   // side panel WebUI. This is called by the WebUIController when the WebUI is
@@ -219,6 +228,7 @@ class LensOverlaySidePanelCoordinator
 
   friend class ::LensOverlayController;
   friend class lens::LensOverlaySidePanelNavigationThrottle;
+  friend class lens::LensComposeboxController;
 
  protected:
   // Returns whether the side panel is bound to the WebUI.
@@ -248,6 +258,19 @@ class LensOverlaySidePanelCoordinator
   // Sets the page content upload progress for the progress bar in the side
   // panel.
   void SetPageContentUploadProgress(double progress);
+
+  // Passes the `message` to the side panel WebUI to be passed to the remote
+  // UI in the side panel iframe. `message` should be a serialized
+  // ClientToAimMessage proto.
+  virtual void SendClientMessageToAim(
+      const std::vector<uint8_t>& serialized_message);
+
+  // Notifies the side panel WebUI that the AIM handshake has been received.
+  virtual void AimHandshakeReceived();
+
+  // Notifies the side panel WebUI that the results have moved to/from the AIM
+  // UI. `on_aim` is true if the results are now in the AIM UI.
+  virtual void AimResultsChanged(bool on_aim);
 
  private:
   // Data class for constructing the side panel and storing side panel state for
@@ -325,6 +348,9 @@ class LensOverlaySidePanelCoordinator
 
   // Called to get the URL for the "open in new tab" button.
   GURL GetOpenInNewTabUrl();
+
+  // Called to get the lens side panel's preferred default width.
+  int GetPreferredDefaultWidth();
 
   std::unique_ptr<views::View> CreateLensOverlayResultsView(
       SidePanelEntryScope& scope);

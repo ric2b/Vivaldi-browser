@@ -122,7 +122,7 @@ export class Event {
   /**
    * set an event to be "live" where it's ended time is always the chart maximum
    * or to be a fixed time.
-   * @param {number} time
+   * @param time
    */
   set endTime(time: number) {
     // Setting end time to -1 signals that an event becomes live
@@ -268,8 +268,8 @@ export class TickingFlameChart extends UI.Widget.VBox {
   }
 
   private onScroll(e: WheelEvent): void {
-    // TODO: is this a good divisor? does it account for high presicision scroll wheels?
-    // low precisision scroll wheels?
+    // TODO: is this a good divisor? does it account for high precision scroll wheels?
+    // low precision scroll wheels?
     const scrollTickCount = Math.round(e.deltaY / 50);
     const scrollPositionRatio = e.offsetX / (e.srcElement as HTMLElement).clientWidth;
     if (scrollTickCount > 0) {
@@ -342,9 +342,6 @@ export class TickingFlameChart extends UI.Widget.VBox {
  * Doesn't do much right now, but can be used in the future for selecting events.
  */
 class TickingFlameChartDelegate implements PerfUI.FlameChart.FlameChartDelegate {
-  constructor() {
-  }
-
   windowChanged(_windowStartTime: number, _windowEndTime: number, _animate: boolean): void {
   }
 
@@ -376,7 +373,7 @@ class TickingFlameChartDataProvider implements PerfUI.FlameChart.FlameChartDataP
     // Map<Event>
     this.eventMap = new Map();
 
-    // Contains the numerical indicies. This is passed as a reference to the events
+    // Contains the numerical indices. This is passed as a reference to the events
     // so that they can update it when they change.
     this.timelineDataInternal = PerfUI.FlameChart.FlameChartTimelineData.createEmpty();
 

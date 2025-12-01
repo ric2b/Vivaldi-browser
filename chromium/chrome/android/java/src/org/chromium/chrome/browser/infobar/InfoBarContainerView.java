@@ -4,6 +4,8 @@
 
 package org.chromium.chrome.browser.infobar;
 
+import static org.chromium.build.NullUtil.assumeNonNull;
+
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.content.Context;
@@ -12,11 +14,11 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.supplier.ObservableSupplier;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsUtils;
 import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeController;
@@ -27,15 +29,16 @@ import org.chromium.components.infobars.InfoBar;
 import org.chromium.components.infobars.InfoBarAnimationListener;
 import org.chromium.components.infobars.InfoBarContainerLayout;
 import org.chromium.components.infobars.InfoBarUiItem;
-import org.chromium.ui.InsetObserver;
 import org.chromium.ui.display.DisplayAndroid;
 import org.chromium.ui.display.DisplayUtil;
+import org.chromium.ui.insets.InsetObserver;
 
 // Vivaldi
 import org.chromium.build.BuildConfig;
 import org.vivaldi.browser.common.VivaldiUtils;
 
 /** The {@link View} for the {@link InfoBarContainer}. */
+@NullMarked
 public class InfoBarContainerView extends SwipableOverlayView
         implements BrowserControlsStateProvider.Observer, InsetObserver.WindowInsetObserver {
     /** Observes container view changes. */
@@ -59,15 +62,15 @@ public class InfoBarContainerView extends SwipableOverlayView
     /** Whether or not the InfoBarContainer is allowed to hide when the user scrolls. */
     private static boolean sIsAllowedToAutoHide = true;
 
-    private final BrowserControlsStateProvider mBrowserControlsStateProvider;
+    private final @Nullable BrowserControlsStateProvider mBrowserControlsStateProvider;
     private final ContainerViewObserver mContainerViewObserver;
     private final InfoBarContainerLayout mLayout;
 
     /** Parent view that contains the InfoBarContainerLayout. */
-    private ViewGroup mParentView;
+    private @Nullable ViewGroup mParentView;
 
     /** Animation used to snap the container to the nearest state if scroll direction changes. */
-    private Animator mScrollDirectionChangeAnimation;
+    private @Nullable Animator mScrollDirectionChangeAnimation;
 
     /** Whether or not the current scroll is downward. */
     private boolean mIsScrollingDownward;
@@ -75,8 +78,8 @@ public class InfoBarContainerView extends SwipableOverlayView
     /** Tracks the previous event's scroll offset to determine if a scroll is up or down. */
     private int mLastScrollOffsetY;
 
-    @Nullable private final ObservableSupplier<EdgeToEdgeController> mEdgeToEdgeSupplier;
-    @Nullable private EdgeToEdgePadAdjuster mEdgeToEdgePadAdjuster;
+    private final @Nullable ObservableSupplier<EdgeToEdgeController> mEdgeToEdgeSupplier;
+    private @Nullable EdgeToEdgePadAdjuster mEdgeToEdgePadAdjuster;
 
     /**
      * @param context The {@link Context} that this view is attached to.
@@ -89,8 +92,8 @@ public class InfoBarContainerView extends SwipableOverlayView
      */
     @Deprecated
     InfoBarContainerView(
-            @NonNull Context context,
-            @NonNull ContainerViewObserver containerViewObserver,
+            Context context,
+            ContainerViewObserver containerViewObserver,
             @Nullable BrowserControlsStateProvider browserControlsStateProvider,
             boolean isTablet) {
         this(context, containerViewObserver, browserControlsStateProvider, null, isTablet);
@@ -107,8 +110,8 @@ public class InfoBarContainerView extends SwipableOverlayView
      * @param isTablet Whether this view is displayed on tablet or not.
      */
     InfoBarContainerView(
-            @NonNull Context context,
-            @NonNull ContainerViewObserver containerViewObserver,
+            Context context,
+            ContainerViewObserver containerViewObserver,
             @Nullable BrowserControlsStateProvider browserControlsStateProvider,
             @Nullable ObservableSupplier<EdgeToEdgeController> edgeToEdgeSupplier,
             boolean isTablet) {
@@ -138,7 +141,8 @@ public class InfoBarContainerView extends SwipableOverlayView
                             }
 
                             @Override
-                            public void notifyAllAnimationsFinished(InfoBarUiItem frontInfoBar) {
+                            public void notifyAllAnimationsFinished(
+                                    @Nullable InfoBarUiItem frontInfoBar) {
                                 mContainerViewObserver.notifyAllAnimationsFinished(frontInfoBar);
                             }
                         });
@@ -176,6 +180,7 @@ public class InfoBarContainerView extends SwipableOverlayView
 
     @Override
     protected boolean shouldConsumeScroll(int scrollOffsetY, int scrollExtentY) {
+        assumeNonNull(mBrowserControlsStateProvider);
         if (mBrowserControlsStateProvider.getBottomControlsHeight() <= 0) return true;
 
         boolean isScrollingDownward = scrollOffsetY > mLastScrollOffsetY;
@@ -237,14 +242,14 @@ public class InfoBarContainerView extends SwipableOverlayView
         }
         if (BuildConfig.IS_VIVALDI && !VivaldiUtils.isTopToolbarOn()) { // Vivaldi Ref. VAB-8486
             setTranslationY(getTotalHeight() * 1.0f * Math.abs(topOffset)
-                            / mBrowserControlsStateProvider.getBottomControlsHeight());
+                    / assumeNonNull(mBrowserControlsStateProvider).getBottomControlsHeight());
             return;
         }
         setTranslationY(
                 getTotalHeight()
                         * 1.0f
                         * Math.abs(topOffset)
-                        / mBrowserControlsStateProvider.getTopControlsHeight());
+                        / assumeNonNull(mBrowserControlsStateProvider).getTopControlsHeight());
     }
 
     /**

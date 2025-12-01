@@ -454,5 +454,188 @@ class DependencyValidationTest(unittest.TestCase):
                          "Found descriptions for unlisted vulnerability IDs")
         self.assertIn("CVE-2024-9999",results[1].get_additional()[0])
 
+
+    def test_vuln_scan_sufficiency(self):
+        """Tests the vuln_scan_sufficiency property."""
+        # Test case: sufficient:CPE.
+        dependency = dm.DependencyMetadata()
+        dependency.add_entry(known_fields.CPE_PREFIX.get_name(),
+                             "cpe:/a:vendor:product")
+        self.assertEqual(dependency.vuln_scan_sufficiency,
+                         "sufficient:CPE")
+
+        # Test case: sufficient:URL and Revision.
+        dependency = dm.DependencyMetadata()
+        dependency.add_entry(known_fields.URL.get_name(), "https://example.com")
+        dependency.add_entry(known_fields.REVISION.get_name(), "abcdef123456")
+        self.assertEqual(dependency.vuln_scan_sufficiency,
+                         "sufficient:URL and Revision")
+
+        # Test case: sufficient:URL and Revision[DEPS], given 'Revision:DEPS'.
+        dependency = dm.DependencyMetadata()
+        dependency.add_entry(known_fields.URL.get_name(), "https://example.com")
+        dependency.add_entry(known_fields.REVISION.get_name(), "DEPS")
+        self.assertEqual(dependency.vuln_scan_sufficiency,
+                         "sufficient:URL and Revision[DEPS]")
+
+        # Test case: sufficient:URL and Version.
+        dependency = dm.DependencyMetadata()
+        dependency.add_entry(known_fields.URL.get_name(), "https://example.com")
+        dependency.add_entry(known_fields.VERSION.get_name(), "1.2.3")
+        self.assertEqual(dependency.vuln_scan_sufficiency,
+                         "sufficient:URL and Version")
+
+        # Test case: ignore:Static (because of update mechanism).
+        dependency = dm.DependencyMetadata()
+        dependency.add_entry(known_fields.UPDATE_MECHANISM.get_name(), "Static")
+        self.assertEqual(dependency.vuln_scan_sufficiency,
+                         "ignore:Static")
+
+        # Test case: ignore:Canonical (only URL).
+        dependency = dm.DependencyMetadata()
+        dependency.add_entry(known_fields.URL.get_name(), "This is the canonical public repository")
+        self.assertEqual(dependency.vuln_scan_sufficiency,
+                         "ignore:Canonical")
+
+        # Test case: ignore:Internal (only URL).
+        dependency = dm.DependencyMetadata()
+        dependency.add_entry(known_fields.URL.get_name(), "Google internal")
+        self.assertEqual(dependency.vuln_scan_sufficiency,
+                         "ignore:Internal")
+
+        # Test case: ignore:Internal takes precedence over ignore:Static.
+        dependency = dm.DependencyMetadata()
+        dependency.add_entry(known_fields.URL.get_name(), "Google Internal.")
+        dependency.add_entry(known_fields.UPDATE_MECHANISM.get_name(), "Static.HardFork")
+        self.assertEqual(dependency.vuln_scan_sufficiency,
+                         "ignore:Internal")
+
+        # Test case: insufficient (bad bug link).
+        dependency = dm.DependencyMetadata()
+        dependency.add_entry(known_fields.UPDATE_MECHANISM.get_name(), "Manual (bad_bug_link)")
+        self.assertEqual(dependency.vuln_scan_sufficiency,
+                         "insufficient")
+
+        # Test case: ignore:Static (because not shipped).
+        dependency = dm.DependencyMetadata()
+        dependency.add_entry(known_fields.SHIPPED.get_name(), "no")
+        self.assertEqual(dependency.vuln_scan_sufficiency,
+                         "insufficient")
+
+        # Test case: insufficient (no relevant fields, shipped defaults to None).
+        dependency = dm.DependencyMetadata()
+        self.assertEqual(dependency.vuln_scan_sufficiency,
+                          "insufficient")
+
+        # Test case: insufficient (only URL).
+        dependency = dm.DependencyMetadata()
+        dependency.add_entry(known_fields.URL.get_name(), "https://example.com")
+        self.assertEqual(dependency.vuln_scan_sufficiency,
+                         "insufficient")
+
+        # Test case: CPE takes precedence over URL/Revision.
+        dependency = dm.DependencyMetadata()
+        dependency.add_entry(known_fields.CPE_PREFIX.get_name(),
+                             "cpe:/a:vendor:product")
+        dependency.add_entry(known_fields.URL.get_name(), "https://example.com")
+        dependency.add_entry(known_fields.REVISION.get_name(), "abcdef123456")
+        self.assertEqual(dependency.vuln_scan_sufficiency,
+                         "sufficient:CPE")
+
+        # Test case: URL/Revision takes precedence over static update mechanism.
+        dependency = dm.DependencyMetadata()
+        dependency.add_entry(known_fields.UPDATE_MECHANISM.get_name(), "Static")
+        dependency.add_entry(known_fields.URL.get_name(), "https://example.com")
+        dependency.add_entry(known_fields.REVISION.get_name(), "abcdef123456")
+        self.assertEqual(dependency.vuln_scan_sufficiency,
+                         "sufficient:URL and Revision")
+
+
+def test_update_mechanism_validation(self):
+    """Tests the validation logic for the Update Mechanism field."""
+    # A list of test cases with the value to test and the expected error, if any.
+    test_cases = {
+        # --- Valid Cases ---
+        "Valid Autoroll": ("Autoroll", None),
+        "Valid Manual": ("Manual (crbug.com/123)", None),
+        "Valid Static": ("Static (crbug.com/456)", None),
+        "Valid Static.HardFork": ("Static.HardFork (crbug.com/789)", None),
+        "Valid with extra whitespace": ("  Manual (crbug.com/123)  ", None),
+
+        # --- Invalid Cases ---
+        "Invalid format":
+        ("Invalid Value", "Invalid format for Update Mechanism field."),
+        "Unknown mechanism":
+        ("Custom (crbug.com/123)", "Invalid mechanism 'Custom'."),
+        "Autoroll with bug link": ("Autoroll (crbug.com/123)",
+                                   "A bug link is not allowed for 'Autoroll'."),
+        "Manual without bug link":
+        ("Manual", "A bug link is required for 'Manual'."),
+        "Static without bug link": ("Static",
+                                    "A bug link is required for 'Static'."),
+        "Static.HardFork without bug link":
+        ("Static.HardFork", "A bug link is required for 'Static.HardFork'."),
+    }
+
+    for name, (value, expected_error) in test_cases.items():
+        with self.subTest(msg=name):
+            dependency = dm.DependencyMetadata()
+            # Populate with other valid, required fields to isolate the test
+            dependency.add_entry(known_fields.NAME.get_name(), f"Test {name}")
+            dependency.add_entry(known_fields.URL.get_name(),
+                                 "https://www.example.com")
+            dependency.add_entry(known_fields.VERSION.get_name(), "1.0.0")
+            dependency.add_entry(known_fields.LICENSE.get_name(), "MIT")
+            dependency.add_entry(known_fields.LICENSE_FILE.get_name(),
+                                 "LICENSE")
+            dependency.add_entry(known_fields.SECURITY_CRITICAL.get_name(),
+                                 "no")
+            dependency.add_entry(known_fields.SHIPPED.get_name(), "no")
+
+            # Add the Update Mechanism field to test
+            dependency.add_entry("Update Mechanism", value)
+
+            results = dependency.validate(
+                source_file_dir=os.path.join(_THIS_DIR, "data"),
+                repo_root_dir=_THIS_DIR,
+            )
+
+            if expected_error is None:
+                self.assertEqual(len(results), 0,
+                                 f"Expected no errors for value: '{value}'")
+            else:
+                self.assertEqual(len(results), 1,
+                                 f"Expected one error for value: '{value}'")
+                self.assertTrue(isinstance(results[0], vr.ValidationError))
+                self.assertEqual(results[0].get_reason(), expected_error)
+
+    # Test case for a missing Update Mechanism field, assuming it's required.
+    with self.subTest(msg="Missing field"):
+        dependency = dm.DependencyMetadata()
+        dependency.add_entry(known_fields.NAME.get_name(),
+                             "Test Missing Update Mechanism")
+        dependency.add_entry(known_fields.URL.get_name(),
+                             "https://www.example.com")
+        dependency.add_entry(known_fields.VERSION.get_name(), "1.0.0")
+        dependency.add_entry(known_fields.LICENSE.get_name(), "MIT")
+        dependency.add_entry(known_fields.LICENSE_FILE.get_name(), "LICENSE")
+        dependency.add_entry(known_fields.SECURITY_CRITICAL.get_name(), "no")
+        dependency.add_entry(known_fields.SHIPPED.get_name(), "no")
+        # The "Update Mechanism" field is omitted.
+
+        results = dependency.validate(
+            source_file_dir=os.path.join(_THIS_DIR, "data"),
+            repo_root_dir=_THIS_DIR,
+        )
+
+        # Assuming 'Update Mechanism' is now a required field in your known_fields config.
+        # If so, the validation framework should catch its absence.
+        error_found = any(
+            "Required field 'Update Mechanism' is missing." in r.get_reason()
+            for r in results)
+        self.assertTrue(
+            error_found,
+            "Expected an error for missing Update Mechanism field.")
+
 if __name__ == "__main__":
     unittest.main()

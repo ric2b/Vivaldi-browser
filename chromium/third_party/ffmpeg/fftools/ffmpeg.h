@@ -39,6 +39,7 @@
 #include "libavfilter/avfilter.h"
 
 #include "libavutil/avutil.h"
+#include "libavutil/bprint.h"
 #include "libavutil/dict.h"
 #include "libavutil/eval.h"
 #include "libavutil/fifo.h"
@@ -352,6 +353,18 @@ typedef struct OutputFilterOptions {
 typedef struct InputFilter {
     struct FilterGraph *graph;
     uint8_t            *name;
+    int                 index;
+
+    // filter data type
+    enum AVMediaType    type;
+
+    AVFilterContext    *filter;
+
+    char               *input_name;
+
+    /* for filters that are not yet bound to an input stream,
+     * this stores the input linklabel, if any */
+    uint8_t            *linklabel;
 } InputFilter;
 
 typedef struct OutputFilter {
@@ -359,6 +372,11 @@ typedef struct OutputFilter {
 
     struct FilterGraph  *graph;
     uint8_t             *name;
+    int                  index;
+
+    AVFilterContext     *filter;
+
+    char                *output_name;
 
     /* for filters that are not yet bound to an output stream,
      * this stores the output linklabel, if any */
@@ -381,6 +399,9 @@ typedef struct FilterGraph {
     int          nb_inputs;
     OutputFilter **outputs;
     int         nb_outputs;
+
+    const char      *graph_desc;
+    struct AVBPrint graph_print_buf;
 } FilterGraph;
 
 enum DecoderFlags {
@@ -716,7 +737,11 @@ extern float max_error_rate;
 
 extern char *filter_nbthreads;
 extern int filter_complex_nbthreads;
+extern int filter_buffered_frames;
 extern int vstats_version;
+extern int print_graphs;
+extern char *print_graphs_file;
+extern char *print_graphs_format;
 extern int auto_conversion_filters;
 
 extern const AVIOInterruptCB int_cb;

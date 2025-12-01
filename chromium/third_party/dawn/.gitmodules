@@ -13,3 +13,6 @@
 [submodule "third_party/webgpu-cts"]
 	path = third_party/webgpu-cts
 	url = ../../external/github.com/gpuweb/cts.git
+[submodule "third_party/webgpu-headers/src"]
+	path = third_party/webgpu-headers/src
+	url = ../../external/github.com/webgpu-native/webgpu-headers.git

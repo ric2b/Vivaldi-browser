@@ -10,14 +10,13 @@
 
 #include <assert.h>
 #include <stddef.h>
-#include <math.h>
-
-#include <immintrin.h>
+#include <stdint.h>
 
 #include <immintrin.h>
 
 #include "src/xnnpack/common.h"
 #include "src/xnnpack/intrinsics-polyfill.h"
+#include "src/xnnpack/math.h"
 #include "src/xnnpack/microparams.h"
 #include "src/xnnpack/vunary.h"
 
@@ -26,7 +25,7 @@ void xnn_f16_vtanh_ukernel__fma3_polynomial_p19h9t2_u8(
     size_t batch,
     const xnn_float16* input,
     xnn_float16* output,
-    const struct xnn_f16_default_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
+    const struct xnn_f16_default_params* restrict params) XNN_OOB_READS
 {
   assert(batch != 0);
   assert(batch % sizeof(uint16_t) == 0);

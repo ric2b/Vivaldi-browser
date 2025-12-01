@@ -5,6 +5,7 @@
 #include "base/test/mock_callback.h"
 #include "chrome/browser/tab_group_sync/tab_group_sync_service_factory.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_features.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/data_sharing/collaboration_controller_delegate_desktop.h"
 #include "chrome/browser/ui/views/data_sharing/data_sharing_bubble_controller.h"
@@ -18,10 +19,14 @@
 #include "components/saved_tab_groups/public/tab_group_sync_service.h"
 #include "components/sync/base/collaboration_id.h"
 #include "content/public/test/browser_test.h"
+#include "content/public/test/test_navigation_observer.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "third_party/abseil-cpp/absl/status/status.h"
 #include "ui/base/interaction/interactive_test.h"
 #include "ui/views/interaction/interactive_views_test.h"
+#include "ui/views/test/dialog_test.h"
+#include "ui/views/widget/widget.h"
+#include "ui/views/window/dialog_client_view.h"
 
 namespace {
 class TestCollaborationControllerDelegateDesktop
@@ -83,6 +88,63 @@ IN_PROC_BROWSER_TEST_F(CollaborationControllerDelegateDesktopInteractiveUITest,
   EXPECT_NE(nullptr, delegate.prompt_dialog_widget_for_testing());
 }
 
+#if BUILDFLAG(IS_CHROMEOS)
+#define MAYBE_PromptDialogAccept DISABLED_PromptDialogAccept
+#else
+#define MAYBE_PromptDialogAccept PromptDialogAccept
+#endif
+IN_PROC_BROWSER_TEST_F(CollaborationControllerDelegateDesktopInteractiveUITest,
+                       MAYBE_PromptDialogAccept) {
+  // Show prompt dialog and accept it.
+  collaboration::ServiceStatus status;
+  TestCollaborationControllerDelegateDesktop delegate(browser());
+  EXPECT_CALL(delegate, GetServiceStatus())
+      .Times(2)
+      .WillRepeatedly(testing::Return(status));
+  EXPECT_EQ(nullptr, delegate.prompt_dialog_widget_for_testing());
+  base::MockCallback<
+      collaboration::CollaborationControllerDelegate::ResultCallback>
+      callback;
+
+  delegate.ShowAuthenticationUi(collaboration::FlowType::kJoin, callback.Get());
+  views::Widget* dialog_widget = delegate.prompt_dialog_widget_for_testing();
+  EXPECT_NE(nullptr, dialog_widget);
+
+  // Accepting the dialog should trigger a sign-in flow. The callback should be
+  // invoked with kSuccess.
+  EXPECT_CALL(
+      callback,
+      Run(collaboration::CollaborationControllerDelegate::Outcome::kSuccess))
+      .Times(1);
+
+  views::test::AcceptDialog(dialog_widget);
+  EXPECT_EQ(nullptr, delegate.prompt_dialog_widget_for_testing());
+}
+
+IN_PROC_BROWSER_TEST_F(CollaborationControllerDelegateDesktopInteractiveUITest,
+                       PromptDialogCancel) {
+  // Show prompt dialog and cancel it.
+  collaboration::ServiceStatus status;
+  TestCollaborationControllerDelegateDesktop delegate(browser());
+  EXPECT_CALL(delegate, GetServiceStatus()).WillOnce(testing::Return(status));
+  EXPECT_EQ(nullptr, delegate.prompt_dialog_widget_for_testing());
+  base::MockCallback<
+      collaboration::CollaborationControllerDelegate::ResultCallback>
+      callback;
+
+  delegate.ShowAuthenticationUi(collaboration::FlowType::kJoin, callback.Get());
+  views::Widget* dialog_widget = delegate.prompt_dialog_widget_for_testing();
+  EXPECT_NE(nullptr, dialog_widget);
+
+  EXPECT_CALL(
+      callback,
+      Run(collaboration::CollaborationControllerDelegate::Outcome::kCancel))
+      .Times(1);
+
+  views::test::CancelDialog(dialog_widget);
+  EXPECT_EQ(nullptr, delegate.prompt_dialog_widget_for_testing());
+}
+
 IN_PROC_BROWSER_TEST_F(CollaborationControllerDelegateDesktopInteractiveUITest,
                        DoNotShowPromptDialog) {
   // Do not show prompt dialog when signed in and sync enabled.
@@ -125,11 +187,13 @@ IN_PROC_BROWSER_TEST_F(CollaborationControllerDelegateDesktopInteractiveUITest,
   base::MockCallback<
       collaboration::CollaborationControllerDelegate::ResultCallback>
       callback;
-  RunTestSequence(Do([&]() {
-                    delegate.ShowJoinDialog(token, preview_data,
-                                            callback.Get());
-                  }),
-                  WaitForShow(kDataSharingBubbleElementId));
+  RunTestSequence(
+      Do([&]() {
+        delegate.ShowJoinDialog(token, preview_data, callback.Get());
+      }),
+      WaitForShow(kDataSharingBubbleElementId), Do([&]() {
+        browser()->GetFeatures().data_sharing_bubble_controller()->Close();
+      }));
 }
 
 IN_PROC_BROWSER_TEST_F(CollaborationControllerDelegateDesktopInteractiveUITest,
@@ -150,7 +214,7 @@ IN_PROC_BROWSER_TEST_F(CollaborationControllerDelegateDesktopInteractiveUITest,
       WaitForShow(kDataSharingBubbleElementId), Do([&]() {
         // Close join dialog and show the error dialog.
         auto* controller =
-            DataSharingBubbleController::GetOrCreateForBrowser(browser());
+            browser()->GetFeatures().data_sharing_bubble_controller();
         controller->Close();
         controller->ShowErrorDialog(
             static_cast<int>(absl::StatusCode::kUnknown));
@@ -171,7 +235,7 @@ IN_PROC_BROWSER_TEST_F(CollaborationControllerDelegateDesktopInteractiveUITest,
       WaitForShow(kDataSharingBubbleElementId), Do([&]() {
         // Close the dialog before the callback runs out of scope.
         auto* controller =
-            DataSharingBubbleController::GetOrCreateForBrowser(browser());
+            browser()->GetFeatures().data_sharing_bubble_controller();
         controller->Close();
       }));
 }
@@ -181,7 +245,7 @@ IN_PROC_BROWSER_TEST_F(CollaborationControllerDelegateDesktopInteractiveUITest,
   TestCollaborationControllerDelegateDesktop delegate(browser());
 
   // Add a saved tab group with fake_collab_id
-  std::string fake_collab_id = "fake_collab_id";
+  syncer::CollaborationId fake_collab_id("fake_collab_id");
   tab_groups::LocalTabGroupID group_id = InstrumentATabGroup();
   tab_groups::TabGroupSyncService* tab_group_service =
       tab_groups::TabGroupSyncServiceFactory::GetForProfile(
@@ -202,7 +266,7 @@ IN_PROC_BROWSER_TEST_F(CollaborationControllerDelegateDesktopInteractiveUITest,
       browser(), data_sharing::FlowType::kDelete);
 
   // Add a saved tab group with fake_collab_id
-  std::string fake_collab_id = "fake_collab_id";
+  syncer::CollaborationId fake_collab_id("fake_collab_id");
   tab_groups::LocalTabGroupID group_id = InstrumentATabGroup();
   tab_groups::TabGroupSyncService* tab_group_service =
       tab_groups::TabGroupSyncServiceFactory::GetForProfile(
@@ -237,7 +301,7 @@ IN_PROC_BROWSER_TEST_F(CollaborationControllerDelegateDesktopInteractiveUITest,
 
 IN_PROC_BROWSER_TEST_F(CollaborationControllerDelegateDesktopInteractiveUITest,
                        PromoteTabGroup) {
-  std::string fake_collab_id = "fake_collab_id";
+  syncer::CollaborationId fake_collab_id("fake_collab_id");
   tab_groups::TabGroupSyncService* tab_group_service =
       tab_groups::TabGroupSyncServiceFactory::GetForProfile(
           browser()->GetProfile());
@@ -255,7 +319,7 @@ IN_PROC_BROWSER_TEST_F(CollaborationControllerDelegateDesktopInteractiveUITest,
       callback,
       Run(collaboration::CollaborationControllerDelegate::Outcome::kSuccess))
       .Times(1);
-  delegate.PromoteTabGroup(data_sharing::GroupId(fake_collab_id),
+  delegate.PromoteTabGroup(data_sharing::GroupId(fake_collab_id.value()),
                            callback.Get());
 }
 
@@ -274,4 +338,55 @@ IN_PROC_BROWSER_TEST_F(CollaborationControllerDelegateDesktopInteractiveUITest,
   // Make sure closing a browser will invoke the exit callback.
   EXPECT_CALL(exit_callback, Run).Times(1);
   browser2->window()->Close();
+}
+
+IN_PROC_BROWSER_TEST_F(CollaborationControllerDelegateDesktopInteractiveUITest,
+                       OnBrowserCloseWithOpenDialog) {
+  Browser* browser2 = CreateBrowser(browser()->profile());
+
+  // Show a prompt dialog.
+  collaboration::ServiceStatus status;
+  TestCollaborationControllerDelegateDesktop delegate(browser2);
+  EXPECT_CALL(delegate, GetServiceStatus()).WillOnce(testing::Return(status));
+  base::MockCallback<
+      collaboration::CollaborationControllerDelegate::ResultCallback>
+      callback;
+  delegate.ShowAuthenticationUi(collaboration::FlowType::kJoin, callback.Get());
+  ASSERT_NE(nullptr, delegate.prompt_dialog_widget_for_testing());
+  ASSERT_FALSE(delegate.prompt_dialog_widget_for_testing()->IsClosed());
+
+  // Pass in an exit callback to the delegate.
+  base::MockCallback<base::OnceCallback<void()>> exit_callback;
+  delegate.PrepareFlowUI(exit_callback.Get(), callback.Get());
+
+  // Closing the browser should not crash and should invoke the exit callback.
+  EXPECT_CALL(exit_callback, Run).Times(1);
+  browser2->window()->Close();
+}
+
+IN_PROC_BROWSER_TEST_F(CollaborationControllerDelegateDesktopInteractiveUITest,
+                       ShowErrorDialogAndOpenUpdateChromePage) {
+  // Show error dialog and open update chrome page.
+  TestCollaborationControllerDelegateDesktop delegate(browser());
+  EXPECT_EQ(nullptr, delegate.error_dialog_widget_for_testing());
+  base::MockCallback<
+      collaboration::CollaborationControllerDelegate::ResultCallback>
+      callback;
+  delegate.ShowError(
+      collaboration::CollaborationControllerDelegate::ErrorInfo(
+          collaboration::CollaborationControllerDelegate::ErrorInfo::Type::
+              kUpdateChromeUiForVersionOutOfDate,
+          collaboration::FlowType::kJoin),
+      callback.Get());
+  EXPECT_NE(nullptr, delegate.error_dialog_widget_for_testing());
+
+  // Click ok button and verify a new tab is opened.
+  content::TestNavigationObserver nav_observer(GURL("chrome://settings/help"));
+  nav_observer.StartWatchingNewWebContents();
+  views::test::AcceptDialog(delegate.error_dialog_widget_for_testing());
+  nav_observer.Wait();
+  EXPECT_EQ(2, browser()->tab_strip_model()->count());
+  EXPECT_EQ(
+      GURL("chrome://settings/help"),
+      browser()->tab_strip_model()->GetActiveWebContents()->GetVisibleURL());
 }

@@ -27,7 +27,7 @@
 
 #include "src/tint/lang/wgsl/feature_status.h"
 
-#include "src/tint/lang/wgsl/language_feature.h"
+#include "src/tint/lang/wgsl/enums.h"
 
 namespace tint::wgsl {
 
@@ -37,6 +37,13 @@ FeatureStatus GetLanguageFeatureStatus(LanguageFeature f) {
             // Experimental features
             ///////////////////////////////////////////////////////////////////
         case LanguageFeature::kSizedBindingArray:
+        case LanguageFeature::kTexelBuffers:
+            return FeatureStatus::kUnsafeExperimental;
+
+            ////////////////////////////////////////////////////////////////////
+            // Chromium developer features
+            ///////////////////////////////////////////////////////////////////
+        case LanguageFeature::kChromiumPrint:
             return FeatureStatus::kUnsafeExperimental;
 
             ////////////////////////////////////////////////////////////////////

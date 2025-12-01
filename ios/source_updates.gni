@@ -1,7 +1,17 @@
 # Copyright (c) 2022 Vivaldi Technologies AS. All rights reserved
 
-update_template_instance("//ios/chrome/app/resources:launchscreen_xib") {
-  source = "//vivaldi/ios/app/resources/LaunchScreen.xib"
+update_template_instance("//ios/chrome/app/resources:launchscreen") {
+  source = "//vivaldi/ios/app/resources/LaunchScreen.storyboard"
+  bundle_files -= [
+    "Info.plist",
+    "Y6W-OH-hqX-view-5EZ-qb-Rvc.nib",
+    "UIViewController-Y6W-OH-hqX.nib",
+  ]
+  bundle_files += [
+    "Info.plist",
+    "nsK-RC-TTv-view-nDB-yi-ZMh.nib", # id from Launchscree.storyboard source
+    "UIViewController-nsK-RC-TTv.nib", # id from Launchscree.storyboard source
+  ]
 }
 
 update_target("//ios/chrome/browser/browser_view/ui_bundled:ui_bundled") {
@@ -82,8 +92,6 @@ update_target("//ios/chrome/browser/shared/ui/table_view/cells:cells") {
 
 update_target("//ios/chrome/browser/shared/model/browser:browser") {
   sources += [
-    "//vivaldi/ios/ad_blocker/adblock_rule_service_factory.h",
-    "//vivaldi/ios/ad_blocker/adblock_rule_service_factory.mm",
     "//vivaldi/ios/chrome/browser/browser_state/vivaldi_post_browser_state_init.mm",
     "//vivaldi/ios/chrome/browser/browser_state/vivaldi_post_browser_state_init.h",
     ]
@@ -100,6 +108,9 @@ update_target("//ios/chrome/browser/settings/ui_bundled:ui_bundled") {
   sources += [
     "//vivaldi/ios/ui/settings/vivaldi_settings_constants.h",
     "//vivaldi/ios/ui/settings/vivaldi_settings_constants.mm",
+  ]
+  configs += [
+    "//vivaldi/gn/config:release_kind"
   ]
 }
 
@@ -141,6 +152,9 @@ update_target("//ios/chrome/browser/whats_new/ui:ui") {
     sources += [
       "//vivaldi/ios/chrome/browser/ui/whats_new/vivaldi_whats_new_util.mm",
       "//vivaldi/ios/chrome/browser/ui/whats_new/vivaldi_whats_new_util.h",
+  ]
+  configs += [
+    "//vivaldi/gn/config:release_kind"
   ]
 }
 
@@ -236,35 +250,9 @@ update_target("//ios/chrome/browser/application_context/model:model") {
   ]
 }
 
-update_target("//ios/chrome/browser/tab_switcher/ui_bundled/tab_strip/coordinator:tab_strip_mediator_utils") {
-  sources -= [
-    "tab_strip_mediator_utils.h",
-    "tab_strip_mediator_utils.mm"
-  ]
-
+update_target("//ios/chrome/browser/recent_tabs/ui_bundled:ui") {
   sources += [
-    "//vivaldi/ios/chrome/browser/tab_switcher/ui_bundled/tab_strip/coordinator/vivaldi_tab_strip_mediator_utils.h",
-    "//vivaldi/ios/chrome/browser/tab_switcher/ui_bundled/tab_strip/coordinator/vivaldi_tab_strip_mediator_utils.mm"
-  ]
-}
-
-update_target("//ios/chrome/browser/tab_switcher/ui_bundled/tab_strip/coordinator:coordinator") {
-  sources -= [
-    "tab_strip_mediator.mm"
-  ]
-
-  sources += [
-    "//vivaldi/ios/chrome/browser/tab_switcher/ui_bundled/tab_strip/coordinator/tab_strip_mediator.mm",
-  ]
-}
-
-update_target("//ios/chrome/browser/tab_switcher/ui_bundled/tab_strip/ui/context_menu:context_menu") {
-  sources -= [
-    "tab_strip_context_menu_helper.mm"
-  ]
-
-  sources += [
-    "//vivaldi/ios/chrome/browser/tab_switcher/ui_bundled/tab_strip/ui/context_menu/tab_strip_context_menu_helper.mm",
+    "//vivaldi/ios/chrome/browser/recent_tabs/ui_bundled/recent_tabs_table_view_controller_ui_delegate.h",
   ]
 }
 
@@ -280,14 +268,12 @@ update_target("//ios/chrome/browser/tab_switcher/ui_bundled/tab_strip/ui:swift_c
 
 update_target("//ios/chrome/browser/tab_switcher/ui_bundled/tab_strip/ui:swift") {
   sources -= [
-    "tab_strip_consumer.swift",
     "tab_strip_layout.swift",
     "tab_strip_new_tab_button.swift",
     "tab_strip_view_controller.swift",
   ]
 
   sources += [
-    "//vivaldi/ios/chrome/browser/tab_switcher/ui_bundled/tab_strip/ui/tab_strip_consumer.swift",
     "//vivaldi/ios/chrome/browser/tab_switcher/ui_bundled/tab_strip/ui/tab_strip_layout.swift",
     "//vivaldi/ios/chrome/browser/tab_switcher/ui_bundled/tab_strip/ui/tab_strip_new_tab_button.swift",
     "//vivaldi/ios/chrome/browser/tab_switcher/ui_bundled/tab_strip/ui/tab_strip_view_controller.swift",

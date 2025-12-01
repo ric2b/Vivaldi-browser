@@ -502,6 +502,7 @@ bool Builder::ResolveItem(BuilderRecord* record, Err* err) {
 
   if (record->type() == BuilderRecord::ITEM_TARGET) {
     Target* target = record->item()->AsTarget();
+    // All deps must be resolved before OnResolved can be called.
     if (!ResolveDeps(&target->public_deps(), err) ||
         !ResolveDeps(&target->private_deps(), err) ||
         !ResolveDeps(&target->data_deps(), err) ||
@@ -510,6 +511,10 @@ bool Builder::ResolveItem(BuilderRecord* record, Err* err) {
         !ResolveConfigs(&target->public_configs(), err) ||
         !ResolvePool(target, err) || !ResolveToolchain(target, err))
       return false;
+
+    // Offload Target::OnResolved to a worker thread.
+    ScheduleTargetOnResolve(record);
+    return true;
   } else if (record->type() == BuilderRecord::ITEM_CONFIG) {
     Config* config = record->item()->AsConfig();
     if (!ResolveConfigs(&config->configs(), err))
@@ -521,11 +526,42 @@ bool Builder::ResolveItem(BuilderRecord* record, Err* err) {
     if (!ResolvePools(toolchain, err))
       return false;
   }
-
-  record->set_resolved(true);
-
   if (!record->item()->OnResolved(err))
     return false;
+
+  return CompleteItemResolution(record, err);
+}
+
+void Builder::ScheduleTargetOnResolve(BuilderRecord* record) {
+  DCHECK(g_scheduler);
+
+  g_scheduler->IncrementWorkCount();
+  g_scheduler->ScheduleWork([this, record]() {
+    Err err;
+    bool success = record->item()->AsTarget()->OnResolved(&err);
+    DCHECK(success == !err.has_error());
+
+    g_scheduler->task_runner()->PostTask(
+        [this, record, err]() { CompleteAsyncTargetResolution(record, err); });
+  });
+}
+
+void Builder::CompleteAsyncTargetResolution(BuilderRecord* record,
+                                            const Err& err) {
+  if (err.has_error()) {
+    g_scheduler->FailWithError(err);
+  } else {
+    Err next_err;
+    if (!CompleteItemResolution(record, &next_err)) {
+      g_scheduler->FailWithError(next_err);
+    }
+  }
+  g_scheduler->DecrementWorkCount();
+}
+
+bool Builder::CompleteItemResolution(BuilderRecord* record, Err* err) {
+  record->set_resolved(true);
+
   if (record->should_generate() && resolved_and_generated_callback_)
     resolved_and_generated_callback_(record);
 

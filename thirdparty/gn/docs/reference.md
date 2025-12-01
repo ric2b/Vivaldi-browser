@@ -167,6 +167,7 @@
     *   [script: [file name] Script file for actions.](#var_script)
     *   [sources: [file list] Source files for a target.](#var_sources)
     *   [swiftflags: [string list] Flags passed to the swift compiler.](#var_swiftflags)
+    *   [target_xcode_platform: [string] The desired platform for the build.](#var_target_xcode_platform)
     *   [testonly: [boolean] Declares a target must only be used for testing.](#var_testonly)
     *   [transparent: [bool] True if the bundle is transparent.](#var_transparent)
     *   [visibility: [label list] A list of labels that can depend on a target.](#var_visibility)
@@ -923,6 +924,10 @@
 
   --json-ide-script-args=<argument>
       Optional second argument that will be passed to executed script.
+
+  --filter-with-data
+      Additionally follows data deps when filtering. Without this flag, only
+      public and private linked deps will be followed. Only used with --filters.
 ```
 
 #### **Ninja Outputs**
@@ -7130,6 +7135,28 @@
   6. public_configs pulled from dependencies, in the order of the
      "deps" list. If a dependency is public, they will be applied
      recursively.
+```
+### <a name="var_target_xcode_platform"></a>**target_xcode_platform**: The desired platform for the build.&nbsp;[Back to Top](#gn-reference)
+
+```
+  This value should be used to indicate the kind of iOS or iOS-based platform
+  that is being the desired platform for the primary object(s) of the build.
+
+  This should be set to the most specific value possible. So, "iphoneos" or
+  "tvos" should be used instead of "ios" where applicable, even though
+  iPhoneOS and tvOS are both iOS variants.
+
+  GN defaults this value to "iphoneos" and the configuration files should set
+  it to an appropriate value if it is not set via the command line or in the
+  args.gn file.
+
+  This value configures the base SDK and the targeted device families of the
+  generated Xcode project. only meaningful when generating with --ide=xcode.
+
+  Possible values
+
+  - "iphoneos"
+  - "tvos"
 ```
 ### <a name="var_testonly"></a>**testonly**: Declares a target must only be used for testing.&nbsp;[Back to Top](#gn-reference)
 

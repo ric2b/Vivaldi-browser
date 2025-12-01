@@ -37,6 +37,11 @@
 // it to be translated.
 - (void)unblockLanguage:(const std::string&)languageCode;
 
+// Vivaldi
+// Informs the receiver to enable or disable Translate Infobar.
+- (void)setTranslateInfobarDisabled:(BOOL)disabled;
+// End Vivaldi
+
 @end
 
 #endif  // IOS_CHROME_BROWSER_SETTINGS_UI_BUNDLED_LANGUAGE_LANGUAGE_SETTINGS_COMMANDS_H_

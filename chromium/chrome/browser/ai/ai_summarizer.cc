@@ -4,13 +4,19 @@
 
 #include "chrome/browser/ai/ai_summarizer.h"
 
+#include <algorithm>
+
+#include "base/containers/fixed_flat_set.h"
+#include "base/metrics/field_trial_params.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "chrome/browser/ai/ai_context_bound_object.h"
 #include "chrome/browser/ai/ai_utils.h"
+#include "components/language/core/common/locale_util.h"
 #include "components/optimization_guide/core/optimization_guide_util.h"
 #include "components/optimization_guide/proto/features/summarize.pb.h"
 #include "components/optimization_guide/proto/string_value.pb.h"
+#include "third_party/blink/public/common/features_generated.h"
 #include "third_party/blink/public/mojom/ai/model_streaming_responder.mojom.h"
 
 namespace {
@@ -84,6 +90,10 @@ AISummarizer::ToProtoOptions(
   proto_options->set_output_type(ToProtoType(options->type));
   proto_options->set_output_format(ToProtoFormat(options->format));
   proto_options->set_output_length(ToProtoLength(options->length));
+  if (options->output_language && !options->output_language->code.empty()) {
+    proto_options->set_output_language(
+        language::ExtractBaseLanguage(options->output_language->code));
+  }
   return proto_options;
 }
 
@@ -94,6 +104,19 @@ std::string AISummarizer::CombineContexts(std::string_view shared,
                            ? base::JoinString({shared, input}, " ")
                            : std::string(shared.empty() ? input : shared);
   return result.empty() ? result : base::StrCat({result, "\n"});
+}
+
+// static
+base::flat_set<std::string_view> AISummarizer::GetSupportedLanguageBaseCodes() {
+  // Comma-separated language codes to enable; or "*" enables all supported.
+  const base::FeatureParam<std::string> kAISummarizationAPILanguagesEnabled{
+      &blink::features::kAISummarizationAPI, "langs", /*default=*/"en,es,ja"};
+  // TODO(crbug.com/394841624): Get supported languages from the model config.
+  auto kSupportedBaseLanguages =
+      base::MakeFixedFlatSet<std::string_view>({"en", "ja", "es"});
+  return AIUtils::RestrictSupportedLanguagesForFeature(
+      base::MakeFlatSet<std::string_view>(kSupportedBaseLanguages),
+      kAISummarizationAPILanguagesEnabled);
 }
 
 void AISummarizer::Summarize(

@@ -3,7 +3,8 @@
 // This source code is licensed under the BSD-style license found in the
 // LICENSE file in the root directory of this source tree.
 
-#pragma once
+#ifndef XNNPACK_TEST_OPERATORS_TRANSPOSE_OPERATOR_TESTER_H_
+#define XNNPACK_TEST_OPERATORS_TRANSPOSE_OPERATOR_TESTER_H_
 
 #include <algorithm>
 #include <cassert>
@@ -103,6 +104,7 @@ class TransposeOperatorTester {
   }
 
   void TestRunX8() const {
+    ASSERT_EQ(xnn_status_success, xnn_initialize(nullptr /* allocator */));
     const size_t count = std::accumulate(dims().cbegin(), dims().cend(),
                                          size_t{1}, std::multiplies<size_t>());
     xnnpack::Buffer<uint8_t> input(count, xnnpack::XnnExtraBytes);
@@ -358,3 +360,5 @@ class TransposeOperatorTester {
   std::vector<size_t> shape_;
   std::vector<size_t> perm_;
 };
+
+#endif  // XNNPACK_TEST_OPERATORS_TRANSPOSE_OPERATOR_TESTER_H_

@@ -1440,7 +1440,7 @@
     "message": "Mabilis ang unang pagtugon ng server"
   },
   "core/audits/third-party-cookies.js | description": {
-    "message": "Lumilipat ang Chrome patungo sa bagong experience na nagbibigay-daan sa mga user na piliing mag-browse nang walang third-party na cookies. [Matuto pa tungkol sa third-party na cookies](https://developers.google.com/privacy-sandbox/cookies)."
+    "message": "Posibleng ma-block ang third-party na cookies sa ilang context. [Matuto pa tungkol sa paghahanda para sa mga paghihigpit sa third-party na cookie](https://privacysandbox.google.com/cookies/prepare/overview)."
   },
   "core/audits/third-party-cookies.js | displayValue": {
     "message": "{itemCount,plural, =1{May nakitang 1 cookie}one{May nakitang # cookies}other{May nakitang # na cookies}}"
@@ -1492,6 +1492,18 @@
   },
   "core/audits/third-party-summary.js | title": {
     "message": "Bawasan ang paggamit ng third-party"
+  },
+  "core/audits/trusted-types-xss.js | columnSeverity": {
+    "message": "Kalalaan"
+  },
+  "core/audits/trusted-types-xss.js | description": {
+    "message": "Nagbibigay ng tagubilin ang direktibang `require-trusted-types-for` sa header ng `Content-Security-Policy` (CSP) sa mga user agent na kontrolin ang datang ipinapasa sa mga sink function ng DOM XSS. [Matuto pa tungkol sa pag-mitigate ng DOM-based XSS na may Mga Pinagkakatiwalaang Uri](https://developer.chrome.com/docs/lighthouse/best-practices/trusted-types-xss)."
+  },
+  "core/audits/trusted-types-xss.js | noTrustedTypesToMitigateXss": {
+    "message": "Walang nakitang header ng `Content-Security-Policy` na may direktiba sa Mga Pinagkakatiwalaang Uri"
+  },
+  "core/audits/trusted-types-xss.js | title": {
+    "message": "I-mitigate ang DOM-based XSS na may Mga Pinagkakatiwalaang Uri"
   },
   "core/audits/unsized-images.js | description": {
     "message": "Magtakda ng malinaw na lapad at taas sa mga element na larawan para mabawasan ang mga pagbabago sa layout at mapahusay ang CLS. [Alamin kung paano magtakda ng mga dimensyon ng larawan](https://web.dev/articles/optimize-cls#images_without_dimensions)"
@@ -1676,6 +1688,12 @@
   "core/config/default-config.js | firstPaintImprovementsGroupTitle": {
     "message": "Mga Pagpapahusay sa First Paint"
   },
+  "core/config/default-config.js | insightsGroupDescription": {
+    "message": "Available din ang mga insight na ito sa Performance Panel ng Chrome DevTools - [mag-record ng trace](https://developer.chrome.com/docs/devtools/performance/reference) para tumingin pa ng mas detalyadong impormasyon."
+  },
+  "core/config/default-config.js | insightsGroupTitle": {
+    "message": "Mga Insight"
+  },
   "core/config/default-config.js | metricGroupTitle": {
     "message": "Mga Sukatan"
   },
@@ -1857,22 +1875,22 @@
     "message": "URL"
   },
   "core/lib/i18n/i18n.js | columnWastedBytes": {
-    "message": "Puwedeng Matipid"
+    "message": "Mga Tinatayang Pagtitipid"
   },
   "core/lib/i18n/i18n.js | columnWastedMs": {
-    "message": "Puwedeng Matipid"
+    "message": "Mga Tinatayang Pagtitipid"
   },
   "core/lib/i18n/i18n.js | cumulativeLayoutShiftMetric": {
     "message": "Cumulative Layout Shift"
   },
   "core/lib/i18n/i18n.js | displayValueByteSavings": {
-    "message": "Puwedeng makatipid ng {wastedBytes, number, bytes} KiB"
+    "message": "Tinatayang makatipid ng {wastedBytes, number, bytes} KiB"
   },
   "core/lib/i18n/i18n.js | displayValueElementsFound": {
     "message": "{nodeCount,plural, =1{1 element ang nakita}one{# element ang nakita}other{# na element ang nakita}}"
   },
   "core/lib/i18n/i18n.js | displayValueMsSavings": {
-    "message": "Puwedeng makatipid ng {wastedMs, number, milliseconds} ms"
+    "message": "Tinatayang makatipid ng {wastedMs, number, milliseconds} ms"
   },
   "core/lib/i18n/i18n.js | documentResourceType": {
     "message": "Dokumento"
@@ -2192,9 +2210,6 @@
   "node_modules/@paulirish/trace_engine/generated/Deprecation.js | CrossOriginWindowConfirm": {
     "message": "Hindi na ginagamit ang pag-trigger ng window.confirm mula sa mga cross origin na iframe at aalisin na ito sa hinaharap."
   },
-  "node_modules/@paulirish/trace_engine/generated/Deprecation.js | DOMMutationEvents": {
-    "message": "Hindi na ginagamit at aalisin na ang Mga Event ng DOM Mutation, kasama ang DOMSubtreeModified, DOMNodeInserted, DOMNodeRemoved, DOMNodeRemovedFromDocument, DOMNodeInsertedIntoDocument, at DOMCharacterDataModified (https://w3c.github.io/uievents/#legacy-event-types). Pakigamit na lang ang MutationObserver."
-  },
   "node_modules/@paulirish/trace_engine/generated/Deprecation.js | DataUrlInSvgUse": {
     "message": "Suporta para sa data: Hindi na ginagamit ang mga URL sa SVGUseElement at aalisin na ito sa hinaharap."
   },
@@ -2336,9 +2351,6 @@
   "node_modules/@paulirish/trace_engine/models/trace/insights/CLSCulprits.js | description": {
     "message": "Nangyayari ang mga pagbabago sa layout kapag gumagalaw ang mga element nang walang anumang interaction ng user. [Siyasatin ang mga dahilan ng pagbabago sa layout](https://web.dev/articles/optimize-cls), tulad ng mga pagdaragdag ng mga element, pag-alis, o pagbabago ng mga font nito kapag naglo-load ang page."
   },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/CLSCulprits.js | fontRequest": {
-    "message": "Request sa font"
-  },
   "node_modules/@paulirish/trace_engine/models/trace/insights/CLSCulprits.js | injectedIframe": {
     "message": "Na-inject na iframe"
   },
@@ -2357,8 +2369,8 @@
   "node_modules/@paulirish/trace_engine/models/trace/insights/CLSCulprits.js | topCulprits": {
     "message": "Mga nangungunang dahilan ng pagbabago sa layout"
   },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/CLSCulprits.js | unsizedImages": {
-    "message": "Mga Larawang Walang Malinaw na Sukat"
+  "node_modules/@paulirish/trace_engine/models/trace/insights/CLSCulprits.js | unsizedImage": {
+    "message": "Unsized image element"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/CLSCulprits.js | worstCluster": {
     "message": "Pinakahindi magandang cluster"
@@ -2412,10 +2424,10 @@
     "message": "Pinakamahalaga ang iyong unang request sa network.  Bawasan ang latency nito sa pamamagitan ng pag-iwas sa mga pag-redirect, na tumitiyak sa mabilis na pagtugon ng server, at nagbibigay-daan sa pag-compress ng text."
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/DocumentLatency.js | failedRedirects": {
-    "message": "Nagkaroon ng mga pag-redirect"
+    "message": "Nagkaroon ng mga pag-redirect ({PH1} (na) pag-redirect, +{PH2})"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/DocumentLatency.js | failedServerResponseTime": {
-    "message": "Mas mabagal na tumugon ang server"
+    "message": "Mabagal na tumutugon ang server (naobserbahan ang {PH1})"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/DocumentLatency.js | failedTextCompression": {
     "message": "Wala inilapat na pag-compress"
@@ -2424,7 +2436,7 @@
     "message": "Umiiwas sa mga pag-redirect"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/DocumentLatency.js | passingServerResponseTime": {
-    "message": "Mabilis na tumugon ang server"
+    "message": "Mabilis na tumutugon ang server (naobserbahan ang {PH1})"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/DocumentLatency.js | passingTextCompression": {
     "message": "Naglalapat ng pag-compress ng text"
@@ -2465,6 +2477,9 @@
   "node_modules/@paulirish/trace_engine/models/trace/insights/FontDisplay.js | wastedTimeColumn": {
     "message": "Nasayang na oras"
   },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/ForcedReflow.js | anonymous": {
+    "message": "(anonymous)"
+  },
   "node_modules/@paulirish/trace_engine/models/trace/insights/ForcedReflow.js | description": {
     "message": "Pinipilit ng maraming API, na kadalasang nagbabasa ng geometry ng layout, ang rendering engine na i-pause ang pag-execute ng script para makalkula nito ang istilo at layout. Matuto pa tungkol sa [sapilitang reflow](https://developers.google.com/web/fundamentals/performance/rendering/avoid-large-complex-layouts-and-layout-thrashing#avoid-forced-synchronous-layouts) at ang mga pag-mitigate nito."
   },
@@ -2481,7 +2496,7 @@
     "message": "Kabuuang tagal ng pag-reflow"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/ForcedReflow.js | unattributed": {
-    "message": "Hindi na-attribute"
+    "message": "[hindi na-attribute]"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/ImageDelivery.js | description": {
     "message": "Kapag binawasan ang tagal ng pag-download ng mga larawan, posibleng mapahusay ang natukoy na oras ng pag-load ng page at LCP. [Matuto pa tungkol sa pag-optimize ng laki ng larawan](https://developer.chrome.com/docs/lighthouse/performance/uses-optimized-images/)"
@@ -2513,30 +2528,6 @@
   "node_modules/@paulirish/trace_engine/models/trace/insights/ImageDelivery.js | useVideoFormat": {
     "message": "Kapag gumamit ng mga format ng video sa halip na mga GIF, posibleng mapahusay ang laki ng download ng animated na content."
   },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/InteractionToNextPaint.js | description": {
-    "message": "Simulan ang pagsisiyasat sa pinakamahabang phase. [Puwedeng mabawasan ang mga pagkaantala](https://web.dev/articles/optimize-inp#optimize_interactions). Para pabilisin ang pagpoproseso, [i-optimize ang mga gastos sa pangunahing thread](https://web.dev/articles/optimize-long-tasks), na madalas na JS."
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/InteractionToNextPaint.js | duration": {
-    "message": "Tagal"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/InteractionToNextPaint.js | inputDelay": {
-    "message": "Pagkaantala ng input"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/InteractionToNextPaint.js | noInteractions": {
-    "message": "Walang na-detect na interaction"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/InteractionToNextPaint.js | phase": {
-    "message": "Phase"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/InteractionToNextPaint.js | presentationDelay": {
-    "message": "Pagkaantala ng presentation"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/InteractionToNextPaint.js | processingDuration": {
-    "message": "Tagal ng pagpoproseso"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/InteractionToNextPaint.js | title": {
-    "message": "INP ayon sa phase"
-  },
   "node_modules/@paulirish/trace_engine/models/trace/insights/LCPDiscovery.js | description": {
     "message": "Gawing [nahahanap](https://web.dev/articles/optimize-lcp#1_eliminate_resource_load_delay) kaagad ang larawan para sa LCP mula sa HTML para ma-optimize ang LCP, at [maiwasan ang mabagal na pag-load](https://web.dev/articles/lcp-lazy-loading)"
   },
@@ -2564,36 +2555,6 @@
   "node_modules/@paulirish/trace_engine/models/trace/insights/LCPDiscovery.js | title": {
     "message": "Pagtuklas sa request ng LCP"
   },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | description": {
-    "message": "Ang bawat [phase ay may mga partikular na strategy sa pagpapahusay](https://web.dev/articles/optimize-lcp#lcp-breakdown). Mainam kung gugugulin sa pag-load ng mga resource ang malaking bahagi ng tagal ng LCP, hindi sa mga pagkaantala."
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | duration": {
-    "message": "Tagal"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | elementRenderDelay": {
-    "message": "Pagkaantala sa pag-render ng element"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | fieldDuration": {
-    "message": "Ika-75 percentile ng field"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | noLcp": {
-    "message": "Walang na-detect na LCP"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | phase": {
-    "message": "Phase"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | resourceLoadDelay": {
-    "message": "Pagkaantala sa pag-load ng resource"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | resourceLoadDuration": {
-    "message": "Tagal ng pag-load ng resource"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | timeToFirstByte": {
-    "message": "Time to first byte"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | title": {
-    "message": "LCP ayon sa bahagi"
-  },
   "node_modules/@paulirish/trace_engine/models/trace/insights/LegacyJavaScript.js | columnScript": {
     "message": "Script"
   },
@@ -2601,7 +2562,7 @@
     "message": "Mga nasayang na byte"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/LegacyJavaScript.js | description": {
-    "message": "Nagbibigay-daan ang mga polyfill at transform na magamit ng mga legacy na browser ang mga bagong feature ng JavaScript. Gayunpaman, marami ang hindi kinakailangan para sa mga modernong browser. Pag-isipang baguhin ang iyong proseso ng pagbuo sa JavaScript para hindi ma-transpile ang mga [Baseline](https://web.dev/articles/baseline-and-polyfills) na feature, maliban kung alam mong dapat mong masuportahan ang mga legacy na browser. [Alamin kung bakit puwedeng mag-deploy ang karamihan ng mga site ng ES6+ na code nang hindi nagta-transpile](https://philipwalton.com/articles/the-state-of-es5-on-the-web/)"
+    "message": "Nagbibigay-daan ang mga polyfill at transform na magamit ng mga mas lumang browser ang mga bagong feature ng JavaScript. Gayunpaman, marami ang hindi kinakailangan para sa mga modernong browser. Pag-isipang baguhin ang iyong proseso ng pagbuo sa JavaScript para hindi ma-transpile ang mga [Baseline](https://web.dev/articles/baseline-and-polyfills) na feature, maliban kung alam mong dapat mong masuportahan ang mga mas lumang browser. [Alamin kung bakit puwedeng mag-deploy ang karamihan ng mga site ng ES6+ na code nang hindi nagta-transpile](https://philipwalton.com/articles/the-state-of-es5-on-the-web/)"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/LegacyJavaScript.js | title": {
     "message": "Legacy na JavaScript"
@@ -2621,8 +2582,32 @@
   "node_modules/@paulirish/trace_engine/models/trace/insights/ModernHTTP.js | title": {
     "message": "Modernong HTTP"
   },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | columnOrigin": {
+    "message": "Origin"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | columnRequest": {
+    "message": "Request"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | columnSource": {
+    "message": "Source"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | columnTime": {
+    "message": "Oras"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | columnWastedMs": {
+    "message": "Mga tinatayang pagtitipid sa LCP"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | crossoriginWarning": {
+    "message": "Hindi nagamit na pag-preconnect. Tingnan kung ginagamit nang maayos ang attribute na crossorigin."
+  },
   "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | description": {
     "message": "[Iwasan ang pag-chain ng mahahalagang request](https://developer.chrome.com/docs/lighthouse/performance/critical-request-chains) sa pamamagitan ng pagbabawas sa haba ng mga chain, pagbabawas sa laki ng mga dina-download na resource, o pagpapaliban sa pag-download ng mga hindi kinakailangang resource para mapabilis ang pag-load ng page."
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | estSavingTableDescription": {
+    "message": "Magdagdag ng mga hint sa [pag-preconnect](https://developer.chrome.com/docs/lighthouse/performance/uses-rel-preconnect/) sa mga pinakamahalagang origin mo, pero subukang gumamit ng hindi lalampas sa 4."
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | estSavingTableTitle": {
+    "message": "Mag-preconnect ng mga candidate"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | maxCriticalPathLatency": {
     "message": "Maximum na latency ng critical path:"
@@ -2630,14 +2615,32 @@
   "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | noNetworkDependencyTree": {
     "message": "Walang gawain sa pag-render na naapektuhan ng mga dependency ng network"
   },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | noPreconnectCandidates": {
+    "message": "Walang karagdagang origin ang magandang candidate para sa pag-preconnect"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | noPreconnectOrigins": {
+    "message": "walang na-preconnect na origin"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | preconnectOriginsTableDescription": {
+    "message": "Nakakatulong ang mga hint sa [pag-preconnect](https://developer.chrome.com/docs/lighthouse/performance/uses-rel-preconnect/) sa browser na bumuo ng koneksyon nang mas maaga sa pag-load ng page, kung saan may matitipid na oras kapag ginawa ang unang request para sa origin na iyon. Ang sumusunod ay mga origin kung saan naka-preconnect ang page."
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | preconnectOriginsTableTitle": {
+    "message": "Mga na-preconnect na origin"
+  },
   "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | title": {
     "message": "Dependency tree ng network"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | tooManyPreconnectLinksWarning": {
+    "message": "Mahigit 4 na koneksyong preconnect ang nakita. Bihira lang dapat gamitin ang mga ito at tanging sa mga pinakamahalagang origin lang."
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | unusedWarning": {
+    "message": "Hindi nagamit na pag-preconnect. Gamitin lang ang preconnect para sa mga origin na malamang na i-request ng page."
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | warningDescription": {
     "message": "Iwasan ang pag-chain ng mahahalagang request sa pamamagitan ng pagbabawas sa haba ng mga chain, pagbabawas sa laki ng mga dina-download na resource, o pagpapaliban sa pag-download ng mga hindi kinakailangang resource para mapabilis ang pag-load ng page."
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/RenderBlocking.js | description": {
-    "message": "Bina-block ng mga request ang unang pag-render ng page, na posibleng makaantala sa LCP. Puwedeng alisin ng [pagpapaliban o pag-inline](https://web.dev/learn/performance/understanding-the-critical-path#render-blocking_resources/) ang mga request sa network na ito sa critical path."
+    "message": "Bina-block ng mga request ang unang pag-render ng page, na posibleng makaantala sa LCP. Puwedeng alisin ng [pagpapaliban o pag-inline](https://web.dev/learn/performance/understanding-the-critical-path#render-blocking_resources) ang mga request sa network na ito sa critical path."
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/RenderBlocking.js | duration": {
     "message": "Tagal"
@@ -2685,7 +2688,7 @@
     "message": "Laki ng paglipat"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/ThirdParties.js | description": {
-    "message": "Puwedeng lubos na makaapekto ang code ng 3rd party sa performance ng pag-load. [Bawasan at ipagpaliban ang pag-load ng code ng 3rd party](https://developers.google.com/web/fundamentals/performance/optimizing-content-efficiency/loading-third-party-javascript/) para isapriyoridad ang content ng iyong page."
+    "message": "Puwedeng lubos na makaapekto ang code ng 3rd party sa performance ng pag-load. [Bawasan at ipagpaliban ang pag-load ng code ng 3rd party](https://web.dev/articles/optimizing-content-efficiency-loading-third-party-javascript/) para isapriyoridad ang content ng iyong page."
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/ThirdParties.js | noThirdParties": {
     "message": "Walang nakitang third party"
@@ -2695,6 +2698,9 @@
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/Viewport.js | description": {
     "message": "Posibleng [maantala nang hanggang 300 ms](https://developer.chrome.com/blog/300ms-tap-delay-gone-away/) ang mga interaction sa pag-tap kung hindi na-optimize para sa mobile ang viewport."
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/Viewport.js | mobileTapDelayLabel": {
+    "message": "Pagkaantala sa pag-tap sa mobile"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/Viewport.js | title": {
     "message": "I-optimize ang viewport para sa mobile"
@@ -3587,8 +3593,14 @@
   "report/renderer/report-utils.js | footerIssue": {
     "message": "Mag-file ng isyu"
   },
+  "report/renderer/report-utils.js | goBackToAudits": {
+    "message": "Bumalik sa mga audit"
+  },
   "report/renderer/report-utils.js | hide": {
     "message": "Itago"
+  },
+  "report/renderer/report-utils.js | insightsNotice": {
+    "message": "Sa huling bahagi ng taong ito, papalitan ng mga insight ang mga pag-audit ng performance. [Matuto pa at magbigay ng feedback dito](https://github.com/GoogleChrome/lighthouse/discussions/16462)."
   },
   "report/renderer/report-utils.js | labDataTitle": {
     "message": "Data ng Lab"
@@ -3689,6 +3701,9 @@
   "report/renderer/report-utils.js | toplevelWarningsMessage": {
     "message": "May mga isyung nakakaapekto sa pagpapatakbong ito ng Lighthouse:"
   },
+  "report/renderer/report-utils.js | tryInsights": {
+    "message": "Subukan ang mga insight"
+  },
   "report/renderer/report-utils.js | unattributable": {
     "message": "Hindi ma-attribute"
   },
@@ -3711,24 +3726,30 @@
     "message": "Lahat"
   },
   "treemap/app/src/util.js | allScriptsDropdownLabel": {
-    "message": "Lahat ng Script"
+    "message": "Lahat ng script"
   },
   "treemap/app/src/util.js | coverageColumnName": {
     "message": "Sakop"
   },
   "treemap/app/src/util.js | duplicateModulesLabel": {
-    "message": "Mga Duplicate na Module"
+    "message": "Mga duplicate na module"
+  },
+  "treemap/app/src/util.js | duplicatedBytesLabel": {
+    "message": "Mga na-duplicate na byte"
   },
   "treemap/app/src/util.js | resourceBytesLabel": {
-    "message": "Mga Byte ng Resource"
+    "message": "Mga byte ng resource"
   },
   "treemap/app/src/util.js | tableColumnName": {
     "message": "Pangalan"
   },
   "treemap/app/src/util.js | toggleTableButtonLabel": {
-    "message": "I-toggle ang Talahanayan"
+    "message": "I-toggle ang talahanayan"
+  },
+  "treemap/app/src/util.js | transferBytesLabel": {
+    "message": "Maglipat ng mga byte"
   },
   "treemap/app/src/util.js | unusedBytesLabel": {
-    "message": "Mga Hindi Nagamit na Byte"
+    "message": "Mga hindi nagamit na byte"
   }
 }

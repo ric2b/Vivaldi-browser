@@ -1051,9 +1051,9 @@ bool CPDF_RenderStatus::ProcessType3Text(CPDF_TextObject* textobj,
       }
 #endif
 
-      CPDF_Document* pDoc = pType3Font->GetDocument();
+      CPDF_Document* doc = pType3Font->GetDocument();
       RetainPtr<CPDF_Type3Cache> pCache =
-          CPDF_DocRenderData::FromDocument(pDoc)->GetCachedType3(pType3Font);
+          CPDF_DocRenderData::FromDocument(doc)->GetCachedType3(pType3Font);
 
       const CFX_GlyphBitmap* pBitmap = pCache->LoadGlyph(charcode, matrix);
       if (!pBitmap) {
@@ -1525,7 +1525,7 @@ RetainPtr<CFX_DIBitmap> CPDF_RenderStatus::LoadSMask(
 
 FX_ARGB CPDF_RenderStatus::GetBackgroundColor(
     const CPDF_Dictionary* pSMaskDict,
-    const CPDF_Dictionary* pGroupDict,
+    const CPDF_Dictionary* group_dict,
     CPDF_ColorSpace::Family* pCSFamily) {
   static constexpr FX_ARGB kDefaultColor = ArgbEncode(255, 0, 0, 0);
   RetainPtr<const CPDF_Array> pBC =
@@ -1536,7 +1536,7 @@ FX_ARGB CPDF_RenderStatus::GetBackgroundColor(
 
   RetainPtr<const CPDF_Object> pCSObj;
   RetainPtr<const CPDF_Dictionary> pGroup =
-      pGroupDict ? pGroupDict->GetDictFor("Group") : nullptr;
+      group_dict ? group_dict->GetDictFor("Group") : nullptr;
   if (pGroup) {
     pCSObj = pGroup->GetDirectObjectFor(pdfium::transparency::kCS);
   }

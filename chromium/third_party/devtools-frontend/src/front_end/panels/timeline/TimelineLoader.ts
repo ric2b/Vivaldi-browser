@@ -11,6 +11,7 @@ import type * as Protocol from '../../generated/protocol.js';
 import * as Bindings from '../../models/bindings/bindings.js';
 import * as Trace from '../../models/trace/trace.js';
 
+import * as RecordingMetadata from './RecordingMetadata.js';
 import type {Client} from './TimelineController.js';
 
 const UIStrings = {
@@ -72,6 +73,24 @@ export class TimelineLoader implements Common.StringOutputStream.OutputStream {
         loader.reportErrorAndCancelLoading((fileReader.error() as any).message);
       }
     });
+    return loader;
+  }
+
+  static loadFromParsedJsonFile(contents: ParsedJSONFile, client: Client): TimelineLoader {
+    const loader = new TimelineLoader(client);
+
+    window.setTimeout(async () => {
+      client.loadingStarted();
+      try {
+        loader.#processParsedFile(contents);
+        await loader.close();
+      } catch (e: unknown) {
+        await loader.close();
+        const message = e instanceof Error ? e.message : '';
+        return loader.reportErrorAndCancelLoading(i18nString(UIStrings.malformedTimelineDataS, {PH1: message}));
+      }
+    });
+
     return loader;
   }
 
@@ -258,7 +277,7 @@ export class TimelineLoader implements Common.StringOutputStream.OutputStream {
 
   private async finalizeTrace(): Promise<void> {
     if (!this.#metadata && this.#traceIsCPUProfile) {
-      this.#metadata = {dataOrigin: Trace.Types.File.DataOrigin.CPU_PROFILE};
+      this.#metadata = RecordingMetadata.forCPUProfile();
     }
 
     await (this.client as Client).loadingComplete(this.#collectedEvents, this.filter, this.#metadata);

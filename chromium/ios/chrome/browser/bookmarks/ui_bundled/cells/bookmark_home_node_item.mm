@@ -23,6 +23,7 @@ using vivaldi::IsVivaldiRunning;
 using vivaldi_bookmark_kit::GetSpeeddial;
 using vivaldi_bookmark_kit::GetNickname;
 using vivaldi_bookmark_kit::GetDescription;
+using vivaldi_bookmark_kit::GetDisplayURL;
 // End Vivaldi
 
 @implementation BookmarksHomeNodeItem
@@ -84,10 +85,18 @@ using vivaldi_bookmark_kit::GetDescription;
         base::apple::ObjCCastStrict<TableViewURLCell>(cell);
     urlCell.titleLabel.text =
         bookmark_utils_ios::TitleForBookmarkNode(_bookmarkNode);
+
+    if (IsVivaldiRunning() && self.displayURL && self.displayURL.length > 0) {
+      urlCell.URLLabel.text = self.displayURL;
+    } else {
+
     urlCell.URLLabel.text = base::SysUTF16ToNSString(
         url_formatter::
             FormatUrlForDisplayOmitSchemePathTrivialSubdomainsAndMobilePrefix(
                 _bookmarkNode->url()));
+
+    } // End Vivaldi
+
     urlCell.accessibilityTraits |= UIAccessibilityTraitButton;
     urlCell.metadataImage.image =
         self.shouldDisplayCloudSlashIcon
@@ -116,6 +125,19 @@ using vivaldi_bookmark_kit::GetDescription;
 
 - (NSString*)urlString {
   return base::SysUTF8ToNSString(_bookmarkNode->url().spec());
+}
+
+- (NSString*)displayURL {
+  const std::string& displayURLString = GetDisplayURL(_bookmarkNode);
+  if (!displayURLString.empty()) {
+    GURL displayURL(displayURLString);
+    if (displayURL.is_valid()) {
+      return base::SysUTF16ToNSString(url_formatter::
+              FormatUrlForDisplayOmitSchemePathTrivialSubdomainsAndMobilePrefix(
+                displayURL));
+    }
+  }
+  return nil;
 }
 
 - (NSString*)description {

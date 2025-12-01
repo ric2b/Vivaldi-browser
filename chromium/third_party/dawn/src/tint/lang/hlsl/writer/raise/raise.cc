@@ -36,6 +36,8 @@
 #include "src/tint/lang/core/ir/transform/binary_polyfill.h"
 #include "src/tint/lang/core/ir/transform/binding_remapper.h"
 #include "src/tint/lang/core/ir/transform/builtin_polyfill.h"
+#include "src/tint/lang/core/ir/transform/builtin_scalarize.h"
+#include "src/tint/lang/core/ir/transform/change_immediate_to_uniform.h"
 #include "src/tint/lang/core/ir/transform/conversion_polyfill.h"
 #include "src/tint/lang/core/ir/transform/demote_to_helper.h"
 #include "src/tint/lang/core/ir/transform/direct_variable_access.h"
@@ -45,6 +47,7 @@
 #include "src/tint/lang/core/ir/transform/remove_terminator_args.h"
 #include "src/tint/lang/core/ir/transform/rename_conflicts.h"
 #include "src/tint/lang/core/ir/transform/robustness.h"
+#include "src/tint/lang/core/ir/transform/signed_integer_polyfill.h"
 #include "src/tint/lang/core/ir/transform/value_to_let.h"
 #include "src/tint/lang/core/ir/transform/vectorize_scalar_matrix_constructors.h"
 #include "src/tint/lang/core/ir/transform/zero_init_workgroup_memory.h"
@@ -54,7 +57,6 @@
 #include "src/tint/lang/hlsl/writer/common/options.h"
 #include "src/tint/lang/hlsl/writer/raise/binary_polyfill.h"
 #include "src/tint/lang/hlsl/writer/raise/builtin_polyfill.h"
-#include "src/tint/lang/hlsl/writer/raise/change_immediate_to_uniform.h"
 #include "src/tint/lang/hlsl/writer/raise/decompose_storage_access.h"
 #include "src/tint/lang/hlsl/writer/raise/decompose_uniform_access.h"
 #include "src/tint/lang/hlsl/writer/raise/localize_struct_array_assignment.h"
@@ -110,7 +112,29 @@ Result<SuccessType> Raise(core::ir::Module& module, const Options& options) {
     RUN_TRANSFORM(core::ir::transform::BindingRemapper, module, remapper_data);
     RUN_TRANSFORM(core::ir::transform::MultiplanarExternalTexture, module, multiplanar_map);
 
+    // `LocalizeStructArrayAssignment` and `ReplaceNonIndexableMatVecStores` may insert additional
+    // expressions before the assignments to arrays or vectors so it is better to add them before
+    // `Robustness`.
+    if (options.compiler == Options::Compiler::kFXC) {
+        RUN_TRANSFORM(raise::LocalizeStructArrayAssignment, module);
+        RUN_TRANSFORM(raise::ReplaceNonIndexableMatVecStores, module);
+    }
+
     if (!options.disable_robustness) {
+        core::ir::transform::RobustnessConfig config{};
+        config.bindings_ignored = std::unordered_set<BindingPoint>(
+            options.bindings.ignored_by_robustness_transform.cbegin(),
+            options.bindings.ignored_by_robustness_transform.cend());
+
+        // Direct3D guarantees to return zero for any resource that is accessed out of bounds, and
+        // according to the description of the assembly store_uav_typed, out of bounds addressing
+        // means nothing gets written to memory.
+        config.clamp_texture = false;
+
+        config.use_integer_range_analysis = options.enable_integer_range_analysis;
+
+        RUN_TRANSFORM(core::ir::transform::Robustness, module, config);
+
         RUN_TRANSFORM(core::ir::transform::PreventInfiniteLoops, module);
     }
 
@@ -145,6 +169,7 @@ Result<SuccessType> Raise(core::ir::Module& module, const Options& options) {
         core_polyfills.radians = true;
         core_polyfills.reflect_vec2_f32 = options.polyfill_reflect_vec2_f32;
         core_polyfills.texture_sample_base_clamp_to_edge_2d_f32 = true;
+        core_polyfills.abs_signed_int = true;
         RUN_TRANSFORM(core::ir::transform::BuiltinPolyfill, module, core_polyfills);
     }
 
@@ -158,24 +183,6 @@ Result<SuccessType> Raise(core::ir::Module& module, const Options& options) {
 
     if (options.compiler == Options::Compiler::kFXC) {
         RUN_TRANSFORM(raise::ReplaceDefaultOnlySwitch, module);
-        RUN_TRANSFORM(raise::LocalizeStructArrayAssignment, module);
-        RUN_TRANSFORM(raise::ReplaceNonIndexableMatVecStores, module);
-    }
-
-    if (!options.disable_robustness) {
-        core::ir::transform::RobustnessConfig config{};
-        config.bindings_ignored = std::unordered_set<BindingPoint>(
-            options.bindings.ignored_by_robustness_transform.cbegin(),
-            options.bindings.ignored_by_robustness_transform.cend());
-
-        // Direct3D guarantees to return zero for any resource that is accessed out of bounds, and
-        // according to the description of the assembly store_uav_typed, out of bounds addressing
-        // means nothing gets written to memory.
-        config.clamp_texture = false;
-
-        config.use_integer_range_analysis = options.enable_integer_range_analysis;
-
-        RUN_TRANSFORM(core::ir::transform::Robustness, module, config);
     }
 
     // ArrayLengthFromUniform must run after Robustness, which introduces arrayLength calls.
@@ -231,10 +238,10 @@ Result<SuccessType> Raise(core::ir::Module& module, const Options& options) {
     // uniform access instructions) and after DirectVariableAccess(to handle immediate pointers
     // being passed as function parameters).
     {
-        raise::ChangeImmediateToUniformConfig config = {
+        core::ir::transform::ChangeImmediateToUniformConfig config = {
             .immediate_binding_point = options.immediate_binding_point,
         };
-        RUN_TRANSFORM(raise::ChangeImmediateToUniform, module, config);
+        RUN_TRANSFORM(core::ir::transform::ChangeImmediateToUniform, module, config);
     }
     // Comes after DecomposeStorageAccess and ChangeImmediateToUniform.
     RUN_TRANSFORM(raise::DecomposeUniformAccess, module);
@@ -247,11 +254,26 @@ Result<SuccessType> Raise(core::ir::Module& module, const Options& options) {
     }
 
     RUN_TRANSFORM(raise::BinaryPolyfill, module);
+
+    // TODO(crbug.com/429211395): Resolve unsigned/signed casting issues with DXC.
+    constexpr bool kEnableSignedIntegerPolyfill = false;
+    if (kEnableSignedIntegerPolyfill) {
+        core::ir::transform::SignedIntegerPolyfillConfig signed_integer_cfg{
+            .signed_negation = true, .signed_arithmetic = true, .signed_shiftleft = true};
+        RUN_TRANSFORM(core::ir::transform::SignedIntegerPolyfill, module, signed_integer_cfg);
+    }
+
     // BuiltinPolyfill must come after BinaryPolyfill and DecomposeStorageAccess as they add
     // builtins
     RUN_TRANSFORM(raise::BuiltinPolyfill, module);
     RUN_TRANSFORM(core::ir::transform::VectorizeScalarMatrixConstructors, module);
     RUN_TRANSFORM(core::ir::transform::RemoveContinueInSwitch, module);
+
+    core::ir::transform::BuiltinScalarizeConfig scalarize_config{
+        .scalarize_clamp = options.scalarize_max_min_clamp,
+        .scalarize_max = options.scalarize_max_min_clamp,
+        .scalarize_min = options.scalarize_max_min_clamp};
+    RUN_TRANSFORM(core::ir::transform::BuiltinScalarize, module, scalarize_config);
 
     // These transforms need to be run last as various transforms introduce terminator arguments,
     // naming conflicts, and expressions that need to be explicitly not inlined.

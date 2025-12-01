@@ -8,7 +8,6 @@
 #include "base/time/time.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
-#include "chrome/browser/ui/webui/new_tab_footer/new_tab_footer_ui.h"
 #include "chrome/browser/ui/webui/top_chrome/webui_contents_wrapper.h"
 #include "chrome/browser/ui/webui/webui_embedding_context.h"
 #include "chrome/common/webui_url_constants.h"
@@ -34,7 +33,8 @@ NewTabFooterWebView::~NewTabFooterWebView() {
   contents_wrapper_ = nullptr;
 }
 
-void NewTabFooterWebView::ShowUI(base::TimeTicks load_start) {
+void NewTabFooterWebView::ShowUI(base::TimeTicks load_start, GURL url) {
+  attached_tab_url_ = url;
   ShowUI();
   base::UmaHistogramMediumTimes("NewTabPage.Footer.ShownTime",
                                 base::TimeTicks::Now() - load_start);
@@ -52,6 +52,12 @@ void NewTabFooterWebView::ShowUI() {
                                      browser_);
   }
 
+  if (!contents_wrapper_->GetWebUIController()) {
+    return;
+  }
+
+  contents_wrapper_->GetWebUIController()->AttachedTabStateUpdated(
+      attached_tab_url_);
   SetVisible(true);
   contents_wrapper_->web_contents()->WasShown();
 }
@@ -61,6 +67,37 @@ void NewTabFooterWebView::CloseUI() {
   if (contents_wrapper_) {
     contents_wrapper_->web_contents()->WasHidden();
   }
+}
+
+void NewTabFooterWebView::ShowCustomContextMenu(
+    gfx::Point point,
+    std::unique_ptr<ui::MenuModel> menu_model) {
+  ConvertPointToScreen(this, &point);
+  context_menu_model_ = std::move(menu_model);
+  context_menu_runner_ = std::make_unique<views::MenuRunner>(
+      context_menu_model_.get(),
+      views::MenuRunner::HAS_MNEMONICS | views::MenuRunner::CONTEXT_MENU,
+      base::BindRepeating(&NewTabFooterWebView::HideCustomContextMenu,
+                          weak_factory_.GetWeakPtr()));
+  context_menu_runner_->RunMenuAt(
+      GetWidget(), nullptr, gfx::Rect(point, gfx::Size()),
+      views::MenuAnchorPosition::kTopLeft, ui::mojom::MenuSourceType::kMouse,
+      contents_wrapper_->web_contents()->GetContentNativeView());
+}
+
+void NewTabFooterWebView::HideCustomContextMenu() {
+  if (context_menu_runner_ && context_menu_runner_->IsRunning()) {
+    context_menu_runner_->Cancel();
+  }
+  context_menu_runner_.reset();
+  context_menu_model_.reset();
+}
+
+bool NewTabFooterWebView::HandleKeyboardEvent(
+    content::WebContents* source,
+    const input::NativeWebKeyboardEvent& event) {
+  return unhandled_keyboard_event_handler_.HandleKeyboardEvent(
+      event, GetFocusManager());
 }
 
 BEGIN_METADATA(NewTabFooterWebView)

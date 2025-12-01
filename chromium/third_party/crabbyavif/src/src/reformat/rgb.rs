@@ -12,8 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use super::coeffs::*;
 use super::libyuv;
 use super::rgb_impl;
+use super::sharpyuv;
 
 use crate::image::Plane;
 use crate::image::YuvRange;
@@ -67,6 +69,22 @@ impl Format {
     pub fn has_alpha(&self) -> bool {
         !matches!(self, Format::Rgb | Format::Bgr | Format::Rgb565)
     }
+
+    pub fn channel_count(&self) -> u32 {
+        match self {
+            Format::Rgba | Format::Bgra | Format::Argb | Format::Abgr => 4,
+            Format::Rgb | Format::Bgr => 3,
+            Format::Rgb565 => 2,
+            Format::Rgba1010102 => 0, // This is never used.
+        }
+    }
+
+    pub fn pixel_size(&self, depth: u32) -> u32 {
+        match self {
+            Format::Rgb565 => 2,
+            _ => self.channel_count() * if depth > 8 { 2 } else { 1 },
+        }
+    }
 }
 
 #[repr(C)]
@@ -93,7 +111,7 @@ impl ChromaUpsampling {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Default, PartialEq)]
 pub enum ChromaDownsampling {
     #[default]
     Automatic,
@@ -126,6 +144,31 @@ pub enum AlphaMultiplyMode {
     UnMultiply,
 }
 
+#[derive(Clone, Copy, PartialEq)]
+pub(crate) enum Mode {
+    YuvCoefficients(f32, f32, f32),
+    Identity,
+    Ycgco,
+    YcgcoRe,
+    YcgcoRo,
+}
+
+impl From<&image::Image> for Mode {
+    fn from(image: &image::Image) -> Self {
+        match image.matrix_coefficients {
+            MatrixCoefficients::Identity => Mode::Identity,
+            MatrixCoefficients::Ycgco => Mode::Ycgco,
+            MatrixCoefficients::YcgcoRe => Mode::YcgcoRe,
+            MatrixCoefficients::YcgcoRo => Mode::YcgcoRo,
+            _ => {
+                let coeffs =
+                    calculate_yuv_coefficients(image.color_primaries, image.matrix_coefficients);
+                Mode::YuvCoefficients(coeffs[0], coeffs[1], coeffs[2])
+            }
+        }
+    }
+}
+
 impl Image {
     pub fn max_channel(&self) -> u16 {
         ((1i32 << self.depth) - 1) as u16
@@ -152,10 +195,19 @@ impl Image {
     }
 
     // This function may not be used in some configurations.
-    #[allow(unused)]
+    #[allow(dead_code)]
     pub(crate) fn pixels(&self) -> *const u8 {
         match &self.pixels {
             Some(pixels) => pixels.ptr_generic(),
+            None => std::ptr::null(),
+        }
+    }
+
+    // This function may not be used in some configurations.
+    #[allow(dead_code)]
+    pub(crate) fn pixels16(&self) -> *const u16 {
+        match &self.pixels {
+            Some(pixels) => pixels.ptr16(),
             None => std::ptr::null(),
         }
     }
@@ -236,12 +288,7 @@ impl Image {
     }
 
     pub fn channel_count(&self) -> u32 {
-        match self.format {
-            Format::Rgba | Format::Bgra | Format::Argb | Format::Abgr => 4,
-            Format::Rgb | Format::Bgr => 3,
-            Format::Rgb565 => 2,
-            Format::Rgba1010102 => 0, // This is never used.
-        }
+        self.format.channel_count()
     }
 
     pub(crate) fn pixel_size(&self) -> u32 {
@@ -318,14 +365,22 @@ impl Image {
             return Err(AvifError::NotImplemented);
         }
 
-        let mut alpha_multiply_mode = AlphaMultiplyMode::NoOp;
-        if image.has_alpha() && self.has_alpha() {
-            if !image.alpha_premultiplied && self.premultiply_alpha {
-                alpha_multiply_mode = AlphaMultiplyMode::Multiply;
+        let mut alpha_multiply_mode = if image.has_alpha() {
+            if !self.has_alpha() && !image.alpha_premultiplied {
+                // If we are converting an image with alpha into a format without alpha, we should
+                // premultiply the alpha value before discarding the alpha plane. This has the same
+                // effect of rendering this image on a black background.
+                AlphaMultiplyMode::Multiply
+            } else if !image.alpha_premultiplied && self.premultiply_alpha {
+                AlphaMultiplyMode::Multiply
             } else if image.alpha_premultiplied && !self.premultiply_alpha {
-                alpha_multiply_mode = AlphaMultiplyMode::UnMultiply;
+                AlphaMultiplyMode::UnMultiply
+            } else {
+                AlphaMultiplyMode::NoOp
             }
-        }
+        } else {
+            AlphaMultiplyMode::NoOp
+        };
 
         let mut converted_with_libyuv: bool = false;
         let mut alpha_reformatted_with_libyuv = false;
@@ -412,9 +467,13 @@ impl Image {
                 _ => AlphaMultiplyMode::NoOp,
             };
         // TODO: b/410088660 - support gray rgb formats.
-        // TODO: b/410088660 - support sharpyuv conversion.
         let mut conversion_complete = false;
-        if alpha_multiply_mode == AlphaMultiplyMode::NoOp {
+        if self.chroma_downsampling == ChromaDownsampling::SharpYuv {
+            match sharpyuv::rgb_to_yuv(self, image) {
+                Ok(_) => conversion_complete = true,
+                Err(err) => return Err(err),
+            }
+        } else if alpha_multiply_mode == AlphaMultiplyMode::NoOp {
             match libyuv::rgb_to_yuv(self, image) {
                 Ok(_) => {
                     conversion_complete = true;

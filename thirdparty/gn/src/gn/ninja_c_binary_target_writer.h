@@ -108,8 +108,7 @@ class NinjaCBinaryTargetWriter : public NinjaBinaryTargetWriter {
   //
   // The validations are the non-linkable deps passed in as an argument, plus
   // the data file dependencies in the target.
-  void WriteValidations(
-      const UniqueVector<const Target*>& non_linkable_deps);
+  void WriteValidations(const UniqueVector<const Target*>& non_linkable_deps);
 
   // Checks for duplicates in the given list of output files. If any duplicates
   // are found, throws an error and return false.

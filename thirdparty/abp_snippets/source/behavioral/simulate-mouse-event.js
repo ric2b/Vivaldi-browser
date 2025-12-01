@@ -17,8 +17,10 @@
 
 import $ from "../$.js";
 
+import {formatArguments} from "../utils/general.js";
 import {initQueryAndApply, initQueryAll} from "../utils/dom.js";
 import {getDebugger} from "../introspection/log.js";
+import {profile} from "../introspection/profile.js";
 
 let {
   parseInt,
@@ -46,10 +48,13 @@ const VALID_TYPES = ["auxclick", "click", "dblclick",	"gotpointercapture",
  * @since Adblock Plus 3.15.3
  */
 export function simulateMouseEvent(...selectors) {
+  const formattedArguments = formatArguments(arguments);
   const debugLog = getDebugger("simulate-mouse-event");
+  const {mark, end} = profile("simulate-mouse-event");
   const MAX_ARGS = 7;
   if (selectors.length < 1)
     throw new Error("[simulate-mouse-event snippet]: No selector provided.");
+
   if (selectors.length > MAX_ARGS) {
     // Truncate any parameters after
     selectors = selectors.slice(0, MAX_ARGS);
@@ -120,6 +125,13 @@ export function simulateMouseEvent(...selectors) {
     return parsedArgs.every(arg => arg.found);
   }
 
+  function resetAttributes() {
+    parsedArgs.forEach(arg => {
+      arg.found = false;
+      arg.clicked = false;
+    });
+  }
+
   function triggerEvent(node, event, delay) {
     // If the node is removed, or the function is called wrongly.
     if (!node || !event)
@@ -132,7 +144,8 @@ export function simulateMouseEvent(...selectors) {
                node,
                "\nwith a delay of",
                delay,
-               "ms"
+               "ms",
+               `n\nFILTER: simulate-mouse-event ${formattedArguments}`
       );
     }
     else {
@@ -145,7 +158,8 @@ export function simulateMouseEvent(...selectors) {
                "event was dispatched with a delay of",
                delay,
                "ms on this node:\n",
-               node
+               node,
+               `n\nFILTER: simulate-mouse-event ${formattedArguments}`
       );
     }
   }
@@ -161,6 +175,7 @@ export function simulateMouseEvent(...selectors) {
   findNodesAndDispatchEvents();
 
   function findNodesAndDispatchEvents() {
+    mark();
     // Check if all selectors are found
     if (!allFound)
       allFound = checkIfAllSelectorsFound();
@@ -174,7 +189,10 @@ export function simulateMouseEvent(...selectors) {
               dispatchedNodes.add(node);
               if (parsedRule.continue) {
                 setInterval(() => {
-                  triggerEvent(node, parsedRule.event, parsedRule.delay);
+                  resetAttributes();
+                  const allIsStillFound = checkIfAllSelectorsFound();
+                  if (allIsStillFound)
+                    triggerEvent(node, parsedRule.event, parsedRule.delay);
                 }, delayInMiliseconds);
               }
               else {
@@ -187,5 +205,6 @@ export function simulateMouseEvent(...selectors) {
         }
       }
     }
+    end();
   }
 }

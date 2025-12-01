@@ -4,6 +4,7 @@
 
 #include "gn/output_conversion.h"
 
+#include "gn/escape.h"
 #include "gn/settings.h"
 #include "gn/value.h"
 
@@ -37,8 +38,10 @@ void RenderListToJSON(const Value& output, std::ostream& out, int indent) {
       RenderScopeToJSON(value, out, indent + 1);
     else if (value.type() == Value::LIST)
       RenderListToJSON(value, out, indent + 1);
+    else if (value.type() == Value::STRING)
+      EscapeJSONStringToStream(out, value.ToString(false), EscapeOptions());
     else
-      out << value.ToString(true);
+      out << value.ToString(false);
     first = false;
   }
   out << "\n";
@@ -61,8 +64,11 @@ void RenderScopeToJSON(const Value& output, std::ostream& out, int indent) {
       RenderScopeToJSON(pair.second, out, indent + 1);
     else if (pair.second.type() == Value::LIST)
       RenderListToJSON(pair.second, out, indent + 1);
+    else if (pair.second.type() == Value::STRING)
+      EscapeJSONStringToStream(out, pair.second.ToString(false),
+                               EscapeOptions());
     else
-      out << pair.second.ToString(true);
+      out << pair.second.ToString(false);
     first = false;
   }
   out << "\n";

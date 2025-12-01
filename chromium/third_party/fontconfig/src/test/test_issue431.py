@@ -2,19 +2,20 @@
 # Copyright (C) 2024 fontconfig Authors
 # SPDX-License-Identifier: HPND
 
-import os
 import pytest
 import re
-import requests
-import shutil
-import subprocess
 from pathlib import Path
+from fctest import FcTest
 
 
-def test_issue431(tmp_path):
-    builddir = Path(os.environ.get("builddir", Path(__file__).parent.parent))
+@pytest.fixture
+def fctest():
+    return FcTest()
+
+
+def test_issue431(fctest):
     roboto_flex_font = (
-        builddir
+        Path(fctest.builddir)
         / "testfonts"
         / "roboto-flex-fonts/fonts/variable/RobotoFlex[GRAD,XOPQ,XTRA,YOPQ,YTAS,YTDE,YTFI,YTLC,YTUC,opsz,slnt,wdth,wght].ttf"
     )
@@ -22,19 +23,13 @@ def test_issue431(tmp_path):
     if not roboto_flex_font.exists():
         pytest.skip(f"Font file not found: {roboto_flex_font}")
 
-    result = subprocess.run(
-        [
-            builddir / "fc-query" / "fc-query",
-            "-f",
-            "%{family[0]}:%{index}:%{style[0]}:%{postscriptname}\n",
-            roboto_flex_font,
-        ],
-        stdout=subprocess.PIPE,
-    )
-
-    for line in result.stdout.decode("utf-8").splitlines():
-        family, index, style, psname = line.split(":")
-        normstyle = re.sub("[\x04\\(\\)/<>\\[\\]{}\t\f\r\n ]", "", style)
-        assert (
-            psname.split("-")[-1] == normstyle
-        ), f"postscriptname `{psname}' does not contain style name `{normstyle}': index {index}"
+    for ret, stdout, stderr in fctest.run_query(['-f',
+                                                 '%{family[0]}:%{index}:%{style[0]}:%{postscriptname}\n',
+                                                 roboto_flex_font]):
+        assert ret == 0, stderr
+        for line in stdout.splitlines():
+            family, index, style, psname = line.split(":")
+            normstyle = re.sub("[\x04\\(\\)/<>\\[\\]{}\t\f\r\n ]", "", style)
+            assert (
+                psname.split("-")[-1] == normstyle
+            ), f"postscriptname `{psname}' does not contain style name `{normstyle}': index {index}"

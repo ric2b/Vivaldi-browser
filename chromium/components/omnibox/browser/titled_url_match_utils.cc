@@ -152,7 +152,10 @@ AutocompleteMatch TitledUrlMatchToAutocompleteMatch(
       input.text(), fixed_up_input_text, false, base::UTF8ToUTF16(url.spec()));
 
   // Find autocomplete offset for the title if search is within the title.
-  if (vivaldi::IsVivaldiRunning() && title_match) {
+  const bool vivaldi_try_match_title =
+      vivaldi::IsVivaldiRunning() && title_match &&
+      inline_autocomplete_offset == std::u16string::npos;
+  if (vivaldi_try_match_title) {
     inline_autocomplete_offset = URLPrefix::GetInlineAutocompleteOffset(
         input.text(), fixed_up_input_text, false, title);
   }  // End Vivaldi
@@ -161,24 +164,23 @@ AutocompleteMatch TitledUrlMatchToAutocompleteMatch(
   if (match_in_scheme)
     fill_into_edit_format_types &= ~url_formatter::kFormatUrlOmitHTTP;
 
-  // Autofill the title if search is within the title
-  if (vivaldi::IsVivaldiRunning() && title_match) {
-    match.fill_into_edit = title;
-  } else {
-    match.fill_into_edit =
-        AutocompleteInput::FormattedStringWithEquivalentMeaning(
-            url,
-            url_formatter::FormatUrl(url, fill_into_edit_format_types,
+  match.fill_into_edit =
+      AutocompleteInput::FormattedStringWithEquivalentMeaning(
+          url,
+          url_formatter::FormatUrl(url, fill_into_edit_format_types,
                                    base::UnescapeRule::SPACES, nullptr, nullptr,
                                    &inline_autocomplete_offset),
-            scheme_classifier, &inline_autocomplete_offset);
-  }  // End Vivaldi
+          scheme_classifier, &inline_autocomplete_offset);
 
   if (match.TryRichAutocompletion(input, match.contents, match.description)) {
     // If rich autocompletion applies, we skip trying the alternatives below.
   } else if (inline_autocomplete_offset != std::u16string::npos) {
-    match.inline_autocompletion =
-        match.fill_into_edit.substr(inline_autocomplete_offset);
+    if (vivaldi_try_match_title) {
+      match.inline_autocompletion = title.substr(inline_autocomplete_offset);
+    } else if (match.fill_into_edit.size() >= inline_autocomplete_offset) {
+      match.inline_autocompletion =
+          match.fill_into_edit.substr(inline_autocomplete_offset);
+    }
     match.SetAllowedToBeDefault(input);
   }
 

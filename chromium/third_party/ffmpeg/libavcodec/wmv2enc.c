@@ -28,6 +28,7 @@
 #include "msmpeg4enc.h"
 #include "msmpeg4data.h"
 #include "msmpeg4_vc1_data.h"
+#include "put_bits.h"
 #include "wmv2.h"
 
 #define WMV2_EXTRADATA_SIZE 4
@@ -58,7 +59,7 @@ static int encode_ext_header(WMV2EncContext *w)
     put_bits(&pb, 11, FFMIN(w->msmpeg4.m.bit_rate / 1024, 2047));
 
     put_bits(&pb, 1, w->mspel_bit        = 1);
-    put_bits(&pb, 1, s->c.loop_filter);
+    put_bits(&pb, 1, s->loop_filter);
     put_bits(&pb, 1, w->abt_flag         = 1);
     put_bits(&pb, 1, w->j_type_bit       = 1);
     put_bits(&pb, 1, w->top_left_mv_flag = 0);
@@ -67,7 +68,7 @@ static int encode_ext_header(WMV2EncContext *w)
 
     flush_put_bits(&pb);
 
-    s->c.slice_height = s->c.mb_height / code;
+    s->slice_height = s->c.mb_height / code;
 
     return 0;
 }
@@ -77,6 +78,8 @@ static int wmv2_encode_picture_header(MPVMainEncContext *const m)
     WMV2EncContext *const w = (WMV2EncContext *) m;
     MSMPEG4EncContext *const ms = &w->msmpeg4;
     MPVEncContext *const s = &m->s;
+
+    put_bits_assume_flushed(&s->pb);
 
     put_bits(&s->pb, 1, s->c.pict_type - 1);
     if (s->c.pict_type == AV_PICTURE_TYPE_I)
@@ -91,7 +94,7 @@ static int wmv2_encode_picture_header(MPVMainEncContext *const m)
     w->abt_type        = 0;
     w->j_type          = 0;
 
-    av_assert0(s->c.flipflop_rounding);
+    av_assert0(s->flipflop_rounding);
 
     if (s->c.pict_type == AV_PICTURE_TYPE_I) {
         av_assert0(s->c.no_rounding == 1);
@@ -115,7 +118,7 @@ static int wmv2_encode_picture_header(MPVMainEncContext *const m)
         put_bits(&s->pb, 2, SKIP_TYPE_NONE);
 
         ff_msmpeg4_code012(&s->pb, cbp_index = 0);
-        w->cbp_table_index = wmv2_get_cbp_table_index(&s->c, cbp_index);
+        w->cbp_table_index = wmv2_get_cbp_table_index(s->c.qscale, cbp_index);
 
         if (w->mspel_bit)
             put_bits(&s->pb, 1, s->c.mspel);

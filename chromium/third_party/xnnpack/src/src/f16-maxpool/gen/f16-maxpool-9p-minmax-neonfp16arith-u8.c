@@ -20,10 +20,10 @@
 #define xnn_load_tail_safe_impl(x, c) xnn_load_tail_safe_f16(x, c)
 #define xnn_pre_store_impl(x) x
 
-#include "src/xnnpack/simd/f16-neonfp16arith.h"
-
 #include "src/xnnpack/common.h"
+#include "src/xnnpack/math.h"
 #include "src/xnnpack/microparams.h"
+#include "src/xnnpack/simd/f16-neonfp16arith.h"
 
 void xnn_f16_maxpool_minmax_ukernel_9p__neonfp16arith_u8(
     size_t output_pixels,
@@ -35,7 +35,7 @@ void xnn_f16_maxpool_minmax_ukernel_9p__neonfp16arith_u8(
     xnn_float16* output,
     size_t input_increment,
     size_t output_increment,
-    const struct xnn_f16_minmax_params params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f16_minmax_params* restrict params)
 {
   assert(output_pixels != 0);
   assert(channels != 0);

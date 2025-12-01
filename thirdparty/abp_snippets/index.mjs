@@ -1,4 +1,4 @@
-import isolated from "./webext/ml.mjs";
+import isolated from "./webext/isolated-full.mjs";
 import main from "./webext/main.mjs";
 
 export {isolated, main};

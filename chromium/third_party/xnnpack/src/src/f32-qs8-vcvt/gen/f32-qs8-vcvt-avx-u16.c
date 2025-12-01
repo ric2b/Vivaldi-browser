@@ -9,11 +9,14 @@
 // LICENSE file in the root directory of this source tree.
 
 #include <assert.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #include <immintrin.h>
 
 #include "src/xnnpack/common.h"
 #include "src/xnnpack/intrinsics-polyfill.h"
+#include "src/xnnpack/microparams.h"
 #include "src/xnnpack/vcvt.h"
 
 
@@ -21,7 +24,7 @@ void xnn_f32_qs8_vcvt_ukernel__avx_u16(
     size_t batch,
     const float* input,
     int8_t* output,
-    const struct xnn_f32_qs8_cvt_params params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f32_qs8_cvt_params* restrict params)
 {
   assert(batch != 0);
   assert(batch % sizeof(float) == 0);

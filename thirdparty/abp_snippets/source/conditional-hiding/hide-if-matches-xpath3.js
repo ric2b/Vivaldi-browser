@@ -17,6 +17,7 @@
 
 import $ from "../$.js";
 
+import {formatArguments} from "../utils/general.js";
 import {hideElement} from "../utils/dom.js";
 import {profile} from "../introspection/profile.js";
 import {raceWinner} from "../introspection/race.js";
@@ -55,6 +56,7 @@ export function hideIfMatchesXPath3(query, scopeQuery) {
     });
   }
 
+  const formattedArguments = formatArguments(arguments);
   let debugLog = getDebugger("hide-if-matches-xpath3");
 
   const startHidingMutationObserver = scopeNode => {
@@ -72,7 +74,11 @@ export function hideIfMatchesXPath3(query, scopeQuery) {
           hideElement(node);
         else
           $(node).textContent = "";
-        debugLog("success", "Matched: ", node, " for selector: ", query);
+        debugLog("success",
+                 "Matched: ",
+                 node,
+                 "\nFILTER: hide-if-matches-xpath3",
+                 formattedArguments);
       }
       end();
     };

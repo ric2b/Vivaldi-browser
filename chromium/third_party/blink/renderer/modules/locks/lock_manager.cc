@@ -19,6 +19,7 @@
 #include "third_party/blink/renderer/bindings/modules/v8/v8_lock_manager_snapshot.h"
 #include "third_party/blink/renderer/core/dom/abort_signal.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
+#include "third_party/blink/renderer/core/execution_context/navigator_base.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/web_feature.h"
@@ -102,7 +103,7 @@ class LockManager::LockRequestImpl final
     visitor->Trace(abort_handle_);
   }
 
-  const char* NameInHeapSnapshot() const override {
+  const char* GetHumanReadableName() const override {
     return "LockManager::LockRequestImpl";
   }
 
@@ -294,10 +295,6 @@ ScriptPromise<IDLAny> LockManager::request(ScriptState* script_state,
 
   ExecutionContext* context = ExecutionContext::From(script_state);
   DCHECK(context->IsContextThread());
-
-  context->GetScheduler()->RegisterStickyFeature(
-      blink::SchedulingPolicy::Feature::kWebLocks,
-      {blink::SchedulingPolicy::DisableBackForwardCache()});
 
   // 5. If origin is an opaque origin, then reject promise with a
   // "SecurityError" DOMException.

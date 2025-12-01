@@ -30,10 +30,11 @@ using subresource_filter::SubresourceFilterObserverManager;
 
 VivaldiSubresourceFilterAdblockingThrottle::
     VivaldiSubresourceFilterAdblockingThrottle(
-        content::NavigationHandle* handle)
-    : NavigationThrottle(handle),
-      browser_context_(handle->GetStartingSiteInstance()->GetBrowserContext()) {
-  DCHECK(handle->IsInMainFrame());
+        content::NavigationThrottleRegistry& registry)
+    : NavigationThrottle(registry),
+      browser_context_(registry.GetNavigationHandle().GetStartingSiteInstance()
+                           ->GetBrowserContext()) {
+  DCHECK(registry.GetNavigationHandle().IsInMainFrame());
   CheckCurrentUrl();
 }
 

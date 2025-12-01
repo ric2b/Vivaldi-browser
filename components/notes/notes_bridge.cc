@@ -827,10 +827,11 @@ void NotesBridge::NotesNodeRemoved(const vivaldi::NoteNode* parent,
   NoteNodeRemoved(parent, old_index, node, urls, location);
 }
 
-void NotesBridge::ReorderChildren(JNIEnv* env,
-                                  const JavaParamRef<jobject>& obj,
-                                  const JavaParamRef<jobject>& j_note_id_obj,
-                                  jlongArray arr) {
+void NotesBridge::ReorderChildren(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    const JavaParamRef<jobject>& j_note_id_obj,
+    const base::android::JavaRef<jlongArray>& arr) {
   DCHECK(IsLoaded());
   // get the NoteNode* for the "parent" note parameter
   const long note_id = JavaNoteIdGetId(env, j_note_id_obj);
@@ -839,8 +840,8 @@ void NotesBridge::ReorderChildren(JNIEnv* env,
 
   // populate a vector
   std::vector<const NoteNode*> ordered_nodes;
-  jsize arraySize = env->GetArrayLength(arr);
-  jlong* elements = env->GetLongArrayElements(arr, 0);
+  jsize arraySize = env->GetArrayLength(arr.obj());
+  jlong* elements = env->GetLongArrayElements(arr.obj(), 0);
 
   // iterate through array, adding the NoteNode*s of the objects
   for (int i = 0; i < arraySize; ++i) {

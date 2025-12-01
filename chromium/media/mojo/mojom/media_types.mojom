@@ -500,8 +500,9 @@ struct SharedImageVideoFrameData {
   // TODO(crbug.com/40263579): Remove this bool once all VideoFrame
   // clients use MappableSI.
   bool is_mappable_si_enabled;
-  // |ycbcr_data| is present on Android (and sometimes Fuchsia) when the
+  // |ycbcr_data| is present on Android when the
   // video is hardware decoded and the display compositor uses Vulkan.
+  [EnableIf=is_android]
   gpu.mojom.VulkanYCbCrInfo? ycbcr_data;
 };
 
@@ -595,7 +596,6 @@ struct StatusData {
   mojo_base.mojom.ListValue frames;
   StatusData? cause;
   mojo_base.mojom.Value data;
-  uint64 packed_root_cause;
 };
 
 struct EncoderStatus {
@@ -675,7 +675,7 @@ enum CreateCdmStatus {
   kUnsupportedKeySystem = 12,
   kDisconnectionError = 13,
   kNotAllowedOnUniqueOrigin = 14,
-  kMediaDrmBridgeCreationFailed = 15,
+  //kMediaDrmBridgeCreationFailed = 15,     // Deprecated
   kMediaCryptoNotAvailable = 16,
   kNoMoreInstances = 17,
   kInsufficientGpuResources = 18,

@@ -101,6 +101,7 @@ class VivaldiUIWebContentsDelegate : public content::WebContentsDelegate,
                       const blink::mojom::WindowFeatures& window_features,
                       bool user_gesture,
                       bool* was_blocked) override;
+  bool CanOverscrollContent() override;
 
 
  private:

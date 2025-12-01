@@ -327,6 +327,7 @@
 <translation id="2240366984605217732">लेआउट स्विच करने वाला बटन</translation>
 <translation id="224421911978987610">लॉन्ग एक्सपोज़र</translation>
 <translation id="2244834438220057800">हरे</translation>
+<translation id="2248689665683494517">एक मिनिमल स्टिल लाइफ़ इमेज, जिसमें ब्लैक बैकग्राउंड में पॉपी के फूल उनके तने से तोड़कर कांच के एक फूलदान में रखे हुए हैं</translation>
 <translation id="225692081236532131">सक्रियण की स्थिति</translation>
 <translation id="2267285889943769271">स्क्रीनशॉट जोड़ें</translation>
 <translation id="2268044343513325586">बेहतर बनाएं</translation>
@@ -334,7 +335,7 @@
 <translation id="2276999893457278469">सबसे ज़्यादा उपयोगी सहायता कॉन्टेंट</translation>
 <translation id="2277631741861284101">आसानी से ऑडियो रिकॉर्ड और शेयर करें</translation>
 <translation id="2279051792571591988">डिफ़ॉल्ट बटन लेबल पहले जैसा करें</translation>
-<translation id="2286454467119466181">आसान</translation>
+<translation id="2286454467119466181">सरल</translation>
 <translation id="2287186687001756809">कोई इमेज उपलब्ध नहीं है. फ़ोटो जोड़ने के लिए, <ph name="LINK" /> पर जाएं</translation>
 <translation id="2294577623958216786">मौजूदा शेड्यूल को <ph name="SUNRISE" /> से <ph name="SUNSET" /> पर सेट किया गया है. सूर्योदय और सूर्यास्त का शेड्यूल अपने-आप अपडेट होने की सुविधा चालू करने के लिए, सिस्टम की जगह की जानकारी देने वाली सुविधा चालू करें.</translation>
 <translation id="2305172810646967500">ब्लैक</translation>
@@ -757,6 +758,7 @@
 <translation id="430786093962686457">शिफ़ॉन</translation>
 <translation id="4310735698903592804">Google के एआई की मदद से हाल ही में बनाए गए वॉलपेपर</translation>
 <translation id="4320904097188876154">नियॉन पिंक</translation>
+<translation id="432961742358282111">परिभाषाएं, अनुवाद या यूनिट कन्वर्ज़न पाने के लिए, टेक्स्ट पर राइट क्लिक करें या उसे दबाकर रखें. इस सुविधा को मैनेज करने के लिए, लेफ़्ट या राइट ऐरो बटन का इस्तेमाल करें.</translation>
 <translation id="4333390807948134856"><ph name="KEY_NAME" /> दबाया गया</translation>
 <translation id="4334293042716981313">आप चाहें, तो<ph name="BEGIN_LINK_FREEFORM_SUBPAGE" />अपना प्रॉम्प्ट दें<ph name="END_LINK_FREEFORM_SUBPAGE" /></translation>
 <translation id="4354430579665871434">बटन</translation>
@@ -1436,7 +1438,6 @@
 <translation id="7302860742311162920">ICCID</translation>
 <translation id="7305884605064981971">EDGE</translation>
 <translation id="7308203371573257315">Chromebook के सहायता फ़ोरम पर विशेषज्ञों से सवाल पूछें</translation>
-<translation id="7309823890857024809">एक मिनिमल स्टिल लाइफ़ इमेज है, जिसमें काले रंग के बैकग्राउंड में पॉपी के फूलों को उनके तने से तोड़कर एक कांच के फूलदान में रखा है</translation>
 <translation id="7311368985037279727">कीबोर्ड का रंग</translation>
 <translation id="7317831949569936035">स्कूल में नाम दर्ज कराएं</translation>
 <translation id="7319430975418800333">ए3</translation>

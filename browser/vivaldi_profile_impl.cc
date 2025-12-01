@@ -19,11 +19,11 @@
 
 #include "app/vivaldi_apptools.h"
 #include "app/vivaldi_version_info.h"
+#include "browser/ad_blocker/adblock_rule_service_factory.h"
 #include "browser/removed_partners_tracker.h"
-#include "browser/vivaldi_runtime_feature.h"
 #include "calendar/calendar_model_loaded_observer.h"
 #include "calendar/calendar_service_factory.h"
-#include "components/ad_blocker/adblock_rule_service.h"
+#include "components/ad_blocker/public/content/adblock_rule_service.h"
 #include "components/content_injection/content_injection_service_factory.h"
 #include "components/datasource/vivaldi_data_source.h"
 #include "components/datasource/vivaldi_web_source.h"
@@ -33,7 +33,6 @@
 #include "components/notes/notes_model.h"
 #include "components/notes/notes_model_loaded_observer.h"
 #include "components/page_actions/page_actions_service_factory.h"
-#include "components/request_filter/adblock_filter/adblock_rule_service_factory.h"
 #include "components/request_filter/request_filter_manager.h"
 #include "components/request_filter/request_filter_manager_factory.h"
 #include "components/search_engines/default_search_engine_observer.h"
@@ -251,7 +250,7 @@ void VivaldiInitProfile(Profile* profile) {
   if (pref_service->GetInteger(vivaldiprefs::kStartupHasSeenFeature) <
       static_cast<int>(vivaldiprefs::StartupHasSeenFeatureValues::kMail)) {
     if (ReleaseKind() >= Release::kBeta) {
-      std::string version = ::vivaldi::GetVivaldiVersionString();
+      std::string_view version = ::vivaldi::GetVivaldiVersionString();
       std::vector<std::string> version_array = base::SplitString(
           version, ".", base::KEEP_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
       if (version_array.size() == 4) {
@@ -261,7 +260,8 @@ void VivaldiInitProfile(Profile* profile) {
               vivaldiprefs::kStartupHasSeenFeature,
               static_cast<int>(
                   vivaldiprefs::StartupHasSeenFeatureValues::kMail));
-          pref_service->SetBoolean(prefs::kHasSeenWelcomePage, false);
+          pref_service->SetBoolean(vivaldiprefs::kStartupHasSeenWelcomePage,
+                                   false);
         }
       }
     }

@@ -21,11 +21,14 @@ import {apply, call} from "proxy-pants/function";
 import {hasOwnProperty} from "proxy-pants/object";
 
 import {getDebugger} from "../introspection/log.js";
-import {randomId} from "./general.js";
+import {formatArguments, randomId, toRegExp} from "./general.js";
 
 let {
   parseFloat,
   variables,
+  clearTimeout,
+  fetch,
+  setTimeout,
   Array,
   Error,
   Map,
@@ -137,10 +140,12 @@ export function overrideOnError(magic) {
  * @param {string} loggingPrefix A string with which we prefix the logs.
  * @param {Window} context The window object whose property we patch.
  * @param {string} property The name of the property.
+ * @param {string} formattedProperties pre-formatted logging helper
  * @param {boolean} setConfigurable Value of the configurable attribute.
  * @private
  */
-export function abortOnRead(loggingPrefix, context, property,
+export function abortOnRead(loggingPrefix, context,
+                            property, formattedProperties = "",
                             setConfigurable = true) {
   let debugLog = getDebugger(loggingPrefix);
 
@@ -152,7 +157,7 @@ export function abortOnRead(loggingPrefix, context, property,
   let rid = randomId();
 
   function abort() {
-    debugLog("success", `${property} access aborted`);
+    debugLog("success", `${property} access aborted`, `\nFILTER: ${loggingPrefix} ${formattedProperties}`);
     throw new ReferenceError(rid);
   }
 
@@ -172,10 +177,13 @@ export function abortOnRead(loggingPrefix, context, property,
  * @param {string} loggingPrefix A string with which we prefix the logs.
  * @param {Window} context The window object whose property we patch.
  * @param {string} property The name of the property.
+ * @param {string} formattedProperties pre-formatted logging helper
  * @param {boolean} setConfigurable Value of the configurable attribute.
  * @private
  */
-export function abortOnWrite(loggingPrefix, context, property,
+export function abortOnWrite(loggingPrefix,
+                             context, property,
+                             formattedProperties = "",
                              setConfigurable = true) {
   let debugLog = getDebugger(loggingPrefix);
 
@@ -187,7 +195,7 @@ export function abortOnWrite(loggingPrefix, context, property,
   let rid = randomId();
 
   function abort() {
-    debugLog("success", `setting ${property} aborted`);
+    debugLog("success", `setting ${property} aborted`, `\nFILTER: ${loggingPrefix} ${formattedProperties}`);
     throw new ReferenceError(rid);
   }
 
@@ -213,15 +221,19 @@ export function abortOnIframe(
 ) {
   let abortedIframes = variables.abortedIframes;
   let iframePropertiesToAbort = variables.iframePropertiesToAbort;
+  // Map each properth to a string format for logging purposes
+  const formattedPropertiesToLog = formatArguments(properties);
 
   // add new properties-to-abort to all aborted iframes' WeakMaps
   for (let frame of Array.from(window.frames)) {
     if (abortedIframes.has(frame)) {
       for (let property of properties) {
         if (abortRead)
-          abortedIframes.get(frame).read.add(property);
+          // eslint-disable-next-line max-len
+          abortedIframes.get(frame).read.add({property, formattedProperties: formattedPropertiesToLog});
         if (abortWrite)
-          abortedIframes.get(frame).write.add(property);
+          // eslint-disable-next-line max-len
+          abortedIframes.get(frame).write.add({property, formattedProperties: formattedPropertiesToLog});
       }
     }
   }
@@ -229,9 +241,11 @@ export function abortOnIframe(
   // store properties-to-abort
   for (let property of properties) {
     if (abortRead)
-      iframePropertiesToAbort.read.add(property);
+      // eslint-disable-next-line max-len
+      iframePropertiesToAbort.read.add({property, formattedProperties: formattedPropertiesToLog});
     if (abortWrite)
-      iframePropertiesToAbort.write.add(property);
+      // eslint-disable-next-line max-len
+      iframePropertiesToAbort.write.add({property, formattedProperties: formattedPropertiesToLog});
   }
 
   queryAndProxyIframe();
@@ -254,16 +268,24 @@ export function abortOnIframe(
       if (readProps.size > 0) {
         let props = Array.from(readProps);
         readProps.clear();
-        for (let property of props)
-          abortOnRead("abort-on-iframe-property-read", frame, property);
+        for (let {property, formattedProperties} of props) {
+          abortOnRead("abort-on-iframe-property-read",
+                      frame,
+                      property,
+                      formattedProperties);
+        }
       }
 
       let writeProps = abortedIframes.get(frame).write;
       if (writeProps.size > 0) {
         let props = Array.from(writeProps);
         writeProps.clear();
-        for (let property of props)
-          abortOnWrite("abort-on-iframe-property-write", frame, property);
+        for (let {property, formattedProperties} of props) {
+          abortOnWrite("abort-on-iframe-property-write",
+                       frame,
+                       property,
+                       formattedProperties);
+        }
       }
     }
   }
@@ -460,4 +482,143 @@ export function waitUntilEvent(
     // If waitUntil is not given, directly start the snippet.
     mainLogic();
   }
+}
+
+/**
+ * Checks if the current stack trace matches a given array of strings.
+ * It captures the current stack trace by creating a new Error
+ * and normalizes it by:
+ * - Removing the "at" prefix from each line.
+ * - Extracting the function name, URL, and line number from each stack
+ * trace line.
+ * - Replacing known patterns like inline or anonymous scripts with a
+ * readable label.
+ * - Ignoring lines that do not contain a resource name or line position.
+ * - Prepending a `stackDepth` label that indicates the number of meaningful
+ * lines in the stack.
+ *
+ * The stack trace is transformed into a single string where each relevant
+ * line is in a new line (`\n`), in the following format:
+ *   stackDepth:<number of lines> <functionName> <url>:<lineNumber>:1
+ *
+ * Each string in the `stackNeedle` array is converted to a regex and tested
+ * against the normalized stack trace.
+ *
+ * @param {Array<string>} stackNeedle An array of strings to be converted
+ *  to regex and checked in the normalized stack trace.
+ * @param {Function} debugLog The debug logging function
+ * @returns {boolean} True if any of the `stackNeedle` patterns match the
+ *  normalized stack trace, otherwise false.
+ */
+export function matchesStackTrace(stackNeedle, debugLog) {
+  if (!stackNeedle || !stackNeedle.length)
+    return true; // If no stack needle specified, always match
+
+  const token = randomId();
+  const error = new Error(token);
+
+  const locHref = new URL(self.location.href);
+  locHref.hash = "";
+
+  const lineRegex = /(.*?@)?(\S+)(:\d+):\d+\)?$/;
+  const lines = [];
+  for (let line of error.stack.split(/[\n\r]+/)) {
+    if ($(line).includes(token))
+      continue;
+
+    line = $(line).trim();
+    const match = $(lineRegex).exec(line);
+    if (match === null)
+      continue;
+
+    let url = match[2];
+    if ($(url).startsWith("("))
+      url = $(url).slice(1);
+
+    if (url === locHref.href)
+      url = "inlineScript";
+    else if ($(url).startsWith("<anonymous>"))
+      url = "injectedScript";
+
+    let functionName = match[1] ?
+      $(match[1]).slice(0, -1) :
+      $(line).slice(0, $(match).index).trim();
+
+    if ($(functionName).startsWith("at"))
+      functionName = $(functionName).slice(2).trim();
+
+    let linePosition = match[3];
+    $(lines).push(" " + `${functionName} ${url}${linePosition}:1`.trim());
+  }
+
+  lines[0] = `stackDepth:${lines.length - 1}`;
+  const normalizedStack = $(lines).join("\n");
+
+  for (let needle of stackNeedle) {
+    const regex = toRegExp(needle);
+    if (regex.test(normalizedStack)) {
+      debugLog("info", `Found needle in stack trace: ${needle}`);
+      return true;
+    }
+  }
+
+  debugLog("info", `Stack trace does not match any needle. Stack trace: ${normalizedStack}`);
+  return false;
+}
+
+/**
+ * @typedef {object} FetchContentInfo
+ * @property {function} remove
+ * @property {Promise} result
+ * @property {number} timer
+ * @private
+ */
+
+/**
+ * @type {Map.<string, FetchContentInfo>}
+ * @private
+ */
+let fetchContentMap = new Map();
+
+
+/**
+ * Returns a potentially already resolved fetch auto cleaning, if not requested
+ * again, after a certain amount of milliseconds.
+ *
+ * The resolved fetch is by default `arrayBuffer` but it can be any other kind
+ * through the configuration object.
+ *
+ * @param {string} url The url to fetch
+ * @param {object} [options] Optional configuration options.
+ *                            By default is {as: "arrayBuffer", cleanup: 60000}
+ * @param {string} [options.as] The fetch type: "arrayBuffer", "json", "text"..
+ * @param {number} [options.cleanup] The cache auto-cleanup delay in ms: 60000
+ *
+ * @returns {Promise} The fetched result as Uint8Array|string.
+ *
+ * @example
+ * fetchContent('https://any.url.com').then(arrayBuffer => { ... })
+ * @example
+ * fetchContent('https://a.com', {as: 'json'}).then(json => { ... })
+ * @example
+ * fetchContent('https://a.com', {as: 'text'}).then(text => { ... })
+ * @private
+ */
+export function fetchContent(url, {as = "arrayBuffer", cleanup = 60000} = {}) {
+  // make sure the fetch type is unique as the url fetching text or arrayBuffer
+  // will fetch same url twice but it will resolve it as expected instead of
+  // keeping the fetch potentially hanging forever.
+  let uid = as + ":" + url;
+  let details = fetchContentMap.get(uid) || {
+    remove: () => fetchContentMap.delete(uid),
+    result: null,
+    timer: 0
+  };
+  clearTimeout(details.timer);
+  details.timer = setTimeout(details.remove, cleanup);
+  if (!details.result) {
+    details.result = fetch(url).then(res => res[as]()).catch(details.remove);
+    fetchContentMap.set(uid, details);
+  }
+  return details.result;
 }

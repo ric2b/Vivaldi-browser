@@ -79,10 +79,8 @@ class ChromeSigninClient : public SigninClient {
   void OnPrimaryAccountChanged(
       signin::PrimaryAccountChangeEvent event_details) override;
 
-#if BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
   std::unique_ptr<signin::BoundSessionOAuthMultiLoginDelegate>
   CreateBoundSessionOAuthMultiloginDelegate() const override;
-#endif
 
   // Adds the users to a synthetic field trial for user that were shown the
   // Bookmarks Bubble sign in/sync promo. Only adds user that are part of the
@@ -121,16 +119,6 @@ class ChromeSigninClient : public SigninClient {
   // Used as the `on_token_fetch_complete` callback in the
   // `ForceSigninVerifier`.
   void OnTokenFetchComplete(bool token_is_valid);
-#endif
-
-  // virtual for unit testing: cut down dependency on `BookmarkModel`.
-  // The following two functions will return `std::nullopt` if the
-  // `BookmarkModel` is nullptr.
-  virtual std::optional<size_t> GetAllBookmarksCount();
-  virtual std::optional<size_t> GetBookmarkBarBookmarksCount();
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-  // Returns `std::nullopt` if the `ExtensionRegistry` is nullptr.
-  virtual std::optional<size_t> GetExtensionsCount();
 #endif
 
 #if !BUILDFLAG(IS_CHROMEOS)

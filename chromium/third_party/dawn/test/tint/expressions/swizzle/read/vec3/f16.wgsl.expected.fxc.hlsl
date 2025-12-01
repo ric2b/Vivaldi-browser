@@ -1,16 +1,11 @@
 SKIP: INVALID
 
-[numthreads(1, 1, 1)]
-void unused_entry_point() {
-  return;
-}
-
 struct S {
   vector<float16_t, 3> v;
 };
 
-static S P = (S)0;
 
+static S P = (S)0;
 void f() {
   vector<float16_t, 3> v = P.v;
   float16_t x = P.v.x;
@@ -134,8 +129,8 @@ void f() {
   vector<float16_t, 4> zzzy = P.v.zzzy;
   vector<float16_t, 4> zzzz = P.v.zzzz;
 }
-FXC validation failure:
-<scrubbed_path>(7,10-18): error X3000: syntax error: unexpected token 'float16_t'
 
+[numthreads(1, 1, 1)]
+void unused_entry_point() {
+}
 
-tint executable returned error: exit status 1

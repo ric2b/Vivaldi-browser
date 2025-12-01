@@ -6,13 +6,13 @@ import 'chrome://new-tab-page/new_tab_page.js';
 
 import type {SearchboxElement, SearchboxIconElement, SearchboxMatchElement} from 'chrome://new-tab-page/new_tab_page.js';
 import {$$, BrowserProxyImpl, MetricsReporterImpl, SearchboxBrowserProxy} from 'chrome://new-tab-page/new_tab_page.js';
-import {NavigationPredictor} from 'chrome://resources/cr_components/searchbox/omnibox.mojom-webui.js';
-import type {AutocompleteMatch} from 'chrome://resources/cr_components/searchbox/searchbox.mojom-webui.js';
-import {RenderType, SideType} from 'chrome://resources/cr_components/searchbox/searchbox.mojom-webui.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {PageMetricsCallbackRouter} from 'chrome://resources/js/metrics_reporter.mojom-webui.js';
 import {mojoString16ToString, stringToMojoString16} from 'chrome://resources/js/mojo_type_util.js';
 import {getDeepActiveElement} from 'chrome://resources/js/util.js';
+import {NavigationPredictor} from 'chrome://resources/mojo/components/omnibox/browser/omnibox.mojom-webui.js';
+import type {AutocompleteMatch} from 'chrome://resources/mojo/components/omnibox/browser/searchbox.mojom-webui.js';
+import {RenderType, SideType} from 'chrome://resources/mojo/components/omnibox/browser/searchbox.mojom-webui.js';
 import {assertEquals, assertFalse, assertNotEquals, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {waitAfterNextRender} from 'chrome://webui-test/polymer_test_util.js';
 import {TestMock} from 'chrome://webui-test/test_mock.js';
@@ -275,46 +275,78 @@ suite('NewTabPageRealboxTest', () => {
     });
   });
 
-  test('Color source baseline search icon has background image', async () => {
-    // Arrange.
-    loadTimeData.overrideValues({searchboxCr23Theming: true});
-    document.body.innerHTML = window.trustedTypes!.emptyHTML;
-    realbox = document.createElement('cr-searchbox');
-    realbox.colorSourceIsBaseline = true;
-    document.body.appendChild(realbox);
-    await waitAfterNextRender(realbox);
+  const webkitTestCases = [
+    {
+      description: 'theming refresh disabled',
+      properties: {
+        composeButtonEnabled: false,
+        searchboxChromeRefreshTheming: false,
+        colorSourceIsBaseline: true,
+      },
+      shouldUseWebkit: false,
+    },
+    {
+      description: 'theming refresh with baseline color',
+      properties: {
+        composeButtonEnabled: false,
+        searchboxChromeRefreshTheming: true,
+        colorSourceIsBaseline: true,
+      },
+      shouldUseWebkit: false,
+    },
+    {
+      description: 'theming refresh with non-baseline color',
+      properties: {
+        composeButtonEnabled: false,
+        searchboxChromeRefreshTheming: true,
+        colorSourceIsBaseline: false,
+      },
+      shouldUseWebkit: true,
+    },
+    {
+      description: 'compose button enabled',
+      properties: {
+        composeButtonEnabled: true,
+        searchboxChromeRefreshTheming: false,
+        colorSourceIsBaseline: false,
+      },
+      shouldUseWebkit: true,
+    },
+  ];
+  webkitTestCases.forEach(({description, properties, shouldUseWebkit}) => {
+    test(`useWebkitSearchIcons ${description}`, async () => {
+      // Arrange.
+      document.body.innerHTML = window.trustedTypes!.emptyHTML;
+      realbox = document.createElement('cr-searchbox');
 
-    // Assert.
-    const voiceSearchButton =
-        realbox.shadowRoot!.querySelector<HTMLElement>('#voiceSearchButton');
-    assertTrue(!!voiceSearchButton);
-    assertStyle(
-        voiceSearchButton, 'background-image',
-        'url("chrome://resources/cr_components/searchbox/icons/mic.svg")');
+      // Act.
+      Object.assign(realbox, properties);
+      document.body.appendChild(realbox);
+      await waitAfterNextRender(realbox);
 
-    // Restore.
-    loadTimeData.overrideValues({searchboxCr23Theming: false});
-  });
-
-  test('Color source not baseline search icon has mask image', async () => {
-    // Arrange.
-    loadTimeData.overrideValues({searchboxCr23Theming: true});
-    document.body.innerHTML = window.trustedTypes!.emptyHTML;
-    realbox = document.createElement('cr-searchbox');
-    realbox.colorSourceIsBaseline = false;
-    document.body.appendChild(realbox);
-    await waitAfterNextRender(realbox);
-
-    // Assert.
-    const voiceSearchButton =
-        realbox.shadowRoot!.querySelector<HTMLElement>('#voiceSearchButton');
-    assertTrue(!!voiceSearchButton);
-    assertStyle(
-        voiceSearchButton, '-webkit-mask-image',
-        'url("chrome://resources/cr_components/searchbox/icons/mic.svg")');
-
-    // Restore.
-    loadTimeData.overrideValues({searchboxCr23Theming: false});
+      // Assert
+      const [iconProperty, nonIconProperty] = shouldUseWebkit ?
+          ['-webkit-mask-image', 'background-image'] :
+          ['background-image', '-webkit-mask-image'];
+      const buttonsToTest = [
+        {
+          selector: '#voiceSearchButton',
+          iconUrl:
+              'url("chrome://resources/cr_components/searchbox/icons/mic.svg")',
+        },
+        {
+          selector: '#lensSearchButton',
+          iconUrl: 'url("chrome://resources/cr_components/searchbox/icons/' +
+              'camera.svg")',
+        },
+      ];
+      for (const {selector, iconUrl} of buttonsToTest) {
+        const button = realbox.shadowRoot!.querySelector<HTMLElement>(selector);
+        assertTrue(!!button);
+        assertStyle(button, iconProperty, iconUrl);
+        assertStyle(button, nonIconProperty, 'none');
+      }
+    });
   });
 
   test('Compose button is not enabled by default.', async () => {
@@ -366,6 +398,108 @@ suite('NewTabPageRealboxTest', () => {
     await whenOpenComposeBox;
   });
 
+  test('hovering on composebox button plays the animation.', async () => {
+    // Arrange.
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
+    realbox = document.createElement('cr-searchbox');
+    realbox.composeButtonEnabled = true;
+    realbox.composeboxEnabled = true;
+    document.body.appendChild(realbox);
+    await waitAfterNextRender(realbox);
+
+    // Act.
+    const composeButton =
+        realbox.shadowRoot!.querySelector('cr-searchbox-compose-button');
+    assertTrue(!!composeButton);
+
+    await composeButton.updateComplete;
+
+    const glowAnimationWrapper =
+        composeButton.shadowRoot.querySelector<HTMLElement>(
+            '#glowAnimationWrapper');
+    assertTrue(!!glowAnimationWrapper);
+
+    // Assert.
+    glowAnimationWrapper.classList.remove('play');
+    assertFalse(glowAnimationWrapper.classList.contains('play'));
+
+    // Simulate mouseenter event
+    glowAnimationWrapper.dispatchEvent(new MouseEvent('mouseenter'));
+    await waitAfterNextRender(glowAnimationWrapper);
+
+    const gradient = glowAnimationWrapper.querySelector('.gradient');
+    const mask = glowAnimationWrapper.querySelector('.mask');
+
+    const gradientBeforeStyle = getComputedStyle(gradient!, '::before');
+    const maskBeforeStyle = getComputedStyle(mask!, '::before');
+
+    assertEquals('running', gradientBeforeStyle.animationPlayState);
+    assertEquals('running', maskBeforeStyle.animationPlayState);
+  });
+
+  test('animation plays on page load.', async () => {
+    // Arrange.
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
+
+    loadTimeData.overrideValues({
+      searchboxShowComposeAnimation: true,
+    });
+
+    realbox = document.createElement('cr-searchbox');
+    realbox.composeButtonEnabled = true;
+    realbox.composeboxEnabled = true;
+    document.body.appendChild(realbox);
+    await waitAfterNextRender(realbox);
+
+    // Act.
+    const composeButton =
+        realbox.shadowRoot!.querySelector('cr-searchbox-compose-button');
+    assertTrue(!!composeButton);
+
+    await composeButton.updateComplete;
+
+    const glowAnimationWrapper =
+        composeButton.shadowRoot.querySelector<HTMLElement>(
+            '#glowAnimationWrapper');
+    assertTrue(!!glowAnimationWrapper);
+
+    // Assert.
+    // Animation should play if `searchboxShowComposeAnimation` is true
+    assertTrue(glowAnimationWrapper.classList.contains('play'));
+  });
+
+  test('animation does not play on page load.', async () => {
+    // Arrange.
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
+
+    loadTimeData.overrideValues({
+      searchboxShowComposeAnimation: false,
+    });
+
+    realbox = document.createElement('cr-searchbox');
+    realbox.composeButtonEnabled = true;
+    realbox.composeboxEnabled = true;
+    document.body.appendChild(realbox);
+    await waitAfterNextRender(realbox);
+
+    // Act.
+    const composeButton =
+        realbox.shadowRoot!.querySelector('cr-searchbox-compose-button');
+    assertTrue(!!composeButton);
+
+    await composeButton.updateComplete;
+
+    const glowAnimationWrapper =
+        composeButton.shadowRoot.querySelector<HTMLElement>(
+            '#glowAnimationWrapper');
+    assertTrue(!!glowAnimationWrapper);
+
+    // Assert.
+    // Animation should not play if `searchboxShowComposeAnimation` is false
+    assertFalse(glowAnimationWrapper.classList.contains('play'));
+  });
+
+
   //============================================================================
   // Test Querying Autocomplete
   //============================================================================
@@ -397,6 +531,9 @@ suite('NewTabPageRealboxTest', () => {
     assertEquals(2, matchEls.length);
 
     // Left click does not query autocomplete when matches are showing.
+    // Need to manually focus in order to trigger `onFocusChanged()` since
+    // `autocompleteResultChanged` does not focus input.
+    realbox.$.input.focus();
     realbox.$.input.dispatchEvent(new MouseEvent('mousedown', {button: 0}));
     assertEquals(0, testProxy.handler.getCallCount('queryAutocomplete'));
     await testProxy.handler.whenCalled('onFocusChanged');
@@ -996,6 +1133,30 @@ suite('NewTabPageRealboxTest', () => {
     loadTimeData.overrideValues({
       queryAutocompleteOnEmptyInput: false,
     });
+  });
+
+  test('autocomplete result change does not impact focus', async () => {
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
+    realbox = document.createElement('cr-searchbox');
+    document.body.appendChild(realbox);
+    await waitAfterNextRender(realbox);
+
+    realbox.$.input.value = 'he';
+    realbox.$.input.dispatchEvent(new InputEvent('input'));
+
+    realbox.shadowRoot!.querySelector<HTMLElement>(
+                           '#voiceSearchButton')!.focus();
+    assertEquals('voiceSearchButton', getDeepActiveElement()!.id);
+
+    const matches = [createSearchMatch(), createUrlMatch()];
+    testProxy.callbackRouterRemote.autocompleteResultChanged({
+      input: stringToMojoString16(realbox.$.input.value.trimStart()),
+      matches,
+      suggestionGroupsMap: {},
+    });
+    assertTrue(await areMatchesShowing());
+
+    assertEquals('voiceSearchButton', getDeepActiveElement()!.id);
   });
 
   //============================================================================
@@ -2184,11 +2345,11 @@ suite('NewTabPageRealboxTest', () => {
 
         const matches = [
           createUrlMatch({
-            iconUrl: 'https://helloworld.com/url.png',
+            iconUrl: {url: 'https://helloworld.com/url.png'},
             iconPath: 'page.svg',
           }),
           createSearchMatch({
-            iconUrl: 'https://helloworld.com/search.png',
+            iconUrl: {url: 'https://helloworld.com/search.png'},
             iconPath: 'clock.svg',
             imageUrl: 'https://gstatic.com/',
             imageDominantColor: '#757575',
@@ -2210,12 +2371,12 @@ suite('NewTabPageRealboxTest', () => {
         assertIconState(
             matchEls[0], /*hasEntityImage=*/ false, /*expectUseIconImg=*/ false,
             `//image?staticEncode=true&encodeType=webp&url=${
-                matches[0]!.iconUrl}`);
+                matches[0]!.iconUrl.url}`);
         // Test initial icon state for the second match: icon image not used.
         assertIconState(
             matchEls[1], /*hasEntityImage=*/ true, /*expectUseIconImg=*/ false,
             `//image?staticEncode=true&encodeType=webp&url=${
-                matches[1]!.iconUrl}`);
+                matches[1]!.iconUrl.url}`);
 
         // Select the first match.
         let arrowDownEvent = arrowDown(realbox);
@@ -2229,18 +2390,18 @@ suite('NewTabPageRealboxTest', () => {
         assertIconState(
             realbox, /*hasEntityImage=*/ false, /*expectUseIconImg=*/ false,
             `//image?staticEncode=true&encodeType=webp&url=${
-                matches[0]!.iconUrl}`);
+                matches[0]!.iconUrl.url}`);
 
         // Mock icon image finishing loading for the first match and the realbox
         // itself. The icon image should be used icon.
         assertAndLoadIcon(
             matchEls[0], /*hasEntityImage=*/ false,
             `//image?staticEncode=true&encodeType=webp&url=${
-                matches[0]!.iconUrl}`);
+                matches[0]!.iconUrl.url}`);
         assertAndLoadIcon(
             realbox, /*hasEntityImage=*/ false,
             `//image?staticEncode=true&encodeType=webp&url=${
-                matches[0]!.iconUrl}`);
+                matches[0]!.iconUrl.url}`);
 
         // Select the second match.
         arrowDownEvent = arrowDown(realbox);
@@ -2254,17 +2415,17 @@ suite('NewTabPageRealboxTest', () => {
         assertIconState(
             realbox, /*hasEntityImage=*/ false, /*expectUseIconImg=*/ false,
             `//image?staticEncode=true&encodeType=webp&url=${
-                matches[1]!.iconUrl}`);
+                matches[1]!.iconUrl.url}`);
         // Mock icon image finishing loading for the second match and the
         // realbox itself. The icon image should be used.
         assertAndLoadIcon(
             matchEls[1], /*hasEntityImage=*/ true,
             `//image?staticEncode=true&encodeType=webp&url=${
-                matches[1]!.iconUrl}`);
+                matches[1]!.iconUrl.url}`);
         assertAndLoadIcon(
             realbox, /*hasEntityImage=*/ false,
             `//image?staticEncode=true&encodeType=webp&url=${
-                matches[1]!.iconUrl}`);
+                matches[1]!.iconUrl.url}`);
 
         // Select the first match by pressing 'Escape'.
         const escapeEvent = new KeyboardEvent('keydown', {
@@ -2284,15 +2445,99 @@ suite('NewTabPageRealboxTest', () => {
         assertIconState(
             realbox, /*hasEntityImage=*/ false, /*expectUseIconImg=*/ false,
             `//image?staticEncode=true&encodeType=webp&url=${
-                matches[0]!.iconUrl}`);
+                matches[0]!.iconUrl.url}`);
         // Mock icon image finishing loading for the realbox (now showing the
         // first match's icon image again).
         assertAndLoadIcon(
             realbox, /*hasEntityImage=*/ false,
             `//image?staticEncode=true&encodeType=webp&url=${
-                matches[0]!.iconUrl}`);
+                matches[0]!.iconUrl.url}`);
       });
 
+
+  test('search aggregator people matches use fallback icons', async () => {
+    realbox.$.input.value = 'hello';
+    realbox.$.input.dispatchEvent(new InputEvent('input'));
+
+    const fallbackIconPath =
+        '//resources/cr_components/searchbox/icons/google_agentspace_logo.svg';
+    const matches = [
+      createUrlMatch({
+        iconPath: fallbackIconPath,
+        isEnterpriseSearchAggregatorPeopleType: true,
+      }),
+      createUrlMatch({
+        iconUrl: {url: 'https://helloworld-2.com/url.png'},
+        iconPath: fallbackIconPath,
+        isEnterpriseSearchAggregatorPeopleType: true,
+        contents: stringToMojoString16('helloworld-2.com'),
+        destinationUrl: {url: 'https://helloworld-2.com/'},
+        fillIntoEdit: stringToMojoString16('https://helloworld-2.com'),
+      }),
+    ];
+    testProxy.callbackRouterRemote.autocompleteResultChanged({
+      input: stringToMojoString16(realbox.$.input.value.trimStart()),
+      matches,
+      suggestionGroupsMap: {},
+    });
+    assertTrue(await areMatchesShowing());
+
+    const matchEls =
+        realbox.$.matches.shadowRoot!.querySelectorAll('cr-searchbox-match');
+    assertEquals(2, matchEls.length);
+
+    // Test initial icon state for the first match: Google Agentspace logo set
+    // as background image.
+    assertStyle(
+        matchEls[0]!.$.icon.$.icon, 'background-image',
+        `url("chrome:${fallbackIconPath}")`);
+    assertStyle(matchEls[0]!.$.icon.$.icon, '-webkit-mask-image', 'none');
+
+    // Test initial icon state for the second match: Google Agentspace logo set
+    // as background image.
+    assertStyle(
+        matchEls[1]!.$.icon.$.icon, 'background-image',
+        `url("chrome:${fallbackIconPath}")`);
+    assertStyle(matchEls[1]!.$.icon.$.icon, '-webkit-mask-image', 'none');
+
+    // Select the first match.
+    let arrowDownEvent = arrowDown(realbox);
+    assertTrue(arrowDownEvent.defaultPrevented);
+
+    // First match is selected.
+    assertTrue(matchEls[0]!.hasAttribute(Attributes.SELECTED));
+    // Input is updated.
+    assertEquals('https://helloworld.com', realbox.$.input.value);
+    // Realbox icon is updated.
+    assertStyle(
+        realbox.$.icon.$.icon, 'background-image',
+        `url("chrome:${fallbackIconPath}")`);
+    assertStyle(realbox.$.icon.$.icon, '-webkit-mask-image', 'none');
+    assertFalse(realbox.$.icon.$.icon.hidden);
+    assertTrue(realbox.$.icon.$.iconImg.hidden);
+
+    // Select the second match.
+    arrowDownEvent = arrowDown(realbox);
+    assertTrue(arrowDownEvent.defaultPrevented);
+
+    // Second match is selected.
+    assertTrue(matchEls[1]!.hasAttribute(Attributes.SELECTED));
+    // Input is updated.
+    assertEquals('https://helloworld-2.com', realbox.$.input.value);
+    // Realbox icon is updated.
+    assertStyle(
+        realbox.$.icon.$.icon, 'background-image',
+        `url("chrome:${fallbackIconPath}")`);
+    assertStyle(realbox.$.icon.$.icon, '-webkit-mask-image', 'none');
+    assertFalse(realbox.$.icon.$.icon.hidden);
+    assertTrue(realbox.$.icon.$.iconImg.hidden);
+
+    // Mock icon image finishing loading for the the realbox
+    // itself. The icon image should be used and the logo should be hidden.
+    realbox.$.icon.$.iconImg.dispatchEvent(new Event('load'));
+    assertTrue(realbox.$.icon.$.icon.hidden);
+    assertFalse(realbox.$.icon.$.iconImg.hidden);
+  });
 
   test('lens searchboxes always use default icons in searchbox', async () => {
     // Arrange.

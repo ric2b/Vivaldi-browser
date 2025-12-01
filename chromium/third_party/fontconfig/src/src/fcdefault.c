@@ -48,11 +48,16 @@ static const struct {
 FcStrSet *default_langs;
 
 FcStrSet *
-FcGetDefaultLangs (void)
+FcConfigGetDefaultLangs (FcConfig *config)
 {
     FcStrSet *result;
+
+    if (!config) {
+	config = FcConfigGetCurrent();
+    }
+    FcConfigReference (config);
 retry:
-    result = (FcStrSet *)fc_atomic_ptr_get (&default_langs);
+    result = (FcStrSet *)fc_atomic_ptr_get (&config->default_langs);
     if (!result) {
 	char *langs;
 
@@ -80,45 +85,65 @@ retry:
 	    FcStrSetAdd (result, (const FcChar8 *)"en");
 
 	FcRefSetConst (&result->ref);
-	if (!fc_atomic_ptr_cmpexch (&default_langs, NULL, result)) {
+	if (!fc_atomic_ptr_cmpexch (&config->default_langs, NULL, result)) {
 	    FcRefInit (&result->ref, 1);
 	    FcStrSetDestroy (result);
 	    goto retry;
 	}
     }
+    FcConfigDestroy (config);
 
     return result;
 }
 
-static FcChar8 *default_lang; /* MT-safe */
+FcStrSet *
+FcGetDefaultLangs (void)
+{
+    return FcConfigGetDefaultLangs (NULL);
+}
 
 FcChar8 *
-FcGetDefaultLang (void)
+FcConfigGetDefaultLang (FcConfig *config)
 {
     FcChar8 *lang;
+
+    if (!config) {
+	config = FcConfigGetCurrent();
+    }
+    FcConfigReference (config);
 retry:
-    lang = fc_atomic_ptr_get (&default_lang);
+    lang = fc_atomic_ptr_get (&config->default_lang);
     if (!lang) {
-	FcStrSet *langs = FcGetDefaultLangs();
+	FcStrSet *langs = FcConfigGetDefaultLangs (config);
 	lang = FcStrdup (langs->strs[0]);
 
-	if (!fc_atomic_ptr_cmpexch (&default_lang, NULL, lang)) {
+	if (!fc_atomic_ptr_cmpexch (&config->default_lang, NULL, lang)) {
 	    free (lang);
 	    goto retry;
 	}
     }
+    FcConfigDestroy (config);
 
     return lang;
 }
 
-static FcChar8 *default_prgname;
+FcChar8 *
+FcGetDefaultLang (void)
+{
+    return FcConfigGetDefaultLang (NULL);
+}
 
 FcChar8 *
-FcGetPrgname (void)
+FcConfigGetPrgname (FcConfig *config)
 {
     FcChar8 *prgname;
+
+    if (!config) {
+	config = FcConfigGetCurrent();
+    }
+    FcConfigReference (config);
 retry:
-    prgname = fc_atomic_ptr_get (&default_prgname);
+    prgname = fc_atomic_ptr_get (&config->prgname);
     if (!prgname) {
 #ifdef _WIN32
 	char buf[MAX_PATH + 1];
@@ -197,26 +222,37 @@ retry:
 	    free (p);
 #endif
 
-	if (!fc_atomic_ptr_cmpexch (&default_prgname, NULL, prgname)) {
+	if (!fc_atomic_ptr_cmpexch (&config->prgname, NULL, prgname)) {
 	    free (prgname);
 	    goto retry;
 	}
     }
 
-    if (prgname && !prgname[0])
-	return NULL;
+    if (prgname && !prgname[0]) {
+	prgname = NULL;
+    }
+    FcConfigDestroy (config);
 
     return prgname;
 }
 
-static FcChar8 *default_desktop_name;
+FcChar8 *
+FcGetPrgname (void)
+{
+    return FcConfigGetPrgname (NULL);
+}
 
 FcChar8 *
-FcGetDesktopName (void)
+FcConfigGetDesktopName (FcConfig *config)
 {
     FcChar8 *desktop_name;
+
+    if (!config) {
+	config = FcConfigGetCurrent();
+    }
+    FcConfigReference (config);
 retry:
-    desktop_name = fc_atomic_ptr_get (&default_desktop_name);
+    desktop_name = fc_atomic_ptr_get (&config->desktop_name);
     if (!desktop_name) {
 	char *s = getenv ("XDG_CURRENT_DESKTOP");
 
@@ -230,54 +266,35 @@ retry:
 	    return NULL;
 	}
 
-	if (!fc_atomic_ptr_cmpexch (&default_desktop_name, NULL, desktop_name)) {
+	if (!fc_atomic_ptr_cmpexch (&config->desktop_name, NULL, desktop_name)) {
 	    free (desktop_name);
 	    goto retry;
 	}
     }
-    if (desktop_name && !desktop_name[0])
-	return NULL;
+    if (desktop_name && !desktop_name[0]) {
+	desktop_name = NULL;
+    }
+    FcConfigDestroy (config);
 
     return desktop_name;
 }
 
-void
-FcDefaultFini (void)
+FcChar8 *
+FcGetDesktopName (void)
 {
-    FcChar8  *lang;
-    FcStrSet *langs;
-    FcChar8  *prgname;
-    FcChar8  *desktop;
-
-    lang = fc_atomic_ptr_get (&default_lang);
-    if (lang && fc_atomic_ptr_cmpexch (&default_lang, lang, NULL)) {
-	free (lang);
-    }
-
-    langs = fc_atomic_ptr_get (&default_langs);
-    if (langs && fc_atomic_ptr_cmpexch (&default_langs, langs, NULL)) {
-	FcRefInit (&langs->ref, 1);
-	FcStrSetDestroy (langs);
-    }
-
-    prgname = fc_atomic_ptr_get (&default_prgname);
-    if (prgname && fc_atomic_ptr_cmpexch (&default_prgname, prgname, NULL)) {
-	free (prgname);
-    }
-
-    desktop = fc_atomic_ptr_get (&default_desktop_name);
-    if (desktop && fc_atomic_ptr_cmpexch (&default_desktop_name, desktop, NULL)) {
-	free (desktop);
-    }
+    return FcConfigGetDesktopName (NULL);
 }
 
 void
-FcDefaultSubstitute (FcPattern *pattern)
+FcConfigSetDefaultSubstitute (FcConfig  *config,
+                              FcPattern *pattern)
 {
     FcPatternIter iter;
     FcValue       v, namelang, v2;
     int           i;
     double        dpi, size, scale, pixelsize;
+
+    config = FcConfigReference (config);
 
     if (!FcPatternFindObjectIter (pattern, &iter, FC_WEIGHT_OBJECT))
 	FcPatternObjectAddInteger (pattern, FC_WEIGHT_OBJECT, FC_WEIGHT_NORMAL);
@@ -331,7 +348,7 @@ FcDefaultSubstitute (FcPattern *pattern)
 	FcPatternObjectAddInteger (pattern, FC_HINT_STYLE_OBJECT, FC_HINT_FULL);
 
     if (!FcPatternFindObjectIter (pattern, &iter, FC_NAMELANG_OBJECT))
-	FcPatternObjectAddString (pattern, FC_NAMELANG_OBJECT, FcGetDefaultLang());
+	FcPatternObjectAddString (pattern, FC_NAMELANG_OBJECT, FcConfigGetDefaultLang (config));
 
     /* shouldn't be failed. */
     FcPatternObjectGet (pattern, FC_NAMELANG_OBJECT, 0, &namelang);
@@ -362,19 +379,27 @@ FcDefaultSubstitute (FcPattern *pattern)
     }
 
     if (FcPatternObjectGet (pattern, FC_PRGNAME_OBJECT, 0, &v) == FcResultNoMatch) {
-	FcChar8 *prgname = FcGetPrgname();
+	FcChar8 *prgname = FcConfigGetPrgname (config);
 	if (prgname)
 	    FcPatternObjectAddString (pattern, FC_PRGNAME_OBJECT, prgname);
     }
 
     if (FcPatternObjectGet (pattern, FC_DESKTOP_NAME_OBJECT, 0, &v) == FcResultNoMatch) {
-	FcChar8 *desktop = FcGetDesktopName();
+	FcChar8 *desktop = FcConfigGetDesktopName (config);
 	if (desktop)
 	    FcPatternObjectAddString (pattern, FC_DESKTOP_NAME_OBJECT, desktop);
     }
 
     if (!FcPatternFindObjectIter (pattern, &iter, FC_ORDER_OBJECT))
 	FcPatternObjectAddInteger (pattern, FC_ORDER_OBJECT, 0);
+
+    FcConfigDestroy (config);
+}
+
+void
+FcDefaultSubstitute (FcPattern *pattern)
+{
+    FcConfigSetDefaultSubstitute (NULL, pattern);
 }
 #define __fcdefault__
 #include "fcaliastail.h"

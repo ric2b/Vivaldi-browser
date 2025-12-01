@@ -114,7 +114,6 @@ export class TabbedPane extends Common.ObjectWrapper.eventMixin<EventTypes, type
   private focusedPlaceholderElement?: Element;
   private placeholderContainerElement?: HTMLElement;
   private lastSelectedOverflowTab?: TabbedPaneTab;
-  private overflowDisabled?: boolean;
   private measuredDropDownButtonWidth?: number;
   private leftToolbarInternal?: Toolbar;
   private rightToolbarInternal?: Toolbar;
@@ -122,7 +121,7 @@ export class TabbedPane extends Common.ObjectWrapper.eventMixin<EventTypes, type
   private automaticReorder?: boolean;
 
   constructor(element?: HTMLElement) {
-    super(true, undefined, element);
+    super(element, {useShadowDom: true});
     this.registerRequiredCSS(tabbedPaneStyles);
     this.element.classList.add('tabbed-pane');
     this.contentElement.classList.add('tabbed-pane-shadow');
@@ -533,6 +532,11 @@ export class TabbedPane extends Common.ObjectWrapper.eventMixin<EventTypes, type
       this.selectTab(effectiveTab.id);
     }
     this.updateTabElements();
+    this.dispatchEventToListeners(Events.PaneVisibilityChanged, {isVisible: true});
+  }
+
+  override wasHidden(): void {
+    this.dispatchEventToListeners(Events.PaneVisibilityChanged, {isVisible: false});
   }
 
   makeTabSlider(): void {
@@ -721,10 +725,6 @@ export class TabbedPane extends Common.ObjectWrapper.eventMixin<EventTypes, type
     return numTabsShown;
   }
 
-  disableOverflowMenu(): void {
-    this.overflowDisabled = true;
-  }
-
   private updateTabsDropDown(): void {
     const tabsToShowIndexes =
         this.tabsToShowIndexes(this.tabs, this.tabsHistory, this.totalWidth(), this.measuredDropDownButtonWidth || 0);
@@ -746,9 +746,7 @@ export class TabbedPane extends Common.ObjectWrapper.eventMixin<EventTypes, type
       }
     }
 
-    if (!this.overflowDisabled) {
-      this.maybeShowDropDown(tabsToShowIndexes.length !== this.tabs.length);
-    }
+    this.maybeShowDropDown(tabsToShowIndexes.length !== this.tabs.length);
   }
 
   private maybeShowDropDown(hasMoreTabs: boolean): void {
@@ -760,7 +758,7 @@ export class TabbedPane extends Common.ObjectWrapper.eventMixin<EventTypes, type
   }
 
   private measureDropDownButton(): void {
-    if (this.overflowDisabled || this.measuredDropDownButtonWidth) {
+    if (this.measuredDropDownButtonWidth) {
       return;
     }
     this.dropDownButton.classList.add('measuring');
@@ -1025,6 +1023,7 @@ export enum Events {
   TabSelected = 'TabSelected',
   TabClosed = 'TabClosed',
   TabOrderChanged = 'TabOrderChanged',
+  PaneVisibilityChanged = 'PaneVisibilityChanged',
   /* eslint-enable @typescript-eslint/naming-convention */
 }
 
@@ -1033,6 +1032,7 @@ export interface EventTypes {
   [Events.TabSelected]: EventData;
   [Events.TabClosed]: EventData;
   [Events.TabOrderChanged]: EventData;
+  [Events.PaneVisibilityChanged]: {isVisible: boolean};
 }
 
 export class TabbedPaneTab {
@@ -1243,6 +1243,7 @@ export class TabbedPaneTab {
       tabElement.classList.add('measuring');
     } else {
       tabElement.addEventListener('click', this.tabClicked.bind(this), false);
+      tabElement.addEventListener('keydown', this.tabKeyDown.bind(this), false);
       tabElement.addEventListener('auxclick', this.tabClicked.bind(this), false);
       tabElement.addEventListener('mousedown', this.tabMouseDown.bind(this), false);
       tabElement.addEventListener('mouseup', this.tabMouseUp.bind(this), false);
@@ -1292,6 +1293,19 @@ export class TabbedPaneTab {
   private isCloseIconClicked(element: HTMLElement): boolean {
     return element?.classList.contains('tabbed-pane-close-button') ||
         element?.parentElement?.classList.contains('tabbed-pane-close-button') || false;
+  }
+
+  private tabKeyDown(ev: Event): void {
+    const event = ev as KeyboardEvent;
+    switch (event.key) {
+      case 'Enter':
+      case ' ':
+        if (this.isCloseIconClicked(event.target as HTMLElement)) {
+          this.closeTabs([this.id]);
+          ev.consume(true);
+          return;
+        }
+    }
   }
 
   private tabClicked(event: MouseEvent): void {

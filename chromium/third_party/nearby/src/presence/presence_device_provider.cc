@@ -17,6 +17,7 @@
 #include <optional>
 #include <string>
 #include <vector>
+
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
 #include "absl/types/variant.h"
@@ -50,8 +51,8 @@ std::string AuthenticationErrorToString(AuthenticationStatus status) {
     case AuthenticationStatus::kFailure:
       return "AuthenticationStatus::kFailure";
   }
-  NEARBY_LOGS(ERROR) << "Unexpected value for AuthenticationStatus: "
-                     << static_cast<int>(status);
+  LOG(ERROR) << "Unexpected value for AuthenticationStatus: "
+             << static_cast<int>(status);
   return "AuthenticationStatus::kUnknown";
 }
 
@@ -131,16 +132,14 @@ AuthenticationStatus PresenceDeviceProvider::AuthenticateAsInitiator(
                                                &shared_secret](
                                                   auto status_or_credentials) {
         if (!status_or_credentials.ok()) {
-          NEARBY_LOGS(INFO)
-              << __func__ << ": failure to fetch local credentials";
+          LOG(INFO) << __func__ << ": failure to fetch local credentials";
           response.Set(AuthenticationStatus::kFailure);
           return;
         }
 
         auto credential = GetValidCredential(status_or_credentials.value());
         if (!credential.has_value()) {
-          NEARBY_LOGS(INFO)
-              << __func__ << ": failure to find a valid local credential";
+          LOG(INFO) << __func__ << ": failure to find a valid local credential";
           response.Set(AuthenticationStatus::kFailure);
           return;
         }
@@ -171,12 +170,12 @@ AuthenticationStatus PresenceDeviceProvider::AuthenticateAsInitiator(
         response.Set(AuthenticationStatus::kSuccess);
       }});
 
-  NEARBY_LOGS(INFO) << __func__ << ": Waiting for future to complete";
+  LOG(INFO) << __func__ << ": Waiting for future to complete";
   ExceptionOr<AuthenticationStatus> result = response.Get();
   CHECK(result.ok());
 
-  NEARBY_LOGS(INFO) << "Future:[" << __func__ << "] completed with status:"
-                    << AuthenticationErrorToString(result.result());
+  LOG(INFO) << "Future:[" << __func__ << "] completed with status:"
+            << AuthenticationErrorToString(result.result());
   return result.result();
 }
 
@@ -192,7 +191,7 @@ bool PresenceDeviceProvider::WriteToRemoteDevice(
       static_cast<const PresenceDevice*>(&remote_device);
   auto shared_credential = remote_presence_device->GetDecryptSharedCredential();
   if (!shared_credential.has_value()) {
-    NEARBY_LOGS(INFO)
+    LOG(INFO)
         << __func__
         << ": failure due to no decrypt shared credential from remote device";
     return false;
@@ -203,8 +202,7 @@ bool PresenceDeviceProvider::WriteToRemoteDevice(
           /*ukey2_secret=*/shared_secret, /*local_credential=*/local_credential,
           /*shared_credential=*/shared_credential.value());
   if (!status_or_initiator_data.ok()) {
-    NEARBY_LOGS(INFO) << __func__
-                      << ": failure to build signed message as initiator";
+    LOG(INFO) << __func__ << ": failure to build signed message as initiator";
     return false;
   }
 
@@ -232,8 +230,8 @@ bool PresenceDeviceProvider::ReadAndVerifyRemoteDeviceData(
                                                &shared_secret](
                                                   auto status_or_credentials) {
         if (!status_or_credentials.ok()) {
-          NEARBY_LOGS(INFO)
-              << __func__ << ": failure to fetch local public credentials";
+          LOG(INFO) << __func__
+                    << ": failure to fetch local public credentials";
           read_and_verify_result.Set(/*success=*/false);
           return;
         }
@@ -244,7 +242,7 @@ bool PresenceDeviceProvider::ReadAndVerifyRemoteDeviceData(
             /*ukey2_secret=*/shared_secret,
             /*shared_credential=*/status_or_credentials.value());
         if (!status.ok()) {
-          NEARBY_LOGS(INFO) << __func__ << ": failure to verify remote device";
+          LOG(INFO) << __func__ << ": failure to verify remote device";
           read_and_verify_result.Set(/*success=*/false);
           return;
         }
@@ -252,10 +250,10 @@ bool PresenceDeviceProvider::ReadAndVerifyRemoteDeviceData(
         read_and_verify_result.Set(/*success=*/true);
       }});
 
-  NEARBY_LOGS(INFO) << __func__ << ": Waiting for future to complete";
+  LOG(INFO) << __func__ << ": Waiting for future to complete";
   ExceptionOr<bool> result = read_and_verify_result.Get();
-  NEARBY_LOGS(INFO) << "Future:[" << __func__
-                    << "] completed with status:" << result.result();
+  LOG(INFO) << "Future:[" << __func__
+            << "] completed with status:" << result.result();
   return result.result();
 }
 

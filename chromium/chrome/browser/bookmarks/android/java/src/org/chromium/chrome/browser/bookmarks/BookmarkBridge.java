@@ -689,22 +689,6 @@ class BookmarkBridge {
     }
 
     /**
-     * Fetches the bookmarks of the given folder. This is an always-synchronous version of another
-     * getBookmarksForFolder function.
-     *
-     * @param folderId The parent folder id.
-     * @return Bookmarks of the given folder.
-     */
-    public List<BookmarkItem> getBookmarksForFolder(BookmarkId folderId) {
-        ThreadUtils.assertOnUiThread();
-        if (mNativeBookmarkBridge == 0) return new ArrayList<>();
-        assert mIsNativeBookmarkModelLoaded;
-        List<BookmarkItem> result = new ArrayList<>();
-        BookmarkBridgeJni.get().getBookmarksForFolder(mNativeBookmarkBridge, folderId, result);
-        return result;
-    }
-
-    /**
      * Check whether the given folder should be visible. This is for top permanent folders that we
      * want to hide when there is no child.
      *
@@ -1207,10 +1191,6 @@ class BookmarkBridge {
 
         boolean doesBookmarkExist(long nativeBookmarkBridge, long id, int type);
 
-        // TODO(crbug.com/41487884): Remove this method.
-        void getBookmarksForFolder(
-                long nativeBookmarkBridge, BookmarkId folderId, List<BookmarkItem> bookmarksList);
-
         boolean isFolderVisible(long nativeBookmarkBridge, long id, int type);
 
         BookmarkId addFolder(
@@ -1284,6 +1264,9 @@ class BookmarkBridge {
 
         void setBookmarkDescription(long nativeBookmarkBridge, BookmarkBridge caller,
                 long id, int type, String description);
+        public void setBookmarkDisplayURL(long nativeBookmarkBridge, BookmarkBridge caller,
+                long id, int type, String url);
+
         void setBookmarkNickName(
                 long nativeBookmarkBridge, BookmarkBridge caller, long id, int type, String nickName);
         void setBookmarkSpeedDial(long nativeBookmarkBridge, BookmarkBridge caller,
@@ -1319,12 +1302,12 @@ class BookmarkBridge {
     /** Vivaldi */
     @CalledByNative
     private static BookmarkItem createVivaldiBookmarkItem(long id, int type,
-            String title, GURL url, boolean isFolder, long parentId,
+            String title, GURL url, GURL displayURL, boolean isFolder, long parentId,
             int parentIdType, boolean isEditable, boolean isManaged,
             long dateAdded, boolean read,
             boolean isSpeeddial, String nickName, String description, int themeColor,
             long created, String thumbnailPath, String guid) {
-        return new BookmarkItem(new BookmarkId(id, type), title, url, isFolder,
+        return new BookmarkItem(new BookmarkId(id, type), title, url, displayURL, isFolder,
                 new BookmarkId(parentId, parentIdType), isEditable, isManaged,
                 dateAdded, read,
                 isSpeeddial, nickName, description, themeColor, created, thumbnailPath, guid);
@@ -1348,6 +1331,16 @@ class BookmarkBridge {
         assert mIsNativeBookmarkModelLoaded;
         BookmarkBridgeJni.get().setBookmarkDescription(
                 mNativeBookmarkBridge, BookmarkBridge.this, id.getId(), id.getType(), description);
+    }
+
+    /** Vivaldi
+     * Set the display url of the given bookmark.
+     * Use to remove display url by setting empty when user edits the url of a partner bookmark
+     */
+    public void setBookmarkDisplayURL(BookmarkId id, String url) {
+        assert mIsNativeBookmarkModelLoaded;
+        BookmarkBridgeJni.get().setBookmarkDisplayURL(
+                mNativeBookmarkBridge, BookmarkBridge.this, id.getId(), id.getType(), url);
     }
 
     /** Vivaldi

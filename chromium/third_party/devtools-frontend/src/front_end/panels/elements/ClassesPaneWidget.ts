@@ -47,7 +47,7 @@ export class ClassesPaneWidget extends UI.Widget.Widget {
   private previousTarget: SDK.DOMModel.DOMNode|null;
 
   constructor() {
-    super(true);
+    super({useShadowDom: true});
     this.registerRequiredCSS(classesPaneWidgetStyles);
     this.contentElement.className = 'styles-element-classes-pane';
     this.contentElement.setAttribute('jslog', `${VisualLogging.pane('elements-classes')}`);
@@ -121,7 +121,7 @@ export class ClassesPaneWidget extends UI.Widget.Widget {
     const joinClassString = classNames.join(' ');
     const announcementString = classNames.length > 1 ? i18nString(UIStrings.classesSAdded, {PH1: joinClassString}) :
                                                        i18nString(UIStrings.classSAdded, {PH1: joinClassString});
-    UI.ARIAUtils.alert(announcementString);
+    UI.ARIAUtils.LiveAnnouncer.alert(announcementString);
 
     this.installNodeClasses(node);
     this.update();

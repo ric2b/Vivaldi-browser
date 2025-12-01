@@ -151,6 +151,12 @@ export interface AidaClientResult {
   detail?: string;
 }
 
+export interface AidaCodeCompleteResult {
+  response?: string;
+  error?: string;
+  detail?: string;
+}
+
 export interface VisualElementImpression {
   id: number;
   type: number;
@@ -204,6 +210,11 @@ export interface SettingAccessEvent {
   numeric_value?: number;
   // eslint-disable-next-line @typescript-eslint/naming-convention
   string_value?: number;
+}
+
+export interface FunctionCallEvent {
+  name: number;
+  context?: number;
 }
 
 // While `EventDescriptors` are used to dynamically dispatch host binding events,
@@ -344,6 +355,8 @@ export interface InspectorFrontendHostAPI {
 
   recordUserMetricsAction(umaName: string): void;
 
+  recordNewBadgeUsage(featureName: string): void;
+
   sendMessageToBackend(message: string): void;
 
   setDevicesDiscoveryConfig(config: Adb.Config): void;
@@ -388,6 +401,7 @@ export interface InspectorFrontendHostAPI {
 
   doAidaConversation: (request: string, streamId: number, cb: (result: DoAidaConversationResult) => void) => void;
   registerAidaClientEvent: (request: string, cb: (result: AidaClientResult) => void) => void;
+  aidaCodeComplete: (request: string, cb: (result: AidaCodeCompleteResult) => void) => void;
 
   recordImpression(event: ImpressionEvent): void;
   recordClick(event: ClickEvent): void;
@@ -396,6 +410,7 @@ export interface InspectorFrontendHostAPI {
   recordChange(event: ChangeEvent): void;
   recordKeyDown(event: KeyDownEvent): void;
   recordSettingAccess(event: SettingAccessEvent): void;
+  recordFunctionCall(event: FunctionCallEvent): void;
 }
 
 export interface AcceleratorDescriptor {
@@ -415,6 +430,8 @@ export interface ContextMenuDescriptor {
   subItems?: ContextMenuDescriptor[];
   shortcut?: string;
   jslogContext?: string;
+  /** Setting the featureName requests showing a new badge tied to that feature . */
+  featureName?: string;
 }
 export interface LoadNetworkResourceResult {
   statusCode: number;
@@ -467,7 +484,6 @@ export const enum EnumeratedHistogram {
   // LINT.IfChange(EnumeratedHistogram)
   ActionTaken = 'DevTools.ActionTaken',
   PanelShown = 'DevTools.PanelShown',
-  SidebarPaneShown = 'DevTools.SidebarPaneShown',
   KeyboardShortcutFired = 'DevTools.KeyboardShortcutFired',
   IssueCreated = 'DevTools.IssueCreated',
   IssuesPanelIssueExpanded = 'DevTools.IssuesPanelIssueExpanded',
@@ -500,6 +516,5 @@ export const enum EnumeratedHistogram {
   LighthouseCategoryUsed = 'DevTools.LighthouseCategoryUsed',
   SwatchActivated = 'DevTools.SwatchActivated',
   AnimationPlaybackRateChanged = 'DevTools.AnimationPlaybackRateChanged',
-  AnimationPointDragged = 'DevTools.AnimationPointDragged',
   // LINT.ThenChange(/front_end/devtools_compatibility.js:EnumeratedHistogram)
 }

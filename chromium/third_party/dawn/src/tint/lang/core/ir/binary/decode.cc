@@ -35,6 +35,7 @@
 #include "src/tint/lang/core/ir/builder.h"
 #include "src/tint/lang/core/ir/control_instruction.h"
 #include "src/tint/lang/core/ir/module.h"
+#include "src/tint/lang/core/type/binding_array.h"
 #include "src/tint/lang/core/type/builtin_structs.h"
 #include "src/tint/lang/core/type/depth_multisampled_texture.h"
 #include "src/tint/lang/core/type/depth_texture.h"
@@ -688,6 +689,10 @@ struct Decoder {
                 return CreateTypeAtomic(type_in.atomic());
             case pb::Type::KindCase::kArray:
                 return CreateTypeArray(type_in.array());
+            case pb::Type::KindCase::kBindingArray:
+                return CreateTypeBindingArray(type_in.binding_array());
+            case pb::Type::KindCase::kTexelBuffer:
+                return CreateTypeTexelBuffer(type_in.texel_buffer());
             case pb::Type::KindCase::kDepthTexture:
                 return CreateTypeDepthTexture(type_in.depth_texture());
             case pb::Type::KindCase::kSampledTexture:
@@ -742,6 +747,10 @@ struct Decoder {
                 return mod_out_.Types().f32();
             case pb::TypeBasic::f16:
                 return mod_out_.Types().f16();
+            case pb::TypeBasic::i8:
+                return mod_out_.Types().i8();
+            case pb::TypeBasic::u8:
+                return mod_out_.Types().u8();
 
             case pb::TypeBasic::TypeBasic_INT_MIN_SENTINEL_DO_NOT_USE_:
             case pb::TypeBasic::TypeBasic_INT_MAX_SENTINEL_DO_NOT_USE_:
@@ -819,14 +828,6 @@ struct Decoder {
             auto index = static_cast<uint32_t>(members_out.Length());
             auto align = member_in.align();
             auto size = member_in.size();
-            if (DAWN_UNLIKELY(align == 0)) {
-                err_ << "struct member must have non-zero alignment\n";
-                align = 1;
-            }
-            if (DAWN_UNLIKELY(size == 0)) {
-                err_ << "struct member must have non-zero size\n";
-                size = 1;
-            }
             core::IOAttributes attributes_out{};
             if (member_in.has_attributes()) {
                 auto& attributes_in = member_in.attributes();
@@ -870,15 +871,6 @@ struct Decoder {
         auto* element = Type(array_in.element());
         uint32_t stride = array_in.stride();
         uint32_t count = array_in.count();
-        if (element->Align() == 0 || element->Size() == 0) {
-            err_ << "cannot create an array of an unsized type\n";
-            return mod_out_.Types().invalid();
-        }
-        uint32_t implicit_stride = tint::RoundUp(element->Align(), element->Size());
-        if (stride < implicit_stride) {
-            err_ << "array element stride is smaller than the implicit stride\n";
-            return mod_out_.Types().invalid();
-        }
         if (count >= internal_limits::kMaxArrayElementCount) {
             err_ << "array count (" << count << ") must be less than "
                  << internal_limits::kMaxArrayElementCount << "\n";
@@ -887,6 +879,19 @@ struct Decoder {
 
         return count > 0 ? mod_out_.Types().array(element, count, stride)
                          : mod_out_.Types().runtime_array(element, stride);
+    }
+
+    const type::Type* CreateTypeBindingArray(const pb::TypeBindingArray& array_in) {
+        auto* element = Type(array_in.element());
+        uint32_t count = array_in.count();
+
+        if (count >= internal_limits::kMaxArrayElementCount) {
+            err_ << "binding_array count (" << count << ") must be less than "
+                 << internal_limits::kMaxArrayElementCount << "\n";
+            return mod_out_.Types().invalid();
+        }
+
+        return mod_out_.Types().binding_array(element, count);
     }
 
     const type::Type* CreateTypeDepthTexture(const pb::TypeDepthTexture& texture_in) {
@@ -926,6 +931,12 @@ struct Decoder {
         auto texel_format = TexelFormat(texture_in.texel_format());
         auto access = AccessControl(texture_in.access());
         return mod_out_.Types().storage_texture(dimension, texel_format, access);
+    }
+
+    const type::TexelBuffer* CreateTypeTexelBuffer(const pb::TypeTexelBuffer& buffer_in) {
+        auto texel_format = TexelFormat(buffer_in.texel_format());
+        auto access = AccessControl(buffer_in.access());
+        return mod_out_.Types().texel_buffer(texel_format, access);
     }
 
     const type::ExternalTexture* CreateTypeExternalTexture(const pb::TypeExternalTexture&) {
@@ -1439,6 +1450,50 @@ struct Decoder {
                 return core::TexelFormat::kRgba8Uint;
             case pb::TexelFormat::rgba8_unorm:
                 return core::TexelFormat::kRgba8Unorm;
+            case pb::TexelFormat::r8_snorm:
+                return core::TexelFormat::kR8Snorm;
+            case pb::TexelFormat::r8_uint:
+                return core::TexelFormat::kR8Uint;
+            case pb::TexelFormat::r8_sint:
+                return core::TexelFormat::kR8Sint;
+            case pb::TexelFormat::rg8_unorm:
+                return core::TexelFormat::kRg8Unorm;
+            case pb::TexelFormat::rg8_snorm:
+                return core::TexelFormat::kRg8Snorm;
+            case pb::TexelFormat::rg8_uint:
+                return core::TexelFormat::kRg8Uint;
+            case pb::TexelFormat::rg8_sint:
+                return core::TexelFormat::kRg8Sint;
+            case pb::TexelFormat::r16_uint:
+                return core::TexelFormat::kR16Uint;
+            case pb::TexelFormat::r16_sint:
+                return core::TexelFormat::kR16Sint;
+            case pb::TexelFormat::r16_float:
+                return core::TexelFormat::kR16Float;
+            case pb::TexelFormat::rg16_uint:
+                return core::TexelFormat::kRg16Uint;
+            case pb::TexelFormat::rg16_sint:
+                return core::TexelFormat::kRg16Sint;
+            case pb::TexelFormat::rg16_float:
+                return core::TexelFormat::kRg16Float;
+            case pb::TexelFormat::rgb10a2_uint:
+                return core::TexelFormat::kRgb10A2Uint;
+            case pb::TexelFormat::rgb10a2_unorm:
+                return core::TexelFormat::kRgb10A2Unorm;
+            case pb::TexelFormat::rg11b10_ufloat:
+                return core::TexelFormat::kRg11B10Ufloat;
+            case pb::TexelFormat::r16_unorm:
+                return core::TexelFormat::kR16Unorm;
+            case pb::TexelFormat::r16_snorm:
+                return core::TexelFormat::kR16Snorm;
+            case pb::TexelFormat::rg16_unorm:
+                return core::TexelFormat::kRg16Unorm;
+            case pb::TexelFormat::rg16_snorm:
+                return core::TexelFormat::kRg16Snorm;
+            case pb::TexelFormat::rgba16_unorm:
+                return core::TexelFormat::kRgba16Unorm;
+            case pb::TexelFormat::rgba16_snorm:
+                return core::TexelFormat::kRgba16Snorm;
 
             case pb::TexelFormat::TexelFormat_INT_MIN_SENTINEL_DO_NOT_USE_:
             case pb::TexelFormat::TexelFormat_INT_MAX_SENTINEL_DO_NOT_USE_:
@@ -1552,6 +1607,8 @@ struct Decoder {
                 return core::BuiltinValue::kWorkgroupId;
             case pb::BuiltinValue::clip_distances:
                 return core::BuiltinValue::kClipDistances;
+            case pb::BuiltinValue::primitive_id:
+                return core::BuiltinValue::kPrimitiveId;
             case pb::BuiltinValue::BuiltinValue_INT_MIN_SENTINEL_DO_NOT_USE_:
             case pb::BuiltinValue::BuiltinValue_INT_MAX_SENTINEL_DO_NOT_USE_:
                 break;
@@ -1863,7 +1920,9 @@ struct Decoder {
             case pb::BuiltinFn::subgroup_matrix_multiply:
                 return core::BuiltinFn::kSubgroupMatrixMultiply;
             case pb::BuiltinFn::subgroup_matrix_multiply_accumulate:
-                return core::BuiltinFn::kSubgroupMatrixMultiply;
+                return core::BuiltinFn::kSubgroupMatrixMultiplyAccumulate;
+            case pb::BuiltinFn::print:
+                return core::BuiltinFn::kPrint;
 
             case pb::BuiltinFn::BuiltinFn_INT_MIN_SENTINEL_DO_NOT_USE_:
             case pb::BuiltinFn::BuiltinFn_INT_MAX_SENTINEL_DO_NOT_USE_:

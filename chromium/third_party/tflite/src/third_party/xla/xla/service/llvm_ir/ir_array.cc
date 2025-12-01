@@ -63,7 +63,7 @@ void IrArray::Index::Delinearize(std::vector<llvm::Value*>* multidim,
                                  llvm::IRBuilderBase* b) const {
   int64_t divisor = 1;
   const Layout& layout = shape.layout();
-  for (int64_t i = 0; i < layout.minor_to_major_size(); ++i) {
+  for (int64_t i = 0; i < layout.minor_to_major().size(); ++i) {
     int64_t dimension = layout.minor_to_major(i);
     int64_t size_of_current_dimension = shape.dimensions(dimension);
 
@@ -78,7 +78,7 @@ void IrArray::Index::Delinearize(std::vector<llvm::Value*>* multidim,
     // memory lives in one big allocation, so cuda-memcheck can't detect
     // out-of-bounds accesses.
     auto* quot = b->CreateUDiv(linear, GetConstantWithIndexType(divisor));
-    if (i < layout.minor_to_major_size() - 1) {
+    if (i < layout.minor_to_major().size() - 1) {
       (*multidim)[dimension] = b->CreateURem(
           quot, GetConstantWithIndexType(size_of_current_dimension));
     } else {
@@ -96,7 +96,7 @@ void IrArray::Index::Delinearize(std::vector<llvm::Value*>* multidim,
   CHECK_EQ(multidim_.size(), shape.dimensions().size());
   llvm::Value* divisor = GetConstantWithIndexType(1);
   const Layout& layout = shape.layout();
-  for (int64_t i = 0; i < layout.minor_to_major_size(); ++i) {
+  for (int64_t i = 0; i < layout.minor_to_major().size(); ++i) {
     int64_t dimension = layout.minor_to_major(i);
 
     // If i is not the last dimension, compute
@@ -104,7 +104,7 @@ void IrArray::Index::Delinearize(std::vector<llvm::Value*>* multidim,
     // If i is the last dimension, we can skip the mod, because we assume that
     // linear is in bounds.
     auto* quot = b->CreateUDiv(linear, divisor, "quot");
-    if (i < layout.minor_to_major_size() - 1) {
+    if (i < layout.minor_to_major().size() - 1) {
       llvm::Value* casted_dynamic_dim =
           b->CreateIntCast(dynamic_dims[dimension], quot->getType(),
                            /*isSigned=*/true);
@@ -326,8 +326,8 @@ IrArray::Index IrArray::Index::SourceIndexOfSlice(
 IrArray::Index IrArray::Index::SourceIndexOfTranspose(
     const Shape& shape, const Shape& operand_shape,
     absl::Span<const int64_t> dimension_mapping) const {
-  std::vector<llvm::Value*> operand_multidim_index =
-      PermuteInverse(multidim(), dimension_mapping);
+  auto operand_multidim_index =
+      PermuteInverse<std::vector<llvm::Value*>>(multidim(), dimension_mapping);
 
   if (linear() != nullptr && LayoutUtil::HasLayout(operand_shape) &&
       LayoutUtil::HasLayout(shape) &&

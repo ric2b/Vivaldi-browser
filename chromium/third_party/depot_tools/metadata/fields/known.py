@@ -20,6 +20,7 @@ import metadata.fields.custom.license
 import metadata.fields.custom.license_file
 import metadata.fields.custom.local_modifications
 import metadata.fields.custom.mitigated
+import metadata.fields.custom.update_mechanism
 import metadata.fields.custom.url
 import metadata.fields.custom.version
 import metadata.fields.custom.revision
@@ -48,6 +49,8 @@ REVISION = metadata.fields.custom.revision.RevisionField()
 LOCAL_MODIFICATIONS = metadata.fields.custom.local_modifications.LocalModificationsField(
 )
 MITIGATED = metadata.fields.custom.mitigated.MitigatedField()
+UPDATE_MECHANISM = metadata.fields.custom.update_mechanism.UpdateMechanismField(
+)
 
 ALL_FIELDS = (
     NAME,
@@ -66,6 +69,7 @@ ALL_FIELDS = (
     MITIGATED,
     DESCRIPTION,
     LOCAL_MODIFICATIONS,
+    UPDATE_MECHANISM,
 )
 ALL_FIELD_NAMES = {field.get_name() for field in ALL_FIELDS}
 _FIELD_MAPPING = {field.get_name().lower(): field for field in ALL_FIELDS}

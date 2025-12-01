@@ -31,20 +31,8 @@ jobs:
         target: i686-unknown-linux-gnu
 
     - name: Using stable toolchain build the library and run the tests without default features
-      run: cargo +stable test --no-default-features -- --skip test_conformance
+      run: cargo +stable test --no-default-features -- --skip test_conformance --skip sharpyuv
 
     - name: Using stable toolchain build the library without default features for 32-bit target
       if: runner.os == 'Linux'
       run: cargo +stable check --target --target i686-unknown-linux-gnu --no-default-features
-
-    - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
-      with:
-        toolchain: nightly
-        target: i686-unknown-linux-gnu
-
-    - name: Using nightly toolchain build the library and run the tests without default features
-      run: cargo +nightly test --no-default-features -- --skip test_conformance
-
-    - name: Using nightly toolchain build the library without default features for 32-bit target
-      if: runner.os == 'Linux'
-      run: cargo +nightly check --target --target i686-unknown-linux-gnu --no-default-features

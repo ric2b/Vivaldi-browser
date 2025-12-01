@@ -1,152 +1,109 @@
 //
 // f
 //
-RasterizerOrderedTexture2D<uint4> pixel_local_a : register(u1);
-RasterizerOrderedTexture2D<int4> pixel_local_b : register(u6);
-RasterizerOrderedTexture2D<float4> pixel_local_c : register(u3);
-
 struct PixelLocal {
   uint a;
   int b;
   float c;
 };
 
-static PixelLocal P = (PixelLocal)0;
-
-void load_from_pixel_local_storage(float4 my_input) {
-  uint2 rov_texcoord = uint2(my_input.xy);
-  P.a = pixel_local_a.Load(rov_texcoord).x;
-  P.b = pixel_local_b.Load(rov_texcoord).x;
-  P.c = pixel_local_c.Load(rov_texcoord).x;
-}
-
-void store_into_pixel_local_storage(float4 my_input) {
-  uint2 rov_texcoord = uint2(my_input.xy);
-  pixel_local_a[rov_texcoord] = uint4((P.a).xxxx);
-  pixel_local_b[rov_texcoord] = int4((P.b).xxxx);
-  pixel_local_c[rov_texcoord] = float4((P.c).xxxx);
-}
-
-struct tint_symbol_1 {
+struct f_inputs {
   float4 pos : SV_Position;
 };
 
-uint tint_ftou(float v) {
-  return ((v <= 4294967040.0f) ? ((v < 0.0f) ? 0u : uint(v)) : 4294967295u);
+
+static PixelLocal P = (PixelLocal)0;
+RasterizerOrderedTexture2D<uint4> pixel_local_a : register(u1);
+RasterizerOrderedTexture2D<int4> pixel_local_b : register(u6);
+RasterizerOrderedTexture2D<float4> pixel_local_c : register(u3);
+uint tint_f32_to_u32(float value) {
+  return uint(clamp(value, 0.0f, 4294967040.0f));
 }
 
 void f_inner(float4 pos) {
-  P.a = (P.a + tint_ftou(pos.x));
+  uint v = tint_f32_to_u32(pos.x);
+  P.a = (P.a + v);
 }
 
-void f_inner_1(float4 pos) {
-  float4 hlsl_sv_position = pos;
-  load_from_pixel_local_storage(hlsl_sv_position);
-  f_inner(pos);
-  store_into_pixel_local_storage(hlsl_sv_position);
+void f(f_inputs inputs) {
+  uint2 v_1 = uint2(inputs.pos.xy);
+  P.a = pixel_local_a.Load(v_1).x;
+  P.b = pixel_local_b.Load(v_1).x;
+  P.c = pixel_local_c.Load(v_1).x;
+  f_inner(float4(inputs.pos.xyz, (1.0f / inputs.pos.w)));
+  pixel_local_a[v_1] = uint4((P.a).xxxx);
+  pixel_local_b[v_1] = int4((P.b).xxxx);
+  pixel_local_c[v_1] = float4((P.c).xxxx);
 }
 
-void f(tint_symbol_1 tint_symbol) {
-  f_inner_1(float4(tint_symbol.pos.xyz, (1.0f / tint_symbol.pos.w)));
-  return;
-}
 //
 // f2
 //
-RasterizerOrderedTexture2D<uint4> pixel_local_a : register(u1);
-RasterizerOrderedTexture2D<int4> pixel_local_b : register(u6);
-RasterizerOrderedTexture2D<float4> pixel_local_c : register(u3);
-
 struct PixelLocal {
   uint a;
   int b;
   float c;
 };
 
-static PixelLocal P = (PixelLocal)0;
-
-void load_from_pixel_local_storage(float4 my_input) {
-  uint2 rov_texcoord = uint2(my_input.xy);
-  P.a = pixel_local_a.Load(rov_texcoord).x;
-  P.b = pixel_local_b.Load(rov_texcoord).x;
-  P.c = pixel_local_c.Load(rov_texcoord).x;
-}
-
-void store_into_pixel_local_storage(float4 my_input) {
-  uint2 rov_texcoord = uint2(my_input.xy);
-  pixel_local_a[rov_texcoord] = uint4((P.a).xxxx);
-  pixel_local_b[rov_texcoord] = int4((P.b).xxxx);
-  pixel_local_c[rov_texcoord] = float4((P.c).xxxx);
-}
-
-struct tint_symbol_1 {
+struct f2_inputs {
   float4 pos : SV_Position;
 };
 
-int tint_ftoi(float v) {
-  return ((v <= 2147483520.0f) ? ((v < -2147483648.0f) ? -2147483648 : int(v)) : 2147483647);
+
+static PixelLocal P = (PixelLocal)0;
+RasterizerOrderedTexture2D<uint4> pixel_local_a : register(u1);
+RasterizerOrderedTexture2D<int4> pixel_local_b : register(u6);
+RasterizerOrderedTexture2D<float4> pixel_local_c : register(u3);
+int tint_f32_to_i32(float value) {
+  return int(clamp(value, -2147483648.0f, 2147483520.0f));
 }
 
 void f2_inner(float4 pos) {
-  P.b = (P.b + tint_ftoi(pos.x));
+  int v = tint_f32_to_i32(pos.x);
+  P.b = (P.b + v);
 }
 
-void f2_inner_1(float4 pos) {
-  float4 hlsl_sv_position = pos;
-  load_from_pixel_local_storage(hlsl_sv_position);
-  f2_inner(pos);
-  store_into_pixel_local_storage(hlsl_sv_position);
+void f2(f2_inputs inputs) {
+  uint2 v_1 = uint2(inputs.pos.xy);
+  P.a = pixel_local_a.Load(v_1).x;
+  P.b = pixel_local_b.Load(v_1).x;
+  P.c = pixel_local_c.Load(v_1).x;
+  f2_inner(float4(inputs.pos.xyz, (1.0f / inputs.pos.w)));
+  pixel_local_a[v_1] = uint4((P.a).xxxx);
+  pixel_local_b[v_1] = int4((P.b).xxxx);
+  pixel_local_c[v_1] = float4((P.c).xxxx);
 }
 
-void f2(tint_symbol_1 tint_symbol) {
-  f2_inner_1(float4(tint_symbol.pos.xyz, (1.0f / tint_symbol.pos.w)));
-  return;
-}
 //
 // f3
 //
-RasterizerOrderedTexture2D<uint4> pixel_local_a : register(u1);
-RasterizerOrderedTexture2D<int4> pixel_local_b : register(u6);
-RasterizerOrderedTexture2D<float4> pixel_local_c : register(u3);
-
 struct PixelLocal {
   uint a;
   int b;
   float c;
 };
 
-static PixelLocal P = (PixelLocal)0;
-
-void load_from_pixel_local_storage(float4 my_input) {
-  uint2 rov_texcoord = uint2(my_input.xy);
-  P.a = pixel_local_a.Load(rov_texcoord).x;
-  P.b = pixel_local_b.Load(rov_texcoord).x;
-  P.c = pixel_local_c.Load(rov_texcoord).x;
-}
-
-void store_into_pixel_local_storage(float4 my_input) {
-  uint2 rov_texcoord = uint2(my_input.xy);
-  pixel_local_a[rov_texcoord] = uint4((P.a).xxxx);
-  pixel_local_b[rov_texcoord] = int4((P.b).xxxx);
-  pixel_local_c[rov_texcoord] = float4((P.c).xxxx);
-}
-
-struct tint_symbol_1 {
+struct f3_inputs {
   float4 pos : SV_Position;
 };
 
+
+static PixelLocal P = (PixelLocal)0;
+RasterizerOrderedTexture2D<uint4> pixel_local_a : register(u1);
+RasterizerOrderedTexture2D<int4> pixel_local_b : register(u6);
+RasterizerOrderedTexture2D<float4> pixel_local_c : register(u3);
 void f3_inner(float4 pos) {
   P.c = (P.c + pos.x);
 }
 
-void f3_inner_1(float4 pos) {
-  float4 hlsl_sv_position = pos;
-  load_from_pixel_local_storage(hlsl_sv_position);
-  f3_inner(pos);
-  store_into_pixel_local_storage(hlsl_sv_position);
+void f3(f3_inputs inputs) {
+  uint2 v = uint2(inputs.pos.xy);
+  P.a = pixel_local_a.Load(v).x;
+  P.b = pixel_local_b.Load(v).x;
+  P.c = pixel_local_c.Load(v).x;
+  f3_inner(float4(inputs.pos.xyz, (1.0f / inputs.pos.w)));
+  pixel_local_a[v] = uint4((P.a).xxxx);
+  pixel_local_b[v] = int4((P.b).xxxx);
+  pixel_local_c[v] = float4((P.c).xxxx);
 }
 
-void f3(tint_symbol_1 tint_symbol) {
-  f3_inner_1(float4(tint_symbol.pos.xyz, (1.0f / tint_symbol.pos.w)));
-  return;
-}

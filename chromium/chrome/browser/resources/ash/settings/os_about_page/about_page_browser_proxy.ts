@@ -50,7 +50,6 @@ export interface AboutPageUpdateInfo {
 export interface EndOfLifeInfo {
   hasEndOfLife: boolean;
   aboutPageEndOfLifeMessage: string;
-  shouldShowEndOfLifeIncentive: boolean;
   shouldShowOfferText: boolean;
   isExtendedUpdatesDatePassed: boolean;
   isExtendedUpdatesOptInRequired: boolean;
@@ -200,6 +199,8 @@ export interface AboutPageBrowserProxy {
    */
   getChannelInfo(): Promise<ChannelInfo>;
 
+  canChangeFirmware(): Promise<boolean>;
+
   canChangeChannel(): Promise<boolean>;
 
   getVersionInfo(): Promise<VersionInfo>;
@@ -211,11 +212,6 @@ export interface AboutPageBrowserProxy {
    * receive updates.
    */
   getEndOfLifeInfo(): Promise<EndOfLifeInfo>;
-
-  /**
-   * Called when the end of life incentive button is clicked.
-   */
-  endOfLifeIncentiveButtonClicked(): void;
 
   /**
    * Request TPM firmware update status from the browser. It results in one or
@@ -324,6 +320,10 @@ export class AboutPageBrowserProxyImpl implements AboutPageBrowserProxy {
     return sendWithPromise('getChannelInfo');
   }
 
+  canChangeFirmware(): Promise<boolean> {
+    return sendWithPromise('canChangeFirmware');
+  }
+
   canChangeChannel(): Promise<boolean> {
     return sendWithPromise('canChangeChannel');
   }
@@ -338,10 +338,6 @@ export class AboutPageBrowserProxyImpl implements AboutPageBrowserProxy {
 
   getEndOfLifeInfo(): Promise<EndOfLifeInfo> {
     return sendWithPromise('getEndOfLifeInfo');
-  }
-
-  endOfLifeIncentiveButtonClicked(): void {
-    chrome.send('openEndOfLifeIncentive');
   }
 
   checkInternetConnection(): Promise<boolean> {

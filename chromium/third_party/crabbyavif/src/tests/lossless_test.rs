@@ -91,7 +91,7 @@ fn lossless_roundtrip(
         #[cfg(not(feature = "jpeg"))]
         unreachable!();
     };
-    let image = reader.read_frame(&Config {
+    let (image, _) = reader.read_frame(&Config {
         yuv_format: Some(yuv_format),
         matrix_coefficients: Some(matrix_coefficients),
         ..Default::default()

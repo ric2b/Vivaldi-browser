@@ -172,6 +172,10 @@ class CONTENT_EXPORT WebContentsViewAura
       EmptyTextWithUrlInDropDataIsEmptyInOSExchangeDataGetString);
   FRIEND_TEST_ALL_PREFIXES(WebContentsViewAuraTest,
                            UrlInDropDataReturnsUrlInOSExchangeDataGetString);
+  FRIEND_TEST_ALL_PREFIXES(WebContentsViewAuraTest,
+                           IgnoreInputs_OngoingDropGetsCleared);
+  FRIEND_TEST_ALL_PREFIXES(WebContentsViewAuraTest,
+                           EndDragIsCalledAfterAsyncDrop);
 
   class WindowObserver;
 
@@ -223,7 +227,6 @@ class CONTENT_EXPORT WebContentsViewAura
   void SetOverscrollControllerEnabled(bool enabled) override;
   void OnCapturerCountChanged() override;
   void FullscreenStateChanged(bool is_fullscreen) override;
-  void UpdateWindowControlsOverlay(const gfx::Rect& bounding_rect) override;
   BackForwardTransitionAnimationManager*
   GetBackForwardTransitionAnimationManager() override;
   void DestroyBackForwardTransitionAnimationManager() override;
@@ -332,7 +335,7 @@ class CONTENT_EXPORT WebContentsViewAura
 
   // Run when drop callback completes to ensure |drag_in_progess_| is
   // flipped to false before EndDrag runs.
-  void OnDropExit(base::ScopedClosureRunner end_drag_runner);
+  void OnDropExit();
 
   // For unit testing, registers a callback for when a drop operation
   // completes.

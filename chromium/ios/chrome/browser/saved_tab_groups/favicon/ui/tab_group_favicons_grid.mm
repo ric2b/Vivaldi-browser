@@ -190,7 +190,14 @@ using LayoutSides::kTrailing;
 // Makes a new rounded rectangle image view to display as part of the 2×2 grid.
 - (UIImageView*)makeFaviconImageView {
   UIImageView* imageView = [[UIImageView alloc] init];
+
+#if defined(VIVALDI_BUILD)
+  // To support both light and dark mode.
+  imageView.tintColor = UIColor.labelColor;
+#else
   imageView.tintColor = UIColor.whiteColor;
+#endif // End Vivaldi
+
   imageView.translatesAutoresizingMaskIntoConstraints = NO;
   AddSquareConstraints(imageView, kImageSize);
   return imageView;

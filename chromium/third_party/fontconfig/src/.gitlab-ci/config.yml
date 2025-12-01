@@ -1,4 +1,4 @@
-.default_tag: &default_tag "2025-04-30.1"
+.default_tag: &default_tag "2025-07-02.2"
 
 build_patterns:
   - name: "autotools shared expat"
@@ -64,14 +64,27 @@ test_patterns:
     parent: "meson static libxml2"
 
 distributions:
+  - name: alpine
+    tag: *default_tag
+    base_type: alpine
+    qemu_based: false
+    versions:
+      - "edge"
+    builds:
+      - name: "standard build"
+        variables:
+          FC_BUILDSYS: meson
+          FC_BUILD_TYPE: shared
+          FC_XML_BACKEND: expat
+          FC_BUILD_DISABLED: nls
   - name: fedora
     tag: *default_tag
     base_type: fedora
     qemu_based: false
     versions:
       - "rawhide"
+      - "42"
       - "41"
-      - "40"
     builds:
       - name: "standard build"
         upload: "rawhide"
@@ -110,7 +123,7 @@ distributions:
     base_type: freebsd
     qemu_based: true
     versions:
-      - "14.1"
+      - "14.2"
     builds:
       - name: "standard build"
         variables:
@@ -120,6 +133,25 @@ distributions:
           FC_BUILD_NO_CHECK: 1
 
 packages:
+  alpine:
+    needed:
+      [
+        "freetype-dev",
+        "expat-dev",
+        "python3-dev",
+        "gperf",
+        "util-linux-dev",
+        "json-c-dev",
+        "curl",
+        "bash",
+        "py3-pip",
+        "gcc",
+        "ninja-build",
+        "bubblewrap",
+        "pkgconf",
+        "musl-dev",
+        "uuidgen",
+      ]
   fedora:
     needed:
       [

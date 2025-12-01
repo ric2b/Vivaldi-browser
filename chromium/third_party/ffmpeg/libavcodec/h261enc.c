@@ -35,6 +35,7 @@
 #include "h261.h"
 #include "h261enc.h"
 #include "mpegvideoenc.h"
+#include "put_bits.h"
 
 #define H261_MAX_RUN   26
 #define H261_MAX_LEVEL 15
@@ -72,11 +73,11 @@ static int h261_encode_picture_header(MPVMainEncContext *const m)
     MPVEncContext *const s = &h->s.s;
     int temp_ref;
 
-    align_put_bits(&s->pb);
+    put_bits_assume_flushed(&s->pb);
 
     put_bits(&s->pb, 20, 0x10); /* PSC */
 
-    temp_ref = s->c.picture_number * 30000LL * s->c.avctx->time_base.num /
+    temp_ref = s->picture_number * 30000LL * s->c.avctx->time_base.num /
                (1001LL * s->c.avctx->time_base.den);   // FIXME maybe this should use a timestamp
     put_sbits(&s->pb, 5, temp_ref); /* TemporalReference */
 
@@ -91,7 +92,7 @@ static int h261_encode_picture_header(MPVMainEncContext *const m)
 
     put_bits(&s->pb, 1, 0); /* no PEI */
     h->gob_number = h->format - 1;
-    s->c.mb_skip_run = 0;
+    s->mb_skip_run = 0;
 
     return 0;
 }
@@ -111,7 +112,7 @@ static void h261_encode_gob_header(MPVEncContext *const s, int mb_line)
     put_bits(&s->pb, 4, h->gob_number); /* GN */
     put_bits(&s->pb, 5, s->c.qscale);     /* GQUANT */
     put_bits(&s->pb, 1, 0);             /* no GEI */
-    s->c.mb_skip_run = 0;
+    s->mb_skip_run = 0;
     s->c.last_mv[0][0][0] = 0;
     s->c.last_mv[0][0][1] = 0;
 }
@@ -247,7 +248,7 @@ static void h261_encode_mb(MPVEncContext *const s, int16_t block[6][64],
 
         if ((cbp | mvd) == 0) {
             /* skip macroblock */
-            s->c.mb_skip_run++;
+            s->mb_skip_run++;
             s->c.last_mv[0][0][0] = 0;
             s->c.last_mv[0][0][1] = 0;
             s->c.qscale -= s->dquant;
@@ -257,17 +258,17 @@ static void h261_encode_mb(MPVEncContext *const s, int16_t block[6][64],
 
     /* MB is not skipped, encode MBA */
     put_bits(&s->pb,
-             ff_h261_mba_bits[s->c.mb_skip_run],
-             ff_h261_mba_code[s->c.mb_skip_run]);
-    s->c.mb_skip_run = 0;
+             ff_h261_mba_bits[s->mb_skip_run],
+             ff_h261_mba_code[s->mb_skip_run]);
+    s->mb_skip_run = 0;
 
     /* calculate MTYPE */
     if (!s->c.mb_intra) {
         com->mtype++;
 
-        if (mvd || s->c.loop_filter)
+        if (mvd || s->loop_filter)
             com->mtype += 3;
-        if (s->c.loop_filter)
+        if (s->loop_filter)
             com->mtype += 3;
         if (cbp)
             com->mtype++;

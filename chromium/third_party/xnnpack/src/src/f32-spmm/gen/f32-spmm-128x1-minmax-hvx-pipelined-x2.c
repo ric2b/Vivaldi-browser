@@ -9,14 +9,12 @@
 // LICENSE file in the root directory of this source tree.
 
 #include <assert.h>
-
-#include <hvx_hexagon_protos.h>
 #include <hexagon_protos.h>
 #include <hexagon_types.h>
-
-#include "src/xnnpack/simd/f32-hvx.h"
+#include <hvx_hexagon_protos.h>
 
 #include "src/xnnpack/prefetch.h"
+#include "src/xnnpack/simd/f32-hvx.h"
 #include "src/xnnpack/spmm.h"
 
 void xnn_f32_spmm_minmax_ukernel_128x1__hvx_pipelined_x2(
@@ -28,7 +26,7 @@ void xnn_f32_spmm_minmax_ukernel_128x1__hvx_pipelined_x2(
     const uint32_t* nidx_nnzmap,
     float* output,
     size_t output_stride,
-    const struct xnn_f32_minmax_params params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f32_minmax_params* restrict params)
 {
   assert(mc != 0);
   assert(mc % sizeof(float) == 0);

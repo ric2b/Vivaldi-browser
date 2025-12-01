@@ -70,7 +70,8 @@ Trigger *sqlite3TriggerList(Parse *pParse, Table *pTab){
       assert( pParse->db->pVtabCtx==0 );
 #endif
       assert( pParse->bReturning );
-      assert( &(pParse->u1.pReturning->retTrig) == pTrig );
+      assert( !pParse->isCreate );
+      assert( &(pParse->u1.d.pReturning->retTrig) == pTrig );
       pTrig->table = pTab->zName;
       pTrig->pTabSchema = pTab->pSchema;
       pTrig->pNext = pList;
@@ -1038,7 +1039,8 @@ static void codeReturningTrigger(
   ExprList *pNew;
   Returning *pReturning;
   Select sSelect;
-  SrcList sFrom;
+  SrcList *pFrom;
+  u8 fromSpace[SZ_SRCLIST_1];
 
   assert( v!=0 );
   if( !pParse->bReturning ){
@@ -1047,19 +1049,21 @@ static void codeReturningTrigger(
     return;
   }
   assert( db->pParse==pParse );
-  pReturning = pParse->u1.pReturning;
+  assert( !pParse->isCreate );
+  pReturning = pParse->u1.d.pReturning;
   if( pTrigger != &(pReturning->retTrig) ){
     /* This RETURNING trigger is for a different statement */
     return;
   }
   memset(&sSelect, 0, sizeof(sSelect));
-  memset(&sFrom, 0, sizeof(sFrom));
+  pFrom = (SrcList*)fromSpace;
+  memset(pFrom, 0, SZ_SRCLIST_1);
   sSelect.pEList = sqlite3ExprListDup(db, pReturning->pReturnEL, 0);
-  sSelect.pSrc = &sFrom;
-  sFrom.nSrc = 1;
-  sFrom.a[0].pSTab = pTab;
-  sFrom.a[0].zName = pTab->zName; /* tag-20240424-1 */
-  sFrom.a[0].iCursor = -1;
+  sSelect.pSrc = pFrom;
+  pFrom->nSrc = 1;
+  pFrom->a[0].pSTab = pTab;
+  pFrom->a[0].zName = pTab->zName; /* tag-20240424-1 */
+  pFrom->a[0].iCursor = -1;
   sqlite3SelectPrep(pParse, &sSelect, 0);
   if( pParse->nErr==0 ){
     assert( db->mallocFailed==0 );
@@ -1277,6 +1281,8 @@ static TriggerPrg *codeRowTrigger(
   sSubParse.eTriggerOp = pTrigger->op;
   sSubParse.nQueryLoop = pParse->nQueryLoop;
   sSubParse.prepFlags = pParse->prepFlags;
+  sSubParse.oldmask = 0;
+  sSubParse.newmask = 0;
 
   v = sqlite3GetVdbe(&sSubParse);
   if( v ){

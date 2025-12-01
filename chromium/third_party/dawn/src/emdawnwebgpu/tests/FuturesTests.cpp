@@ -44,8 +44,10 @@ class InstanceLevelTests : public testing::Test {
     void SetUp() override {
         wgpu::InstanceDescriptor descriptor = {};
         // The unit tests use wgpuInstanceWaitAny(WGPUFuture, timeoutNS) with timeoutNS > 0
-        // which requires the `timedWaitAnyEnable` property enabled on the instance capability.
-        descriptor.capabilities.timedWaitAnyEnable = true;
+        // which requires TimedWaitAny enabled on the instance.
+        static constexpr auto kTimedWaitAny = wgpu::InstanceFeatureName::TimedWaitAny;
+        descriptor.requiredFeatureCount = 1;
+        descriptor.requiredFeatures = &kTimedWaitAny;
         instance = wgpu::CreateInstance(&descriptor);
     }
 
@@ -166,7 +168,10 @@ class DeviceLevelTests : public AdapterLevelTests {
             });
         descriptor.SetUncapturedErrorCallback(
             [](const wgpu::Device& d, wgpu::ErrorType t, wgpu::StringView m,
-               DeviceLevelTests* self) { self->uncapturedErrorCb.Call(d, t, m); },
+               DeviceLevelTests* self) {
+                self->uncapturedErrorCount++;
+                self->uncapturedErrorCb.Call(d, t, m);
+            },
             this);
         device = RequestDevice(&descriptor);
     }
@@ -195,6 +200,7 @@ class DeviceLevelTests : public AdapterLevelTests {
     testing::StrictMock<
         testing::MockFunction<void(const wgpu::Device&, wgpu::ErrorType, wgpu::StringView)>>
         uncapturedErrorCb;
+    int uncapturedErrorCount = 0;
 };
 
 TEST_F(DeviceLevelTests, ValidationError) {
@@ -204,6 +210,16 @@ TEST_F(DeviceLevelTests, ValidationError) {
     desc.size = 1024;
     desc.usage = static_cast<wgpu::BufferUsage>(UINT64_MAX);
     wgpu::Buffer buffer = device.CreateBuffer(&desc);
+
+    // Do something async to make sure the browser flushes uncaptured error
+    // messages back to the client. (Chromium won't do so without this.)
+    device.GetQueue().OnSubmittedWorkDone(wgpu::CallbackMode::AllowSpontaneous,
+                                          [](wgpu::QueueWorkDoneStatus, wgpu::StringView) {});
+    // Wait until the uncaptured error callback runs before dropping the
+    // device, otherwise it probably won't arrive.
+    while (uncapturedErrorCount != 1) {
+        emscripten_sleep(50);
+    }
 }
 
 TEST_F(DeviceLevelTests, PopErrorScope) {
@@ -275,13 +291,12 @@ TEST_F(DeviceLevelTests, BufferMapAndWorkDone) {
     queue.Submit(1, &commands);
 
     wgpu::QueueWorkDoneStatus copyStatus;
-    EXPECT_EQ(
-        instance.WaitAny(queue.OnSubmittedWorkDone(wgpu::CallbackMode::AllowSpontaneous,
-                                                   [&copyStatus](wgpu::QueueWorkDoneStatus status) {
-                                                       copyStatus = status;
-                                                   }),
-                         UINT64_MAX),
-        wgpu::WaitStatus::Success);
+    EXPECT_EQ(instance.WaitAny(queue.OnSubmittedWorkDone(
+                                   wgpu::CallbackMode::AllowSpontaneous,
+                                   [&copyStatus](wgpu::QueueWorkDoneStatus status,
+                                                 wgpu::StringView) { copyStatus = status; }),
+                               UINT64_MAX),
+              wgpu::WaitStatus::Success);
     ASSERT_EQ(copyStatus, wgpu::QueueWorkDoneStatus::Success);
 
     // Map the readable buffer and verify the contents.

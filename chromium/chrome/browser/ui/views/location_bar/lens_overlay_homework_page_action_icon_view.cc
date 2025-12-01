@@ -14,13 +14,12 @@
 #include "chrome/browser/ui/lens/lens_search_controller.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
-#include "chrome/browser/ui/views/omnibox/omnibox_view_views.h"
 #include "chrome/browser/ui/views/page_action/page_action_icon_view.h"
 #include "chrome/browser/user_education/user_education_service.h"
 #include "chrome/grit/branded_strings.h"
 #include "components/lens/lens_features.h"
 #include "components/lens/lens_metrics.h"
-#include "components/omnibox/browser/omnibox_prefs.h"
+#include "components/omnibox/browser/autocomplete_match_type.h"
 #include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
@@ -51,6 +50,8 @@ LensOverlayHomeworkPageActionIconView::LensOverlayHomeworkPageActionIconView(
 
   SetLabel(l10n_util::GetStringUTF16(
       IDS_CONTENT_LENS_OVERLAY_HOMEWORK_ENTRYPOINT_LABEL));
+  // Elide behavior must be set to allow label to collapse.
+  SetElideBehavior(gfx::ElideBehavior::NO_ELIDE);
   SetUseTonalColorsWhenExpanded(true);
   SetBackgroundVisibility(BackgroundVisibility::kWithLabel);
 }
@@ -92,11 +93,6 @@ bool LensOverlayHomeworkPageActionIconView::ShouldShow() {
   }
 #endif  // BUILDFLAG(ENABLE_GLIC)
 
-  if (!browser_->GetProfile()->GetPrefs()->GetBoolean(
-          omnibox::kShowGoogleLensShortcut)) {
-    return false;
-  }
-
   // Hide the homework chip if the broader lens feature is disabled.
   const auto* controller =
       browser_->GetFeatures().lens_overlay_entry_point_controller();
@@ -110,8 +106,10 @@ bool LensOverlayHomeworkPageActionIconView::ShouldShow() {
   }
 
   // Don't show the chip if the location bar isn't visible yet.
+  // TODO(crbug.com/421963047): Investigate why we are getting two matching
+  // views on ChromeOS.
   View* location_bar_view =
-      views::ElementTrackerViews::GetInstance()->GetUniqueView(
+      views::ElementTrackerViews::GetInstance()->GetFirstMatchingView(
           kLocationBarElementId,
           views::ElementTrackerViews::GetContextForView(this));
   if (!location_bar_view) {
@@ -149,10 +147,10 @@ bool LensOverlayHomeworkPageActionIconView::ShouldShow() {
 
 void LensOverlayHomeworkPageActionIconView::OnExecuting(
     PageActionIconView::ExecuteSource source) {
-  // If the user entered Lens through the keyboard, we want to open Lens Web
-  // in a new tab.
-  // TODO(crbug.com/404640455): Clean up after a11y updates.
-  if (source == PageActionIconView::EXECUTE_SOURCE_KEYBOARD) {
+  // If the user entered Lens through the keyboard and keyboard selection is not
+  // enabled, we want to open Lens Web in a new tab.
+  if (source == PageActionIconView::EXECUTE_SOURCE_KEYBOARD &&
+      !lens::features::IsLensOverlayKeyboardSelectionEnabled()) {
     browser_->GetFeatures().lens_region_search_controller()->Start(
         GetWebContents(), /*use_fullscreen_capture=*/true,
         /*is_google_default_search_provider=*/true,
@@ -165,8 +163,21 @@ void LensOverlayHomeworkPageActionIconView::OnExecuting(
       LensSearchController::FromTabWebContents(GetWebContents());
   CHECK(controller);
 
-  controller->OpenLensOverlay(
-      lens::LensOverlayInvocationSource::kHomeworkActionChip);
+  if (lens::features::IsLensOverlayStraightToSrpEnabled()) {
+    std::string query_text =
+        lens::features::GetStraightToSrpQuery().empty()
+            ? l10n_util::GetStringUTF8(IDS_LENS_CONTEXTUAL_SEARCH_DEFAULT_QUERY)
+            : lens::features::GetStraightToSrpQuery();
+    controller->IssueTextSearchRequest(
+        lens::LensOverlayInvocationSource::kHomeworkActionChip, query_text,
+        /*additional_query_parameters=*/{},
+        AutocompleteMatchType::Type::SEARCH_SUGGEST,
+        /*is_zero_prefix_suggestion=*/false,
+        /*suppress_contextualization=*/false);
+  } else {
+    controller->OpenLensOverlay(
+        lens::LensOverlayInvocationSource::kHomeworkActionChip);
+  }
   UserEducationService::MaybeNotifyNewBadgeFeatureUsed(
       GetWebContents()->GetBrowserContext(), lens::features::kLensOverlay);
 

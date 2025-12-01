@@ -6,12 +6,15 @@
 
 #import "base/apple/foundation_util.h"
 #import "base/memory/raw_ptr.h"
+#import "components/omnibox/common/omnibox_features.h"
 #import "components/prefs/pref_service.h"
+#import "ios/chrome/browser/intelligence/features/features.h"
 #import "ios/chrome/browser/location_bar/ui_bundled/location_bar_coordinator.h"
-#import "ios/chrome/browser/ntp/model/new_tab_page_tab_helper.h"
 #import "ios/chrome/browser/ntp/model/new_tab_page_util.h"
 #import "ios/chrome/browser/omnibox/model/omnibox_position/omnibox_position_browser_agent.h"
+#import "ios/chrome/browser/omnibox/ui/omnibox_drs_view_controller.h"
 #import "ios/chrome/browser/orchestrator/ui_bundled/omnibox_focus_orchestrator.h"
+#import "ios/chrome/browser/orchestrator/ui_bundled/omnibox_focus_orchestrator_parity.h"
 #import "ios/chrome/browser/overlays/model/public/overlay_presentation_context.h"
 #import "ios/chrome/browser/prerender/model/prerender_service.h"
 #import "ios/chrome/browser/prerender/model/prerender_service_factory.h"
@@ -28,6 +31,7 @@
 #import "ios/chrome/browser/shared/public/commands/text_zoom_commands.h"
 #import "ios/chrome/browser/shared/public/commands/toolbar_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
+#import "ios/chrome/browser/shared/public/prototypes/diamond/utils.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/toolbar/ui_bundled/adaptive_toolbar_view_controller.h"
 #import "ios/chrome/browser/toolbar/ui_bundled/primary_toolbar_coordinator.h"
@@ -41,6 +45,7 @@
 #import "ios/chrome/browser/toolbar/ui_bundled/toolbar_mediator.h"
 #import "ios/chrome/common/ui/util/ui_util.h"
 #import "ios/components/webui/web_ui_url_constants.h"
+#import "ios/web/public/web_state.h"
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
@@ -92,6 +97,9 @@ using vivaldi::IsVivaldiRunning;
 @property(nonatomic, strong) OmniboxFocusOrchestrator* orchestrator;
 /// Whether the omnibox is currently focused.
 @property(nonatomic, assign) BOOL locationBarFocused;
+/// Dynamic response system view controller is an omnibox presenter. Only
+/// defined  when kOmniboxDRSPrototype is set.
+@property(nonatomic, strong) OmniboxDRSViewController* drsViewController;
 
 // Vivaldi
 @property(nonatomic, strong) LayoutGuideCenter* layoutGuideCenter;
@@ -182,6 +190,13 @@ using vivaldi::IsVivaldiRunning;
                      forProtocol:@protocol(GuidedTourCommands)];
   }
 
+  if (base::FeatureList::IsEnabled(kOmniboxDRSPrototype)) {
+    self.drsViewController = [[OmniboxDRSViewController alloc] init];
+    self.drsViewController.proxiedPresenterDelegate =
+        self.popupPresenterDelegate;
+    self.popupPresenterDelegate = self.drsViewController;
+  }
+
   segmentation_platform::DeviceSwitcherResultDispatcher* deviceSwitcherResult =
       nullptr;
   if (!browser->GetProfile()->IsOffTheRecord()) {
@@ -236,7 +251,11 @@ using vivaldi::IsVivaldiRunning;
   [self initialiseAdblockManager];
   // End Vivaldi
 
-  self.orchestrator = [[OmniboxFocusOrchestrator alloc] init];
+  if (base::FeatureList::IsEnabled(omnibox::kOmniboxMobileParityUpdateV2)) {
+    self.orchestrator = [[OmniboxFocusOrchestratorParity alloc] init];
+  } else {
+    self.orchestrator = [[OmniboxFocusOrchestrator alloc] init];
+  }
 
   // Important:(prio@vivaldi.com) - Animatee is set below with config. Setting
   // this incorrectly breaks primary toolbar position.
@@ -256,6 +275,10 @@ using vivaldi::IsVivaldiRunning;
     [self.primaryToolbarCoordinator
         setLocationBarViewController:self.locationBarCoordinator
                                          .locationBarViewController];
+  }
+
+  if (IsPageActionMenuEnabled()) {
+    [self.locationBarCoordinator setPageActionMenuEntryPointDispatcher];
   }
 
   [self updateToolbarsLayout];
@@ -371,14 +394,9 @@ using vivaldi::IsVivaldiRunning;
       self.browser->GetCommandDispatcher(), TextZoomCommands);
   [textZoomCommandsHandler showTextZoomUIIfActive];
 
-  // There are times when the NTP can be hidden but before the visibleURL
-  // changes.  This can leave the BVC in a blank state where only the bottom
-  // toolbar is visible. Instead, if possible, use the NewTabPageTabHelper
-  // IsActive() value rather than checking -IsVisibleURLNewTabPage.
-  NewTabPageTabHelper* NTPHelper = NewTabPageTabHelper::FromWebState(webState);
-  BOOL isNTP = NTPHelper && NTPHelper->IsActive();
+  BOOL isNTP = IsVisibleURLNewTabPage(webState);
   BOOL isOffTheRecord = self.isOffTheRecord;
-  BOOL canShowTabStrip = IsRegularXRegularSizeClass(self.traitEnvironment);
+  BOOL canShowTabStrip = CanShowTabStrip(self.traitEnvironment);
 
   // Hide the toolbar when displaying content suggestions without the tab
   // strip, without the focused omnibox, only when in split toolbar mode.
@@ -428,23 +446,30 @@ using vivaldi::IsVivaldiRunning;
     animateTransition = _enableAnimationsForOmniboxFocus; // End Vivaldi
 
   __weak __typeof(self) weakSelf = self;
-  BOOL toolbarExpanded =
-      focused && !IsRegularXRegularSizeClass(self.traitEnvironment);
+  BOOL toolbarExpanded = focused && !CanShowTabStrip(self.traitEnvironment);
 
   // Vivaldi
   [self updateToolbarBackgroundColorWithOmniboxFocus:focused];
   // End Vivaldi
 
-  [self.orchestrator
-      transitionToStateOmniboxFocused:focused
-                      toolbarExpanded:toolbarExpanded
-                              trigger:[self omniboxFocusTrigger]
-                             animated:animateTransition
-                           completion:^{
-                             [weakSelf focusTransitionDidComplete:focused
-                                                       completion:completion];
-                           }];
+  if (base::FeatureList::IsEnabled(kOmniboxDRSPrototype) && focused) {
+    [self.baseViewController presentViewController:self.drsViewController
+                                          animated:YES
+                                        completion:nil];
 
+    return;
+
+  } else {
+    [self.orchestrator
+        transitionToStateOmniboxFocused:focused
+                        toolbarExpanded:toolbarExpanded
+                                trigger:[self omniboxFocusTrigger]
+                               animated:animateTransition
+                             completion:^{
+                               [weakSelf focusTransitionDidComplete:focused
+                                                         completion:completion];
+                             }];
+  }
   self.locationBarFocused = focused;
 }
 
@@ -459,6 +484,11 @@ using vivaldi::IsVivaldiRunning;
 #pragma mark ToolbarHeightProviding
 
 - (CGFloat)collapsedPrimaryToolbarHeight {
+  if (IsDiamondPrototypeEnabled() &&
+      _omniboxPosition == ToolbarType::kPrimary) {
+    return kDiamondCollapsedToolbarHeight;
+  }
+
   if (_omniboxPosition == ToolbarType::kSecondary) {
     // TODO(crbug.com/40279063): Find out why primary toolbar height cannot be
     // zero. This is a temporary fix for the pdf bug.
@@ -475,15 +505,23 @@ using vivaldi::IsVivaldiRunning;
 }
 
 - (CGFloat)expandedPrimaryToolbarHeight {
+  if (IsDiamondPrototypeEnabled() &&
+      _omniboxPosition == ToolbarType::kPrimary) {
+    return kDiamondToolbarHeight;
+  }
+
   CGFloat height =
       self.primaryToolbarViewController.view.intrinsicContentSize.height;
-  if (!IsSplitToolbarMode(self.traitEnvironment)) {
+  if (!IsSplitToolbarMode(self.traitEnvironment) ||
+      CanShowTabStrip(self.traitEnvironment)) {
 
     // Note: (prio@vivaldi.com) - Add the margin when omnibox is at the top.
     // otherwise, it shows a gap between content view and status bar.
     if (IsVivaldiRunning() &&
         _omniboxPosition == ToolbarType::kPrimary) {
-    // When the adaptive toolbar is unsplit, add a margin.
+
+    // When the adaptive toolbar is unsplit or the tab strip is visible, add a
+    // margin.
     height += kTopToolbarUnsplitMargin;
     } // End Vivaldi
 
@@ -522,6 +560,9 @@ using vivaldi::IsVivaldiRunning;
   }
   CGFloat height =
       self.secondaryToolbarViewController.view.intrinsicContentSize.height;
+  if (IsDiamondPrototypeEnabled()) {
+    height = 0;
+  }
   if (_omniboxPosition == ToolbarType::kSecondary) {
     height += ToolbarExpandedHeight(
         self.traitEnvironment.traitCollection.preferredContentSizeCategory);
@@ -634,6 +675,11 @@ using vivaldi::IsVivaldiRunning;
 }
 - (void)locationBarContractedInViewController:
     (PrimaryToolbarViewController*)viewController {
+  // Do nothing.
+}
+
+- (void)viewController:(PrimaryToolbarViewController*)viewController
+    tabGroupIndicatorVisibilityUpdated:(BOOL)visible {
   // Do nothing.
 }
 
@@ -755,13 +801,21 @@ using vivaldi::IsVivaldiRunning;
   OmniboxPositionBrowserAgent* positionBrowserAgent =
       OmniboxPositionBrowserAgent::FromBrowser(self.browser);
   switch (toolbarType) {
-    case ToolbarType::kPrimary:
-      [self.primaryToolbarCoordinator
-          setLocationBarViewController:self.locationBarCoordinator
-                                           .locationBarViewController];
-      [self.secondaryToolbarCoordinator setLocationBarViewController:nil];
+    case ToolbarType::kPrimary: {
+      if (IsDiamondPrototypeEnabled()) {
+        [self.secondaryToolbarCoordinator
+            setLocationBarViewController:self.locationBarCoordinator
+                                             .locationBarViewController];
+        [self.primaryToolbarCoordinator setLocationBarViewController:nil];
+      } else {
+        [self.primaryToolbarCoordinator
+            setLocationBarViewController:self.locationBarCoordinator
+                                             .locationBarViewController];
+        [self.secondaryToolbarCoordinator setLocationBarViewController:nil];
+      }
       positionBrowserAgent->SetIsCurrentLayoutBottomOmnibox(false);
       break;
+    }
     case ToolbarType::kSecondary:
       [self.secondaryToolbarCoordinator
           setLocationBarViewController:self.locationBarCoordinator
@@ -769,6 +823,11 @@ using vivaldi::IsVivaldiRunning;
       [self.primaryToolbarCoordinator setLocationBarViewController:nil];
       positionBrowserAgent->SetIsCurrentLayoutBottomOmnibox(true);
       break;
+  }
+  if (IsDiamondPrototypeEnabled()) {
+    [self.toolbarHeightDelegate diamondToolbarTypeChanged:toolbarType];
+    self.secondaryToolbarCoordinator.usedAsPrimaryToolbar =
+        toolbarType == ToolbarType::kPrimary;
   }
   [self.toolbarHeightDelegate toolbarsHeightChanged];
 }
@@ -808,8 +867,7 @@ using vivaldi::IsVivaldiRunning;
   [self.orchestrator
       transitionToStateOmniboxFocused:omniboxFocused
                       toolbarExpanded:omniboxFocused &&
-                                      !IsRegularXRegularSizeClass(
-                                          self.traitEnvironment)
+                                      !CanShowTabStrip(self.traitEnvironment)
                               trigger:[self omniboxFocusTrigger]
                              animated:NO
                            completion:nil];
@@ -819,21 +877,42 @@ using vivaldi::IsVivaldiRunning;
 /// an incognito browser, the NTP is displayed, and whether the fakebox was
 /// pinned if it was selected.
 - (OmniboxFocusTrigger)omniboxFocusTrigger {
-  if (self.isOffTheRecord || !IsSplitToolbarMode(self.traitEnvironment)) {
-    return _focusedFromFakebox ? OmniboxFocusTrigger::kUnpinnedFakebox
-                               : OmniboxFocusTrigger::kOther;
+  if (base::FeatureList::IsEnabled(omnibox::kOmniboxMobileParityUpdateV2)) {
+    web::WebState* webState =
+        self.browser->GetWebStateList()->GetActiveWebState();
+    if (!webState) {
+      return OmniboxFocusTrigger::kOther;
+    }
+    if (!IsVisibleURLNewTabPage(webState)) {
+      return OmniboxFocusTrigger::kOther;
+    }
+
+    // (De)focusing on NTP.
+
+    if (self.isOffTheRecord || !IsSplitToolbarMode(self.traitEnvironment)) {
+      return _focusedFromFakebox ? OmniboxFocusTrigger::kUnpinnedFakebox
+                                 : OmniboxFocusTrigger::kNTPOmnibox;
+    }
+
+    return _fakeboxPinned ? OmniboxFocusTrigger::kPinnedFakebox
+                          : OmniboxFocusTrigger::kUnpinnedFakebox;
+
+  } else {
+    if (self.isOffTheRecord || !IsSplitToolbarMode(self.traitEnvironment)) {
+      return _focusedFromFakebox ? OmniboxFocusTrigger::kUnpinnedFakebox
+                                 : OmniboxFocusTrigger::kOther;
+    }
+    web::WebState* webState =
+        self.browser->GetWebStateList()->GetActiveWebState();
+    if (!webState) {
+      return OmniboxFocusTrigger::kOther;
+    }
+    if (!IsVisibleURLNewTabPage(webState)) {
+      return OmniboxFocusTrigger::kOther;
+    }
+    return _fakeboxPinned ? OmniboxFocusTrigger::kPinnedFakebox
+                          : OmniboxFocusTrigger::kUnpinnedFakebox;
   }
-  web::WebState* webState =
-      self.browser->GetWebStateList()->GetActiveWebState();
-  if (!webState) {
-    return OmniboxFocusTrigger::kOther;
-  }
-  NewTabPageTabHelper* NTPHelper = NewTabPageTabHelper::FromWebState(webState);
-  if (!NTPHelper || !NTPHelper->IsActive()) {
-    return OmniboxFocusTrigger::kOther;
-  }
-  return _fakeboxPinned ? OmniboxFocusTrigger::kPinnedFakebox
-                        : OmniboxFocusTrigger::kUnpinnedFakebox;
 }
 
 - (void)focusTransitionDidComplete:(BOOL)focused
@@ -1027,8 +1106,7 @@ using vivaldi::IsVivaldiRunning;
   if (!webState)
     return [self globalATBSetting];
 
-  NewTabPageTabHelper* NTPHelper = NewTabPageTabHelper::FromWebState(webState);
-  BOOL isNTP = NTPHelper && NTPHelper->IsActive();
+  BOOL isNTP = IsVisibleURLNewTabPage(webState);
   // Return Global Adblocker Settings for New Tab Page.
   if (isNTP)
     return [self globalATBSetting];

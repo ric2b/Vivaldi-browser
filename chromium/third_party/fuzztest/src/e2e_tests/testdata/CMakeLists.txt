@@ -1,7 +1,3 @@
-get_filename_component(PARENT_DIR ../ ABSOLUTE)
-include_directories(${PARENT_DIR})
-
-include_directories(${CMAKE_BINARY_DIR})
 add_executable(
   fuzz_tests_for_microbenchmarking
   fuzz_tests_for_microbenchmarking.cc
@@ -11,7 +7,7 @@ target_link_libraries(
   PUBLIC
   fuzztest_status
   protobuf::libprotobuf
-  test_protobuf
+  fuzztest::test_protobuf_cc_proto
   absl::random_bit_gen_ref
   absl::random_distributions
   absl::str_format
@@ -30,7 +26,7 @@ target_link_libraries(
   fuzz_tests_for_functional_testing.stripped
   PUBLIC
   protobuf::libprotobuf
-  test_protobuf
+  fuzztest::test_protobuf_cc_proto
   absl::algorithm_container
   absl::check
   absl::flat_hash_map
@@ -43,8 +39,10 @@ target_link_libraries(
   absl::strings
   absl::time
   re2::re2
+  fuzztest_flatbuffers
   fuzztest_googletest_fixture_adapter
   fuzztest_logging
+  fuzztest_test_flatbuffers_headers
 )
 link_fuzztest(fuzz_tests_for_functional_testing.stripped)
 set_target_properties(

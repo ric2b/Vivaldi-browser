@@ -183,7 +183,7 @@ main (int argc, char **argv)
 	return 1;
 
     FcConfigSubstitute (0, pat, FcMatchPattern);
-    FcDefaultSubstitute (pat);
+    FcConfigSetDefaultSubstitute (0, pat);
 
     fs = FcFontSetCreate();
 

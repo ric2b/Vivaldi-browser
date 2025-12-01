@@ -1,5 +1,6 @@
 // Copyright (c) 2019 Vivaldi Technologies AS. All rights reserved
 
+#include "base/logging.h"
 #include "components/sync/protocol/session_specifics.pb.h"
 #include "components/sync_sessions/synced_session.h"
 #include "components/sync_sessions/vivaldi_specific.h"

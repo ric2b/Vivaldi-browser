@@ -10,6 +10,7 @@ import '/lens/shared/searchbox_ghost_loader.js';
 import '/lens/shared/searchbox_shared_style.css.js';
 import '//resources/cr_components/searchbox/searchbox.js';
 import '//resources/cr_elements/cr_toast/cr_toast.js';
+import '//resources/cr_components/composebox/composebox.js';
 
 import {ColorChangeUpdater} from '//resources/cr_components/color_change_listener/colors_css_updater.js';
 import {HelpBubbleMixin} from '//resources/cr_components/help_bubble/help_bubble_mixin.js';
@@ -78,10 +79,30 @@ export class LensSidePanelAppElement extends LensSidePanelAppElementBase {
         type: Boolean,
         value: false,
       },
+      enableAimSearchbox: {
+        reflectToAttribute: true,
+        type: Boolean,
+        value: () => loadTimeData.getBoolean('enableAimSearchbox'),
+      },
+      enableFloatingGForHeader: {
+        reflectToAttribute: true,
+        type: Boolean,
+        value: () => loadTimeData.getBoolean('enableFloatingGForHeader'),
+      },
+      enableClientSideAimHeader: {
+        reflectToAttribute: true,
+        type: Boolean,
+        value: () => loadTimeData.getBoolean('enableClientSideAimHeader'),
+      },
       enableCsbMotionTweaks: {
         reflectToAttribute: true,
         type: Boolean,
         value: () => loadTimeData.getBoolean('enableCsbMotionTweaks'),
+      },
+      enableVisualSelectionUpdates: {
+        reflectToAttribute: true,
+        type: Boolean,
+        value: () => loadTimeData.getBoolean('enableVisualSelectionUpdates'),
       },
       isBackArrowVisible: {
         type: Boolean,
@@ -176,11 +197,18 @@ export class LensSidePanelAppElement extends LensSidePanelAppElementBase {
         type: Number,
         value: 0,
       },
+      isOnAimResults: {
+        type: Boolean,
+        value: false,
+        reflectToAttribute: true,
+      },
     };
   }
 
   // Whether CSB motion tweaks are enabled via feature flag.
   declare private enableCsbMotionTweaks: boolean;
+  // Whether the visual selection updates are enabled via feature flag.
+  declare private enableVisualSelectionUpdates: boolean;
   // Public for use in browser tests.
   declare isBackArrowVisible: boolean;
   // Whether the user is currently focused into the searchbox.
@@ -202,6 +230,12 @@ export class LensSidePanelAppElement extends LensSidePanelAppElementBase {
   declare private pageContentType: PageContentType;
   // Whether this is an in flight request to autocomplete.
   declare private autocompleteRequestStarted: boolean;
+  // Whether the AIM searchbox is enabled via feature flag.
+  declare private enableAimSearchbox: boolean;
+  // Whether the floating G for header is enabled via feature flag.
+  declare private enableFloatingGForHeader: boolean;
+  // Whether the client side header is enabled via feature flag.
+  declare private enableClientSideAimHeader: boolean;
   declare private isErrorPageVisible: boolean;
   // Whether the results iframe is currently loading. This needs to be done via
   // browser because the iframe is cross-origin. Default true since the side
@@ -216,9 +250,8 @@ export class LensSidePanelAppElement extends LensSidePanelAppElementBase {
   private progressBarAnimation: Animation|null = null;
   private progressBarHideAnimation: Animation|null = null;
   // A helper object responsible for handling post messages received by the
-  // window.
-  private postMessageReceiver: PostMessageReceiver =
-      new PostMessageReceiver(SidePanelBrowserProxyImpl.getInstance());
+  // window. Only alive while this component is connected to the DOM.
+  private postMessageReceiver?: PostMessageReceiver;
   // Whether the feedback toast has been explicitly dismissed by the user.
   private feedbackToastDismissed = false;
   // The timeout ID for reshowing the feedback toast.
@@ -233,6 +266,8 @@ export class LensSidePanelAppElement extends LensSidePanelAppElementBase {
   declare private toastMessage: string;
   // The number of suggestions currently being shown to the user.
   declare private searchboxSuggestionCount: number;
+  // Whether the results in the iframe are currently on the AIM UI.
+  declare private isOnAimResults: boolean;
   private eventTracker_: EventTracker = new EventTracker();
 
   private searchboxBoundingClientRectObserver: ResizeObserver =
@@ -278,10 +313,11 @@ export class LensSidePanelAppElement extends LensSidePanelAppElementBase {
           this.pageContentTypeChanged.bind(this)),
       this.browserProxy.callbackRouter.showToast.addListener(
           this.showMessageToast.bind(this)),
+      this.browserProxy.callbackRouter.aimResultsChanged.addListener(
+          this.onAimResultsChanged.bind(this)),
     ];
     this.eventTracker_.add(this.$.searchbox, 'mousedown', () => {
       this.suppressGhostLoader = false;
-      this.showErrorState = false;
     });
     this.eventTracker_.add(
         document, 'query-autocomplete',
@@ -291,7 +327,8 @@ export class LensSidePanelAppElement extends LensSidePanelAppElementBase {
         () => this.feedbackToastDismissed = true);
 
     // Start listening to postMessages on the window.
-    this.postMessageReceiver.listen();
+    this.postMessageReceiver = new PostMessageReceiver(
+        SidePanelBrowserProxyImpl.getInstance(), this.$.results);
   }
 
   override disconnectedCallback() {
@@ -301,7 +338,9 @@ export class LensSidePanelAppElement extends LensSidePanelAppElementBase {
         id => assert(this.browserProxy.callbackRouter.removeListener(id)));
     this.listenerIds = [];
     this.eventTracker_.removeAll();
-    this.postMessageReceiver.detach();
+    // Let the postMessageReceiver cleanup before it is destroyed.
+    this.postMessageReceiver!.detach();
+    this.postMessageReceiver = undefined;
   }
 
   private onBackArrowClick() {
@@ -411,6 +450,14 @@ export class LensSidePanelAppElement extends LensSidePanelAppElementBase {
     // A request is only started for zero suggest, which is when the input value
     // is empty.
     this.autocompleteRequestStarted = !e.detail.inputValue;
+
+    if (this.autocompleteRequestStarted && !window.navigator.onLine) {
+      // If the user doesn't have an internet connection, the suggest request
+      // will fail, so immediately show the error state.
+      this.showErrorState = true;
+      return;
+    }
+
     this.showErrorState = false;
   }
 
@@ -500,6 +547,10 @@ export class LensSidePanelAppElement extends LensSidePanelAppElementBase {
 
   private pageContentTypeChanged(newPageContentType: PageContentType) {
     this.pageContentType = newPageContentType;
+    this.browserProxy.handler.getIsContextualSearchbox().then(
+        ({isContextualSearchbox}) => {
+          this.isContextualSearchbox = isContextualSearchbox;
+        });
   }
 
   // Show the toast that asks the user to share their feedback.
@@ -522,6 +573,10 @@ export class LensSidePanelAppElement extends LensSidePanelAppElementBase {
         this.showFeedbackToast();
       }, RESHOW_FEEDBACK_TOAST_DELAY_MS);
     }
+  }
+
+  private onAimResultsChanged(onAim: boolean) {
+    this.isOnAimResults = onAim;
   }
 
   private async showToast(toast: CrToastElement, message?: string) {
@@ -561,5 +616,23 @@ declare global {
     'lens-side-panel-app': LensSidePanelAppElement;
   }
 }
+
+// Register the custom property for the composebox gradient color.
+// Custom properties are ignored by the browser in shadow DOMs, so need to
+// register them globally here. Additionally, the property can only by
+// registered once per document, so this must be done in the main window, rather
+// than in the class itself.
+window.CSS.registerProperty({
+  name: '--search-background-color',
+  syntax: '<color>',
+  inherits: true,
+  initialValue: 'white',
+});
+window.CSS.registerProperty({
+  name: '--ntp-composebox-background-color',
+  syntax: '<color>',
+  inherits: true,
+  initialValue: 'white',
+});
 
 customElements.define(LensSidePanelAppElement.is, LensSidePanelAppElement);

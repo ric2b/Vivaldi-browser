@@ -83,6 +83,8 @@ std::string GetDecoderName(AudioDecoderType type) {
       return "AudioToolboxAudioDecoder";
     case AudioDecoderType::kMediaFoundation:
       return "MediaFoundationAudioDecoder";
+    case AudioDecoderType::kSymphonia:
+      return "SymphoniaAudioDecoder";
   }
 }
 

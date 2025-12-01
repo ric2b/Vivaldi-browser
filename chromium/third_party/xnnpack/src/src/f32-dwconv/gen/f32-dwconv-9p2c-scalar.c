@@ -9,9 +9,13 @@
 // LICENSE file in the root directory of this source tree.
 
 #include <assert.h>
+#include <stddef.h>
+#include <stdint.h>
 
+#include "src/xnnpack/common.h"
 #include "src/xnnpack/dwconv.h"
 #include "src/xnnpack/math.h"
+#include "src/xnnpack/microparams.h"
 
 
 void xnn_f32_dwconv_ukernel_9p2c__scalar(
@@ -25,7 +29,7 @@ void xnn_f32_dwconv_ukernel_9p2c__scalar(
     size_t input_offset,
     size_t input_pixel_stride,
     const float* zero,
-    const struct xnn_f32_default_params params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f32_default_params* restrict params)
 {
   assert(channels != 0);
   assert(output_width != 0);

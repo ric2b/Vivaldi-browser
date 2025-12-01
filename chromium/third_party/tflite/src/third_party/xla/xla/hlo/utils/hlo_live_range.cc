@@ -29,6 +29,7 @@ limitations under the License.
 #include "absl/log/check.h"
 #include "absl/log/log.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "absl/types/span.h"
 #include "xla/hlo/analysis/hlo_alias_analysis.h"
@@ -36,6 +37,7 @@ limitations under the License.
 #include "xla/hlo/ir/hlo_computation.h"
 #include "xla/hlo/ir/hlo_opcode.h"
 #include "xla/hlo/ir/hlo_schedule.h"
+#include "xla/hlo/utils/hlo_stack_trace.h"
 #include "xla/service/hlo_buffer.h"
 #include "xla/service/hlo_value.h"
 #include "xla/shape_util.h"
@@ -320,16 +322,41 @@ std::string HloLiveRange::ToString() const {
 
   absl::StrAppendFormat(&output, "  Live ranges at %lld (peak):\n",
                         peak_moment);
+
+  std::vector<std::pair<int64_t, const HloValue*>> sized_buffers;
   for (const HloValue* value : alias_analysis_.dataflow_analysis().values()) {
     auto it = buffer_live_ranges_.find(value);
     if (it != buffer_live_ranges_.end()) {
       if (it->second.start <= peak_moment && peak_moment <= it->second.end) {
         int64_t bytes = ShapeUtil::ByteSizeOf(value->shape(), 8);
-        absl::StrAppendFormat(&output, "    %s%s: %lld bytes\n",
-                              value->instruction()->name(),
-                              value->index().ToString(), bytes);
+        sized_buffers.push_back({bytes, value});
       }
     }
+  }
+
+  absl::c_sort(sized_buffers, [](const std::pair<int64_t, const HloValue*>& a,
+                                 const std::pair<int64_t, const HloValue*>& b) {
+    if (a.first != b.first) {
+      return a.first > b.first;  // Size descending
+    }
+    // Sizes are equal, compare by name then index (ascending).
+    return std::make_pair(a.second->instruction()->name(), a.second->index()) <
+           std::make_pair(b.second->instruction()->name(), b.second->index());
+  });
+
+  int64_t total_bytes = 0;
+  for (const auto& [bytes, value] : sized_buffers) {
+    total_bytes += bytes;
+    absl::StrAppendFormat(&output,
+                          "    %s%s: %lld bytes (cumulative: %lld bytes)\n",
+                          value->instruction()->name(),
+                          value->index().ToString(), bytes, total_bytes);
+  }
+
+  const HloModule* module =
+      instructions.empty() ? nullptr : instructions[0]->GetModule();
+  if (module != nullptr) {
+    absl::StrAppend(&output, FormatStackTraceBreakdown(sized_buffers, module));
   }
 
   return output;

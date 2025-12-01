@@ -10,7 +10,7 @@ SRC = os.path.dirname(os.path.dirname(__file__))
 
 cipd_pick_list = [
   "tools/clang/dsymutil",
-  "third_party/devtools-frontend/src/third_party/esbuild",
+  "third_party/esbuild", # in third_party/devtools-frontend/src/
   "buildtools/reclient",
   "third_party/lzma_sdk/bin/host_platform",
   "third_party/lzma_sdk/bin/win64",
@@ -66,7 +66,11 @@ excluded_modules = [
   "chromiumos/platform/minigbm",
   "third_party/pyelftools",
   "third_party/crossbench",
+  "third_party/crossbench-web-tests",
+  ]
 
+include_recursive_deps = [
+  "third_party/devtools-frontend/src"
   ]
 
 def main():
@@ -76,7 +80,7 @@ def main():
 
   deps = vivdeps.ChromiumDeps(variables=variables)
 
-  deps.Load(recurse=True)
+  deps.Load(recurse=True, recurse_deps=include_recursive_deps)
 
   existing_submodules = []
   only_cipd = True

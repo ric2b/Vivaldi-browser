@@ -8,7 +8,7 @@
 #include "components/os_crypt/sync/keychain_password_mac.h"
 #include "components/os_crypt/sync/os_crypt_metrics.h"
 #include "crypto/aes_cbc.h"
-#include "crypto/apple_keychain.h"
+#include "crypto/apple/keychain.h"
 #include "crypto/kdf.h"
 
 namespace {
@@ -43,7 +43,7 @@ bool OSCryptImpl::DeriveImportEncryptionKey(const std::string& service_name,
     return true;
 
   std::string password;
-  auto keychain = crypto::AppleKeychain::DefaultKeychain();
+  auto keychain = crypto::apple::Keychain::DefaultKeychain();
   KeychainPassword encryptor_password(*keychain);
   password = encryptor_password.GetPassword(service_name, account_name);
 

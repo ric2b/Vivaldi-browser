@@ -1,15 +1,22 @@
-SKIP: FAILED
+struct main_outputs {
+  float4 tint_symbol : SV_Position;
+};
+
+struct main_inputs {
+  uint b : SV_InstanceID;
+};
 
 
-enable chromium_experimental_immediate;
-
-var<immediate> a : f32;
-
-@vertex
-fn main(@builtin(instance_index) b : u32) -> @builtin(position) vec4<f32> {
-  return vec4<f32>((a + f32(b)));
+cbuffer cbuffer_a : register(b0) {
+  uint4 a[1];
+};
+float4 main_inner(uint b) {
+  float v = asfloat(a[0u].x);
+  return float4(((v + float(b))).xxxx);
 }
 
-Failed to generate: error: unhandled address space immediate
+main_outputs main(main_inputs inputs) {
+  main_outputs v_1 = {main_inner(inputs.b)};
+  return v_1;
+}
 
-tint executable returned error: exit status 1

@@ -10,6 +10,8 @@ class WebContents;
 namespace vivaldi {
 bool IsVivaldiMail(content::WebContents* web_contents);
 bool IsVivaldiWebPanel(content::WebContents* web_contents);
+bool IsVivaldiReader(content::WebContents* web_contents);
+bool IsVivaldiRichTextEditor(content::WebContents* web_contents);
 }  // namespace vivaldi
 
 #endif  // BROWSER_VIVALDI_WEBCONTENTS_UTIL_H_

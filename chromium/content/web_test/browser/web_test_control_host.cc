@@ -31,6 +31,7 @@
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/functional/callback_helpers.h"
+#include "base/hash/md5.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
@@ -47,6 +48,8 @@
 #include "cc/paint/skia_paint_canvas.h"
 #include "components/custom_handlers/protocol_handler_registry.h"
 #include "components/custom_handlers/simple_protocol_handler_registry_factory.h"
+#include "components/subresource_filter/core/common/test_ruleset_creator.h"
+#include "components/subresource_filter/core/common/test_ruleset_utils.h"
 #include "content/browser/aggregation_service/aggregation_service.h"
 #include "content/browser/attribution_reporting/attribution_manager.h"
 #include "content/browser/in_memory_federated_permission_context.h"
@@ -95,7 +98,6 @@
 #include "content/web_test/common/web_test_constants.h"
 #include "content/web_test/common/web_test_string_util.h"
 #include "content/web_test/common/web_test_switches.h"
-#include "ipc/ipc_channel_proxy.h"
 #include "mojo/public/cpp/bindings/sync_call_restrictions.h"
 #include "net/cookies/cookie_util.h"
 #include "services/device/public/cpp/compute_pressure/buildflags.h"
@@ -1084,17 +1086,6 @@ void WebTestControlHost::RequestPointerLock(WebContents* web_contents) {
   next_pointer_lock_action_ = NextPointerLockAction::kWillSucceed;
 }
 
-void WebTestControlHost::PluginCrashed(const base::FilePath& plugin_path,
-                                       base::ProcessId plugin_pid) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  printer_->AddErrorMessage(
-      base::StringPrintf("#CRASHED - plugin (pid %" CrPRIdPid ")", plugin_pid));
-  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
-      FROM_HERE,
-      base::BindOnce(base::IgnoreResult(&WebTestControlHost::DiscardMainWindow),
-                     weak_factory_.GetWeakPtr()));
-}
-
 void WebTestControlHost::TitleWasSet(NavigationEntry* entry) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   std::vector<std::string> logs = DumpTitleWasSet(main_window_->web_contents());
@@ -1641,6 +1632,23 @@ void WebTestControlHost::SetFilePathForMockFileDialog(
     const base::FilePath& path) {
   ui::SelectFileDialog::SetFactory(
       std::make_unique<FakeSelectFileDialogFactory>(path));
+}
+
+void WebTestControlHost::CreateSubresourceFilterRulesetFile(
+    const std::vector<std::string>& disallowed_suffixes,
+    CreateSubresourceFilterRulesetFileCallback callback) {
+  std::vector<url_pattern_index::proto::UrlRule> rules;
+  for (const std::string& disallowed_suffix : disallowed_suffixes) {
+    rules.push_back(
+        subresource_filter::testing::CreateSuffixRule(disallowed_suffix));
+  }
+
+  subresource_filter::testing::TestRulesetPair test_ruleset_pair;
+  subresource_filter::testing::TestRulesetCreator ruleset_creator;
+  ruleset_creator.CreateRulesetWithRules(rules, &test_ruleset_pair);
+
+  std::move(callback).Run(subresource_filter::testing::TestRuleset::Open(
+      test_ruleset_pair.indexed));
 }
 
 void WebTestControlHost::FocusDevtoolsSecondaryWindow() {

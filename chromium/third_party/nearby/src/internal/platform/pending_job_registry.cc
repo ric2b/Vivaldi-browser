@@ -14,6 +14,8 @@
 
 #include "internal/platform/pending_job_registry.h"
 
+#include "absl/time/time.h"
+#include "internal/platform/implementation/system_clock.h"
 #include "internal/platform/logging.h"
 #include "internal/platform/mutex_lock.h"
 #include "internal/platform/system_clock.h"
@@ -67,15 +69,15 @@ void PendingJobRegistry::ListJobs() {
   for (auto& job : pending_jobs_) {
     auto age = current_time - job.second;
     if (age >= kReportPendingJobsOlderThan) {
-      NEARBY_LOGS(INFO) << "Task \"" << job.first << "\" is waiting for "
-                        << absl::ToInt64Seconds(age) << " s";
+      LOG(INFO) << "Task \"" << job.first << "\" is waiting for "
+                << absl::ToInt64Seconds(age) << " s";
     }
   }
   for (auto& job : running_jobs_) {
     auto age = current_time - job.second;
     if (age >= kReportRunningJobsOlderThan) {
-      NEARBY_LOGS(INFO) << "Task \"" << job.first << "\" is running for "
-                        << absl::ToInt64Seconds(age) << " s";
+      LOG(INFO) << "Task \"" << job.first << "\" is running for "
+                << absl::ToInt64Seconds(age) << " s";
     }
   }
   list_jobs_time_ = current_time;
@@ -86,13 +88,13 @@ void PendingJobRegistry::ListAllJobs() {
   auto current_time = SystemClock::ElapsedRealtime();
   for (auto& job : pending_jobs_) {
     auto age = current_time - job.second;
-    NEARBY_LOGS(INFO) << "Task \"" << job.first << "\" is waiting for "
-                      << absl::ToInt64Seconds(age) << " s";
+    LOG(INFO) << "Task \"" << job.first << "\" is waiting for "
+              << absl::ToInt64Seconds(age) << " s";
   }
   for (auto& job : running_jobs_) {
     auto age = current_time - job.second;
-    NEARBY_LOGS(INFO) << "Task \"" << job.first << "\" is running for "
-                      << absl::ToInt64Seconds(age) << " s";
+    LOG(INFO) << "Task \"" << job.first << "\" is running for "
+              << absl::ToInt64Seconds(age) << " s";
   }
   list_jobs_time_ = current_time;
 }

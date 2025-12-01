@@ -6,6 +6,7 @@
 #define SYSTEM_API_DBUS_CROS_DISKS_DBUS_CONSTANTS_H_
 
 #include <ostream>
+#include <type_traits>
 
 namespace cros_disks {
 

@@ -26,29 +26,46 @@
 
 namespace ash::settings {
 
+namespace {
+
+class TtsPreviewEventDelegate : public content::UtteranceEventDelegate {
+ public:
+  explicit TtsPreviewEventDelegate(
+      base::WeakPtr<SettingsWithTtsPreviewHandler> handler)
+      : handler_(handler) {}
+  ~TtsPreviewEventDelegate() override = default;
+
+  // content::UtteranceEventDelegate:
+  void OnTtsEvent(content::TtsUtterance* utterance,
+                  content::TtsEventType event_type,
+                  int char_index,
+                  int length,
+                  const std::string& error_message) override {
+    if (handler_ && (event_type == content::TTS_EVENT_END ||
+                     event_type == content::TTS_EVENT_INTERRUPTED ||
+                     event_type == content::TTS_EVENT_ERROR)) {
+      handler_->FireTtsPreviewEvent();
+    }
+  }
+
+ private:
+  base::WeakPtr<SettingsWithTtsPreviewHandler> handler_;
+};
+
+}  // namespace
+
 SettingsWithTtsPreviewHandler::SettingsWithTtsPreviewHandler() = default;
 
-SettingsWithTtsPreviewHandler::~SettingsWithTtsPreviewHandler() {
-  RemoveTtsControllerDelegates();
-}
+SettingsWithTtsPreviewHandler::~SettingsWithTtsPreviewHandler() = default;
 
 void SettingsWithTtsPreviewHandler::HandleGetAllTtsVoiceData(
     const base::Value::List& args) {
   OnVoicesChanged();
 }
 
-void SettingsWithTtsPreviewHandler::OnTtsEvent(
-    content::TtsUtterance* utterance,
-    content::TtsEventType event_type,
-    int char_index,
-    int length,
-    const std::string& error_message) {
-  if (event_type == content::TTS_EVENT_END ||
-      event_type == content::TTS_EVENT_INTERRUPTED ||
-      event_type == content::TTS_EVENT_ERROR) {
-    base::Value result(false /* preview stopped */);
-    FireWebUIListener("tts-preview-state-changed", result);
-  }
+void SettingsWithTtsPreviewHandler::FireTtsPreviewEvent() {
+  FireWebUIListener("tts-preview-state-changed",
+                    base::Value(/*preview_stopped=*/false));
 }
 
 void SettingsWithTtsPreviewHandler::HandlePreviewTtsVoice(
@@ -77,11 +94,12 @@ void SettingsWithTtsPreviewHandler::HandlePreviewTtsVoice(
   utterance->SetVoiceName(name);
   utterance->SetEngineId(extension_id);
   utterance->SetSrcUrl(GetSourceURL());
-  utterance->SetEventDelegate(this);
+  utterance->SetEventDelegate(
+      std::make_unique<TtsPreviewEventDelegate>(weak_factory_.GetWeakPtr()));
   content::TtsController::GetInstance()->Stop();
 
-  base::Value result(true /* preview started */);
-  FireWebUIListener("tts-preview-state-changed", result);
+  FireWebUIListener("tts-preview-state-changed",
+                    base::Value(/*preview_started=*/true));
   content::TtsController::GetInstance()->SpeakOrEnqueue(std::move(utterance));
 }
 
@@ -98,21 +116,16 @@ void SettingsWithTtsPreviewHandler::RegisterMessages() {
 }
 
 void SettingsWithTtsPreviewHandler::OnJavascriptAllowed() {
-  content::TtsController::GetInstance()->AddVoicesChangedDelegate(this);
+  tts_observation_.Observe(content::TtsController::GetInstance());
 }
 
 void SettingsWithTtsPreviewHandler::OnJavascriptDisallowed() {
-  RemoveTtsControllerDelegates();
+  tts_observation_.Reset();
 }
 
 void SettingsWithTtsPreviewHandler::RefreshTtsVoices(
     const base::Value::List& args) {
   content::TtsController::GetInstance()->RefreshVoices();
-}
-
-void SettingsWithTtsPreviewHandler::RemoveTtsControllerDelegates() {
-  content::TtsController::GetInstance()->RemoveVoicesChangedDelegate(this);
-  content::TtsController::GetInstance()->RemoveUtteranceEventDelegate(this);
 }
 
 }  // namespace ash::settings

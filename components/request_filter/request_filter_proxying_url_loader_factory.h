@@ -17,6 +17,7 @@
 #include "base/memory/raw_ptr.h"
 #include "components/keyed_service/core/keyed_service_shutdown_notifier.h"
 #include "components/request_filter/request_filter_manager.h"
+#include "ipc/constants.mojom.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "services/network/public/mojom/early_hints.mojom.h"
@@ -176,8 +177,8 @@ class RequestFilterProxyingURLLoaderFactory
     const std::optional<url::Origin> original_initiator_;
     const uint64_t request_id_ = 0;
     const int32_t network_service_request_id_ = 0;
-    const int32_t view_routing_id_ = MSG_ROUTING_NONE;
-    const int32_t frame_routing_id_ = MSG_ROUTING_NONE;
+    const int32_t view_routing_id_ = IPC::mojom::kRoutingIdNone;
+    const int32_t frame_routing_id_ = IPC::mojom::kRoutingIdNone;
     const uint32_t options_ = 0;
     const net::MutableNetworkTrafficAnnotationTag traffic_annotation_;
     mojo::Receiver<network::mojom::URLLoader> proxied_loader_receiver_;

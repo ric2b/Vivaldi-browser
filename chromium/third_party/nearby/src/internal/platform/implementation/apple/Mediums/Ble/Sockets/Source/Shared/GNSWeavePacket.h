@@ -47,21 +47,21 @@ typedef NS_ENUM(UInt8, GNSWeaveControlCommand) {
  * - (void)didReceivedData:(NSData *)data {
  *   GNSWeavePacket *packet = [GNSWeavePacket parseData:data error:nil];
  *   if ([packet visitWithHandler:self context:nil]) {
- *     NSLog(@"This class can handle this packet.");
+ *     GNCLoggerInfo(@"This class can handle this packet.");
  *   } else {
- *     NSLog(@"Unexpected packet received.");
+ *     GNCLoggerInfo(@"Unexpected packet received.");
  *   }
  * }
  *
  * - (void)handleConnectionRequestPacket:(GNSWeaveConnectionRequestPacket *)packet
  *                               context:(nullable id)context {
- *   NSLog(@"Connection request packet received.");
+ *   GNCLoggerInfo(@"Connection request packet received.");
  *   ...
  * }
  * @end
  *
  **/
-@protocol GNSWeavePacketHandler<NSObject>
+@protocol GNSWeavePacketHandler <NSObject>
 @optional
 
 - (void)handleConnectionRequestPacket:(GNSWeaveConnectionRequestPacket *)packet

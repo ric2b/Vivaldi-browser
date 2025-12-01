@@ -4,14 +4,14 @@
 
 #include "base/lazy_instance.h"
 #include "base/strings/utf_string_conversions.h"
+#include "browser/ad_blocker/adblock_rule_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
-#include "components/ad_blocker/adblock_known_sources_handler.h"
-#include "components/ad_blocker/adblock_stats_store.h"
-#include "components/request_filter/adblock_filter/adblock_rule_service_content.h"
-#include "components/request_filter/adblock_filter/adblock_rule_service_factory.h"
-#include "components/request_filter/adblock_filter/adblock_state_and_logs.h"
-#include "components/request_filter/adblock_filter/adblock_tab_state_and_logs.h"
+#include "components/ad_blocker/public/content/adblock_rule_service.h"
+#include "components/ad_blocker/public/content/adblock_state_and_logs.h"
+#include "components/ad_blocker/public/content/adblock_tab_state_and_logs.h"
+#include "components/ad_blocker/public/core/adblock_known_sources_handler.h"
+#include "components/ad_blocker/public/core/adblock_stats_store.h"
 #include "components/search_engines/template_url_service.h"
 #include "extensions/schema/content_blocking.h"
 #include "extensions/tools/vivaldi_tools.h"
@@ -308,15 +308,6 @@ void ContentBlockingEventRouter::OnExceptionListStateChanged(
       browser_context_);
 }
 
-void ContentBlockingEventRouter::OnGroupStateChanged(
-    adblock_filter::RuleGroup group) {
-  ::vivaldi::BroadcastEvent(
-      vivaldi::content_blocking::OnStateChanged::kEventName,
-      vivaldi::content_blocking::OnStateChanged::Create(
-          ToVivaldiContentBlockingRuleGroup(group)),
-      browser_context_);
-}
-
 void ContentBlockingEventRouter::OnExceptionListChanged(
     adblock_filter::RuleGroup group,
     adblock_filter::RuleManager::ExceptionsList list) {
@@ -441,31 +432,6 @@ void AdBlockFunction::OnRuleServiceStateLoaded(
 ExtensionFunction::ResponseValue AdBlockFunction::ValidationFailure(
     AdBlockFunction* function) {
   return function->BadMessage();
-}
-
-AdBlockFunction::ResponseAction
-ContentBlockingSetRuleGroupEnabledFunction::RunWithService(
-    adblock_filter::RuleService* rules_service) {
-  using vivaldi::content_blocking::SetRuleGroupEnabled::Params;
-  std::optional<Params> params(Params::Create(args()));
-
-  rules_service->SetRuleGroupEnabled(
-      FromVivaldiContentBlockingRuleGroup(params->rule_group).value(),
-      params->enabled);
-
-  return RespondNow(NoArguments());
-}
-
-AdBlockFunction::ResponseAction
-ContentBlockingIsRuleGroupEnabledFunction::RunWithService(
-    adblock_filter::RuleService* rules_service) {
-  using vivaldi::content_blocking::IsRuleGroupEnabled::Params;
-  namespace Results = vivaldi::content_blocking::IsRuleGroupEnabled::Results;
-  std::optional<Params> params(Params::Create(args()));
-
-  return RespondNow(
-      ArgumentList(Results::Create(rules_service->IsRuleGroupEnabled(
-          FromVivaldiContentBlockingRuleGroup(params->rule_group).value()))));
 }
 
 AdBlockFunction::ResponseAction
@@ -807,8 +773,8 @@ ContentBlockingGetBlockedUrlsInfoFunction::RunWithService(
       }
       tab_blocked_urls_infos.emplace_back();
       tab_blocked_urls_infos.back().tab_id =
-      VivaldiBrowserComponentWrapper::GetInstance()->ExtensionTabUtilGetTabId(
-          web_contents);
+          VivaldiBrowserComponentWrapper::GetInstance()
+              ->ExtensionTabUtilGetTabId(web_contents);
       tab_blocked_urls_infos.back().total_blocked_count =
           tab_blocked_urls_info.total_count;
 
@@ -969,8 +935,8 @@ ContentBlockingGetAdAttributionDomainFunction::RunWithService(
   for (auto tab_id : params->tab_ids) {
     content::WebContents* web_contents;
     if (!VivaldiBrowserComponentWrapper::GetInstance()
-            ->ExtensionTabUtilGetTabById(tab_id, browser_context(), true,
-                                         &web_contents) ||
+             ->ExtensionTabUtilGetTabById(tab_id, browser_context(), true,
+                                          &web_contents) ||
         !web_contents) {
       continue;
     }
@@ -1001,8 +967,8 @@ ContentBlockingGetAdAttributionAllowedTrackersFunction::RunWithService(
   for (auto tab_id : params->tab_ids) {
     content::WebContents* web_contents;
     if (!VivaldiBrowserComponentWrapper::GetInstance()
-            ->ExtensionTabUtilGetTabById(tab_id, browser_context(), true,
-                                         &web_contents) ||
+             ->ExtensionTabUtilGetTabById(tab_id, browser_context(), true,
+                                          &web_contents) ||
         !web_contents) {
       continue;
     }

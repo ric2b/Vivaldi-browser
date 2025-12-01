@@ -4,13 +4,13 @@
 
 #include "components/input/child_frame_input_helper.h"
 
+#include "base/trace_event/trace_event.h"
 #include "components/input/features.h"
 #include "components/input/render_input_router.h"
 #include "components/input/render_widget_host_input_event_router.h"
 #include "third_party/blink/public/common/frame/frame_visual_properties.h"
 
 #include "app/vivaldi_apptools.h"
-#include "browser/vivaldi_clipboard_utils.h"
 
 namespace input {
 
@@ -194,17 +194,6 @@ void ChildFrameInputHelper::TransformPointToRootSurface(gfx::PointF* point) {
 
 blink::mojom::InputEventResultState ChildFrameInputHelper::FilterInputEvent(
     const blink::WebInputEvent& input_event) {
-#if BUILDFLAG(IS_LINUX)
-  if (vivaldi::IsVivaldiRunning()) {
-    // NOTE(espen@vivaldi.com): Same handling as in
-    // RenderWidgetHostViewAura::FilterInputEvent(). With the introduction of
-    // GuestViewCrossProcessFrames it has become to do the same here. This gets
-    // called for all events in web pages, while RenderWidgetHostViewAura deals
-    // with events for UI.
-    vivaldi::clipboard::OnInputEvent(input_event);
-  }
-#endif  // IS_LINUX
-
   // A child renderer should never receive a GesturePinch event. Pinch events
   // can still be targeted to a child, but they must be processed without
   // sending the pinch event to the child (e.g. touchpad pinch synthesizes

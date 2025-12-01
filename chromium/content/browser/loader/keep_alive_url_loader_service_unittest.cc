@@ -19,6 +19,7 @@
 #include "content/browser/attribution_reporting/test/mock_attribution_data_host_manager.h"
 #include "content/browser/attribution_reporting/test/mock_attribution_manager.h"
 #include "content/browser/storage_partition_impl.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/test/test_utils.h"
 #include "content/test/navigation_simulator_impl.h"
@@ -49,6 +50,10 @@
 #include "third_party/blink/public/common/loader/url_loader_throttle.h"
 #include "third_party/blink/public/mojom/loader/fetch_later.mojom.h"
 #include "url/gurl.h"
+
+#if BUILDFLAG(IS_MAC)
+#include "base/mac/mac_util.h"
+#endif
 
 namespace content {
 namespace {
@@ -351,11 +356,11 @@ class KeepAliveURLLoaderServiceTestBase : public RenderViewHostTestHarness {
 
     test_web_contents()->NavigateAndCommit(GURL("https://example.com"));
 
-    pending_navigation_ = NavigationSimulator::CreateBrowserInitiated(
+    // Start a navigation but don't commit just yet, since we want to inject the
+    // context created in `BindKeepAliveURLLoaderFactory()`.
+    pending_navigation_ = NavigationSimulatorImpl::CreateBrowserInitiated(
         GURL("https://example.com"), web_contents());
-    pending_navigation_->ReadyToCommit();
-
-    AddConnectSrcCSPToRFH(kTestRedirectRequestUrl);
+    pending_navigation_->Start();
   }
 
   void TearDown() override {
@@ -371,7 +376,7 @@ class KeepAliveURLLoaderServiceTestBase : public RenderViewHostTestHarness {
     EXPECT_EQ(mojo_bad_message_, message);
   }
 
-  NavigationHandle* GetNavigationHandle() {
+  NavigationRequest* GetNavigationRequest() {
     return pending_navigation_->GetNavigationHandle();
   }
 
@@ -394,7 +399,19 @@ class KeepAliveURLLoaderServiceTestBase : public RenderViewHostTestHarness {
         static_cast<RenderFrameHostImpl*>(main_rfh())
             ->policy_container_host()
             ->Clone());
-    context->OnDidCommitNavigation(GetNavigationHandle());
+
+    // Ensure that the context above is the one used in the NavigationRequest.
+    // This is to make sure the OnDidCommitNavigation call that happens during
+    // navigation commit below will use the the loader & context that is
+    // expected by the test. We no longer call OnDidCommitNavigation manually
+    // since if we change RFHs we might not have a PolicyContainerHost or
+    // RFH origin yet here, causing problems with tests, attribution context
+    // etc.
+    GetNavigationRequest()->SetKeepAliveURLLoaderFactoryContextForTesting(
+        context);
+    pending_navigation_->Commit();
+
+    AddConnectSrcCSPToRFH(kTestRedirectRequestUrl);
   }
 
   network::TestURLLoaderFactory::PendingRequest* GetLastPendingRequest() {
@@ -422,7 +439,8 @@ class KeepAliveURLLoaderServiceTestBase : public RenderViewHostTestHarness {
   KeepAliveURLLoaderService& loader_service() {
     if (!loader_service_) {
       loader_service_ = std::make_unique<KeepAliveURLLoaderService>(
-          main_rfh()->GetBrowserContext());
+          static_cast<StoragePartitionImpl*>(
+              main_rfh()->GetStoragePartition()));
     }
     return *loader_service_;
   }
@@ -431,6 +449,8 @@ class KeepAliveURLLoaderServiceTestBase : public RenderViewHostTestHarness {
   TestWebContents* test_web_contents() {
     return static_cast<TestWebContents*>(web_contents());
   }
+
+  std::unique_ptr<NavigationSimulatorImpl> pending_navigation_;
 
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
@@ -441,7 +461,6 @@ class KeepAliveURLLoaderServiceTestBase : public RenderViewHostTestHarness {
   // The test target.
   std::unique_ptr<KeepAliveURLLoaderService> loader_service_ = nullptr;
   std::optional<std::string> mojo_bad_message_;
-  std::unique_ptr<NavigationSimulator> pending_navigation_;
 };
 
 class KeepAliveURLLoaderServiceTest : public KeepAliveURLLoaderServiceTestBase {
@@ -564,13 +583,18 @@ TEST_F(KeepAliveURLLoaderServiceTest, LoadRequestAfterUpdateFactory) {
   // to nothing.
   auto unbound_factory =
       std::make_unique<network::WrapperPendingSharedURLLoaderFactory>();
+  scoped_refptr<PolicyContainerHost> policy_container_host =
+      static_cast<RenderFrameHostImpl*>(main_rfh())
+          ->policy_container_host()
+          ->Clone();
   auto context = loader_service().BindFactory(
       renderer_loader_factory.BindNewPipeAndPassReceiver(),
       network::SharedURLLoaderFactory::Create(std::move(unbound_factory)),
-      static_cast<RenderFrameHostImpl*>(main_rfh())
-          ->policy_container_host()
-          ->Clone());
-  context->OnDidCommitNavigation(GetNavigationHandle());
+      policy_container_host);
+  GetNavigationRequest()->SetKeepAliveURLLoaderFactoryContextForTesting(
+      context);
+  pending_navigation_->Commit();
+
   {
     // Load a keepalive request. There should be no network loader created.
     MockReceiverURLLoaderClient renderer_loader_client;
@@ -1304,10 +1328,17 @@ TEST_F(KeepAliveURLLoaderServiceTest,
 class FetchLaterKeepAliveURLLoaderServiceTest
     : public KeepAliveURLLoaderServiceTestBase {
  protected:
+  static constexpr base::TimeDelta kDisconnectedLoaderTimeoutForTesting =
+      base::Seconds(15);
+
   void SetUp() override {
-    feature_list().InitWithFeatures(
-        {blink::features::kFetchLaterAPI,
-         blink::features::kAttributionReportingInBrowserMigration},
+    feature_list().InitWithFeaturesAndParameters(
+        {{blink::features::kFetchLaterAPI, {}},
+         {blink::features::kAttributionReportingInBrowserMigration, {}},
+         {blink::features::kKeepAliveInBrowserMigration,
+          {{"disconnected_loader_timeout_seconds",
+            base::NumberToString(
+                kDisconnectedLoaderTimeoutForTesting.InSeconds())}}}},
         {});
     KeepAliveURLLoaderServiceTestBase::SetUp();
   }
@@ -1332,7 +1363,11 @@ class FetchLaterKeepAliveURLLoaderServiceTest
         static_cast<RenderFrameHostImpl*>(main_rfh())
             ->policy_container_host()
             ->Clone());
-    context->OnDidCommitNavigation(GetNavigationHandle());
+
+    GetNavigationRequest()->SetFetchLaterLoaderFactoryContextForTesting(
+        context);
+    pending_navigation_->Commit();
+    AddConnectSrcCSPToRFH(kTestRedirectRequestUrl);
   }
 };
 
@@ -1437,8 +1472,8 @@ TEST_F(FetchLaterKeepAliveURLLoaderServiceTest,
   // KeepAliveURLLoader.
   renderer_loader_factory.reset_remote_fetch_later_loader();
   base::RunLoop().RunUntilIdle();
-  // Fast forwards `kDefaultDisconnectedKeepAliveURLLoaderTimeout` (30s).
-  task_environment()->FastForwardBy(base::Seconds(30));
+  // Fast forwards to the keepalive disconnect timeout.
+  task_environment()->FastForwardBy(kDisconnectedLoaderTimeoutForTesting);
 
   // Disconnected KeepAliveURLLoader should be killed.
   EXPECT_EQ(loader_service().NumDisconnectedLoadersForTesting(), 0u);
@@ -1757,7 +1792,7 @@ TEST_F(KeepAliveURLLoaderServiceRetryTest, OnCompleteWillBeRetried) {
           FakeRemoteURLLoaderFactory::kRequestId);
   loader->OnComplete(
       network::URLLoaderCompletionStatus(net::ERR_NETWORK_CHANGED));
-  EXPECT_TRUE(loader->IsAttemptingRetry());
+  EXPECT_TRUE(loader->IsAttemptingRetry(/*include_failed_retry=*/false));
 }
 // Test which errors are eligible for retry when opting in to retry only if the
 // server is not reached yet.
@@ -1840,7 +1875,7 @@ TEST_F(KeepAliveURLLoaderServiceRetryTest, CancelWithStatusWillBeRetried) {
           FakeRemoteURLLoaderFactory::kRequestId);
   loader->CancelWithStatus(
       network::URLLoaderCompletionStatus(net::ERR_NETWORK_CHANGED));
-  EXPECT_TRUE(loader->IsAttemptingRetry());
+  EXPECT_TRUE(loader->IsAttemptingRetry(/*include_failed_retry=*/false));
 }
 
 // Test that failing a request with no retry options won't be retried.
@@ -1867,6 +1902,14 @@ TEST_F(KeepAliveURLLoaderServiceRetryTest, NoRetryOptionsWillNotBeRetried) {
 
 // Test that failing a request to non-HTTPs will not be retried.
 TEST_F(KeepAliveURLLoaderServiceRetryTest, NonHTTPSWillNotBeRetried) {
+#if BUILDFLAG(IS_MAC)
+  // TODO(crbug.com/434660312): Re-enable on macOS 26 once issues with
+  // unexpected test timeout failures are resolved.
+  if (base::mac::MacOSMajorVersion() == 26) {
+    GTEST_SKIP() << "Disabled on macOS Tahoe.";
+  }
+#endif
+
   FakeRemoteURLLoaderFactory renderer_loader_factory;
   MockReceiverURLLoaderClient renderer_loader_client;
   BindKeepAliveURLLoaderFactory(renderer_loader_factory);
@@ -1887,7 +1930,15 @@ TEST_F(KeepAliveURLLoaderServiceRetryTest, NonHTTPSWillNotBeRetried) {
           FakeRemoteURLLoaderFactory::kRequestId);
   loader->OnComplete(
       network::URLLoaderCompletionStatus(net::ERR_NETWORK_CHANGED));
-  // The loader is deleted as it can't be retried.
+
+  // The loader is deleted after max age, as it can't be retried, and the error
+  // gets forwarded at that time.
+  EXPECT_FALSE(loader->IsAttemptingRetry(/*include_failed_retry=*/false));
+  EXPECT_CALL(
+      renderer_loader_client,
+      OnComplete(network::URLLoaderCompletionStatus(net::ERR_NETWORK_CHANGED)))
+      .Times(1);
+  task_environment()->FastForwardBy(loader->GetMaxAgeForRetry());
   EXPECT_FALSE(loader.get());
 }
 
@@ -1895,6 +1946,14 @@ TEST_F(KeepAliveURLLoaderServiceRetryTest, NonHTTPSWillNotBeRetried) {
 // retry options doesn't specify it wants to retry non-idempotent failures.
 TEST_F(KeepAliveURLLoaderServiceRetryTest,
        POSTWillNotBeRetriedUnlessRequested) {
+#if BUILDFLAG(IS_MAC)
+  // TODO(crbug.com/434660312): Re-enable on macOS 26 once issues with
+  // unexpected test timeout failures are resolved.
+  if (base::mac::MacOSMajorVersion() == 26) {
+    GTEST_SKIP() << "Disabled on macOS Tahoe.";
+  }
+#endif
+
   FakeRemoteURLLoaderFactory renderer_loader_factory;
   MockReceiverURLLoaderClient renderer_loader_client;
   BindKeepAliveURLLoaderFactory(renderer_loader_factory);
@@ -1916,7 +1975,65 @@ TEST_F(KeepAliveURLLoaderServiceRetryTest,
           FakeRemoteURLLoaderFactory::kRequestId);
   loader->OnComplete(
       network::URLLoaderCompletionStatus(net::ERR_NETWORK_CHANGED));
-  // The loader is deleted as it can't be retried.
+
+  // The loader is deleted after max age, as it can't be retried, and the error
+  // gets forwarded at that time.
+  EXPECT_FALSE(loader->IsAttemptingRetry(/*include_failed_retry=*/false));
+  EXPECT_CALL(
+      renderer_loader_client,
+      OnComplete(network::URLLoaderCompletionStatus(net::ERR_NETWORK_CHANGED)))
+      .Times(1);
+  task_environment()->FastForwardBy(loader->GetMaxAgeForRetry());
+  EXPECT_FALSE(loader.get());
+}
+
+// Test that fail all attempts will forward the last error.
+TEST_F(KeepAliveURLLoaderServiceRetryTest,
+       FailedMaxAttemptWillForwardLastError) {
+#if BUILDFLAG(IS_MAC)
+  // TODO(crbug.com/434660312): Re-enable on macOS 26 once issues with
+  // unexpected test timeout failures are resolved.
+  if (base::mac::MacOSMajorVersion() == 26) {
+    GTEST_SKIP() << "Disabled on macOS Tahoe.";
+  }
+#endif
+  FakeRemoteURLLoaderFactory renderer_loader_factory;
+  MockReceiverURLLoaderClient renderer_loader_client;
+  BindKeepAliveURLLoaderFactory(renderer_loader_factory);
+
+  auto resource_request = CreateResourceRequest(GURL(kTestRequestUrl));
+  network::FetchRetryOptions options;
+  options.max_attempts = 1;
+  resource_request.fetch_retry_options = options;
+
+  // Loads keepalive request:
+  renderer_loader_factory.CreateLoaderAndStart(
+      resource_request, renderer_loader_client.BindNewPipeAndPassRemote());
+  ASSERT_EQ(network_url_loader_factory().NumPending(), 1);
+  ASSERT_EQ(loader_service().NumLoadersForTesting(), 1u);
+
+  base::WeakPtr<KeepAliveURLLoader> loader =
+      loader_service().GetLoaderWithRequestIdForTesting(
+          FakeRemoteURLLoaderFactory::kRequestId);
+  // First failure.
+  loader->OnComplete(
+      network::URLLoaderCompletionStatus(net::ERR_NETWORK_CHANGED));
+  EXPECT_TRUE(loader->IsAttemptingRetry(/*include_failed_retry=*/false));
+
+  // Second failure.
+  loader->OnComplete(network::URLLoaderCompletionStatus(net::ERR_TIMED_OUT));
+  // We can only retry once, since that's the max attempt set.
+  EXPECT_FALSE(loader->IsAttemptingRetry(/*include_failed_retry=*/false));
+  EXPECT_FALSE(loader->IsForwardURLLoadStarted());
+
+  // The renderer should get the latest OnComplete call when we hit the max age.
+  EXPECT_CALL(
+      renderer_loader_client,
+      OnComplete(network::URLLoaderCompletionStatus(net::ERR_TIMED_OUT)))
+      .Times(1);
+  task_environment()->FastForwardBy(loader->GetMaxAgeForRetry());
+  // Note that we can't check IsForwardURLLoadStarted() here as we delete the
+  // loader after the OnComplete is forwarded.
   EXPECT_FALSE(loader.get());
 }
 
@@ -1955,6 +2072,13 @@ TEST_F(KeepAliveURLLoaderServiceRetryTest, ReceivedResponseWillNotBeRetried) {
 // Test that hitting the redirect limit won't trigger a retry.
 TEST_F(KeepAliveURLLoaderServiceRetryTest,
        ExceededRedirectLimitWillNotBeRetried) {
+#if BUILDFLAG(IS_MAC)
+  // TODO(crbug.com/434660312): Re-enable on macOS 26 once issues with
+  // unexpected test timeout failures are resolved.
+  if (base::mac::MacOSMajorVersion() == 26) {
+    GTEST_SKIP() << "Disabled on macOS Tahoe.";
+  }
+#endif
   FakeRemoteURLLoaderFactory renderer_loader_factory;
   MockReceiverURLLoaderClient renderer_loader_client;
   BindKeepAliveURLLoaderFactory(renderer_loader_factory);
@@ -1984,7 +2108,7 @@ TEST_F(KeepAliveURLLoaderServiceRetryTest,
   loader->OnComplete(
       network::URLLoaderCompletionStatus(net::ERR_NETWORK_CHANGED));
   // The load should be eligible for retry still.
-  EXPECT_TRUE(loader->IsAttemptingRetry());
+  EXPECT_TRUE(loader->IsAttemptingRetry(/*include_failed_retry=*/false));
   EXPECT_FALSE(loader->IsForwardURLLoadStarted());
 
   // But if we hit another redirect, the loader will fail with
@@ -1994,7 +2118,14 @@ TEST_F(KeepAliveURLLoaderServiceRetryTest,
                                                   kTestResponseHeaderValue}}));
 
   // The loader can't be retried. Note that it won't be immediately deleted like
-  // in other cases, because it will forward the redirects to the renderer.
+  // in other cases, because it will forward the redirects to the renderer, but
+  // only after it reached the max age.
+  EXPECT_FALSE(loader->IsAttemptingRetry(/*include_failed_retry=*/false));
+  EXPECT_FALSE(loader->IsForwardURLLoadStarted());
+
+  // After hitting max age, the redirects will be forwarded.
+  EXPECT_CALL(renderer_loader_client, OnReceiveRedirect(_, _)).Times(1);
+  task_environment()->FastForwardBy(loader->GetMaxAgeForRetry());
   EXPECT_TRUE(loader->IsForwardURLLoadStarted());
 }
 
@@ -2022,16 +2153,15 @@ TEST_F(KeepAliveURLLoaderServiceRetryTest, SelfDeletionOnMaxAge) {
           FakeRemoteURLLoaderFactory::kRequestId);
   loader->OnComplete(
       network::URLLoaderCompletionStatus(net::ERR_NETWORK_CHANGED));
-  EXPECT_TRUE(loader->IsAttemptingRetry());
+  EXPECT_TRUE(loader->IsAttemptingRetry(/*include_failed_retry=*/false));
 
   // Fast forwards to just before the max age timeout fires.
   task_environment()->FastForwardBy(options.max_age.value() - base::Seconds(5));
   EXPECT_EQ(loader_service().NumLoadersForTesting(), 1u);
-  EXPECT_TRUE(loader->IsAttemptingRetry());
+  EXPECT_TRUE(loader->IsAttemptingRetry(/*include_failed_retry=*/false));
 
   // Fast forward to after the max age timeout fires.
   task_environment()->FastForwardBy(base::Seconds(10));
-  base::RunLoop().RunUntilIdle();
 
   // The loader should be deleted after hitting max age.
   EXPECT_EQ(loader_service().NumLoadersForTesting(), 0u);

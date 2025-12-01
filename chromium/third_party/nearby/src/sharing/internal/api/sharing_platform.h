@@ -15,12 +15,12 @@
 #ifndef THIRD_PARTY_NEARBY_SHARING_INTERNAL_API_SHARING_PLATFORM_H_
 #define THIRD_PARTY_NEARBY_SHARING_INTERNAL_API_SHARING_PLATFORM_H_
 
-#include <filesystem>  // NOLINT
 #include <functional>
 #include <memory>
 #include <vector>
 
 #include "absl/strings/string_view.h"
+#include "internal/base/file_path.h"
 #include "internal/platform/clock.h"
 #include "internal/platform/device_info.h"
 #include "internal/platform/implementation/account_manager.h"
@@ -50,12 +50,6 @@ class SharingPlatform {
   virtual void InitProductIdGetter(
       absl::string_view (*product_id_getter)()) = 0;
 
-  // This function should only be called once.
-  virtual void InitLogging(absl::string_view log_file_base_name) = 0;
-
-  // Platform specific implementation to set default logging levels.
-  virtual void UpdateLoggingLevel() = 0;
-
   virtual std::unique_ptr<nearby::api::NetworkMonitor> CreateNetworkMonitor(
       std::function<void(nearby::api::NetworkMonitor::ConnectionType, bool,
                          bool)>
@@ -82,7 +76,7 @@ class SharingPlatform {
   virtual TaskRunner& GetDefaultTaskRunner() = 0;
   virtual nearby::DeviceInfo& GetDeviceInfo() = 0;
   virtual std::unique_ptr<PublicCertificateDatabase>
-  CreatePublicCertificateDatabase(absl::string_view database_path) = 0;
+  CreatePublicCertificateDatabase(const FilePath& database_path) = 0;
 
   virtual std::unique_ptr<SharingRpcClientFactory>
   CreateSharingRpcClientFactory(
@@ -92,8 +86,7 @@ class SharingPlatform {
   // On platforms where it is supported, tag the transferred files as
   // originating from an untrusted source.
   // Returns true on success.
-  virtual bool UpdateFileOriginMetadata(
-      std::vector<std::filesystem::path>& file_paths) = 0;
+  virtual bool UpdateFileOriginMetadata(std::vector<FilePath>& file_paths) = 0;
 };
 }  // namespace nearby::sharing::api
 

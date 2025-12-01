@@ -27,7 +27,7 @@ use skrifa::{
     string::{LocalizedStrings, StringId},
     FontRef, MetadataProvider,
 };
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 
 fn foundry_name_to_taglike(foundry: &str) -> Option<&'static str> {
     match foundry {
@@ -60,7 +60,20 @@ fn map_foundry_from_name_entry(localized_strings: &mut LocalizedStrings) -> Opti
 
 pub fn make_foundry(font: &FontRef) -> Option<CString> {
     if let Ok(os2) = font.os2() {
-        return CString::new(os2.ach_vend_id().to_be_bytes()).ok();
+        let vend_bytes = os2.ach_vend_id().to_be_bytes();
+        let foundry = if vend_bytes.contains(&0) {
+            CStr::from_bytes_until_nul(&vend_bytes)
+                .ok()
+                .map(|cstr| cstr.to_owned())
+        } else {
+            CString::new(vend_bytes).ok()
+        };
+
+        if let Some(foundry) = foundry {
+            if !foundry.is_empty() {
+                return Some(foundry);
+            }
+        }
     }
 
     map_foundry_from_name_entry(&mut font.localized_strings(StringId::TRADEMARK)).or_else(|| {

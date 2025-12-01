@@ -15,6 +15,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/views/frame/toolbar_button_provider.h"
+#include "chrome/browser/ui/views/page_action/page_action_view.h"
 #include "components/web_modal/modal_dialog_host.h"
 #include "extensions/common/mojom/frame.mojom.h"
 #include "ui/gfx/image/image_family.h"
@@ -377,6 +378,7 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   void PreHandleDragUpdate(const content::DropData& drop_data,
                            const gfx::PointF& point) override {}
   void PreHandleDragExit() override {}
+  void HandleDragEnded() override {}
   content::KeyboardEventProcessingResult PreHandleKeyboardEvent(
       const input::NativeWebKeyboardEvent& event) override;
   bool HandleKeyboardEvent(const input::NativeWebKeyboardEvent& event) override;
@@ -416,8 +418,6 @@ class VivaldiBrowserWindow final : public BrowserWindow {
                              const std::string& target_language,
                              const std::u16string& text_selection) override {}
   void ShowAvatarBubbleFromAvatarButton(bool is_source_accelerator) override {}
-  bool IsDownloadShelfVisible() const override;
-  DownloadShelf* GetDownloadShelf() override;
   views::View* GetTopContainer() override;
   views::View* GetLensOverlayView() override;
   DownloadBubbleUIController* GetDownloadBubbleUIController() override;
@@ -488,25 +488,6 @@ class VivaldiBrowserWindow final : public BrowserWindow {
       tab_search::mojom::TabOrganizationFeature organization_feature) override {
   }
   void CloseTabSearchBubble() override {}
-  bool IsFeaturePromoQueued(const base::Feature& iph_feature) const override;
-  bool IsFeaturePromoActive(
-      const base::Feature& iph_feature) const override;
-  user_education::FeaturePromoResult CanShowFeaturePromo(
-      const base::Feature& iph_feature) const override;
-  void MaybeShowFeaturePromo(
-      user_education::FeaturePromoParams params) override {}
-  void MaybeShowStartupFeaturePromo(
-      user_education::FeaturePromoParams params) override {}
-  bool AbortFeaturePromo(const base::Feature& iph_feature) override;
-  user_education::FeaturePromoHandle CloseFeaturePromoAndContinue(
-      const base::Feature& iph_feature) override;
-  bool NotifyFeaturePromoFeatureUsed(
-      const base::Feature& feature,
-      FeaturePromoFeatureUsedAction action) override;
-  void NotifyAdditionalConditionEvent(const char* event_name) override {}
-  user_education::DisplayNewBadge MaybeShowNewBadgeFor(
-      const base::Feature& feature) override;
-  void NotifyNewBadgeFeatureUsed(const base::Feature& feature) override {}
   void ShowIncognitoClearBrowsingDataDialog() override {}
   void ShowIncognitoHistoryDisclaimerDialog() override {}
   std::string GetWorkspace() const override;
@@ -555,10 +536,6 @@ class VivaldiBrowserWindow final : public BrowserWindow {
                  std::vector<std::u16string> body_string_replacement_params);
 
   void UninstallExtensionViaDialog(const extensions::Extension* extension);
-
- protected:
-  user_education::FeaturePromoController* GetFeaturePromoControllerImpl()
-      override;
 
  private:
   enum QuitAction { ShowDialogOnQuit = 0, SaveSessionOnQuit,  DoNothingOnQuit };

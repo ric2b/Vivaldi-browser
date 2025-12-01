@@ -164,5 +164,9 @@ bundle_data_xcassets("assets") {
     # vivaldi_overflow_about
     "Assets.xcassets/vivaldi_overflow_about.imageset/Contents.json",
     "Assets.xcassets/vivaldi_overflow_about.imageset/vivaldi_overflow_about.pdf",
+
+    # vivaldi_overflow_reader_mode
+    "Assets.xcassets/vivaldi_overflow_reader_mode.imageset/Contents.json",
+    "Assets.xcassets/vivaldi_overflow_reader_mode.imageset/vivaldi_overflow_reader_mode.pdf",
   ]
 }

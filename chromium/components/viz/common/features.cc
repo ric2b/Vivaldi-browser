@@ -48,6 +48,14 @@ BASE_FEATURE(kAndroidBcivBottomControls,
              "AndroidBcivBottomControls",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+// If this flag is enabled, a DumpWithoutCrashing() is captured when a bad
+// state is detected when moving the composited UI. For example, this could
+// mean scrolling without a resource, or OffsetTagValues trying to position
+// the UI outside of their valid constraints.
+BASE_FEATURE(kAndroidDumpForBadCompositedUiState,
+             "AndroidDumpForBadCompositedUiState",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 #endif  // BUILDFLAG(IS_ANDROID)
 
 BASE_FEATURE(kBackdropFilterMirrorEdgeMode,
@@ -61,11 +69,6 @@ BASE_FEATURE(kUseDrmBlackFullscreenOptimization,
 #else
              base::FEATURE_DISABLED_BY_DEFAULT
 #endif
-);
-
-BASE_FEATURE(kUseFrameIntervalDecider,
-             "UseFrameIntervalDecider",
-             base::FEATURE_ENABLED_BY_DEFAULT
 );
 
 #if BUILDFLAG(IS_ANDROID)
@@ -96,6 +99,10 @@ BASE_FEATURE(kAvoidDuplicateDelayBeginFrame,
              "AvoidDuplicateDelayBeginFrame",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+BASE_FEATURE(kTransferableResourcePassAlphaTypeDirectly,
+             "TransferableResourcePassAlphaTypeDirectly",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
 const char kDrawQuadSplit[] = "num_of_splits";
 
 // If enabled, overrides the maximum number (exclusive) of quads one draw quad
@@ -103,6 +110,10 @@ const char kDrawQuadSplit[] = "num_of_splits";
 BASE_FEATURE(kDrawQuadSplitLimit,
              "DrawQuadSplitLimit",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kEnableBackdropFiltersCullingOptimization,
+             "EnableBackdropFiltersCullingOptimization",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 constexpr base::FeatureParam<DelegatedCompositingMode>::Option
     kDelegatedCompositingModeOption[] = {
@@ -146,7 +157,7 @@ BASE_FEATURE(kDCompSurfacesForDelegatedInk,
 // user resizes the window.
 BASE_FEATURE(kRemoveRedirectionBitmap,
              "RemoveRedirectionBitmap",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 #endif
 
 #if BUILDFLAG(IS_ANDROID)
@@ -244,20 +255,11 @@ const base::FeatureParam<int> kCALayerNewLimitManyVideos{&kCALayerNewLimit,
 #endif
 
 #if BUILDFLAG(IS_MAC)
-// Whether the presentation should be delayed until the next CVDisplayLink
-// callback.
+// Whether the presentation should be delayed until the next DisplayLink
+// callback. Currently only for frames that handle interaction.
 BASE_FEATURE(kVSyncAlignedPresent,
              "VSyncAlignedPresent",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// Present the frame at next VSync only if this frame handles interaction or
-// animation as described in kTargetForVSync. Three finch experiment groups for
-// kVSyncAlignedPresent.
-constexpr const char kTargetForVSyncAllFrames[] = "AllFrames";
-constexpr const char kTargetForVSyncAnimation[] = "Animation";
-constexpr const char kTargetForVSyncInteraction[] = "Interaction";
-const base::FeatureParam<std::string> kTargetForVSync{
-    &kVSyncAlignedPresent, "Target", kTargetForVSyncAllFrames};
+             base::FEATURE_ENABLED_BY_DEFAULT);
 #endif
 
 BASE_FEATURE(kAllowUndamagedNonrootRenderPassToSkip,
@@ -267,11 +269,6 @@ BASE_FEATURE(kAllowUndamagedNonrootRenderPassToSkip,
 #else
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
-
-// If enabled, complex occluders are generated for quads with rounded corners,
-BASE_FEATURE(kComplexOccluderForQuadsWithRoundedCorners,
-             "ComplexOccluderForQuadsWithRoundedCorners",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Allow SurfaceAggregator to merge render passes when they contain quads that
 // require overlay (e.g. protected video). See usage in |EmitSurfaceContent|.
@@ -422,11 +419,24 @@ BASE_FEATURE(kBatchResourceRelease,
              "BatchResourceRelease",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+// When enabled, BeginFrameSource will not send a `BeginFrameArgs::MISSED` in
+// response to `AddObserver`. As these consistently miss deadlines, and increase
+// latency and jank. Instead the client will receive the next BeginFrame.
+BASE_FEATURE(kNoLateBeginFrames,
+             "NoLateBeginFrames",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // Stops BeginFrame issue to use |last_vsync_interval_| instead of the current
 // set of BeginFrameArgs.
 // TODO(b/333940735): Should be removed if the issue isn't fixed.
 BASE_FEATURE(kLastVSyncArgsKillswitch,
              "LastVSyncArgsKillswitch",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Enables IPCs to directly target Viz's compositor thread for non-root
+// CompositorFrameSink messages without hopping through the IO thread first.
+BASE_FEATURE(kVizDirectCompositorThreadIpcNonRoot,
+             "VizDirectCompositorThreadIpcNonRoot",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Null Hypothesis test for viz. This will be used in an meta experiment to
@@ -459,8 +469,18 @@ int DrawQuadSplitLimit() {
                     kMaxDrawQuadSplitLimit);
 }
 
+bool IsBackdropFiltersCullingOptimizationEnabled() {
+  static bool is_enabled =
+      base::FeatureList::IsEnabled(kEnableBackdropFiltersCullingOptimization);
+  return is_enabled;
+}
+
 bool IsDelegatedCompositingEnabled() {
   return base::FeatureList::IsEnabled(kDelegatedCompositing);
+}
+
+bool IsVizDirectCompositorThreadIpcNonRootEnabled() {
+  return base::FeatureList::IsEnabled(kVizDirectCompositorThreadIpcNonRoot);
 }
 
 #if BUILDFLAG(IS_ANDROID)
@@ -523,12 +543,6 @@ bool ShouldOnBeginFrameThrottleVideo() {
   return base::FeatureList::IsEnabled(features::kOnBeginFrameThrottleVideo);
 }
 
-bool IsComplexOccluderForQuadsWithRoundedCornersEnabled() {
-  static bool enabled = base::FeatureList::IsEnabled(
-      features::kComplexOccluderForQuadsWithRoundedCorners);
-  return enabled;
-}
-
 bool ShouldDrawImmediatelyWhenInteractive() {
   return base::FeatureList::IsEnabled(
       features::kDrawImmediatelyWhenInteractive);
@@ -558,10 +572,6 @@ bool ShouldLogFrameQuadInfo() {
   return base::FeatureList::IsEnabled(features::kShouldLogFrameQuadInfo);
 }
 
-bool IsUsingFrameIntervalDecider() {
-  return base::FeatureList::IsEnabled(kUseFrameIntervalDecider);
-}
-
 #if BUILDFLAG(IS_MAC)
 bool IsVSyncAlignedPresentEnabled() {
   return base::FeatureList::IsEnabled(features::kVSyncAlignedPresent);
@@ -570,32 +580,42 @@ bool IsVSyncAlignedPresentEnabled() {
 
 #if BUILDFLAG(IS_CHROMEOS)
 bool IsCrosContentAdjustedRefreshRateEnabled() {
-  if (base::FeatureList::IsEnabled(kCrosContentAdjustedRefreshRate)) {
-    if (base::FeatureList::IsEnabled(kUseFrameIntervalDecider)) {
-      return true;
-    }
-
-    LOG(WARNING) << "Feature ContentAdjustedRefreshRate is ignored. It cannot "
-                    "be used without also setting UseFrameIntervalDecider.";
-  }
-
-  return false;
+  return base::FeatureList::IsEnabled(kCrosContentAdjustedRefreshRate);
 }
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
 #if BUILDFLAG(IS_WIN)
 bool ShouldRemoveRedirectionBitmap() {
   // Limit to Win11 because there are a high number of D3D9 users on Win10;
-  // which requires the Redirection Bitmap. Additionally, software GL in tests
-  // can take the Swiftshader rendering path, which also needs the Redirection
-  // Bitmap. On devices with DComp disabled, ANGLE draws to the redirection
-  // bitmap via a blit swap chain, so check for the command line switch as well.
-  return base::win::GetVersion() >= base::win::Version::WIN11 &&
-         base::FeatureList::IsEnabled(kRemoveRedirectionBitmap) &&
-         !base::CommandLine::ForCurrentProcess()->HasSwitch(
-             switches::kOverrideUseSoftwareGLForTests) &&
-         !base::CommandLine::ForCurrentProcess()->HasSwitch(
-             switches::kDisableDirectComposition);
+  // which requires the redirection bitmap. 22H2 is specified because it is the
+  // lowest version supporting DWM system backdrop.
+  if (base::win::GetVersion() < base::win::Version::WIN11_22H2) {
+    return false;
+  }
+
+  const auto* command_line = base::CommandLine::ForCurrentProcess();
+
+  // If direct composition is disabled say for testing, we will use an ANGLE
+  // EGLSurface which uses a BitBlt swap chain that needs a redirection surface.
+  if (command_line->HasSwitch(switches::kDisableDirectComposition)) {
+    return false;
+  }
+
+  // When using swiftshader for testing, we will also use an ANGLE EGLSurface.
+  if (command_line->HasSwitch(switches::kOverrideUseSoftwareGLForTests)) {
+    return false;
+  }
+
+  // Some users set ANGLE backend to D3D9 or OpenGL via chrome://flags and in
+  // that case too we would also use an ANGLE EGLSurface.
+  const std::string angle_backend =
+      command_line->GetSwitchValueASCII(switches::kUseANGLE);
+  if (angle_backend == gl::kANGLEImplementationD3D9Name ||
+      angle_backend == gl::kANGLEImplementationOpenGLName) {
+    return false;
+  }
+
+  return base::FeatureList::IsEnabled(kRemoveRedirectionBitmap);
 }
 #endif
 

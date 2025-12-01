@@ -241,6 +241,27 @@ bool IsLandscape(UIWindow* window) {
   return UIInterfaceOrientationIsLandscape(GetInterfaceOrientation(window));
 }
 
+bool CanShowTabStrip(UITraitCollection* traitCollection) {
+  if (IsRegularXRegularSizeClass(traitCollection)) {
+    return true;
+  }
+#if defined(__IPHONE_26_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_26_0
+  if (@available(iOS 26, *)) {
+#if defined(VIVALDI_BUILD)
+    // We show tab strip on iPhone too.
+    return true;
+#else
+    return ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET;
+#endif // End Vivaldi
+  }
+#endif
+  return false;
+}
+
+bool CanShowTabStrip(id<UITraitEnvironment> environment) {
+  return CanShowTabStrip(environment.traitCollection);
+}
+
 bool IsCompactWidth(id<UITraitEnvironment> environment) {
   return IsCompactWidth(environment.traitCollection);
 }
@@ -452,9 +473,18 @@ CGFloat DeviceCornerRadius() {
     }
   }
 
-  const BOOL isRoundedDevice =
-      (idiom == UIUserInterfaceIdiomPhone && window.safeAreaInsets.bottom);
-  return isRoundedDevice ? 40.0 : 0.0;
+  // Estimated iPhone rounded corners radii.
+  if (window.safeAreaInsets.bottom && idiom == UIUserInterfaceIdiomPhone) {
+    return 50.0;
+  }
+
+  // Estimated iPad rounded corners radii.
+  if (window.safeAreaInsets.bottom && idiom == UIUserInterfaceIdiomPad) {
+    return 18.0;
+  }
+
+  // Device has square corners.
+  return 0.0;
 }
 
 bool IsBottomOmniboxAvailable() {

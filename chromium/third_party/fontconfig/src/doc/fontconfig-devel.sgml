@@ -217,7 +217,7 @@ convenience for the application's rendering mechanism.
     order          FC_ORDER               Int     Order number of the font
     desktop        FC_DESKTOP_NAME        String  Current desktop name
     namedinstance  FC_NAMED_INSTANCE      Bool    Whether font is a named instance
-    fontwarapper   FC_FONT_WRAPPER        String  The font wrapper format
+    fontwrapper    FC_FONT_WRAPPER        String  The font wrapper format
     </programlisting>
   </sect2>
 </sect1>

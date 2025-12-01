@@ -65,9 +65,9 @@ namespace internal {
 class FuzzTestFuzzer {
  public:
   virtual ~FuzzTestFuzzer() = default;
-  // Returns ture if no error were detected by the FuzzTest, false otherwise.
+  // Returns true if no error were detected by the FuzzTest, false otherwise.
   virtual bool RunInUnitTestMode(const Configuration& configuration) = 0;
-  // Returns ture if no error were detected by the FuzzTest, false otherwise.
+  // Returns true if no error were detected by the FuzzTest, false otherwise.
   virtual bool RunInFuzzingMode(int* argc, char*** argv,
                                 const Configuration& configuration) = 0;
 };
@@ -430,8 +430,6 @@ class FuzzTestFuzzerImpl : public FuzzTestFuzzer {
   friend class CentipedeAdaptorRunnerCallbacks;
   friend class CentipedeAdaptorEngineCallbacks;
 };
-
-size_t GetStackLimitFromEnvOrConfiguration(const Configuration& configuration);
 
 // A reproduction command template will include these placeholders. These
 // placeholders then will be replaced by the proper test filter when creating

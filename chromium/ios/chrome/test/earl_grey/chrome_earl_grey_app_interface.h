@@ -161,9 +161,6 @@ enum class TipsNotificationType;
 // Simulates opening a custom `URL` from another application.
 + (void)simulateExternalAppURLOpeningWithURL:(NSURL*)URL;
 
-// Simulates opening the add account sign-in flow from the web.
-+ (void)simulateAddAccountFromWeb;
-
 // Closes current tab.
 + (void)closeCurrentTab;
 
@@ -532,9 +529,6 @@ enum class TipsNotificationType;
 // Returns YES if kTestFeature is enabled.
 + (BOOL)isTestFeatureEnabled;
 
-// Returns YES if DWA feature is enabled.
-+ (BOOL)isDWAEnabled [[nodiscard]];
-
 // Returns YES if DemographicMetricsReporting feature is enabled.
 + (BOOL)isDemographicMetricsReportingEnabled [[nodiscard]];
 
@@ -558,9 +552,6 @@ enum class TipsNotificationType;
 
 // Returns whether the UseLensToSearchForImage feature is enabled.
 + (BOOL)isUseLensToSearchForImageEnabled;
-
-// Returns whether Tab Group Sync is enabled.
-+ (BOOL)isTabGroupSyncEnabled;
 
 // Returns whether the current layout is showing the bottom omnibox.
 + (BOOL)isCurrentLayoutBottomOmnibox;
@@ -642,6 +633,9 @@ enum class TipsNotificationType;
 
 // Sets the value of a integer user pref in the original profile.
 + (void)setIntegerValue:(int)value forUserPref:(NSString*)prefName;
+
+// Sets the value of a double user pref in the original profile.
++ (void)setDoubleValue:(double)value forUserPref:(NSString*)prefName;
 
 // Returns true if the LocalState Preference is currently using its default
 // value, and has not been set by any higher-priority source (even with the same

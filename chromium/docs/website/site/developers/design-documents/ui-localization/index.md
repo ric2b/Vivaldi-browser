@@ -28,7 +28,9 @@ files after a few weeks.
 Strings are included on all platforms by default and will needlessly increase
 the download size if they're not used. It's important to judiciously surround
 strings with appropriate &lt;if&gt; clauses to ensure that they are only
-included on the platforms where they're actually used.
+included on the platforms where they're actually used. For iOS, you should
+instead add the string to a file in
+[ios/chrome/app/strings](https://source.chromium.org/chromium/chromium/src/+/main:ios/chrome/app/strings/ios_strings_grd/).
 
 ### How strings get translated
 

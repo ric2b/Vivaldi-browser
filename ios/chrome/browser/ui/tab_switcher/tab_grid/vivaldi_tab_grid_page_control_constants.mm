@@ -3,10 +3,6 @@
 
 #import <algorithm>
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 // Height and width of the slider.
 const CGFloat vSliderHeight = 32.0;
 const CGFloat vSliderWidth = 46.0;
@@ -21,14 +17,14 @@ const CGFloat vSliderOverhang =
     std::max((vSliderWidth - vSegmentWidth) / 2.0, 0.0);
 
 // Width of the background -- three segments plus two separators.
-const CGFloat vBackgroundWidth = 4 * vSegmentWidth;
+const CGFloat vBackgroundWidth = 5 * vSegmentWidth;
 
 // Overall height of the control -- the larger of the slider and segment
 // heights.
 const CGFloat vOverallHeight = std::max(vSliderHeight, vSegmentHeight);
 // Overall width of the control -- the background width plus twice the slider
 // overhang.
-const CGFloat vOverallWidth = vBackgroundWidth + 3 * vSliderOverhang;
+const CGFloat vOverallWidth = vBackgroundWidth + 4 * vSliderOverhang;
 
 // Corner radius of the segment
 const CGFloat vCornerRadius = 10.0;

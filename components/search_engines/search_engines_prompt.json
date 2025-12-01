@@ -5,9 +5,9 @@
     // which defines the expected default search engines for the dialog.
     "kSearchEnginesDataVersionRequired": 10000174,
     // Update the version each time the data is changed.
-    "kVersion": 5,
+    "kVersion": 6,
     // Type of the UI dialog to show.
-    "kType": "MULTICHOICE_PROMPT"
+    "kType": "DONATE_AND_MULTICHOICE_PROMPT"
   },
   // Add only types that exist in
   // chromium/components/search_engines/search_engine_type.h

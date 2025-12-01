@@ -24,6 +24,7 @@
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/autocomplete/chrome_autocomplete_scheme_classifier.h"
+#include "chrome/browser/extensions/context_menu_helpers.h"
 #include "chrome/browser/extensions/context_menu_matcher.h"
 #include "chrome/browser/renderer_context_menu/context_menu_content_type_factory.h"
 #include "chrome/browser/renderer_context_menu/spelling_options_submenu_observer.h"
@@ -39,6 +40,7 @@
 #include "components/password_manager/content/browser/content_password_manager_driver.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
 #include "components/policy/core/common/policy_pref_names.h"
+#include "components/prefs/pref_service.h"
 #include "components/search_engines/template_url.h"
 #include "components/user_prefs/user_prefs.h"
 #include "components/vector_icons/vector_icons.h"
@@ -295,6 +297,8 @@ void VivaldiRenderViewContextMenu::InitMenu() {
   request.iswebpanel = web_view_guest && web_view_guest->IsVivaldiWebPanel();
   request.iswebpagewidget =
       web_view_guest && web_view_guest->IsVivaldiWebPageWidget();
+  request.isreader = web_view_guest && web_view_guest->IsVivaldiReader();
+  request.isrichtexteditor = web_view_guest && web_view_guest->IsVivaldiRichTextEditor();
   request.ismailto = params_.link_url.SchemeIs(url::kMailToScheme);
   request.support.copy =
       content_type->SupportsGroup(ContextMenuContentType::ITEM_GROUP_COPY);
@@ -646,9 +650,6 @@ bool VivaldiRenderViewContextMenu::IsCommandIdEnabled(int command_id) const {
       case IDC_VIV_OPEN_LINK_CURRENT_TAB:
       case IDC_VIV_OPEN_LINK_BACKGROUND_TAB:
         return params_.link_url.is_valid();
-      case IDC_VIV_RELOAD_IMAGE:
-        return params_.src_url.is_valid() &&
-               (params_.src_url.scheme() != content::kChromeUIScheme);
       case IDC_VIV_OPEN_IMAGE_CURRENT_TAB:
       case IDC_VIV_OPEN_IMAGE_NEW_FOREGROUND_TAB:
       case IDC_VIV_OPEN_IMAGE_NEW_BACKGROUND_TAB:
@@ -884,23 +885,12 @@ VivaldiRenderViewContextMenu::HandleCommand(int command_id, int event_flags) {
       // Test for web panel and handle that case here if so.
       extensions::WebViewGuest* guest_view =
           extensions::WebViewGuest::FromWebContents(source_web_contents_);
-      if (guest_view && guest_view->IsVivaldiWebPanel()) {
+      if (guest_view && (guest_view->IsVivaldiWebPanel() ||
+                         guest_view->IsVivaldiWebPageWidget())) {
         guest_view->Reload();
       } else {
         RenderViewContextMenu::ExecuteCommand(command_id, event_flags);
       }
-      break;
-    }
-    case IDC_VIV_RELOAD_IMAGE: {
-      // params.x and params.y position the context menu and are always in root
-      // coordinates. Convert to content coordinates.
-      gfx::PointF p = source_web_contents_->GetRenderViewHost()
-                          ->GetWidget()
-                          ->GetView()
-                          ->TransformPointToRootCoordSpaceF(
-                              gfx::PointF(params_.x, params_.y));
-      source_web_contents_->GetRenderViewHost()->LoadImageAt(
-          static_cast<int>(p.x()), static_cast<int>(p.y()));
       break;
     }
     case IDC_VIV_CONTENT_CONTEXT_ADDSEARCHENGINE: {
@@ -1033,7 +1023,9 @@ void VivaldiRenderViewContextMenu::PopulateContainer(
               extensions::vivaldi::context_menu::ContainerMode::kFolder);
       break;
     case context_menu::ContainerContent::kLinktohighlight:
+      populating_menu_model_ = menu_model;
       VivaldiAppendLinkToTextItems();
+      populating_menu_model_ = nullptr;
       break;
     case context_menu::ContainerContent::kExtensions: {
       std::u16string text = PrintableSelectionText();
@@ -1041,7 +1033,9 @@ void VivaldiRenderViewContextMenu::PopulateContainer(
       extensions_controller_.reset(new ExtensionsMenuController(this));
       extensions_controller_->Populate(
           menu_model, this, VivaldiGetExtension(), source_web_contents_, text,
-          base::BindRepeating(VivaldiMenuItemMatchesParams, params_));
+          base::BindRepeating(
+              extensions::context_menu_helpers::MenuItemMatchesParams,
+              params_));
       break;
     }
     case context_menu::ContainerContent::kSendpagetodevices:
@@ -1135,7 +1129,6 @@ int VivaldiRenderViewContextMenu::GetStaticIdForAction(std::string command) {
       {"DOCUMENT_COPY_IMAGE_ADDRESS", IDC_CONTENT_CONTEXT_COPYIMAGELOCATION},
       {"DOCUMENT_USE_IMAGE_AS_STARTPAGE_BACKGROUND",
        IDC_VIV_USE_IMAGE_AS_BACKGROUND},
-      {"DOCUMENT_RELOAD_IMAGE", IDC_VIV_RELOAD_IMAGE},
       {"DOCUMENT_SEARCH_FOR IMAGE", IDC_CONTENT_CONTEXT_SEARCHWEBFORIMAGE},
       {"DOCUMENT_ADD_AS_SEARCH_ENGINE",
        IDC_VIV_CONTENT_CONTEXT_ADDSEARCHENGINE},

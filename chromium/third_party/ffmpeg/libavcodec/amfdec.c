@@ -25,6 +25,7 @@
 #include "libavutil/mem.h"
 #include "libavutil/time.h"
 #include "decode.h"
+#include "decode_bsf.h"
 #include "libavutil/mastering_display_metadata.h"
 
 #if CONFIG_D3D11VA
@@ -89,6 +90,9 @@ static int amf_init_decoder(AVCodecContext *avctx)
     AMFBuffer               *buffer;
     amf_int64               color_profile;
     int                     pool_size = 36;
+    // way-around for older drivers that don't support dynamic bitness detection -
+    // define HEVC and VP9 10-bit based on container info
+    int                     no_bitness_detect = amf_legacy_driver_no_bitness_detect(amf_device_ctx);
 
     ctx->drain = 0;
     ctx->resolution_changed = 0;
@@ -99,13 +103,17 @@ static int amf_init_decoder(AVCodecContext *avctx)
             break;
         case AV_CODEC_ID_HEVC: {
             codec_id = AMFVideoDecoderHW_H265_HEVC;
-            // way-around for older drivers that don't support dynamic butness detection -
-            // define HEVC 10-bit based on container info
-            if(amf_legacy_driver_no_bitness_detect(amf_device_ctx)){
+            if(no_bitness_detect){
                 if(avctx->pix_fmt == AV_PIX_FMT_YUV420P10)
                     codec_id = AMFVideoDecoderHW_H265_MAIN10;
             }
-
+        } break;
+        case AV_CODEC_ID_VP9: {
+            codec_id = AMFVideoDecoderHW_VP9;
+            if(no_bitness_detect){
+                if(avctx->pix_fmt == AV_PIX_FMT_YUV420P10)
+                    codec_id = AMFVideoDecoderHW_VP9_10BIT;
+            }
         } break;
         case AV_CODEC_ID_AV1:
             codec_id = AMFVideoDecoderHW_AV1;
@@ -187,9 +195,12 @@ static int amf_init_decoder(AVCodecContext *avctx)
         AMF_ASSIGN_PROPERTY_INT64(res, ctx->decoder, AMF_VIDEO_DECODER_SURFACE_COPY, ctx->copy_output);
 
     if (avctx->extradata_size) {
-        res = amf_device_ctx->context->pVtbl->AllocBuffer(amf_device_ctx->context, AMF_MEMORY_HOST, avctx->extradata_size, &buffer);
+        const uint8_t *extradata;
+        int extradata_size;
+        ff_decode_get_extradata(avctx, &extradata, &extradata_size);
+        res = amf_device_ctx->context->pVtbl->AllocBuffer(amf_device_ctx->context, AMF_MEMORY_HOST, extradata_size, &buffer);
         if (res == AMF_OK) {
-            memcpy(buffer->pVtbl->GetNative(buffer), avctx->extradata, avctx->extradata_size);
+            memcpy(buffer->pVtbl->GetNative(buffer), extradata, extradata_size);
             AMF_ASSIGN_PROPERTY_INTERFACE(res,ctx->decoder, AMF_VIDEO_DECODER_EXTRADATA, buffer);
             buffer->pVtbl->Release(buffer);
             buffer = NULL;
@@ -713,4 +724,5 @@ const FFCodec ff_##x##_amf_decoder = { \
 
 DEFINE_AMF_DECODER(h264, H264, "h264_mp4toannexb")
 DEFINE_AMF_DECODER(hevc, HEVC, NULL)
+DEFINE_AMF_DECODER(vp9, VP9, NULL)
 DEFINE_AMF_DECODER(av1, AV1, NULL)

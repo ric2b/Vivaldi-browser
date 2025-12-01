@@ -9,10 +9,13 @@
 // LICENSE file in the root directory of this source tree.
 
 #include <assert.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #include <tmmintrin.h>
 
 #include "src/xnnpack/common.h"
+#include "src/xnnpack/microparams.h"
 #include "src/xnnpack/vunary.h"
 #include "src/xnnpack/unaligned.h"
 
@@ -21,7 +24,7 @@ void xnn_qs8_vlrelu_ukernel__ssse3_u16(
     size_t batch,
     const int8_t* input,
     int8_t* output,
-    const struct xnn_qs8_lrelu_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
+    const struct xnn_qs8_lrelu_params* restrict params) XNN_OOB_READS
 {
   assert(batch != 0);
   assert(batch % sizeof(int8_t) == 0);

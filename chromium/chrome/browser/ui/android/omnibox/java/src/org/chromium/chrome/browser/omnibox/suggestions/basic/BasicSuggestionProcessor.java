@@ -114,6 +114,10 @@ public class BasicSuggestionProcessor extends BaseSuggestionViewProcessor {
             case SuggestTemplateInfo.IconType.TRENDING_VALUE:
                 return R.drawable.trending_up_black_24dp;
 
+            case SuggestTemplateInfo.IconType.SUB_ARROW_RIGHT_VALUE:
+                // TODO(crbug.com/437177158): Replace with the correct symbol when it's available.
+                return R.drawable.ic_suggestion_magnifier;
+
             default: // Icon type is specified, but not recognized
                 assert false : "Unrecognized IconType: " + iconType;
                 return 0;
@@ -142,13 +146,13 @@ public class BasicSuggestionProcessor extends BaseSuggestionViewProcessor {
     @Override
     protected OmniboxDrawableState getFallbackIcon(AutocompleteMatch suggestion) {
         @DrawableRes int icon = 0;
-
-        if (BuildConfig.IS_VIVALDI &&
-                suggestion.getType() == OmniboxSuggestionType.DIRECT_MATCH) { // Vivaldi
+        // Vivaldi
+        if (BuildConfig.IS_VIVALDI
+                && suggestion.getNativeObjectRef() != 0
+                && suggestion.getType() == OmniboxSuggestionType.DIRECT_MATCH) {
             return OmniboxDrawableState.forImage(
                     mContext, BitmapFactory.decodeFile(suggestion.getLocalIconPath()), false);
         } // End Vivaldi
-
         if (suggestion.isSearchSuggestion()) {
             icon = getFallbackIconFromIconType(suggestion.getIconType());
             if (icon == 0) {
@@ -237,6 +241,9 @@ public class BasicSuggestionProcessor extends BaseSuggestionViewProcessor {
     }
 
     protected @Nullable SuggestionSpannable getSuggestionDescription(AutocompleteMatch match) {
+        if (match.getDescription() != null) {
+            return new SuggestionSpannable(match.getDescription());
+        }
         return null;
     }
 

@@ -38,22 +38,24 @@ int ff_rv20_encode_picture_header(MPVMainEncContext *const m)
 {
     MPVEncContext *const s = &m->s;
 
+    put_bits_assume_flushed(&s->pb);
+
     put_bits(&s->pb, 2, s->c.pict_type); //I 0 vs. 1 ?
     put_bits(&s->pb, 1, 0);     /* unknown bit */
     put_bits(&s->pb, 5, s->c.qscale);
 
-    put_sbits(&s->pb, 8, s->c.picture_number); //FIXME wrong, but correct is not known
+    put_sbits(&s->pb, 8, s->picture_number); //FIXME wrong, but correct is not known
     s->c.mb_x = s->c.mb_y = 0;
     ff_h263_encode_mba(s);
 
     put_bits(&s->pb, 1, s->c.no_rounding);
 
-    av_assert0(s->c.f_code == 1);
-    av_assert0(!s->c.unrestricted_mv);
-    av_assert0(!s->c.alt_inter_vlc);
-    av_assert0(!s->c.umvplus);
-    av_assert0(s->c.modified_quant==1);
-    av_assert0(s->c.loop_filter==1);
+    av_assert1(s->f_code == 1);
+    av_assert1(!s->me.unrestricted_mv);
+    av_assert1(!s->alt_inter_vlc);
+    av_assert1(!s->umvplus);
+    av_assert1(s->modified_quant == 1);
+    av_assert1(s->loop_filter == 1);
 
     s->c.h263_aic = s->c.pict_type == AV_PICTURE_TYPE_I;
     if (s->c.h263_aic) {

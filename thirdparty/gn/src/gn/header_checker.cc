@@ -151,6 +151,7 @@ bool HeaderChecker::Run(const std::vector<const Target*>& to_check,
 
 void HeaderChecker::RunCheckOverFiles(const FileMap& files, bool force_check) {
   WorkerPool pool;
+  task_count_.Increment();
 
   for (const auto& file : files) {
     // Only check C-like source files (RC files also have includes).
@@ -180,6 +181,8 @@ void HeaderChecker::RunCheckOverFiles(const FileMap& files, bool force_check) {
       }
     }
   }
+
+  task_count_.Decrement();
 
   // Wait for all tasks posted by this method to complete.
   std::unique_lock<std::mutex> auto_lock(lock_);

@@ -9,7 +9,6 @@ import {expectError} from '../../conductor/events.js';
 import {
   $,
   $$,
-  assertNotNullOrUndefined,
   click,
   drainFrontendTaskQueue,
   getAllTextContents,
@@ -982,9 +981,6 @@ describe('The Debugger Language Plugins', () => {
         /* allowFileAccess */ true);
     await extension.evaluate(() => {
       class WasmDataExtension {
-        constructor() {
-        }
-
         async addRawModule(_rawModuleId: string, symbols: string, rawModule: Chrome.DevTools.RawModule) {
           const sourceFileURL = new URL('can_access_wasm_data.wat', rawModule.url || symbols).href;
           return [sourceFileURL];
@@ -1047,7 +1043,7 @@ describe('The Debugger Language Plugins', () => {
       ],
       isError: true,
     });
-    assertNotNullOrUndefined(expectedError.caught);
+    assert.isOk(expectedError.caught);
 
     // TODO(crbug.com/1472241): Find a way to stop the flake by determining the stopid
     // const local2Set = await extension.evaluate(() => chrome.devtools.languageServices.getWasmLocal(1, 1n));

@@ -241,6 +241,11 @@ bool UsesDerivatives(TIntermAggregate *functionCall)
             return false;
     }
 }
+
+bool IsSamplerOrStructWithOnlySamplers(const TType *type)
+{
+    return IsSampler(type->getBasicType()) || type->isStructureContainingOnlySamplers();
+}
 }  // namespace
 
 // This tracks each binding point's current default offset for inheritance of subsequent
@@ -770,6 +775,9 @@ bool TParseContext::checkCanBeLValue(const TSourceLoc &line, const char *op, TIn
             break;
         case EvqLayerIn:
             message = "can't modify gl_Layer in a fragment shader";
+            break;
+        case EvqShadingRateEXT:
+            message = "can't modify gl_ShadingRateEXT";
             break;
         case EvqSampleID:
             message = "can't modify gl_SampleID";
@@ -5186,12 +5194,35 @@ TIntermDeclaration *TParseContext::addInterfaceBlock(
             // is legal. See bug https://github.com/KhronosGroup/OpenGL-API/issues/7
             fieldType->setMemoryQualifier(fieldMemoryQualifier);
         }
+
+        // For per-vertex members, apply the appropriate built-in qualifiers to the members.
+        if (isGLPerVertex)
+        {
+            if (field->name() == "gl_Position")
+            {
+                fieldType->setQualifier(EvqPosition);
+            }
+            if (field->name() == "gl_PointSize")
+            {
+                fieldType->setQualifier(EvqPointSize);
+            }
+            if (field->name() == "gl_ClipDistance")
+            {
+                fieldType->setQualifier(EvqClipDistance);
+            }
+            if (field->name() == "gl_CullDistance")
+            {
+                fieldType->setQualifier(EvqCullDistance);
+            }
+        }
     }
 
     SymbolType instanceSymbolType = SymbolType::UserDefined;
     if (isGLPerVertex)
     {
         instanceSymbolType = SymbolType::BuiltIn;
+        typeQualifier.qualifier =
+            IsVaryingOut(typeQualifier.qualifier) ? EvqPerVertexOut : EvqPerVertexIn;
     }
     TInterfaceBlock *interfaceBlock = new TInterfaceBlock(&symbolTable, blockName, fieldList,
                                                           blockLayoutQualifier, instanceSymbolType);
@@ -6541,18 +6572,18 @@ TTypeSpecifierNonArray TParseContext::addStructure(const TSourceLoc &structLine,
     }
 
     // To simplify pulling samplers out of structs, reorder the struct fields to put the samplers at
-    // the end.
+    // the end.  Structures that *only* contain samplers are also put last.
     TFieldList *reorderedFields = new TFieldList;
     for (TField *field : *fieldList)
     {
-        if (!IsSampler(field->type()->getBasicType()))
+        if (!IsSamplerOrStructWithOnlySamplers(field->type()))
         {
             reorderedFields->push_back(field);
         }
     }
     for (TField *field : *fieldList)
     {
-        if (IsSampler(field->type()->getBasicType()))
+        if (IsSamplerOrStructWithOnlySamplers(field->type()))
         {
             reorderedFields->push_back(field);
         }

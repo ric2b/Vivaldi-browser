@@ -161,6 +161,8 @@ class PreloadingUIUtils {
         return i18nString(UIStrings.validityInvalid);
       case Protocol.Preload.RuleSetErrorType.InvalidRulesSkipped:
         return i18nString(UIStrings.validitySomeRulesInvalid);
+      case Protocol.Preload.RuleSetErrorType.InvalidRulesetLevelTag:
+        return i18nString(UIStrings.validitySomeRulesInvalid);
     }
   }
 
@@ -202,7 +204,7 @@ export class PreloadingRuleSetView extends UI.Widget.VBox {
   private shouldPrettyPrint = Common.Settings.Settings.instance().moduleSetting('auto-pretty-print-minified').get();
 
   constructor(model: SDK.PreloadingModel.PreloadingModel) {
-    super(/* isWebComponent */ true, /* delegatesFocus */ false);
+    super({useShadowDom: true});
     this.registerRequiredCSS(emptyWidgetStyles, preloadingViewStyles);
 
     this.model = model;
@@ -353,10 +355,12 @@ export class PreloadingAttemptView extends UI.Widget.VBox {
   private readonly ruleSetSelector: PreloadingRuleSetSelector;
 
   constructor(model: SDK.PreloadingModel.PreloadingModel) {
-    super(/* isWebComponent */ true, /* delegatesFocus */ false);
+    super({
+      jslog: `${VisualLogging.pane('preloading-speculations')}`,
+      useShadowDom: true,
+    });
     this.registerRequiredCSS(emptyWidgetStyles, preloadingViewStyles);
 
-    this.element.setAttribute('jslog', `${VisualLogging.pane('preloading-speculations')}`);
     this.model = model;
     SDK.TargetManager.TargetManager.instance().addScopeChangeListener(this.onScopeChange.bind(this));
     SDK.TargetManager.TargetManager.instance().addModelListener(
@@ -510,10 +514,12 @@ export class PreloadingSummaryView extends UI.Widget.VBox {
   private readonly usedPreloading = new PreloadingComponents.UsedPreloadingView.UsedPreloadingView();
 
   constructor(model: SDK.PreloadingModel.PreloadingModel) {
-    super(/* isWebComponent */ true, /* delegatesFocus */ false);
+    super({
+      jslog: `${VisualLogging.pane('speculative-loads')}`,
+      useShadowDom: true,
+    });
     this.registerRequiredCSS(emptyWidgetStyles, preloadingViewStyles);
 
-    this.element.setAttribute('jslog', `${VisualLogging.pane('speculative-loads')}`);
     this.model = model;
     SDK.TargetManager.TargetManager.instance().addScopeChangeListener(this.onScopeChange.bind(this));
     SDK.TargetManager.TargetManager.instance().addModelListener(
@@ -709,7 +715,7 @@ export class PreloadingWarningsView extends UI.Widget.VBox {
   private readonly infobar = new PreloadingComponents.PreloadingDisabledInfobar.PreloadingDisabledInfobar();
 
   constructor() {
-    super(/* isWebComponent */ false, /* delegatesFocus */ false);
+    super();
     this.registerRequiredCSS(emptyWidgetStyles);
   }
 

@@ -13,6 +13,7 @@
 
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/strings/string_number_conversions.h"
 #include "components/affiliations/core/browser/affiliation_utils.h"
 #include "components/password_manager/core/browser/password_ui_utils.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"

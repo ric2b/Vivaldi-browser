@@ -1,3 +1,46 @@
+2025-mm-dd next version
+  This release is ABI compatible with the last release.
+
+  The aom_roi_map_t struct, used only by the codec control
+  AOME_SET_ROI_MAP, was modified in this release. Since AOME_SET_ROI_MAP
+  was unimplemented, aom_roi_map_t was effectively an unused struct.
+  Therefore aom_roi_map_t is to be considered as a new struct added in
+  this release and this change does not break ABI compatibility.
+
+  - New Features
+    * New tuning mode AOM_TUNE_SSIMULACRA2 for the AOME_SET_TUNING codec
+      control (--tune=ssimulacra2) in all-intra mode. The feature detection
+      macro AOM_HAVE_TUNE_SSIMULACRA2, if defined, indicates that
+      AOM_TUNE_SSIMULACRA2 is available.
+      AOM_TUNE_SSIMULACRA2 was developed to maximize SSIMULACRA 2 scores.
+    * New codec control AV1E_SET_SCREEN_CONTENT_DETECTION_MODE
+      (--screen-detection-mode).
+      This codec control helps select between two screen detection modes:
+       - Mode 1: standard (default)
+       - Mode 2: anti-aliased text and graphics aware
+    * New codec control AV1E_SET_ENABLE_ADAPTIVE_SHARPNESS
+      (--enable-adaptive-sharpness). When enabled, it modulates sharpness
+      based on frame QP, which helps mitigate blocking artifacts in the
+      low to medium quality range.
+
+  - Compression Efficiency Improvements
+    * Variance Boost is now enabled for tuning modes AOM_TUNE_IQ and
+      AOM_TUNE_SSIMULACRA2 at speeds 8 and 9 (2-5% SSIMULACRA 2 BD-Rate
+      gains)
+    * Several quality/time tradeoff improvements and bug fixes for all
+      intra mode speeds 8 and 9.
+      * Up to 6.9% SSIMULACRA 2 BD-Rate gains for speed 8
+      * Up to 2.2% SSIMULACRA 2 BD-Rate gains for speed 9
+
+  - Speedups
+    * Optimize intraBC search for better speed/efficiency tradeoffs for
+      all intra mode speeds >= 1
+    * Optimize intraBC block hashing process
+
+  - Bug Fixes
+    * b:421196988: all intra speed 8: overuse of palette mode
+      unnecessarily inflating file sizes
+
 2025-04-11 v3.12.1
   This release includes several bug fixes. This release is ABI
   compatible with the last release. See

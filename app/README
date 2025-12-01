@@ -1,0 +1,16 @@
+
+This directory mostly manages strings and resources in Vivaldi
+
+android: Android Vivaldi specific strings and resources
+
+ios: IOS Vivaldi specific strings and resources
+
+native_resources: ALL strings and resources added by Vivaldi goes here (!!DO NOT!! add them in resources/)
+
+other_resource: Windows specific logos and files. See README file
+
+resources: Overrides of existing Chromium strings to handle strings that does not fit well with Vivaldi,
+           or does not auto search/replace correctly, and additional translations for CHromium strings.
+           !!DO NOT!! add new strings and resources from Vivaldi here.
+
+version_assembly: Vivaldi override templates for Chromium exectuable target manifests

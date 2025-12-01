@@ -58,6 +58,13 @@
         pre-multiplied alpha.
 
         The width and height of the buffer are 1.
+
+        The r, g, b and a arguments valid range is from UINT32_MIN (0)
+        to UINT32_MAX (0xffffffff).
+        
+        These arguments should be interpreted as a percentage, i.e.
+        - UINT32_MIN = 0% of the given color component
+        - UINT32_MAX = 100% of the given color component
       </description>
       <arg name="id" type="new_id" interface="wl_buffer"/>
       <arg name="r" type="uint" summary="value of the buffer's red channel"/>

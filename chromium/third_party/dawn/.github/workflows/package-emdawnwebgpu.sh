@@ -38,33 +38,35 @@ else
     PKG_VERSION=v${VERSION_DATETIME}
 fi
 PKG_FILE=emdawnwebgpu_pkg-${PKG_VERSION}.zip
-REMOTE_PORT_FILE=emdawnwebgpu-${PKG_VERSION}.port.py
+REMOTE_PORT_FILE=emdawnwebgpu-${PKG_VERSION}.remoteport.py
 
-# Variables for documentation.
-SHA=$(git rev-parse HEAD)
-EMSDK_VERSION=$(python3 tools/activate-emsdk --get-emsdk-version)
-
-# Initialize dependencies. We could use gclient for this, but then we still have to
-# install gclient, and it takes a long time. We only need a few deps for emdawnwebgpu.
-git submodule update --init --depth=1 third_party/abseil-cpp
-git submodule update --init --depth=1 third_party/googletest
+# Initialize emsdk so we can use emcmake. Other dependencies wll be downloaded
+# later via DAWN_FETCH_DEPENDENCIES (set in dawn-ci.cmake).
 git submodule update --init --depth=1 third_party/emsdk
 python3 tools/activate-emsdk
 
-# Build the package (which is not affected by the build type), and build the
-# link test in release mode (with Closure, which verifies the JS to some extent)
-mkdir -p out/wasm
-third_party/emsdk/upstream/emscripten/emcmake cmake -S=. -B=out/wasm -DCMAKE_BUILD_TYPE=Release
+# First build the link test in debug mode as a basic test.
+third_party/emsdk/upstream/emscripten/emcmake cmake -S=. -B=out/wasm \
+    -C=.github/workflows/dawn-ci.cmake \
+    -DCMAKE_BUILD_TYPE=Debug
+make -j4 -C out/wasm emdawnwebgpu_link_test
+
+# Switch the build type (in-place to save time), rebuild the link test (this
+# time with Closure, which verifies the linked JS to some extent), and build the
+# final package (which is not actually affected by build type).
+# TODO: If we have Ninja (from depot_tools), we could use -G'Ninja Multi-Config'
+# to do multiple build types more cleanly.
+# https://cmake.org/cmake/help/latest/generator/Ninja%20Multi-Config.html
+cmake -S=. -B=out/wasm -DCMAKE_BUILD_TYPE=Release
 make -j4 -C out/wasm emdawnwebgpu_pkg emdawnwebgpu_link_test
 
-# Also build the link test in debug mode.
-mkdir -p out/wasm-debug
-third_party/emsdk/upstream/emscripten/emcmake cmake -S=. -B=out/wasm-debug -DCMAKE_BUILD_TYPE=Debug
-make -j4 -C out/wasm-debug emdawnwebgpu_link_test
+# Get variables for documentation.
+SHA=$(git rev-parse HEAD)
+EMSDK_VERSION=$(python3 tools/activate-emsdk --get-emsdk-version)
 
 # Create zip
 cat << EOF > out/wasm/emdawnwebgpu_pkg/VERSION.txt
-Dawn release ${PKG_VERSION} at revision <https://dawn.googlesource.com/dawn/+/${SHA}>.
+Dawn release ${PKG_VERSION} at revision <https://dawn.googlesource.com/dawn/+log/${SHA}>.
 Built/tested with emsdk release ${EMSDK_VERSION}.
 EOF
 (cd out/wasm && zip -9roX - emdawnwebgpu_pkg > "../../${PKG_FILE}")
@@ -76,6 +78,7 @@ cat << EOF > "$REMOTE_PORT_FILE"
 # University of Illinois/NCSA Open Source License.  Both these licenses can be
 # found in the LICENSE file.
 
+# https://dawn.googlesource.com/dawn/+/${SHA}/src/emdawnwebgpu/pkg/README.md
 r"""
 $(cat out/wasm/emdawnwebgpu_pkg/README.md)
 """
@@ -87,16 +90,21 @@ SHA512 = '${PKG_FILE_SHA512}'
 PORT_FILE = 'emdawnwebgpu_pkg/emdawnwebgpu.port.py'
 
 # Port information (required)
-URL = 'https://dawn.googlesource.com/dawn/+/refs/heads/main/src/emdawnwebgpu/'
-DESCRIPTION = "Emdawnwebgpu is a fork of Emscripten's original USE_WEBGPU, implementing a newer, more stable version of the standardized webgpu.h interface."
+
+# - Visible in emcc --show-ports and emcc --use-port=emdawnwebgpu:help
 LICENSE = "Some files: BSD 3-Clause License. Other files: Emscripten's license (available under both MIT License and University of Illinois/NCSA Open Source License)"
+
+# - Visible in emcc --use-port=emdawnwebgpu:help
+DESCRIPTION = "Emdawnwebgpu implements webgpu.h on WebGPU, replacing -sUSE_WEBGPU. **For info on usage and filing feedback, see link below.**"
+URL = 'https://dawn.googlesource.com/dawn/+/${SHA}/src/emdawnwebgpu/pkg/README.md'
 EOF
 
 # Create RELEASE_INFO.md
 cat << EOF > RELEASE_INFO.md
 $(cat out/wasm/emdawnwebgpu_pkg/VERSION.txt)
 
-For instructions, see the README (included in the zip and the port file docstring).
+Use either the \`emdawnwebgpu-*.remoteport.py\` file (Emscripten 4.0.10+) or the \`emdawnwebgpu_pkg-*.zip\`.
+For full instructions, see the [README](https://dawn.googlesource.com/dawn/+/${SHA}/src/emdawnwebgpu/pkg/README.md) which is included in both files.
 EOF
 
 # Save version numbers for later steps

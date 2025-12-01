@@ -8,11 +8,15 @@
 <translation id="1158211211994409885">El sitio <ph name="HOST_NAME" /> ha cerrado inesperadamente la conexión.</translation>
 <translation id="1161325031994447685">Reconectarte a una red Wi-Fi</translation>
 <translation id="1175364870820465910">&amp;Imprimir...</translation>
+<translation id="1204778305310783648">«Nos equivocamos al convertir Internet en una economía de la vigilancia»: Jon von Tetzchner en la Cumbre Web 2023.</translation>
 <translation id="1285320974508926690">No traducir nunca este sitio</translation>
 <translation id="1375198122581997741">Información de la versión</translation>
 <translation id="139305205187523129">El sitio <ph name="HOST_NAME" /> no envió datos.</translation>
+<translation id="1489123210863708132">Activa el rastreador y el bloqueador de anuncios para salvaguardar tu navegación y generar tus estadísticas de privacidad.</translation>
+<translation id="1500787357908295021">Tus estadísticas de privacidad</translation>
 <translation id="1555191101192706055">Es posible que los atacantes del sitio que has intentado visitar te engañen para que instales software dañino que afecte a tu navegación (por ejemplo, que cambie tu página principal o te muestre anuncios adicionales en los sitios que visites).</translation>
 <translation id="1559528461873125649">No existe el archivo o carpeta</translation>
+<translation id="16328381871867323">Por fin los legisladores prestan atención a las preocupaciones sobre cómo se rastrean, recopilan y almacenan nuestros datos digitales. Averigua qué significa esta sentencia que cambia las reglas del juego y cómo podría afectarnos.</translation>
 <translation id="1640244768702815859">Prueba a <ph name="BEGIN_LINK" />visitar la página principal del sitio<ph name="END_LINK" />.</translation>
 <translation id="1645368109819982629">Protocolo no admitido</translation>
 <translation id="1662550410081243962">Guardar y autocompletar métodos de pago</translation>
@@ -20,6 +24,8 @@
 <translation id="1728677426644403582">Estás viendo el código fuente de una página web</translation>
 <translation id="1734878702283171397">Prueba a contactar con el administrador del sistema.</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Prueba a ejecutar el diagnóstico de red de Windows<ph name="END_LINK" />.</translation>
+<translation id="1919345977826869612">Anuncios</translation>
+<translation id="1970180444859658569">La opción de privacidad «No rastrear» tiene respaldo legal en Alemania</translation>
 <translation id="1974060860693918893">Avanzado</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Revisar el proxy y el cortafuegos<ph name="END_LINK" /></translation>
 <translation id="2048261947532620704">Traduciendo página</translation>
@@ -28,6 +34,7 @@
 <translation id="2178904466768126352">Es posible que los atacantes del sitio que has intentado visitar instalen software dañino que robe o elimine cosas como tus contraseñas, fotos, mensajes o números de tarjeta de crédito.</translation>
 <translation id="2187317261103489799">Detectar (por defecto)</translation>
 <translation id="2224337661447660594">Sin conexión a internet</translation>
+<translation id="2225863440766607138">Rastreadores</translation>
 <translation id="2283340219607151381">Guardar y autocompletar direcciones</translation>
 <translation id="2292556288342944218">Tu acceso a internet está bloqueado</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> requiere un nombre de usuario y contraseña.</translation>
@@ -43,8 +50,11 @@
 <translation id="2634124572758952069">No se ha podido encontrar la dirección IP del servidor de <ph name="HOST_NAME" />.</translation>
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
 <translation id="2650446666397867134">Se le ha denegado el acceso al archivo</translation>
+<translation id="2690699652723742414">Últimos 30 días</translation>
 <translation id="2705137772291741111">La copia guardada (almacenada en caché) de este sitio no se puede leer.</translation>
 <translation id="2730326759066348565"><ph name="BEGIN_LINK" />Ejecutar el diagnóstico de conectividad<ph name="END_LINK" /></translation>
+<translation id="2741210449864955442">https://vivaldi.com/blog/technology/vivaldi-browser-at-the-web-summit/</translation>
+<translation id="2765309692777226484">El rastreador y el bloqueador de anuncios están desactivados.</translation>
 <translation id="2784949926578158345">La conexión se ha restablecido.</translation>
 <translation id="2826760142808435982">La conexión se cifró y autenticó con <ph name="CIPHER" /> y usa <ph name="KX" /> como mecanismo de intercambio de claves.</translation>
 <translation id="290376772003165898">¿La página no está en <ph name="LANGUAGE" />?</translation>
@@ -57,12 +67,16 @@
 <translation id="3037605927509011580">¡Vaya!</translation>
 <translation id="3041612393474885105">Información del certificado</translation>
 <translation id="3109728660330352905">No tienes autorización para ver esta página.</translation>
+<translation id="3119245580849443327">Informe de privacidad de Vivaldi</translation>
 <translation id="31207688938192855"><ph name="BEGIN_LINK" />Prueba a ejecutar el diagnóstico de conectividad<ph name="END_LINK" />.</translation>
+<translation id="3126903660515914763">https://vivaldi.com/blog/news/alert-no-google-topics-in-vivaldi/</translation>
 <translation id="3154506275960390542">Esta página contiene un formulario que no se puede enviar de forma segura. Terceras personas pueden ver los datos que envíes cuando están de camino o los podría modificar un atacante para cambiar lo que recibe el servidor.</translation>
+<translation id="3156779787905856989">Manifest V3, webRequest y bloqueadores de anuncios</translation>
 <translation id="3176929007561373547">Revisa la configuración del proxy o contacta con el administrador de red para
       asegurarte de que el servidor proxy esté funcionando. Si consideras que no
       necesitas usar un servidor proxy, sigue estas instrucciones:
       <ph name="PLATFORM_TEXT" /></translation>
+<translation id="3191389212681074619">https://help.vivaldi.com/es/android-es-2/privacidad-android/bloqueador-de-rastreadores-y-anuncios-android/</translation>
 <translation id="3226128629678568754">Pulsa el botón de recargar la página para reenviar los datos necesarios para cargar la página.</translation>
 <translation id="3234666976984236645">Detectar siempre contenido importante en este sitio</translation>
 <translation id="3384522979010096022">Tu organización no te permite ver este sitio</translation>
@@ -80,6 +94,8 @@
       prueba a eliminarlo de la lista y volverlo a añadir.</translation>
 <translation id="3658742229777143148">Revisión</translation>
 <translation id="3681007416295224113">Información del certificado</translation>
+<translation id="3694122362646626770">Sitios web</translation>
+<translation id="3716128635228495027">Volver a Vivaldi</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />Revisar el proxy, el cortafuegos y la configuración DNS<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">Si usas un servidor proxy...</translation>
 <translation id="3861977424605124250">Mostrar al iniciar</translation>
@@ -99,9 +115,11 @@
 <translation id="4250431568374086873">La conexión con el sitio no es totalmente segura</translation>
 <translation id="4265872034478892965">Permitido por tu administrador</translation>
 <translation id="4305666528087210886">No se ha podido acceder al archivo</translation>
+<translation id="430967081421617822">Siempre</translation>
 <translation id="4312866146174492540">Bloquear (por defecto)</translation>
 <translation id="4408413947728134509">Cookies <ph name="NUM_COOKIES" /></translation>
 <translation id="4432688616882109544">El sitio <ph name="HOST_NAME" /> no aceptó tu certificado de inicio de sesión o es posible que no se le haya proporcionado uno.</translation>
+<translation id="4474776280324528449">https://vivaldi.com/blog/do-no-track-gets-legal-backing-in-germany/</translation>
 <translation id="4506599922270137252">Contactar con el administrador del sistema</translation>
 <translation id="4522570452068850558">Detalles</translation>
 <translation id="4558551763791394412">Prueba a desactivar tus extensiones.</translation>
@@ -121,8 +139,11 @@
 <translation id="5068778127327928576">{NUM_COOKIES, plural, =1 {(1 en uso)} other {(# en uso)}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Revisar la dirección del proxy<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64 bits)</translation>
+<translation id="5216593085343845370">Únete a la campaña de Vivaldi por el rastreo cero y recupera el control de tu privacidad en Internet.
+    Obtén más información sobre cómo luchamos por los derechos de los usuarios en los siguientes artículos.</translation>
 <translation id="5355557959165512791">Ahora mismo no puedes acceder a <ph name="SITE" /> porque su certificado ha sido revocado. Los ataques y errores de red suelen ser temporales, por lo que es probable que esta página funcione más tarde.</translation>
 <translation id="5386426401304769735">La cadena de certificados de este sitio contiene un certificado firmado con SHA-1.</translation>
+<translation id="5398772614898833570">Anuncios bloqueados</translation>
 <translation id="5452270690849572955">No se puede encontrar el sitio (<ph name="HOST_NAME" />)</translation>
 <translation id="5457113250005438886">No válido</translation>
 <translation id="5492298309214877701">Este sitio en la intranet de la empresa, organización o centro educativo tiene la misma URL que un sitio web externo.
@@ -130,9 +151,12 @@
     Prueba a contactar con tu administrador del sistema.</translation>
 <translation id="5510766032865166053">Es posible que haya sido trasladado o eliminado.</translation>
 <translation id="5556459405103347317">Recargar</translation>
+<translation id="5583322400766491358">Los datos personales se almacenan de forma segura en tu dispositivo y nunca se comparten con terceros.</translation>
 <translation id="5610142619324316209">Revisar la conexión</translation>
 <translation id="5617949217645503996">El sitio <ph name="HOST_NAME" /> te ha redirigido demasiadas veces.</translation>
+<translation id="5648166631817621825">Últimos 7 días</translation>
 <translation id="5675650730144413517">Esta página no está funcionando</translation>
+<translation id="5741670635761443575">Alerta: No hay Google Topics en Vivaldi.</translation>
 <translation id="5785756445106461925">Además, esta página incluye otros recursos no seguros. Terceras personas pueden ver estos recursos cuando están de camino y los puede modificar un atacante para cambiar el aspecto de la página.</translation>
 <translation id="5799902971440853357">Ahora mismo no puedes acceder a <ph name="SITE" /> porque el sitio web envió credenciales codificadas que Vivaldi no puede procesar. Los ataques y errores de red suelen ser temporales, por lo que es probable que esta página funcione más tarde.</translation>
 <translation id="5810442152076338065">Tu conexión con <ph name="DOMAIN" /> está cifrada con un conjunto de cifrado obsoleto.</translation>
@@ -162,11 +186,13 @@
 <translation id="6653655836861174026">Con los perfiles de Vivaldi puedes separar todas tus cosas de Vivaldi. Crea perfiles para amigos y familiares, o divídelos entre trabajo y diversión.</translation>
 <translation id="6657585470893396449">Contraseña</translation>
 <translation id="6711464428925977395">Se ha producido un error con el servidor proxy o la dirección no es correcta.</translation>
+<translation id="6736243959894955139">Dirección</translation>
 <translation id="6757797048963528358">Tu dispositivo entró en suspensión.</translation>
 <translation id="6890956352250146925">Opciones para cookies y datos de sitios</translation>
 <translation id="6897140037006041989">Agente de usuario</translation>
 <translation id="6935179587384421592"><ph name="SIZE" />. Algunos sitios puede que tardar más en cargarse la próxima vez que los visites.</translation>
 <translation id="6957624206566198865">Abrir página en una pestaña privada nueva</translation>
+<translation id="7013466836883158999">¿Es posible crear productos sostenibles sin espiar a los usuarios? ¿Cómo será el futuro de la navegación? Mira cómo nuestro CEO, Jon von Tetzchner, responde a estas preguntas en la Web Summit 2023.</translation>
 <translation id="7053983685419859001">Bloquear</translation>
 <translation id="7066262000446496119">¿Quién usa Vivaldi?</translation>
 <translation id="7096937462164235847">La identidad de este sitio web no se ha verificado.</translation>
@@ -176,15 +202,19 @@
 <translation id="7210863904660874423">El sitio <ph name="HOST_NAME" /> no cumple con los estándares de seguridad.</translation>
 <translation id="7219179957768738017">La conexión usa <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Mostrar notificaciones</translation>
+<translation id="7277237102285741596">https://vivaldi.com/blog/manifest-v3-webrequest-and-ad-blockers/</translation>
 <translation id="7283555985781738399">Modo invitado</translation>
 <translation id="7353601530677266744">Línea de comandos</translation>
 <translation id="7419106976560586862">Ruta del perfil</translation>
+<translation id="7421665776469827022">Datos guardados</translation>
+<translation id="7454640759045234067">Rastreadores bloqueados</translation>
 <translation id="7455133967321480974">Usar valor por defecto global (bloquear)</translation>
 <translation id="7518003948725431193">No se ha encontrado una página web en la dirección: <ph name="URL" /></translation>
 <translation id="7549584377607005141">Esta página web requiere los datos que has introducido anteriormente para mostrarse correctamente. Puedes volver a enviarlos, pero al hacerlo, repetirás las acciones que esta página haya realizado previamente .</translation>
 <translation id="759889825892636187">El sitio <ph name="HOST_NAME" /> no puede procesar esta solicitud en este momento.</translation>
 <translation id="7662298039739062396">Ajuste controlado por una extensión</translation>
 <translation id="7663736086183791259">Certificado <ph name="CERTIFICATE_VALIDITY" /></translation>
+<translation id="7698231949697067951">Lo que haces en Internet es asunto tuyo. A continuación puedes ver cómo te hemos ayudado a mantenerte protegido.</translation>
 <translation id="7714464543167945231">Certificado</translation>
 <translation id="7716147886133743102">Bloqueado por tu administrador</translation>
 <translation id="7716424297397655342">Este sitio no se puede cargar de la caché</translation>
@@ -193,8 +223,11 @@
 <translation id="7800304661137206267">La conexión se cifró con <ph name="CIPHER" />, con <ph name="MAC" /> para la autenticación del mensaje y con <ph name="KX" /> como mecanismo de intercambio de claves.</translation>
 <translation id="7834399512844817676">Normalmente <ph name="SITE" /> usa el cifrado para proteger tu información. Cuando Vivaldi intentó establecer una conexión con <ph name="SITE" />, el sitio web devolvió unas credenciales inusuales e incorrectas. Esto puede ocurrir si un atacante está intentando suplantar a <ph name="SITE" /> o si la conexión es interrumpida por el inicio de sesión en una red inalámbrica. Tu información sigue estando protegida, ya que Vivaldi detuvo la conexión antes de intercambiar datos.</translation>
 <translation id="7878562273885520351">Tu contraseña puede estar comprometida</translation>
+<translation id="788493840831967104">Tiempo ahorrado</translation>
 <translation id="7951415247503192394">(32 bits)</translation>
 <translation id="7953236668995583915">Recarga la página para aplicar la configuración actualizada a este sitio</translation>
+<translation id="7981965265950405093">Vivaldi viene con su propio bloqueador de anuncios y de rastreadores, toneladas de opciones de personalización, un cliente de correo y calendario y mucho más. ¿Seguirá los pasos de Google con su absoluta dependencia de Manifest V3? Julien Picalausa, desarrollador de Vivaldi, profundiza en esta cuestión.</translation>
+<translation id="8034402064393340023">Nuestro compromiso con tu privacidad</translation>
 <translation id="8037357227543935929">Preguntar (por defecto)</translation>
 <translation id="8041940743680923270">Usar valor por defecto global (preguntar)</translation>
 <translation id="808894953321890993">Cambiar contraseña</translation>
@@ -204,6 +237,7 @@
 <translation id="8211406090763984747">La conexión es segura</translation>
 <translation id="8241707690549784388">La página que quieres visitar ha usado información que has introducido con anterioridad. Volver a esa página podría hacer que se repita cualquier acción que hayas realizado. ¿Quieres continuar?</translation>
 <translation id="8241712895048303527">Bloquear en este sitio</translation>
+<translation id="8248593573177859437">Informe de privacidad</translation>
 <translation id="8286036467436129157">Iniciar sesión</translation>
 <translation id="8288807391153049143">Mostrar certificado</translation>
 <translation id="8289355894181816810">Si tienes alguna duda, contacta con tu administrador de red.</translation>
@@ -223,9 +257,11 @@
 <translation id="9062620674789239642">Es posible que haya sido trasladado, editado o eliminado.</translation>
 <translation id="9069693763241529744">Bloqueado por una extensión</translation>
 <translation id="9073799351042754113">Has elegido desactivar las advertencias de seguridad para este sitio.</translation>
+<translation id="9118360612142967597">Espiar el comportamiento de las personas y crear perfiles de las mismas está mal. Por eso nos hemos asegurado de que los Topics de Google estén desactivados de dos formas distintas en el navegador Vivaldi.</translation>
 <translation id="9168814207360376865">Permitir que los sitios comprueben si tienes métodos de pago guardados</translation>
 <translation id="9169664750068251925">Bloquear siempre en este sitio</translation>
 <translation id="9183425211371246419">El sitio <ph name="HOST_NAME" /> usa un protocolo no admitido.</translation>
+<translation id="9188210215803842004">Detalles de páginas web y rastreadores</translation>
 <translation id="936602727769022409">Podrías perder el acceso a tu cuenta de Google. Te recomendamos que cambies tu contraseña ahora. Se te solicitará que inicies sesión.</translation>
 <translation id="969892804517981540">Compilación oficial</translation>
 <translation id="984275831282074731">Métodos de pago</translation>

@@ -120,7 +120,7 @@ export class SettingsScreen extends UI.Widget.VBox implements UI.View.ViewLocati
   private reportTabOnReveal: boolean;
 
   private constructor() {
-    super(true);
+    super({useShadowDom: true});
     this.registerRequiredCSS(settingsScreenStyles);
 
     this.contentElement.classList.add('settings-window-main');
@@ -181,6 +181,7 @@ export class SettingsScreen extends UI.Widget.VBox implements UI.View.ViewLocati
     dialog.setEscapeKeyCallback(settingsScreen.onEscapeKeyPressed.bind(settingsScreen));
     dialog.setMarginBehavior(UI.GlassPane.MarginBehavior.NO_MARGIN);
     dialog.show();
+    dialog.contentElement.focus();
 
     return settingsScreen;
   }
@@ -248,15 +249,15 @@ export class GenericSettingsTab extends UI.Widget.VBox implements SettingsTab {
   private readonly syncSection = new PanelComponents.SyncSection.SyncSection();
   private readonly settingToControl = new Map<Common.Settings.Setting<unknown>, HTMLElement>();
   private readonly containerElement: HTMLElement;
+  #updateSyncSectionTimerId = -1;
 
   constructor() {
-    super();
+    super({jslog: `${VisualLogging.pane('preferences')}`});
     this.element.classList.add('settings-tab-container');
     this.element.id = 'preferences-tab-content';
     this.containerElement =
         this.contentElement.createChild('div', 'settings-card-container-wrapper').createChild('div');
 
-    this.element.setAttribute('jslog', `${VisualLogging.pane('preferences')}`);
     this.containerElement.classList.add('settings-multicolumn-card-container');
 
     // AI, GRID, MOBILE, EMULATION, and RENDERING are intentionally excluded from this list.
@@ -321,16 +322,27 @@ export class GenericSettingsTab extends UI.Widget.VBox implements SettingsTab {
   }
 
   override willHide(): void {
+    if (this.#updateSyncSectionTimerId > 0) {
+      window.clearTimeout(this.#updateSyncSectionTimerId);
+      this.#updateSyncSectionTimerId = -1;
+    }
     super.willHide();
     UI.Context.Context.instance().setFlavor(GenericSettingsTab, null);
   }
 
   private updateSyncSection(): void {
+    if (this.#updateSyncSectionTimerId > 0) {
+      window.clearTimeout(this.#updateSyncSectionTimerId);
+      this.#updateSyncSectionTimerId = -1;
+    }
     Host.InspectorFrontendHost.InspectorFrontendHostInstance.getSyncInformation(syncInfo => {
       this.syncSection.data = {
         syncInfo,
         syncSetting: Common.Settings.moduleSetting('sync-preferences') as Common.Settings.Setting<boolean>,
       };
+      if (!syncInfo.isSyncActive || !syncInfo.arePreferencesSynced) {
+        this.#updateSyncSectionTimerId = window.setTimeout(this.updateSyncSection.bind(this), 500);
+      }
     });
   }
 
@@ -395,13 +407,12 @@ export class ExperimentsSettingsTab extends UI.Widget.VBox implements SettingsTa
   private readonly containerElement: HTMLElement;
 
   constructor() {
-    super();
+    super({jslog: `${VisualLogging.pane('experiments')}`});
     this.element.classList.add('settings-tab-container');
     this.element.id = 'experiments-tab-content';
     this.containerElement =
         this.contentElement.createChild('div', 'settings-card-container-wrapper').createChild('div');
     this.containerElement.classList.add('settings-card-container');
-    this.element.setAttribute('jslog', `${VisualLogging.pane('experiments')}`);
 
     const filterSection = this.containerElement.createChild('div');
     filterSection.classList.add('experiments-filter');
@@ -461,7 +472,7 @@ export class ExperimentsSettingsTab extends UI.Widget.VBox implements SettingsTa
     if (!stableExperiments.length && !unstableExperiments.length) {
       const warning = document.createElement('span');
       warning.textContent = i18nString(UIStrings.noResults);
-      UI.ARIAUtils.alert(warning.textContent);
+      UI.ARIAUtils.LiveAnnouncer.alert(warning.textContent);
       this.#experimentsSection = createSettingsCard(i18nString(UIStrings.experiments), warning);
       this.containerElement.appendChild(this.#experimentsSection);
     }

@@ -84,19 +84,15 @@ class AssertHelper {
 
 void RegisterTest(testing::Test* (*)(), const char*);
 
-#define TEST_F_(x, y, name)                   \
-  struct y : public x {                       \
-    static testing::Test* Create() {          \
-      return testing::g_current_test = new y; \
-    }                                         \
-    virtual void Run();                       \
-  };                                          \
-  struct Register##y {                        \
-    Register##y() {                           \
-      RegisterTest(y::Create, name);          \
-    }                                         \
-  };                                          \
-  Register##y g_register_##y;                 \
+#define TEST_F_(x, y, name)                                                    \
+  struct y : public x {                                                        \
+    static testing::Test* Create() { return testing::g_current_test = new y; } \
+    virtual void Run();                                                        \
+  };                                                                           \
+  struct Register##y {                                                         \
+    Register##y() { RegisterTest(y::Create, name); }                           \
+  };                                                                           \
+  Register##y g_register_##y;                                                  \
   void y::Run()
 
 #define TEST_F(x, y) TEST_F_(x, x##y, #x "." #y)

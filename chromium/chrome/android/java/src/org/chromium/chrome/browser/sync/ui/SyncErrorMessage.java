@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.sync.ui;
 
 import static org.chromium.base.ContextUtils.getApplicationContext;
+import static org.chromium.build.NullUtil.assumeNonNull;
 
 import android.app.Activity;
 import android.content.Context;
@@ -22,6 +23,8 @@ import org.chromium.base.UnownedUserData;
 import org.chromium.base.UnownedUserDataHost;
 import org.chromium.base.UnownedUserDataKey;
 import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.profiles.Profile;
@@ -60,6 +63,7 @@ import org.vivaldi.browser.vivaldi_account_manager.VivaldiAccountManager;
  * practice however, because the time limit imposed between 2 displays is global, only one instance
  * in the whole application will exist at a time.
  */
+@NullMarked
 public class SyncErrorMessage implements SyncService.SyncStateChangedListener, UnownedUserData {
     // Note: Not all SyncErrors have a corresponding SyncErrorMessage, see getError().
     private final @SyncError int mError;
@@ -69,7 +73,7 @@ public class SyncErrorMessage implements SyncService.SyncStateChangedListener, U
     private final SyncService mSyncService;
     private final MessageDispatcher mMessageDispatcher;
     private final PropertyModel mModel;
-    private static MessageDispatcher sMessageDispatcherForTesting;
+    private static @Nullable MessageDispatcher sMessageDispatcherForTesting;
 
     private static final UnownedUserDataKey<SyncErrorMessage> SYNC_ERROR_MESSAGE_KEY =
             new UnownedUserDataKey<>(SyncErrorMessage.class);
@@ -120,9 +124,10 @@ public class SyncErrorMessage implements SyncService.SyncStateChangedListener, U
                 return;
             }
 
+            var activity = windowAndroid.getActivity().get();
+            assert activity != null : "Activity should be non-null.";
             SYNC_ERROR_MESSAGE_KEY.attachToHost(
-                    host,
-                    new SyncErrorMessage(dispatcher, windowAndroid.getActivity().get(), profile));
+                    host, new SyncErrorMessage(dispatcher, activity, profile));
         }
     }
 
@@ -130,8 +135,10 @@ public class SyncErrorMessage implements SyncService.SyncStateChangedListener, U
         mError = getError(profile);
         mActivity = activity;
         mProfile = profile;
-        mIdentityManager = IdentityServicesProvider.get().getIdentityManager(mProfile);
-        mSyncService = SyncServiceFactory.getForProfile(mProfile);
+        var identityManager = IdentityServicesProvider.get().getIdentityManager(mProfile);
+        assert identityManager != null : "IdentityManager should be non-null.";
+        mIdentityManager = identityManager;
+        mSyncService = assumeNonNull(SyncServiceFactory.getForProfile(mProfile));
         mSyncService.addSyncStateChangedListener(this);
 
         String errorMessage = getMessage(activity);
@@ -286,6 +293,8 @@ public class SyncErrorMessage implements SyncService.SyncStateChangedListener, U
                     return R.string.identity_error_message_button_verify;
                 case 2:
                     return R.string.identity_error_card_button_okay;
+                case 3:
+                    return R.string.identity_error_card_button_get;
                 default:
                     // This should never happen, as there are only two versions.
                     assert false
@@ -401,11 +410,13 @@ public class SyncErrorMessage implements SyncService.SyncStateChangedListener, U
                                             TrustedVaultUserActionTriggerForUMA
                                                     .NEW_TAB_PAGE_INFOBAR));
                         },
-                        (exception) ->
-                                Log.w(
-                                        TAG,
-                                        "Error creating trusted vault key retrieval intent: ",
-                                        exception));
+                        (exception) -> {
+                            var error = exception == null ? "unknown error." : exception;
+                            Log.w(
+                                    TAG,
+                                    "Error creating trusted vault key retrieval intent: ",
+                                    error);
+                        });
     }
 
     private void openTrustedVaultRecoverabilityDegradedActivity() {
@@ -425,11 +436,13 @@ public class SyncErrorMessage implements SyncService.SyncStateChangedListener, U
                                                     intent, action);
                             IntentUtils.safeStartActivity(getApplicationContext(), proxyIntent);
                         },
-                        (exception) ->
-                                Log.w(
-                                        TAG,
-                                        "Error creating trusted vault recoverability intent: ",
-                                        exception));
+                        (exception) -> {
+                            var error = exception == null ? "unknown error." : exception;
+                            Log.w(
+                                    TAG,
+                                    "Error creating trusted vault recoverability intent: ",
+                                    error);
+                        });
     }
 
     private void openSettings() {
@@ -450,15 +463,8 @@ public class SyncErrorMessage implements SyncService.SyncStateChangedListener, U
                         CoreAccountInfo.getAndroidAccountFrom(primaryAccountInfo), activity, null);
     }
 
-    // TODO(crbug.com/330290259): Turn this into `bool shouldShowMessage(error)`.
     private static @SyncError int getError(Profile profile) {
-        @SyncError
-        int error =
-                IdentityServicesProvider.get()
-                                .getIdentityManager(profile)
-                                .hasPrimaryAccount(ConsentLevel.SYNC)
-                        ? SyncSettingsUtils.getSyncError(profile)
-                        : SyncSettingsUtils.getIdentityError(profile);
+        @SyncError int error = SyncSettingsUtils.getSyncError(profile);
         // Do not show sync error message for UPM_BACKEND_OUTDATED or OTHER_ERRORS.
         if (error == SyncError.UPM_BACKEND_OUTDATED || error == SyncError.OTHER_ERRORS) {
             return SyncError.NO_ERROR;

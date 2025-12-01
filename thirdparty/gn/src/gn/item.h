@@ -69,6 +69,7 @@ class Item {
   // Called when this item is resolved, meaning it and all of its dependents
   // have no unresolved deps. Returns true on success. Sets the error and
   // returns false on failure.
+  // Can be called from any thread, so must not mutate dependencies.
   virtual bool OnResolved(Err* err);
 
  private:

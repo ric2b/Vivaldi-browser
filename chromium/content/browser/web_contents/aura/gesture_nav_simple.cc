@@ -588,8 +588,24 @@ void GestureNavSimple::OnOverscrollModeChange(OverscrollMode old_mode,
   DCHECK_LE(0, max_delta_);
 
   aura::Window* window = web_contents_->GetNativeView();
+  // In Vivaldi we added support for child-views, so calculate the position in
+  // layerspace if a child.
+  if (web_contents_->GetOutermostWebContents()) {
+    gfx::Rect content_rect = window->bounds();
+    RenderWidgetHostView* child_rwhv = web_contents_->GetRenderWidgetHostView();
+    gfx::Rect rect_in_parent = child_rwhv->GetViewBounds();
+    gfx::Rect window_rect_on_screen =
+        web_contents_->GetOutermostWebContents()->GetViewBounds();
+    content_rect = rect_in_parent;
+    content_rect.set_x(content_rect.x() - window_rect_on_screen.x());
+    content_rect.set_y(content_rect.y() - window_rect_on_screen.y());
+    affordance_ = std::make_unique<Affordance>(
+        this, mode_, content_rect, max_delta_ / completion_threshold_);
+  } else {
   affordance_ = std::make_unique<Affordance>(
       this, mode_, window->bounds(), max_delta_ / completion_threshold_);
+  }
+
 
   // Adding the affordance as a child of the content window is not sufficient,
   // because it is possible for a new layer to be parented on top of the

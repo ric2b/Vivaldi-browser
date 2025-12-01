@@ -23,9 +23,6 @@ extern NSString* const vTabGridEmptyStateLoginButtonBGColor;
 
 // Assets for the empty state
 extern NSString* vTabGridEmptyStateRegularTabsImage;
-extern NSString* vTabGridEmptyStatePrivateTabsImage;
-extern NSString* vTabGridEmptyStateSyncedTabsImage;
-extern NSString* vTabGridEmptyStateClosedTabsImage;
 
 // Assets for inactive tabs
 extern NSString* vTabGridInactiveTabsEduIcon;

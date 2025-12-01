@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import type * as Common from '../../core/common/common.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import * as Platform from '../../core/platform/platform.js';
 import * as SDK from '../../core/sdk/sdk.js';
@@ -12,7 +13,6 @@ import * as ThemeSupport from '../../ui/legacy/theme_support/theme_support.js';
 
 import * as TimelineComponents from './components/components.js';
 import {initiatorsDataToDrawForNetwork} from './Initiators.js';
-import {ModificationsManager} from './ModificationsManager.js';
 import {NetworkTrackAppender, type NetworkTrackEvent} from './NetworkTrackAppender.js';
 import timelineFlamechartPopoverStyles from './timelineFlamechartPopover.css.js';
 import {FlameChartStyle, Selection} from './TimelineFlameChartView.js';
@@ -22,6 +22,7 @@ import {
   selectionsEqual,
   type TimelineSelection,
 } from './TimelineSelection.js';
+import {buildPersistedConfig, keyForTraceConfig} from './TrackConfiguration.js';
 import * as TimelineUtils from './utils/utils.js';
 
 export class TimelineFlameChartNetworkDataProvider implements PerfUI.FlameChart.FlameChartDataProvider {
@@ -39,6 +40,7 @@ export class TimelineFlameChartNetworkDataProvider implements PerfUI.FlameChart.
   #lastInitiatorEntry = -1;
   #lastInitiatorsData: PerfUI.FlameChart.FlameChartInitiatorData[] = [];
   #entityMapper: TimelineUtils.EntityMapper.EntityMapper|null = null;
+  #persistedGroupConfigSetting: Common.Settings.Setting<PerfUI.FlameChart.PersistedConfigPerTrace>|null = null;
 
   constructor() {
     this.reset();
@@ -169,23 +171,6 @@ export class TimelineFlameChartNetworkDataProvider implements PerfUI.FlameChart.
     return this.#events.at(entryIndex) ?? null;
   }
 
-  entryHasAnnotations(entryIndex: number): boolean {
-    const event = this.eventByIndex(entryIndex);
-    if (!event) {
-      return false;
-    }
-    const entryAnnotations = ModificationsManager.activeManager()?.annotationsForEntry(event);
-    return entryAnnotations !== undefined && entryAnnotations.length > 0;
-  }
-
-  deleteAnnotationsForEntry(entryIndex: number): void {
-    const event = this.eventByIndex(entryIndex);
-    if (!event) {
-      return;
-    }
-    ModificationsManager.activeManager()?.deleteEntryAnnotations(event);
-  }
-
   entryIndexForSelection(selection: TimelineSelection|null): number {
     if (!selection || selectionIsRange(selection)) {
       return -1;
@@ -242,7 +227,7 @@ export class TimelineFlameChartNetworkDataProvider implements PerfUI.FlameChart.
    *    |----------------[ (URL text)    waiting time   |   request  ]--------|
    *    ^start           ^sendStart                     ^headersEnd  ^Finish  ^end
    * @param request
-   * @param unclippedBarX The start pixel of the request. It is calculated with request.beginTime() in FlameChart.
+   * @param unclippedBarX - The start pixel of the request. It is calculated with request.beginTime() in FlameChart.
    * @param timeToPixelRatio
    * @returns the pixels to draw waiting time and left and right whiskers and url text
    */
@@ -269,11 +254,11 @@ export class TimelineFlameChartNetworkDataProvider implements PerfUI.FlameChart.
    * Decorates the entry depends on the type of the event:
    * @param index
    * @param context
-   * @param barX The x pixel of the visible part request
-   * @param barY The y pixel of the visible part request
-   * @param barWidth The width of the visible part request
-   * @param barHeight The height of the visible part request
-   * @param unclippedBarX The start pixel of the request compare to the visible area. It is calculated with request.beginTime() in FlameChart.
+   * @param barX - The x pixel of the visible part request
+   * @param barY - The y pixel of the visible part request
+   * @param barWidth - The width of the visible part request
+   * @param barHeight - The height of the visible part request
+   * @param unclippedBarX - The start pixel of the request compare to the visible area. It is calculated with request.beginTime() in FlameChart.
    * @param timeToPixelRatio
    * @returns if the entry needs to be decorate, which is alway true if the request has "timing" field
    */
@@ -325,7 +310,7 @@ export class TimelineFlameChartNetworkDataProvider implements PerfUI.FlameChart.
 
     // Draws left and right whiskers
     function drawTick(begin: number, end: number, y: number): void {
-      const /** @const */ tickHeightPx = 6;
+      const /** @constant */ tickHeightPx = 6;
       context.moveTo(begin, y - tickHeightPx / 2);
       context.lineTo(begin, y + tickHeightPx / 2);
       context.moveTo(begin, y);
@@ -345,15 +330,15 @@ export class TimelineFlameChartNetworkDataProvider implements PerfUI.FlameChart.
     // Draw request URL as text
     const textStart = Math.max(sendStart, 0);
     const textWidth = finish - textStart;
-    const /** @const */ minTextWidthPx = 20;
+    const /** @constant */ minTextWidthPx = 20;
     if (textWidth >= minTextWidthPx) {
       let title = this.entryTitle(index) || '';
       if (event.args.data.fromServiceWorker) {
         title = '⚙ ' + title;
       }
       if (title) {
-        const /** @const */ textPadding = 4;
-        const /** @const */ textBaseline = 5;
+        const /** @constant */ textPadding = 4;
+        const /** @constant */ textBaseline = 5;
         const textBaseHeight = barHeight - textBaseline;
         const trimmedText = UI.UIUtils.trimTextEnd(context, title, textWidth - 2 * textPadding);
         context.fillStyle = '#333';
@@ -462,6 +447,30 @@ export class TimelineFlameChartNetworkDataProvider implements PerfUI.FlameChart.
     });
   }
 
+  /**
+   * Note that although we use the same mechanism to track configuration
+   * changes in the Network part of the timeline, we only really use it to track
+   * the expanded state because the user cannot re-order or hide/show tracks in
+   * here.
+   */
+  handleTrackConfigurationChange(groups: readonly PerfUI.FlameChart.Group[], indexesInVisualOrder: number[]): void {
+    if (!this.#persistedGroupConfigSetting) {
+      return;
+    }
+    if (!this.#parsedTrace) {
+      return;
+    }
+    const persistedDataForTrace = buildPersistedConfig(groups, indexesInVisualOrder);
+    const traceKey = keyForTraceConfig(this.#parsedTrace);
+    const setting = this.#persistedGroupConfigSetting.get();
+    setting[traceKey] = persistedDataForTrace;
+    this.#persistedGroupConfigSetting.set(setting);
+  }
+
+  setPersistedGroupConfigSetting(setting: Common.Settings.Setting<PerfUI.FlameChart.PersistedConfigPerTrace>): void {
+    this.#persistedGroupConfigSetting = setting;
+  }
+
   preferredHeight(): number {
     if (!this.#networkTrackAppender || this.#maxLevel === 0) {
       return 0;
@@ -532,7 +541,7 @@ export class TimelineFlameChartNetworkDataProvider implements PerfUI.FlameChart.
     if (!this.#timelineDataInternal) {
       return false;
     }
-    if (this.#lastInitiatorEntry === entryIndex) {
+    if (entryIndex > -1 && this.#lastInitiatorEntry === entryIndex) {
       if (this.#lastInitiatorsData) {
         this.#timelineDataInternal.initiatorsData = this.#lastInitiatorsData;
       }

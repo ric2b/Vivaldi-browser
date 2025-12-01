@@ -1,8 +1,8 @@
 //
 // fragment_main
 //
-RWByteAddressBuffer prevent_dce : register(u0);
 
+RWByteAddressBuffer prevent_dce : register(u0);
 float2 subgroupShuffleXor_f7b453() {
   float2 arg_0 = (1.0f).xx;
   uint arg_1 = 1u;
@@ -12,13 +12,13 @@ float2 subgroupShuffleXor_f7b453() {
 
 void fragment_main() {
   prevent_dce.Store2(0u, asuint(subgroupShuffleXor_f7b453()));
-  return;
 }
+
 //
 // compute_main
 //
-RWByteAddressBuffer prevent_dce : register(u0);
 
+RWByteAddressBuffer prevent_dce : register(u0);
 float2 subgroupShuffleXor_f7b453() {
   float2 arg_0 = (1.0f).xx;
   uint arg_1 = 1u;
@@ -29,5 +29,5 @@ float2 subgroupShuffleXor_f7b453() {
 [numthreads(1, 1, 1)]
 void compute_main() {
   prevent_dce.Store2(0u, asuint(subgroupShuffleXor_f7b453()));
-  return;
 }
+

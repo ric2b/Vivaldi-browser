@@ -118,7 +118,19 @@ const CGFloat kButtonHorizontalPadding = 30.0;
 
 @end
 
-@implementation HistoryTableViewController
+@implementation HistoryTableViewController {
+  // Whether the history was previously in search mode.
+  BOOL _wasInSearch;
+}
+
+#pragma mark - UIViewController
+
+- (void)viewDidLayoutSubviews {
+  [super viewDidLayoutSubviews];
+  if ([self.scrimView isDescendantOfView:self.view]) {
+    [self.view bringSubviewToFront:self.scrimView];
+  }
+}
 
 #pragma mark - TableViewModel
 
@@ -359,7 +371,22 @@ const CGFloat kButtonHorizontalPadding = 30.0;
 // Configure the navigationItem contents for the current state.
 - (void)updateNavigationBar {
   if ([self isEmptyState]) {
-    self.navigationItem.searchController = nil;
+    if (@available(iOS 26, *)) {
+      if (_wasInSearch) {
+        // This is to prevent a UIKit bug where the app becomes frozen. See
+        // crbug.com/430383178 for more details.
+        dispatch_after(
+            dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)),
+            dispatch_get_main_queue(), ^{
+              self.navigationItem.searchController = nil;
+            });
+      } else {
+        self.navigationItem.searchController = nil;
+      }
+    } else {
+      self.navigationItem.searchController = nil;
+    }
+    _wasInSearch = NO;
     self.navigationItem.largeTitleDisplayMode =
         UINavigationItemLargeTitleDisplayModeNever;
 
@@ -592,8 +619,7 @@ const CGFloat kButtonHorizontalPadding = 30.0;
         self.browser->GetCommandDispatcher(), QuickDeleteCommands);
     [quickDeleteHandler
         showQuickDeleteAndCanPerformTabsClosureAnimation:
-            ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET &&
-            self.canPerformTabsClosureAnimation];
+            ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET];
     return;
   }
 
@@ -670,6 +696,13 @@ const CGFloat kButtonHorizontalPadding = 30.0;
     _editButton.width = stringSize.width + kButtonHorizontalPadding;
   }
   return _editButton;
+}
+
+- (void)setSearchInProgress:(BOOL)searchInProgress {
+  _searchInProgress = searchInProgress;
+  if (searchInProgress) {
+    _wasInSearch = YES;
+  }
 }
 
 #pragma mark - Vivaldi

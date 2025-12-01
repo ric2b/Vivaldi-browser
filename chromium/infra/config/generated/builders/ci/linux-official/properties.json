@@ -10,7 +10,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "linux-official",
-              "project": "chromium-m138"
+              "project": "chromium-m140"
             },
             "builder_spec": {
               "builder_group": "chromium",
@@ -37,7 +37,7 @@
         {
           "bucket": "ci",
           "builder": "linux-official",
-          "project": "chromium-m138"
+          "project": "chromium-m140"
         }
       ],
       "mirroring_builder_group_and_names": [
@@ -51,13 +51,16 @@
   },
   "$build/siso": {
     "configs": [
-      "builder"
+      "builder",
+      "no-remote-timeout",
+      "remote-link"
     ],
     "enable_cloud_monitoring": true,
     "enable_cloud_profiler": true,
     "enable_cloud_trace": true,
     "experiments": [],
     "metrics_project": "chromium-reclient-metrics",
+    "output_local_strategy": "minimum",
     "project": "rbe-chromium-trusted",
     "remote_jobs": 250
   },

@@ -156,11 +156,16 @@ devtools_entrypoint("bundle") {
     "../components/markdown_view:*",
     "../components/request_link_icon:unittests",
     "../components/snackbars:*",
+    "../components/tooltips:*",
     "./*",
 
     # Required for x-link
     "../components/panel_feedback/*",
     "../components/text_editor/*",
+
+    # Required for correct button styling in the Computed tab
+    # (http://crbug.com/435601104).
+    "../components/tree_outline:*",
   ]
 
   visibility += devtools_ui_legacy_visibility
@@ -190,6 +195,7 @@ ts_library("unittests") {
     "Treeoutline.test.ts",
     "UIUtils.test.ts",
     "View.test.ts",
+    "ViewManager.test.ts",
     "ViewRegistration.test.ts",
     "Widget.test.ts",
     "XLink.test.ts",

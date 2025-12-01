@@ -2,7 +2,7 @@
 
 var $TypeError = require('es-errors/type');
 
-var callBound = require('call-bind/callBound');
+var callBound = require('call-bound');
 
 var $arrayBufferResizable = callBound('%ArrayBuffer.prototype.resizable%', true);
 var $sharedArrayGrowable = callBound('%SharedArrayBuffer.prototype.growable%', true);

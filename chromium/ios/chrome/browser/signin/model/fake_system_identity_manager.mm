@@ -4,6 +4,9 @@
 
 #import "ios/chrome/browser/signin/model/fake_system_identity_manager.h"
 
+#import <set>
+#import <string>
+
 #import "base/apple/foundation_util.h"
 #import "base/functional/bind.h"
 #import "base/i18n/time_formatting.h"
@@ -260,8 +263,9 @@ FakeSystemIdentityManager::CreateRefreshAccessTokenFailure(
   FakeSystemIdentityDetails* details =
       [storage_ detailsForGaiaID:identity.gaiaID];
   details.error = [[FakeRefreshAccessTokenError alloc]
-      initWithIdentity:identity
-              callback:std::move(callback)];
+         initWithIdentity:identity
+      isScopeLimitedError:false
+                 callback:std::move(callback)];
   return details.error;
 }
 
@@ -474,6 +478,12 @@ bool FakeSystemIdentityManager::HandleMDMNotification(
   return true;
 }
 
+bool FakeSystemIdentityManager::IsScopeLimitedError(
+    id<RefreshAccessTokenError> error) {
+  return base::apple::ObjCCastStrict<FakeRefreshAccessTokenError>(error)
+      .isScopeLimitedError;
+}
+
 bool FakeSystemIdentityManager::IsMDMError(id<SystemIdentity> identity,
                                            NSError* error) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -530,7 +540,8 @@ void FakeSystemIdentityManager::GetAccessTokenAsync(
     id<RefreshAccessTokenError> error =
         details.getAccessTokenCallback.Run(std::move(callback));
     if (error) {
-      FireIdentityAccessTokenRefreshFailed(identity, error);
+      FireIdentityAccessTokenRefreshFailed(identity, error,
+                                           std::set<std::string>());
     }
     return;
   } else {

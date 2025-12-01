@@ -23,6 +23,8 @@
 #include "mojo/public/cpp/bindings/associated_receiver_set.h"
 
 #if BUILDFLAG(IS_ANDROID)
+#include "base/android/android_info.h"
+#include "base/cancelable_callback.h"
 #include "components/input/android/input_receiver_data.h"
 #include "components/viz/service/input/android_state_transfer_handler.h"
 #include "components/viz/service/input/render_input_router_support_android.h"
@@ -196,7 +198,18 @@ class VIZ_SERVICE_EXPORT InputManager
 
   AndroidStateTransferHandler android_state_transfer_handler_;
 
+  // There's a platform bug on Android 16 which keeps the input surface control
+  // lingering around unless the app explicitly does a `System.gc()` call to
+  // clean it up : https://crbug.com/436302937#comment5.
+  // Since the the input surface control doesn't have any associate buffers
+  // `System.gc()` is called on every 100th destruction.
+  int pending_surface_controls_ = 0;
   std::unique_ptr<input::InputReceiverData> receiver_data_;
+
+  // Allow cancelling the creation task, since it's possible for
+  // DestroyCompositorFrameSink call to come before the callback is ran.
+  base::flat_map<FrameSinkId, std::unique_ptr<base::CancelableOnceClosure>>
+      pending_create_input_receiver_callback_;
 #endif  // BUILDFLAG(IS_ANDROID)
 
   friend class MockInputManager;

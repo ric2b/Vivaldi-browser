@@ -62,7 +62,6 @@ typedef struct SVQ1EncContext {
     MPVEncContext m;
     AVCodecContext *avctx;
     MECmpContext mecc;
-    HpelDSPContext hdsp;
     AVFrame *current_picture;
     AVFrame *last_picture;
 
@@ -80,10 +79,6 @@ typedef struct SVQ1EncContext {
     /* Y plane block dimensions */
     int y_block_width;
     int y_block_height;
-
-    /* U & V plane (C planes) block dimensions */
-    int c_block_width;
-    int c_block_height;
 
     DECLARE_ALIGNED(16, int16_t, encoded_block_levels)[6][7][256];
 
@@ -295,8 +290,6 @@ static void init_block_index(MpegEncContext *const s)
     s->block_index[1]= s->b8_stride*(s->mb_y*2    ) + 1 + s->mb_x*2;
     s->block_index[2]= s->b8_stride*(s->mb_y*2 + 1)     + s->mb_x*2;
     s->block_index[3]= s->b8_stride*(s->mb_y*2 + 1) + 1 + s->mb_x*2;
-    s->block_index[4]= s->mb_stride*(s->mb_y + 1)                + s->b8_stride*s->mb_height*2 + s->mb_x;
-    s->block_index[5]= s->mb_stride*(s->mb_y + s->mb_height + 2) + s->b8_stride*s->mb_height*2 + s->mb_x;
 }
 
 static int svq1_encode_plane(SVQ1EncContext *s, int plane,
@@ -325,7 +318,6 @@ static int svq1_encode_plane(SVQ1EncContext *s, int plane,
     block_height = (height + 15) / 16;
 
     if (s->pict_type == AV_PICTURE_TYPE_P) {
-        s2->avctx                         = s->avctx;
         s2->last_pic.data[0]        = ref_plane;
         s2->linesize                      =
         s2->last_pic.linesize[0]    =
@@ -337,11 +329,11 @@ static int svq1_encode_plane(SVQ1EncContext *s, int plane,
         s2->mb_height                     = block_height;
         s2->mb_stride                     = s2->mb_width + 1;
         s2->b8_stride                     = 2 * s2->mb_width + 1;
-        s2->f_code                        = 1;
+        s->m.f_code                       = 1;
         s2->pict_type                     = s->pict_type;
         s->m.me.scene_change_score        = 0;
         // s2->out_format                    = FMT_H263;
-        // s2->unrestricted_mv               = 1;
+        // s->m.me.unrestricted_mv           = 1;
         s->m.lambda                       = s->quality;
         s2->qscale                        = s->m.lambda * 139 +
                                              FF_LAMBDA_SCALE * 64 >>
@@ -349,17 +341,6 @@ static int svq1_encode_plane(SVQ1EncContext *s, int plane,
         s->m.lambda2                      = s->m.lambda * s->m.lambda +
                                              FF_LAMBDA_SCALE / 2 >>
                                              FF_LAMBDA_SHIFT;
-
-        if (!s->motion_val8[plane]) {
-            s->motion_val8[plane]  = av_mallocz((s2->b8_stride *
-                                                 block_height * 2 + 2) *
-                                                2 * sizeof(int16_t));
-            s->motion_val16[plane] = av_mallocz((s2->mb_stride *
-                                                 (block_height + 2) + 1) *
-                                                2 * sizeof(int16_t));
-            if (!s->motion_val8[plane] || !s->motion_val16[plane])
-                return AVERROR(ENOMEM);
-        }
 
         s->m.mb_type = s->mb_type;
 
@@ -400,7 +381,7 @@ static int svq1_encode_plane(SVQ1EncContext *s, int plane,
         }
 
         ff_fix_long_p_mvs(&s->m, CANDIDATE_MB_TYPE_INTRA);
-        ff_fix_long_mvs(&s->m, NULL, 0, s->m.p_mv_table, s2->f_code,
+        ff_fix_long_mvs(&s->m, NULL, 0, s->m.p_mv_table, s->m.f_code,
                         CANDIDATE_MB_TYPE_INTER, 0);
     }
 
@@ -479,10 +460,10 @@ static int svq1_encode_plane(SVQ1EncContext *s, int plane,
 
                     dxy = (mx & 1) + 2 * (my & 1);
 
-                    s->hdsp.put_pixels_tab[0][dxy](temp + 16*stride,
-                                                   ref + (mx >> 1) +
-                                                   stride * (my >> 1),
-                                                   stride, 16);
+                    s2->hdsp.put_pixels_tab[0][dxy](temp + 16*stride,
+                                                    ref + (mx >> 1) +
+                                                    stride * (my >> 1),
+                                                    stride, 16);
 
                     score[1] += encode_block(s, src + 16 * x, temp + 16*stride,
                                              decoded, stride, 5, 64, lambda, 0);
@@ -493,7 +474,7 @@ static int svq1_encode_plane(SVQ1EncContext *s, int plane,
                     score[2] += SVQ1_BLOCK_SKIP_LEN * lambda;
                     if (score[2] < score[best] && mx == 0 && my == 0) {
                         best = 2;
-                        s->hdsp.put_pixels_tab[0][0](decoded, ref, stride, 16);
+                        s2->hdsp.put_pixels_tab[0][0](decoded, ref, stride, 16);
                         put_bits(pb, SVQ1_BLOCK_SKIP_LEN, SVQ1_BLOCK_SKIP_CODE);
                     }
                 }
@@ -522,7 +503,7 @@ static int svq1_encode_plane(SVQ1EncContext *s, int plane,
                 ff_copy_bits(pb, reorder_buffer[best][i],
                                  count[best][i]);
             if (best == 0)
-                s->hdsp.put_pixels_tab[0][0](decoded, temp, stride, 16);
+                s2->hdsp.put_pixels_tab[0][0](decoded, temp, stride, 16);
         }
         s2->first_slice_line = 0;
     }
@@ -543,9 +524,6 @@ static av_cold int svq1_encode_end(AVCodecContext *avctx)
     av_freep(&s->mb_type);
     av_freep(&s->dummy);
     av_freep(&s->scratchbuf);
-
-    s->m.mb_type = NULL;
-    ff_mpv_common_end(&s->m.c);
 
     for (i = 0; i < 3; i++) {
         av_freep(&s->motion_val8[i]);
@@ -582,7 +560,7 @@ static av_cold int svq1_encode_init(AVCodecContext *avctx)
         return AVERROR(EINVAL);
     }
 
-    ff_hpeldsp_init(&s->hdsp, avctx->flags);
+    ff_hpeldsp_init(&s->m.c.hdsp, avctx->flags);
     ff_me_cmp_init(&s->mecc, avctx);
     ret = ff_me_init(&s->m.me, avctx, &s->mecc, 0);
     if (ret < 0)
@@ -594,6 +572,15 @@ static av_cold int svq1_encode_init(AVCodecContext *avctx)
     if (!s->current_picture || !s->last_picture) {
         return AVERROR(ENOMEM);
     }
+    ret = ff_encode_alloc_frame(avctx, s->current_picture);
+    if (ret < 0)
+        return ret;
+    ret = ff_encode_alloc_frame(avctx, s->last_picture);
+    if (ret < 0)
+        return ret;
+    s->scratchbuf = av_malloc_array(s->current_picture->linesize[0], 16 * 3);
+    if (!s->scratchbuf)
+        return AVERROR(ENOMEM);
 
     s->frame_width  = avctx->width;
     s->frame_height = avctx->height;
@@ -601,15 +588,21 @@ static av_cold int svq1_encode_init(AVCodecContext *avctx)
     s->y_block_width  = (s->frame_width  + 15) / 16;
     s->y_block_height = (s->frame_height + 15) / 16;
 
-    s->c_block_width  = (s->frame_width  / 4 + 15) / 16;
-    s->c_block_height = (s->frame_height / 4 + 15) / 16;
-
     s->avctx               = avctx;
     s->m.c.avctx           = avctx;
 
-    ret = ff_mpv_common_init(&s->m.c);
-    if (ret < 0)
-        return ret;
+    for (size_t plane = 0; plane < FF_ARRAY_ELEMS(s->motion_val16); ++plane) {
+        const int shift = plane ? 2 : 0;
+        unsigned block_height = ((s->frame_height >> shift) + 15U) / 16;
+        unsigned block_width  = ((s->frame_width  >> shift) + 15U) / 16;
+
+        s->motion_val8[plane]  = av_calloc((2 * block_width + 1) * block_height * 2 + 2,
+                                           2 * sizeof(int16_t));
+        s->motion_val16[plane] = av_calloc((block_width + 1) * (block_height + 2) + 1,
+                                           2 * sizeof(int16_t));
+        if (!s->motion_val8[plane] || !s->motion_val16[plane])
+            return AVERROR(ENOMEM);
+    }
 
     s->m.c.picture_structure = PICT_FRAME;
     s->m.me.temp           =
@@ -644,27 +637,6 @@ static int svq1_encode_frame(AVCodecContext *avctx, AVPacket *pkt,
     if (ret < 0)
         return ret;
 
-    if (avctx->pix_fmt != AV_PIX_FMT_YUV410P) {
-        av_log(avctx, AV_LOG_ERROR, "unsupported pixel format\n");
-        return -1;
-    }
-
-    if (!s->current_picture->data[0]) {
-        if ((ret = ff_encode_alloc_frame(avctx, s->current_picture)) < 0) {
-            return ret;
-        }
-    }
-    if (!s->last_picture->data[0]) {
-        ret = ff_encode_alloc_frame(avctx, s->last_picture);
-        if (ret < 0)
-            return ret;
-    }
-    if (!s->scratchbuf) {
-        s->scratchbuf = av_malloc_array(s->current_picture->linesize[0], 16 * 3);
-        if (!s->scratchbuf)
-            return AVERROR(ENOMEM);
-    }
-
     FFSWAP(AVFrame*, s->current_picture, s->last_picture);
 
     if (avctx->gop_size && (avctx->frame_num % avctx->gop_size))
@@ -687,15 +659,8 @@ static int svq1_encode_frame(AVCodecContext *avctx, AVPacket *pkt,
                               pict->linesize[i],
                               s->current_picture->linesize[i]);
         emms_c();
-        if (ret < 0) {
-            int j;
-            for (j = 0; j < i; j++) {
-                av_freep(&s->motion_val8[j]);
-                av_freep(&s->motion_val16[j]);
-            }
-            av_freep(&s->scratchbuf);
-            return -1;
-        }
+        if (ret < 0)
+            return ret;
     }
 
     // align_put_bits(&pb);

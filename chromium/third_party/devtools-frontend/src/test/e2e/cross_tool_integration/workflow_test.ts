@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {click, closeAllCloseableTabs, goToResource, timeout, waitFor} from '../../shared/helper.js';
+import {click, closeAllCloseableTabs, goToResource, timeout, waitFor, waitForFunction} from '../../shared/helper.js';
 import {navigateToConsoleTab, waitForConsoleInfoMessageAndClickOnLink} from '../helpers/console-helpers.js';
 import {
   clickOnContextMenuItemFromTab,
@@ -47,8 +47,7 @@ describe('A user can navigate across', function() {
     await waitFor('.panel[aria-label="sources"]');
   });
 
-  // Flaky test.
-  it.skip('[crbug.com/327072692] Performance -> Sources', async () => {
+  it('Performance -> Sources', async () => {
     await navigateToPerformanceTab();
 
     await startRecording();
@@ -58,18 +57,19 @@ describe('A user can navigate across', function() {
     // `default.html` below.
     const statusIndicator = await waitFor('.timeline-status-dialog .progress .indicator');
     const statusIndicatorValues = new Set<number>();
-    do {
+    await waitForFunction(async () => {
       const indicatorValue = await statusIndicator.evaluate(n => Number(n.getAttribute('aria-valuenow')));
       if (statusIndicatorValues.has(indicatorValue)) {
         await timeout(50);
       } else {
         statusIndicatorValues.add(indicatorValue);
       }
-    } while (statusIndicatorValues.size <= 2);
+      return statusIndicatorValues.size > 1;
+    });
 
     await stopRecording();
 
-    await navigateToBottomUpTab();
+    await navigateToBottomUpTab(undefined, 'script-location');
 
     await click('.devtools-link[title*="default.html"]');
     await waitFor('.panel[aria-label="sources"]');
@@ -94,8 +94,7 @@ describe('A user can move tabs', function() {
 });
 
 describe('A user can open panels via the "panel" query param', function() {
-  // Flaky on windows
-  it.skipOnPlatforms(['win32'], '[crbug.com/377280477] Layers is shown', async () => {
+  it('Layers is shown', async () => {
     await reloadDevTools({queryParams: {panel: 'layers'}});
     await tabExistsInMainPanel(LAYERS_TAB_SELECTOR);
   });

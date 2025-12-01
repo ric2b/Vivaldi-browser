@@ -6,9 +6,11 @@
 
 #include <stdint.h>
 
+#include <algorithm>
 #include <memory>
 #include <utility>
 
+#include "base/containers/span.h"
 #include "gn/input_file.h"
 #include "gn/scope.h"
 #include "gn/test_with_scope.h"
@@ -170,6 +172,62 @@ TEST(ParseTree, OriginForDereference) {
   // was dereferenced (the "a" on the second line).
   EXPECT_EQ(2, err.location().line_number());
   EXPECT_EQ(20, err.location().column_number());
+}
+
+TEST(ParseTree, ShortenTargets) {
+  TestParseInput input(
+      "deps = [\n"
+      "  \":abc\",\n"
+      "  \"bcd/efg\",\n"
+      "  \"cde/fgh:fgh\",\n"
+      "  \"cde/fgh:fghz\",\n"
+      "  \"//def/ghi\",\n"
+      "  \"//efg/hij:hij\",\n"
+      "  \"//efg/hij:hihihi\",\n"
+      "]\n");
+  EXPECT_FALSE(input.has_error());
+  ASSERT_TRUE(input.parsed()->AsBlock());
+  ASSERT_TRUE(input.parsed()->AsBlock()->statements()[0]->AsBinaryOp());
+  const BinaryOpNode* binop =
+      input.parsed()->AsBlock()->statements()[0]->AsBinaryOp();
+  ASSERT_TRUE(binop->right()->AsList());
+  auto* list = const_cast<ListNode*>(binop->right()->AsList());
+  const auto& contents = list->contents();
+  ASSERT_EQ(7u, contents.size());
+
+  auto all_elements_are_literal_nodes =
+      [](base::span<const std::unique_ptr<const ParseNode>> container) -> bool {
+    // TODO(thestig): Switch to std::ranges::all_of() when the CI/CQ bots all
+    // support it.
+    return std::all_of(container.begin(), container.end(),
+                       [](const std::unique_ptr<const ParseNode>& element) {
+                         return element->AsLiteral();
+                       });
+  };
+
+  auto get_literal_value = [](const ParseNode& node) {
+    return node.AsLiteral()->value().value();
+  };
+
+  ASSERT_TRUE(all_elements_are_literal_nodes(contents));
+  EXPECT_EQ("\":abc\"", get_literal_value(*contents[0]));
+  EXPECT_EQ("\"bcd/efg\"", get_literal_value(*contents[1]));
+  EXPECT_EQ("\"cde/fgh:fgh\"", get_literal_value(*contents[2]));
+  EXPECT_EQ("\"cde/fgh:fghz\"", get_literal_value(*contents[3]));
+  EXPECT_EQ("\"//def/ghi\"", get_literal_value(*contents[4]));
+  EXPECT_EQ("\"//efg/hij:hij\"", get_literal_value(*contents[5]));
+  EXPECT_EQ("\"//efg/hij:hihihi\"", get_literal_value(*contents[6]));
+
+  list->ShortenTargets();
+
+  ASSERT_TRUE(all_elements_are_literal_nodes(contents));
+  EXPECT_EQ("\":abc\"", get_literal_value(*contents[0]));
+  EXPECT_EQ("\"bcd/efg\"", get_literal_value(*contents[1]));
+  EXPECT_EQ("\"cde/fgh\"", get_literal_value(*contents[2]));
+  EXPECT_EQ("\"cde/fgh:fghz\"", get_literal_value(*contents[3]));
+  EXPECT_EQ("\"//def/ghi\"", get_literal_value(*contents[4]));
+  EXPECT_EQ("\"//efg/hij\"", get_literal_value(*contents[5]));
+  EXPECT_EQ("\"//efg/hij:hihihi\"", get_literal_value(*contents[6]));
 }
 
 TEST(ParseTree, SortRangeExtraction) {

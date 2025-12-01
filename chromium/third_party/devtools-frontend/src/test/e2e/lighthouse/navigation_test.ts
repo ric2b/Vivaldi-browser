@@ -94,7 +94,7 @@ describe('Navigation', function() {
     // 1 refresh after auditing to reset state
     assert.strictEqual(numNavigations, 5);
 
-    assert.strictEqual(lhr.lighthouseVersion, '12.6.0');
+    assert.strictEqual(lhr.lighthouseVersion, '12.8.1');
     assert.match(lhr.finalUrl, /^https:\/\/localhost:[0-9]+\/test\/e2e\/resources\/lighthouse\/hello.html/);
 
     assert.strictEqual(lhr.configSettings.throttlingMethod, 'simulate');
@@ -120,7 +120,7 @@ describe('Navigation', function() {
     });
 
     const {auditResults, erroredAudits, failedAudits} = getAuditsBreakdown(lhr, ['max-potential-fid']);
-    assert.lengthOf(auditResults, 175);
+    assert.lengthOf(auditResults, 176);
     assert.deepEqual(erroredAudits, []);
     assert.deepEqual(failedAudits.map(audit => audit.id), [
       'document-title',
@@ -136,8 +136,7 @@ describe('Navigation', function() {
 
     // Test view trace button behavior
     // For some reason the CDP click command doesn't work here even if the tools menu is open.
-    await reportEl.$eval(
-        'a[data-action="view-unthrottled-trace"]:not(.hidden)', saveJsonEl => (saveJsonEl as HTMLElement).click());
+    await reportEl.$eval('a[data-action="view-unthrottled-trace"]:not(.hidden)', saveJsonEl => saveJsonEl.click());
     let selectedTab = await waitFor('.tabbed-pane-header-tab.selected[aria-label="Performance"]');
     let selectedTabText = await selectedTab.evaluate(selectedTabEl => {
       return selectedTabEl.textContent;
@@ -145,6 +144,9 @@ describe('Navigation', function() {
     assert.strictEqual(selectedTabText, 'Performance');
 
     await navigateToLighthouseTab();
+
+    // TODO: currently the "LighthouseReportRenderer.linkifyNodeDetails" doesn't run for swappable sections.
+    await reportEl.$eval('.lh-button-insight-toggle', el => (el as HTMLElement).click());
 
     // Test element link behavior
     const lcpElementAudit = await waitForElementWithTextContent('Largest Contentful Paint element', reportEl);
@@ -161,7 +163,7 @@ describe('Navigation', function() {
     const waitForJson = await interceptNextFileSave();
 
     // For some reason the CDP click command doesn't work here even if the tools menu is open.
-    await reportEl.$eval('a[data-action="save-json"]:not(.hidden)', saveJsonEl => (saveJsonEl as HTMLElement).click());
+    await reportEl.$eval('a[data-action="save-json"]:not(.hidden)', saveJsonEl => saveJsonEl.click());
 
     const jsonContent = await waitForJson();
     assert.strictEqual(jsonContent, JSON.stringify(lhr, null, 2));
@@ -169,7 +171,7 @@ describe('Navigation', function() {
     const waitForHtml = await interceptNextFileSave();
 
     // For some reason the CDP click command doesn't work here even if the tools menu is open.
-    await reportEl.$eval('a[data-action="save-html"]:not(.hidden)', saveHtmlEl => (saveHtmlEl as HTMLElement).click());
+    await reportEl.$eval('a[data-action="save-html"]:not(.hidden)', saveHtmlEl => saveHtmlEl.click());
 
     const htmlContent = await waitForHtml();
     const iframeHandle = await renderHtmlInIframe(htmlContent);
@@ -202,7 +204,7 @@ describe('Navigation', function() {
     ];
 
     const {auditResults, erroredAudits, failedAudits} = getAuditsBreakdown(lhr, flakyAudits);
-    assert.lengthOf(auditResults, 175);
+    assert.lengthOf(auditResults, 176);
     assert.deepEqual(erroredAudits, []);
     assert.deepEqual(failedAudits.map(audit => audit.id), [
       'document-title',

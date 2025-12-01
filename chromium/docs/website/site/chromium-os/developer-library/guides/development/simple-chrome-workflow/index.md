@@ -116,8 +116,8 @@ The board's SDK will then be downloaded (and cached) everytime
 you run `gclient sync`, which should be run after every update to your chromium
 checkout.  You may specify additional boards in the `cros_boards` variable by
 appending `:<board>` to the variable. For example, `"cros_boards":
-"amd64-generic:betty-pi-arc"` includes the `amd64-generic` and `betty-pi-arc`
-boards. Similar to the traditional flow, this will also create a convenient build dir at
+"amd64-generic:betty"` includes the `amd64-generic` and `betty` boards. Similar
+to the traditional flow, this will also create a convenient build dir at
 `out_$BOARD/Release` ($BOARD refers to the board name) for each board listed in
 your `.gclient` file, with `args.gn` file that contains a line that looks like
 this (if your board is `hatch`):
@@ -479,6 +479,10 @@ test image:
 *   `/var/log/messages` contains messages logged by `session_manager`
     (which is responsible for starting Chrome), in addition to kernel
     messages when a Chrome process crashes.
+
+Note that logging is not enabled when Chrome is run in Guest mode. To see log
+output you'll need to sign into ChromeOS with an account (for instance an
+[owned test account]).
 
 ### Command-line flags and environment variables
 
@@ -923,3 +927,4 @@ Some notes about the above:
 [Prepare a DUT]:#set-up-the-chromeos-device
 [Shell-less flow]: #shell-less-flow
 [ChromeOS Build Instructions]: https://chromium.googlesource.com/chromium/src/+/HEAD/docs/chromeos_build_instructions.md
+[owned test account]: /chromium-os/developer-library/guides/security/test-accounts/

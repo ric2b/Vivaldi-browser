@@ -165,6 +165,17 @@ class SearchEnginesAcknowledgeSwitchPromptFunction : public ExtensionFunction {
   ~SearchEnginesAcknowledgeSwitchPromptFunction() override = default;
   ExtensionFunction::ResponseAction Run() override;
 };
+
+class SearchEnginesSetIsActiveFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("searchEngines.setIsActive",
+                             SEARCH_ENGINES_SET_IS_ACTIVE)
+  SearchEnginesSetIsActiveFunction() = default;
+
+ private:
+  ~SearchEnginesSetIsActiveFunction() override = default;
+  ExtensionFunction::ResponseAction Run() override;
+};
 }  // namespace extensions
 
 #endif  // EXTENSIONS_API_SEARCH_ENGINES_SEARCH_ENGINES_API_H_

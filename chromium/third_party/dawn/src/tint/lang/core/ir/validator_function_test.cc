@@ -31,7 +31,7 @@
 
 #include "gtest/gtest.h"
 
-#include "src/tint/lang/core/address_space.h"
+#include "src/tint/lang/core/enums.h"
 #include "src/tint/lang/core/ir/builder.h"
 #include "src/tint/lang/core/ir/validator.h"
 #include "src/tint/lang/core/number.h"
@@ -95,6 +95,37 @@ TEST_F(IR_ValidatorTest, Function_Duplicate) {
 )")) << res.Failure();
 }
 
+TEST_F(IR_ValidatorTest, Function_MultipleEntryPoints_WithCapability) {
+    auto* ep1 = ComputeEntryPoint("ep1");
+    ep1->Block()->Append(b.Return(ep1));
+
+    auto* ep2 = ComputeEntryPoint("ep2");
+    ep2->Block()->Append(b.Return(ep2));
+
+    auto res = ir::Validate(mod, Capabilities{
+                                     Capability::kAllowMultipleEntryPoints,
+                                 });
+    ASSERT_EQ(res, Success) << res.Failure();
+}
+
+TEST_F(IR_ValidatorTest, Function_MultipleEntryPoints_WithoutCapability) {
+    auto* ep1 = ComputeEntryPoint("ep1");
+    ep1->Block()->Append(b.Return(ep1));
+
+    auto* ep2 = ComputeEntryPoint("ep2");
+    ep2->Block()->Append(b.Return(ep2));
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_THAT(
+        res.Failure().reason,
+        testing::HasSubstr(
+            R"(:6:1 error: a module with multiple entry points requires the AllowMultipleEntryPoints capability
+%ep2 = @compute @workgroup_size(1u, 1u, 1u) func():void {
+^^^^
+)")) << res.Failure();
+}
+
 TEST_F(IR_ValidatorTest, Function_DuplicateEntryPointNames) {
     auto* c = ComputeEntryPoint("dup");
     c->Block()->Append(b.Return(c));
@@ -102,7 +133,9 @@ TEST_F(IR_ValidatorTest, Function_DuplicateEntryPointNames) {
     auto* f = FragmentEntryPoint("dup");
     f->Block()->Append(b.Return(f));
 
-    auto res = ir::Validate(mod);
+    auto res = ir::Validate(mod, Capabilities{
+                                     Capability::kAllowMultipleEntryPoints,
+                                 });
     ASSERT_NE(res, Success);
     EXPECT_THAT(res.Failure().reason,
                 testing::HasSubstr(R"(:6:1 error: entry point name 'dup' is not unique
@@ -1118,6 +1151,49 @@ TEST_F(IR_ValidatorTest, Function_EntryPoint_PtrToWorkgroup) {
             R"(:1:21 error: input param to entry point cannot be a ptr in the 'workgroup' address space
 %f = @fragment func(%invalid:ptr<workgroup, i32, read_write>):void {
                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+)")) << res.Failure();
+}
+
+TEST_F(IR_ValidatorTest, Function_DirectRecursion) {
+    auto* f = b.Function("f", ty.void_());
+    b.Append(f->Block(), [&] {
+        b.Call(f);
+        b.Return(f);
+    });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_THAT(res.Failure().reason,
+                testing::HasSubstr(R"(:1:1 error: recursive function calls are not allowed
+%f = func():void {
+^^
+)")) << res.Failure();
+}
+
+TEST_F(IR_ValidatorTest, Function_IndirectRecursion) {
+    auto* f1 = b.Function("f1", ty.void_());
+    auto* f2 = b.Function("f2", ty.void_());
+    auto* f3 = b.Function("f3", ty.void_());
+
+    b.Append(f1->Block(), [&] {
+        b.Call(f2);
+        b.Return(f1);
+    });
+    b.Append(f2->Block(), [&] {
+        b.Call(f3);
+        b.Return(f2);
+    });
+    b.Append(f3->Block(), [&] {
+        b.Call(f1);
+        b.Return(f3);
+    });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_THAT(res.Failure().reason,
+                testing::HasSubstr(R"(:1:1 error: recursive function calls are not allowed
+%f1 = func():void {
+^^^
 )")) << res.Failure();
 }
 

@@ -6,9 +6,9 @@
 #import <Foundation/Foundation.h>
 
 #import "base/compiler_specific.h"
-#import "components/ad_blocker/adblock_known_sources_handler.h"
-#import "components/ad_blocker/adblock_rule_manager.h"
-#import "components/ad_blocker/adblock_rule_service.h"
+#import "components/ad_blocker/public/core/adblock_known_sources_handler.h"
+#import "components/ad_blocker/public/core/adblock_rule_manager.h"
+#import "components/ad_blocker/public/ios/adblock_rule_service.h"
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/ui/ad_tracker_blocker/vivaldi_atb_consumer.h"
 
@@ -32,8 +32,8 @@ class VivaldiATBManagerBridge : public RuleService::Observer,
 
  private:
   void OnRuleServiceStateLoaded(RuleService* rule_service) override;
-  void OnStartApplyingIosRules(RuleGroup group) override;
-  void OnDoneApplyingIosRules(RuleGroup group) override;
+  void OnStartApplyingRules(RuleGroup group) override;
+  void OnDoneApplyingRules(RuleGroup group) override;
   void OnRuleSourceUpdated(RuleGroup group,
                             const ActiveRuleSource& rule_source) override;
   void OnRuleSourceDeleted(uint32_t source_id, RuleGroup group) override;

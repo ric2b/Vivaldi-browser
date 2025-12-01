@@ -18,6 +18,7 @@ limitations under the License.
 
 #include <cstdint>
 
+#include "absl/base/no_destructor.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
 #include "absl/strings/match.h"
@@ -26,6 +27,7 @@ limitations under the License.
 #include "xla/hlo/ir/hlo_instruction.h"
 #include "xla/hlo/ir/hlo_opcode.h"
 #include "xla/service/buffer_assignment.h"
+#include "xla/service/buffer_value.h"
 #include "xla/service/gpu/backend_configs.pb.h"
 #include "xla/service/hlo_value.h"
 
@@ -42,8 +44,10 @@ inline BufferAssigner::Colorer CollectiveColorer(bool use_user_buffers,
                                                  bool use_nvshmem) {
   return [use_user_buffers, use_nvshmem](HloAliasAnalysis* alias_analysis,
                                          const HloOrdering&) {
-    static const auto* const kSupportedOpcodes =
-        new absl::flat_hash_set<HloOpcode>{
+    // NOTE: The explicit internal constructor is needed as an explicitly typed
+    // variable to avoid a method ambiguity error when compiling for CUDA 12.4.
+    static const absl::NoDestructor<absl::flat_hash_set<HloOpcode>>
+        kSupportedOpcodes(absl::flat_hash_set<HloOpcode>{
             HloOpcode::kAllReduce,
             HloOpcode::kAllReduceStart,
             HloOpcode::kAllReduceDone,
@@ -55,7 +59,7 @@ inline BufferAssigner::Colorer CollectiveColorer(bool use_user_buffers,
             HloOpcode::kCollectivePermuteStart,
             HloOpcode::kCollectivePermuteDone,
             HloOpcode::kAllToAll,
-        };
+        });
 
     auto is_nvshmem_op = [](const HloInstruction* inst) {
       bool is_nvshmem_collective = false;
@@ -102,6 +106,17 @@ inline BufferAssigner::Colorer CollectiveColorer(bool use_user_buffers,
       return false;
     };
     for (HloValue* value : alias_analysis->dataflow_analysis().values()) {
+      // If the value has a layout with non-default memory space, use the memory
+      // space from the layout.
+      const HloPosition& defining_position = value->defining_position();
+      if (defining_position.shape().has_layout()) {
+        auto memory_space = defining_position.shape().layout().memory_space();
+        if (memory_space != 0) {
+          value->set_color(BufferValue::Color(memory_space));
+          continue;
+        }
+      }
+
       auto& buffer = alias_analysis->GetBufferContainingValue(*value);
       for (const auto& alias : buffer.values()) {
         if (is_collective_memory_instr(alias->instruction()) ||

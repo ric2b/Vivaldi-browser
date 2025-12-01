@@ -19,19 +19,6 @@ use crate::*;
 
 use std::num::NonZero;
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum RepetitionCount {
-    Unknown,
-    Infinite,
-    Finite(i32),
-}
-
-impl Default for RepetitionCount {
-    fn default() -> Self {
-        Self::Finite(0)
-    }
-}
-
 #[derive(Debug, Default)]
 pub struct Track {
     pub id: u32,
@@ -120,7 +107,7 @@ impl Track {
                     ));
                 }
                 let repetition_count: u64 = self.track_duration.div_ceil(self.segment_duration) - 1;
-                return match i32::try_from(repetition_count) {
+                return match u32_from_u64(repetition_count) {
                     Ok(value) => Ok(RepetitionCount::Finite(value)),
                     Err(_) => Ok(RepetitionCount::Infinite),
                 };

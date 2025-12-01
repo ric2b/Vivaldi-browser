@@ -14,7 +14,9 @@ those to this list.
 """
 
 temporary_patch_list = [
-    "//third_party/triton:temporary/launcher_tma_arg_mask.patch",
-    "//third_party/triton:temporary/launcher_tma_tensordesc.patch",
+    "//third_party/triton:temporary/fix_test_core_h100_target.patch",
+    "//third_party/triton:temporary/speed_up_int4_unpacking.patch",
+    "//third_party/triton:temporary/tutorial_fixes.patch",
+    "//third_party/triton:temporary/ws_fix.patch",
     # Add new patches just above this line
 ]

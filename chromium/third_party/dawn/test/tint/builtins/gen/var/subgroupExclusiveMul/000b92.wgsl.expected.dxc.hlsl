@@ -1,8 +1,8 @@
 //
 // fragment_main
 //
-RWByteAddressBuffer prevent_dce : register(u0);
 
+RWByteAddressBuffer prevent_dce : register(u0);
 uint4 subgroupExclusiveMul_000b92() {
   uint4 arg_0 = (1u).xxxx;
   uint4 res = WavePrefixProduct(arg_0);
@@ -10,14 +10,14 @@ uint4 subgroupExclusiveMul_000b92() {
 }
 
 void fragment_main() {
-  prevent_dce.Store4(0u, asuint(subgroupExclusiveMul_000b92()));
-  return;
+  prevent_dce.Store4(0u, subgroupExclusiveMul_000b92());
 }
+
 //
 // compute_main
 //
-RWByteAddressBuffer prevent_dce : register(u0);
 
+RWByteAddressBuffer prevent_dce : register(u0);
 uint4 subgroupExclusiveMul_000b92() {
   uint4 arg_0 = (1u).xxxx;
   uint4 res = WavePrefixProduct(arg_0);
@@ -26,6 +26,6 @@ uint4 subgroupExclusiveMul_000b92() {
 
 [numthreads(1, 1, 1)]
 void compute_main() {
-  prevent_dce.Store4(0u, asuint(subgroupExclusiveMul_000b92()));
-  return;
+  prevent_dce.Store4(0u, subgroupExclusiveMul_000b92());
 }
+

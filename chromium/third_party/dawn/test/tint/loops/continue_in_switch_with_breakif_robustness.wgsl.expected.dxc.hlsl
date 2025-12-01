@@ -1,29 +1,46 @@
+
 [numthreads(1, 1, 1)]
 void f() {
-  int i = 0;
-  bool tint_continue = false;
-  while (true) {
-    tint_continue = false;
-    switch(i) {
-      case 0: {
-        tint_continue = true;
+  int i = int(0);
+  {
+    uint2 tint_loop_idx = (4294967295u).xx;
+    while(true) {
+      if (all((tint_loop_idx == (0u).xx))) {
         break;
       }
-      default: {
-        break;
+      bool tint_continue = false;
+      switch(i) {
+        case int(0):
+        {
+          tint_continue = true;
+          break;
+        }
+        default:
+        {
+          break;
+        }
       }
-    }
-    if (tint_continue) {
+      if (tint_continue) {
+        {
+          uint tint_low_inc = (tint_loop_idx.x - 1u);
+          tint_loop_idx.x = tint_low_inc;
+          uint tint_carry = uint((tint_low_inc == 4294967295u));
+          tint_loop_idx.y = (tint_loop_idx.y - tint_carry);
+          i = (i + int(1));
+          if ((i >= int(4))) { break; }
+        }
+        continue;
+      }
       {
-        i = (i + 1);
-        if ((i >= 4)) { break; }
+        uint tint_low_inc = (tint_loop_idx.x - 1u);
+        tint_loop_idx.x = tint_low_inc;
+        uint tint_carry = uint((tint_low_inc == 4294967295u));
+        tint_loop_idx.y = (tint_loop_idx.y - tint_carry);
+        i = (i + int(1));
+        if ((i >= int(4))) { break; }
       }
       continue;
     }
-    {
-      i = (i + 1);
-      if ((i >= 4)) { break; }
-    }
   }
-  return;
 }
+

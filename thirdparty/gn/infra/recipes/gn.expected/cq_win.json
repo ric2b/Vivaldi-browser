@@ -296,7 +296,9 @@
       "python3",
       "-u",
       "[START_DIR]\\gn\\build\\gen.py",
-      "-d"
+      "-d",
+      "--use-asan",
+      "--use-ubsan"
     ],
     "cwd": "[START_DIR]\\gn",
     "env": {

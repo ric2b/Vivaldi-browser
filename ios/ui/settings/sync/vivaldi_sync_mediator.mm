@@ -10,6 +10,7 @@
 #import "base/task/thread_pool.h"
 #import "base/threading/scoped_blocking_call.h"
 #import "base/values.h"
+#import "components/application_locale_storage/application_locale_storage.h"
 #import "components/language/core/browser/pref_names.h"
 #import "components/os_crypt/sync/os_crypt.h"
 #import "components/prefs/pref_service.h"
@@ -1128,7 +1129,7 @@ struct PendingRegistration {
   std::string locale =
       pref_service->HasPrefPath(language::prefs::kApplicationLocale)
           ? pref_service->GetString(language::prefs::kApplicationLocale)
-          : GetApplicationContext()->GetApplicationLocale();
+          : GetApplicationContext()->GetApplicationLocaleStorage()->Get();
 
   base::Value::Dict dict;
   dict.Set(vParamUsername, pendingRegistration.username);

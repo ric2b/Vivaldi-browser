@@ -56,6 +56,8 @@ static const AVOption filtergraph_options[] = {
         AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, F|V },
     {"aresample_swr_opts"   , "default aresample filter options"    , OFFSET(aresample_swr_opts)    ,
         AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, F|A },
+    {"max_buffered_frames"  , "maximum number of buffered frames allowed", OFFSET(max_buffered_frames),
+        AV_OPT_TYPE_UINT,   {.i64 = 0}, 0, UINT_MAX, F|V|A },
     { NULL },
 };
 
@@ -1068,8 +1070,8 @@ static void swap_channel_layouts_on_filter(AVFilterContext *filter)
             }
 
             /* no penalty for LFE channel mismatch */
-            if (av_channel_layout_channel_from_index(&in_chlayout,  AV_CHAN_LOW_FREQUENCY) >= 0 &&
-                av_channel_layout_channel_from_index(&out_chlayout, AV_CHAN_LOW_FREQUENCY) >= 0)
+            if (av_channel_layout_index_from_channel(&in_chlayout,  AV_CHAN_LOW_FREQUENCY) >= 0 &&
+                av_channel_layout_index_from_channel(&out_chlayout, AV_CHAN_LOW_FREQUENCY) >= 0)
                 score += 10;
             av_channel_layout_from_mask(&in_chlayout, av_channel_layout_subset(&in_chlayout, ~AV_CH_LOW_FREQUENCY));
             av_channel_layout_from_mask(&out_chlayout, av_channel_layout_subset(&out_chlayout, ~AV_CH_LOW_FREQUENCY));
@@ -1296,6 +1298,8 @@ int avfilter_graph_config(AVFilterGraph *graphctx, void *log_ctx)
 {
     int ret;
 
+    if (graphctx->max_buffered_frames)
+        fffiltergraph(graphctx)->frame_queues.max_queued = graphctx->max_buffered_frames;
     if ((ret = graph_check_validity(graphctx, log_ctx)))
         return ret;
     if ((ret = graph_config_formats(graphctx, log_ctx)))
@@ -1460,6 +1464,8 @@ int avfilter_graph_request_oldest(AVFilterGraph *graph)
     frame_count = oldesti->l.frame_count_out;
     while (frame_count == oldesti->l.frame_count_out) {
         r = ff_filter_graph_run_once(graph);
+        if (r == FFERROR_BUFFERSRC_EMPTY)
+            r = 0;
         if (r == AVERROR(EAGAIN) &&
             !oldesti->frame_wanted_out && !oldesti->frame_blocked_in &&
             !oldesti->status_in)

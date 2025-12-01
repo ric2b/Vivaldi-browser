@@ -42,6 +42,7 @@ class TabHandleLayer : public Layer {
                      bool foreground,
                      bool shouldShowTabOutline,
                      bool close_pressed,
+                     bool should_hide_favicon,
                      float toolbar_width,
                      float x,
                      float y,
@@ -63,6 +64,7 @@ class TabHandleLayer : public Layer {
                      int keyboard_focus_ring_offset,
                      int stroke_width,
                      float folio_foot_length,
+                     float width_to_hide_tab_title,
                      bool is_shown_as_favicon, // Vivaldi
                      float title_offset); // Vivaldi
   bool foreground();

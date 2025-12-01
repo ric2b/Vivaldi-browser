@@ -16,7 +16,6 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <memory>
 #include <vector>
 
 #include "avif/avif.h"
@@ -44,23 +43,18 @@ using namespace crabbyavif;
 
 namespace avif {
 
-// Use these unique_ptr wrappers/class wrappers for automatic memory management.
-struct UniquePtrDeleter {
-  void operator()(avifDecoder* decoder) const { avifDecoderDestroy(decoder); }
-  void operator()(avifEncoder* encoder) const { avifEncoderDestroy(encoder); }
-  void operator()(avifImage* image) const { avifImageDestroy(image); }
-};
-
-using DecoderPtr = std::unique_ptr<avifDecoder, UniquePtrDeleter>;
-using EncoderPtr = std::unique_ptr<avifEncoder, UniquePtrDeleter>;
-using ImagePtr = std::unique_ptr<avifImage, UniquePtrDeleter>;
-
 class AvifRwData : public avifRWData {
  public:
   AvifRwData() : avifRWData{nullptr, 0} {}
   AvifRwData(const AvifRwData&) = delete;
   AvifRwData(AvifRwData&& other);
   ~AvifRwData() { avifRWDataFree(this); }
+};
+
+class AvifRgbImage : public avifRGBImage {
+ public:
+  AvifRgbImage(const avifImage* yuv, int rgbDepth, avifRGBFormat rgbFormat);
+  ~AvifRgbImage() { avifRGBImageFreePixels(this); }
 };
 
 }  // namespace avif
@@ -71,9 +65,9 @@ inline bool Av1DecoderAvailable() { return true; }
 
 std::vector<uint8_t> read_file(const char* file_name);
 
-avif::ImagePtr CreateImage(int width, int height, int depth,
-                           avifPixelFormat yuv_format, avifPlanesFlags planes,
-                           avifRange yuv_range);
+crabbyavif::ImagePtr CreateImage(int width, int height, int depth,
+                                 avifPixelFormat yuv_format,
+                                 avifPlanesFlags planes, avifRange yuv_range);
 
 void FillImageGradient(avifImage* image, int offset);
 
@@ -82,5 +76,26 @@ double GetPsnr(const avifImage& image1, const avifImage& image2,
 
 bool AreByteSequencesEqual(const uint8_t* data1, size_t data1_length,
                            const uint8_t* data2, size_t data2_length);
+
+bool AreByteSequencesEqual(const avifRWData& data1, const avifRWData& data2);
+
+bool AreImagesEqual(const avifImage& image1, const avifImage& image2,
+                    bool ignore_alpha);
+
+avifResult MergeGridFromRawPointers(int grid_cols, int grid_rows,
+                                    const std::vector<const avifImage*>& cells,
+                                    avifImage* merged);
+
+avifResult MergeGrid(int grid_cols, int grid_rows,
+                     const std::vector<crabbyavif::ImagePtr>& cells,
+                     avifImage* merged);
+
+void FillImageChannel(avifRGBImage* image, uint32_t channel_offset,
+                      uint32_t value);
+
+constexpr uint32_t kModifierSize = 4 * 4;
+
+void ModifyImageChannel(avifRGBImage* image, uint32_t channel_offset,
+                        const uint8_t modifier[kModifierSize]);
 
 }  // namespace testutil

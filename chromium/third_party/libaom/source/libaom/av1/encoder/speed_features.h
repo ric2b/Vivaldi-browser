@@ -357,10 +357,12 @@ typedef enum {
  */
 typedef enum {
   NO_PRUNING = -1,
-  SIMPLE_AGG_LVL0,     /*!< Simple prune aggressiveness level 0. */
-  SIMPLE_AGG_LVL1,     /*!< Simple prune aggressiveness level 1. */
-  SIMPLE_AGG_LVL2,     /*!< Simple prune aggressiveness level 2. */
-  SIMPLE_AGG_LVL3,     /*!< Simple prune aggressiveness level 3. */
+  SIMPLE_AGG_LVL0,     /*!< Simple prune aggressiveness level 0. speed = 0 */
+  SIMPLE_AGG_LVL1,     /*!< Simple prune aggressiveness level 1. speed = 1 */
+  SIMPLE_AGG_LVL2,     /*!< Simple prune aggressiveness level 2. speed = 2 */
+  SIMPLE_AGG_LVL3,     /*!< Simple prune aggressiveness level 3. speed >= 3 */
+  SIMPLE_AGG_LVL4,     /*!< Simple prune aggressiveness level 4. speed >= 4 */
+  SIMPLE_AGG_LVL5,     /*!< Simple prune aggressiveness level 5. speed >= 5 */
   QIDX_BASED_AGG_LVL1, /*!< Qindex based prune aggressiveness level, aggressive
                           level maps to simple agg level 1 or 2 based on qindex.
                         */
@@ -368,7 +370,7 @@ typedef enum {
                                                   aggressiveness levels. */
   TOTAL_QINDEX_BASED_AGG_LVLS =
       QIDX_BASED_AGG_LVL1 -
-      SIMPLE_AGG_LVL3, /*!< Total number of qindex based simple prune
+      SIMPLE_AGG_LVL5, /*!< Total number of qindex based simple prune
                           aggressiveness levels. */
   TOTAL_AGG_LVLS = TOTAL_SIMPLE_AGG_LVLS +
                    TOTAL_QINDEX_BASED_AGG_LVLS, /*!< Total number of levels. */
@@ -490,6 +492,13 @@ typedef struct HIGH_LEVEL_SPEED_FEATURES {
    * 2: Always disable
    */
   int ref_frame_mvs_lvl;
+
+  /*!
+   *  Decide whether to enable screen detection mode 2 fast detection.
+   *  0: Regular detection
+   *  1: Fast detection
+   */
+  int screen_detection_mode2_fast_detection;
 } HIGH_LEVEL_SPEED_FEATURES;
 
 /*!
@@ -659,10 +668,13 @@ typedef struct PARTITION_SPEED_FEATURES {
   int partition_search_breakout_rate_thr;
 
   // Thresholds for ML based partition search breakout.
-  int ml_partition_search_breakout_thresh[PARTITION_BLOCK_SIZES];
+  float ml_partition_search_breakout_thresh[PARTITION_BLOCK_SIZES];
+
+  // ML based partition search breakout model index
+  int ml_partition_search_breakout_model_index;
 
   // Aggressiveness levels for pruning split and rectangular partitions based on
-  // simple_motion_search. SIMPLE_AGG_LVL0 to SIMPLE_AGG_LVL3 correspond to
+  // simple_motion_search. SIMPLE_AGG_LVL0 to SIMPLE_AGG_LVL5 correspond to
   // simple motion search based pruning. QIDX_BASED_AGG_LVL1 corresponds to
   // qindex based and simple motion search based pruning.
   int simple_motion_search_prune_agg;
@@ -902,6 +914,21 @@ typedef struct MV_SPEED_FEATURES {
 
   // Allow intrabc motion search
   int use_intrabc;
+
+  // Prune intrabc candidate block hash search
+  // 0: check every block hash candidate
+  // 1: check the first 64 block hash candidates only
+  int prune_intrabc_candidate_block_hash_search;
+
+  // Intrabc search level
+  // 0: top + left search
+  // 1: top search only
+  int intrabc_search_level;
+
+  // Whether the maximum intrabc block size to hash is 8x8
+  // 0: Hash from 4x4 up to superblock size
+  // 1: Hash 4x4 and 8x8 only
+  int hash_max_8x8_intrabc_blocks;
 
   // Whether to downsample the rows in sad calculation during motion search.
   // This is only active when there are at least 16 rows. When this sf is
@@ -1537,6 +1564,15 @@ typedef struct LOOP_FILTER_SPEED_FEATURES {
   // adding a penalty of 1%
   int dual_sgr_penalty_level;
 
+  // Restricts loop restoration to RESTORE_SWITCHABLE by skipping RD cost
+  // comparisons for RESTORE_WIENER and RESTORE_SGRPROJ. Also applies a bias
+  // during switchable restoration search: each level adds a 0.5% penalty to
+  // Wiener and SGR selection.
+  // 0 : No restriction or bias (all restoration types allowed)
+  // 1+: Skip WIENER/SGRPROJ and apply (level x 0.5%) penalty in
+  // search_switchable()
+  int switchable_lr_with_bias_level;
+
   // prune sgr ep using binary search like mechanism
   int enable_sgr_ep_pruning;
 
@@ -1623,6 +1659,11 @@ typedef struct REAL_TIME_SPEED_FEATURES {
 
   // This flag controls the use of non-RD mode decision.
   int use_nonrd_pick_mode;
+
+  // Flag that controls discounting for color map cost during palette search.
+  // This saves about 5% of CPU and in non-RD speeds delivers better results
+  // across rtc_screen set (on speed 10 overall BDRate growth is 13%)
+  int discount_color_cost;
 
   // Use ALTREF frame in non-RD mode decision.
   int use_nonrd_altref_frame;

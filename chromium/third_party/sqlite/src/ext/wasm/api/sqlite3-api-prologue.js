@@ -12,12 +12,12 @@
 
   This file is intended to be combined at build-time with other
   related code, most notably a header and footer which wraps this
-  whole file into an Emscripten Module.postRun()-style handler. The
-  sqlite3 JS API has no hard requirements on Emscripten and does not
-  expose any Emscripten APIs to clients. It is structured such that
-  its build can be tweaked to include it in arbitrary WASM
-  environments which can supply the necessary underlying features
-  (e.g. a POSIX file I/O layer).
+  whole file into a single callback which can be run after Emscripten
+  loads the corresponding WASM module. The sqlite3 JS API has no hard
+  requirements on Emscripten and does not expose any Emscripten APIs
+  to clients. It is structured such that its build can be tweaked to
+  include it in arbitrary WASM environments which can supply the
+  necessary underlying features (e.g. a POSIX file I/O layer).
 
   Main project home page: https://sqlite.org
 
@@ -124,7 +124,7 @@
 globalThis.sqlite3ApiBootstrap = function sqlite3ApiBootstrap(
   apiConfig = (globalThis.sqlite3ApiConfig || sqlite3ApiBootstrap.defaultConfig)
 ){
-  if(sqlite3ApiBootstrap.sqlite3){ /* already initalized */
+  if(sqlite3ApiBootstrap.sqlite3){ /* already initialized */
     (sqlite3ApiBootstrap.sqlite3.config || console).warn(
       "sqlite3ApiBootstrap() called multiple times.",
       "Config and external initializers are ignored on calls after the first."
@@ -195,7 +195,7 @@ globalThis.sqlite3ApiBootstrap = function sqlite3ApiBootstrap(
       names with prefixes 'sqlite3_' and 'SQLITE_' behave, insofar as
       possible, identically to the C-native counterparts, as documented at:
 
-      https://www.sqlite.org/c3ref/intro.html
+      https://sqlite.org/c3ref/intro.html
 
       A very few exceptions require an additional level of proxy
       function or may otherwise require special attention in the WASM
@@ -663,7 +663,7 @@ globalThis.sqlite3ApiBootstrap = function sqlite3ApiBootstrap(
        free those pointers (using `wasm.uninstallFunction()` or
        equivalent).
 
-       C reference: https://www.sqlite.org/c3ref/create_function.html
+       C reference: https://sqlite.org/c3ref/create_function.html
 
        Maintenance reminder: the ability to add new
        WASM-accessible functions to the runtime requires that the
@@ -869,7 +869,7 @@ globalThis.sqlite3ApiBootstrap = function sqlite3ApiBootstrap(
        Emscripten -sWASM_BIGINT flag, else false. When
        enabled, certain 64-bit sqlite3 APIs are enabled which
        are not otherwise enabled due to JS/WASM int64
-       impedence mismatches.
+       impedance mismatches.
     */
     bigIntEnabled: !!config.bigIntEnabled,
     /**
@@ -880,7 +880,7 @@ globalThis.sqlite3ApiBootstrap = function sqlite3ApiBootstrap(
 
     /**
        When Emscripten compiles with `-sIMPORTED_MEMORY`, it
-       initalizes the heap and imports it into wasm, as opposed to
+       initializes the heap and imports it into wasm, as opposed to
        the other way around. In this case, the memory is not
        available via this.exports.memory.
     */
@@ -1453,7 +1453,7 @@ globalThis.sqlite3ApiBootstrap = function sqlite3ApiBootstrap(
      creates (or overwrites) the given file using those APIs. This is
      primarily intended for use in Emscripten-based builds where the POSIX
      APIs are transparently proxied by an in-memory virtual filesystem.
-     It may behave diffrently in other environments.
+     It may behave differently in other environments.
 
      The first argument must be either a JS string or WASM C-string
      holding the filename. Note that this routine does _not_ create
@@ -1555,7 +1555,7 @@ globalThis.sqlite3ApiBootstrap = function sqlite3ApiBootstrap(
      - "memdb": results are undefined.
 
      - "kvvfs": will fail with an I/O error due to strict internal
-       requirments of that VFS's xTruncate().
+       requirements of that VFS's xTruncate().
 
      - "unix" and related: will use the WASM build's equivalent of the
        POSIX I/O APIs. This will work so long as neither a specific

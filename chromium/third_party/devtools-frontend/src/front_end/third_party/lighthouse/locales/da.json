@@ -660,7 +660,7 @@
     "message": "Brug videoformater til animeret indhold"
   },
   "core/audits/byte-efficiency/legacy-javascript.js | description": {
-    "message": "Polyfills and transforms enable legacy browsers to use new JavaScript features. However, many aren't necessary for modern browsers. Consider modifying your JavaScript build process to not transpile [Baseline](https://web.dev/baseline) features, unless you know you must support legacy browsers. [Learn why most sites can deploy ES6+ code without transpiling](https://philipwalton.com/articles/the-state-of-es5-on-the-web/)"
+    "message": "Polyfill-koder og transformeringer gør det muligt for browsere at anvende nye JavaScript-funktioner. Mange af dem er dog ikke nødvendige for moderne browsere. Du kan vælge at ændre din JavaScript-buildproces, så den ikke transpilerer [Baseline](https://web.dev/baseline)-funktioner, medmindre du ved, at du skal understøtte forældede browsere. [Se, hvorfor de fleste websites kan implementere ES6+-kode uden transpilering](https://philipwalton.com/articles/the-state-of-es5-on-the-web/)"
   },
   "core/audits/byte-efficiency/legacy-javascript.js | detectedCoreJs2Warning": {
     "message": "Version 2 af core-js blev registreret på siden. Du bør opgradere til version 3 for at få flere effektivitetsforbedringer."
@@ -1440,7 +1440,7 @@
     "message": "Den indledende serversvartid var kort"
   },
   "core/audits/third-party-cookies.js | description": {
-    "message": "Chrome arbejder på en ny type brugeroplevelse, der skal give brugerne mulighed for at browse uden tredjepartscookies. [Få flere oplysninger om tredjepartscookies](https://developers.google.com/privacy-sandbox/cookies)."
+    "message": "Tredjepartscookies blokeres muligvis i nogle sammenhænge. [Få flere oplysninger om, hvordan du forbereder dig på begrænsninger af tredjepartscookies](https://privacysandbox.google.com/cookies/prepare/overview)."
   },
   "core/audits/third-party-cookies.js | displayValue": {
     "message": "{itemCount,plural, =1{Der blev fundet 1 cookie}one{Der blev fundet # cookie}other{Der blev fundet # cookies}}"
@@ -1492,6 +1492,18 @@
   },
   "core/audits/third-party-summary.js | title": {
     "message": "Minimer brugen af tredjeparter"
+  },
+  "core/audits/trusted-types-xss.js | columnSeverity": {
+    "message": "Omfang"
+  },
+  "core/audits/trusted-types-xss.js | description": {
+    "message": "Direktivet `require-trusted-types-for` i headeren `Content-Security-Policy` (CSP) instruerer brugeragenter i at styre de data, der videregives til DOM XSS-sårbare funktioner. [Se, hvordan du reducerer risikoen for DOM-baseret XSS med Trusted Types](https://developer.chrome.com/docs/lighthouse/best-practices/trusted-types-xss)."
+  },
+  "core/audits/trusted-types-xss.js | noTrustedTypesToMitigateXss": {
+    "message": "Der blev ikke fundet nogen `Content-Security-Policy`-header med Trusted Types-direktiv"
+  },
+  "core/audits/trusted-types-xss.js | title": {
+    "message": "Reducer DOM-baseret XSS med Trusted Types"
   },
   "core/audits/unsized-images.js | description": {
     "message": "Anvend en fast bredde og højde for billedelementer for at reducere layoutskift og forbedre CLS. [Få flere oplysninger om, hvordan du angiver billedmål](https://web.dev/articles/optimize-cls#images_without_dimensions)"
@@ -1676,6 +1688,12 @@
   "core/config/default-config.js | firstPaintImprovementsGroupTitle": {
     "message": "Forbedringer af første udfyldning"
   },
+  "core/config/default-config.js | insightsGroupDescription": {
+    "message": "Disse indsigter er også tilgængelig i ydeevnepanelet i Chrome Udviklerværktøjer. [Optag en sporing](https://developer.chrome.com/docs/devtools/performance/reference) for at se mere detaljerede oplysninger."
+  },
+  "core/config/default-config.js | insightsGroupTitle": {
+    "message": "Indsigt"
+  },
   "core/config/default-config.js | metricGroupTitle": {
     "message": "Metrics"
   },
@@ -1857,22 +1875,22 @@
     "message": "Webadresse"
   },
   "core/lib/i18n/i18n.js | columnWastedBytes": {
-    "message": "Potentiel besparelse"
+    "message": "Estimeret besparelse"
   },
   "core/lib/i18n/i18n.js | columnWastedMs": {
-    "message": "Potentiel besparelse"
+    "message": "Estimeret besparelse"
   },
   "core/lib/i18n/i18n.js | cumulativeLayoutShiftMetric": {
     "message": "Cumulative Layout Shift"
   },
   "core/lib/i18n/i18n.js | displayValueByteSavings": {
-    "message": "Potentiel besparelse på {wastedBytes, number, bytes} KiB"
+    "message": "Estimeret besparelse på {wastedBytes, number, bytes} KiB"
   },
   "core/lib/i18n/i18n.js | displayValueElementsFound": {
     "message": "{nodeCount,plural, =1{1 element blev fundet}one{# element blev fundet}other{# elementer blev fundet}}"
   },
   "core/lib/i18n/i18n.js | displayValueMsSavings": {
-    "message": "Potentiel besparelse på {wastedMs, number, milliseconds} ms"
+    "message": "Estimeret besparelse på {wastedMs, number, milliseconds} ms"
   },
   "core/lib/i18n/i18n.js | documentResourceType": {
     "message": "Dokument"
@@ -2022,13 +2040,13 @@
     "message": "Brugerflow ({url})"
   },
   "core/user-flow.js | defaultNavigationName": {
-    "message": "Rapport over navigation ({url})"
+    "message": "Rapport om navigation ({url})"
   },
   "core/user-flow.js | defaultSnapshotName": {
     "message": "Rapport med øjebliksbillede ({url})"
   },
   "core/user-flow.js | defaultTimespanName": {
-    "message": "Rapport over tidsperiode ({url})"
+    "message": "Rapport om tidsperiode ({url})"
   },
   "flow-report/src/i18n/ui-strings.js | allReports": {
     "message": "Alle rapporter"
@@ -2052,7 +2070,7 @@
     "message": "Computer"
   },
   "flow-report/src/i18n/ui-strings.js | helpDialogTitle": {
-    "message": "Sådan skal rapporten over flow i Lighthouse forstås"
+    "message": "Sådan skal rapporten om flow i Lighthouse forstås"
   },
   "flow-report/src/i18n/ui-strings.js | helpLabel": {
     "message": "Sådan skal flow forstås"
@@ -2103,7 +2121,7 @@
     "message": "Rapporter over navigation analyserer indlæsning af en enkelt side, præcis som de oprindelige Lighthouse-rapporter."
   },
   "flow-report/src/i18n/ui-strings.js | navigationReport": {
-    "message": "Rapport over navigation"
+    "message": "Rapport om navigation"
   },
   "flow-report/src/i18n/ui-strings.js | navigationReportCount": {
     "message": "{numNavigation,plural, =1{{numNavigation} navigationsrapportering}one{{numNavigation} navigationsrapportering}other{{numNavigation} navigationsrapporteringer}}"
@@ -2151,13 +2169,13 @@
     "message": "Rapporter over tidsperioder analyserer en tilfældig periode, typisk med brugerinteraktioner."
   },
   "flow-report/src/i18n/ui-strings.js | timespanReport": {
-    "message": "Rapport over tidsperiode"
+    "message": "Rapport om tidsperiode"
   },
   "flow-report/src/i18n/ui-strings.js | timespanReportCount": {
     "message": "{numTimespan,plural, =1{{numTimespan} tidsperioderapportering}one{{numTimespan} tidsperioderapportering}other{{numTimespan} tidsperioderapporteringer}}"
   },
   "flow-report/src/i18n/ui-strings.js | title": {
-    "message": "Rapport over brugerflow i Lighthouse"
+    "message": "Rapport om brugerflow i Lighthouse"
   },
   "node_modules/@paulirish/trace_engine/generated/Deprecation.js | AuthorizationCoveredByWildcard": {
     "message": "Godkendelse dækkes ikke af jokertegnet (*) ved behandling af CORS Access-Control-Allow-Headers."
@@ -2191,9 +2209,6 @@
   },
   "node_modules/@paulirish/trace_engine/generated/Deprecation.js | CrossOriginWindowConfirm": {
     "message": "Aktivering af window.confirm fra iframes med krydsoprindelse er udfaset og fjernes senere."
-  },
-  "node_modules/@paulirish/trace_engine/generated/Deprecation.js | DOMMutationEvents": {
-    "message": "Hændelser med DOM-mutation, herunder DOMSubtreeModified, DOMNodeInserted, DOMNodeRemoved, DOMNodeRemovedFromDocument, DOMNodeInsertedIntoDocument og DOMCharacterDataModified, er udfaset (https://w3c.github.io/uievents/#legacy-event-types) og fjernes. Brug i stedet MutationObserver."
   },
   "node_modules/@paulirish/trace_engine/generated/Deprecation.js | DataUrlInSvgUse": {
     "message": "Understøttelse af data: Webadresser i SVGUseElement er udfaset, og de fjernes på et senere tidspunkt."
@@ -2336,9 +2351,6 @@
   "node_modules/@paulirish/trace_engine/models/trace/insights/CLSCulprits.js | description": {
     "message": "Layoutændringer opstår, når elementer bevæger sig uden brugerinteraktion. [Undersøg årsagerne til layoutændringer](https://web.dev/articles/optimize-cls), f.eks. elementer, der tilføjes eller fjernes eller ændrer skrifttyper, mens siden indlæses."
   },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/CLSCulprits.js | fontRequest": {
-    "message": "Anmodning om skrifttype"
-  },
   "node_modules/@paulirish/trace_engine/models/trace/insights/CLSCulprits.js | injectedIframe": {
     "message": "Iframe er indsat"
   },
@@ -2357,8 +2369,8 @@
   "node_modules/@paulirish/trace_engine/models/trace/insights/CLSCulprits.js | topCulprits": {
     "message": "Typiske årsager til layoutændringer"
   },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/CLSCulprits.js | unsizedImages": {
-    "message": "Billeder uden mål"
+  "node_modules/@paulirish/trace_engine/models/trace/insights/CLSCulprits.js | unsizedImage": {
+    "message": "Unsized image element"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/CLSCulprits.js | worstCluster": {
     "message": "Værste klynge"
@@ -2412,10 +2424,10 @@
     "message": "Din første netværksanmodning er den vigtigste.  Reducer forsinkelsen ved at undgå omdirigeringer, sikre en hurtig serversvartid og aktivere tekstkomprimering."
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/DocumentLatency.js | failedRedirects": {
-    "message": "Der var omdirigeringer"
+    "message": "Der var omdirigeringer ({PH1} omdirigeringer, +{PH2})"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/DocumentLatency.js | failedServerResponseTime": {
-    "message": "Serveren reagerede langsomt"
+    "message": "Serveren reagerede langsomt (observeret {PH1})"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/DocumentLatency.js | failedTextCompression": {
     "message": "Der er ikke anvendt komprimering"
@@ -2424,7 +2436,7 @@
     "message": "Undgår omdirigeringer"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/DocumentLatency.js | passingServerResponseTime": {
-    "message": "Serveren svarer hurtigt"
+    "message": "Serveren svarer hurtigt (observeret {PH1})"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/DocumentLatency.js | passingTextCompression": {
     "message": "Tekstkomprimering er anvendt"
@@ -2465,6 +2477,9 @@
   "node_modules/@paulirish/trace_engine/models/trace/insights/FontDisplay.js | wastedTimeColumn": {
     "message": "Tidstab"
   },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/ForcedReflow.js | anonymous": {
+    "message": "(anonym)"
+  },
   "node_modules/@paulirish/trace_engine/models/trace/insights/ForcedReflow.js | description": {
     "message": "Mange API'er, som typisk læser layoutgeometri, tvinger gengivelsesmotoren til at sætte scriptudførelsen på pause for at beregne typografien og layoutet. Få flere oplysninger om [tvungen reflow](https://developers.google.com/web/fundamentals/performance/rendering/avoid-large-complex-layouts-and-layout-thrashing#avoid-forced-synchronous-layouts) og forebyggelsen af den."
   },
@@ -2481,7 +2496,7 @@
     "message": "Samlet tid for reflow"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/ForcedReflow.js | unattributed": {
-    "message": "Uden attributter"
+    "message": "[uden attributter]"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/ImageDelivery.js | description": {
     "message": "Hvis du reducerer downloadtiden for billeder, kan det forbedre den oplevede indlæsningstid for siden og LCP. [Få flere oplysninger om optimering af billedstørrelse](https://developer.chrome.com/docs/lighthouse/performance/uses-optimized-images/)"
@@ -2513,30 +2528,6 @@
   "node_modules/@paulirish/trace_engine/models/trace/insights/ImageDelivery.js | useVideoFormat": {
     "message": "Hvis du bruger videoformater i stedet for giffer, kan det forbedre downloadstørrelsen på det animerede indhold."
   },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/InteractionToNextPaint.js | description": {
-    "message": "Start med at undersøge den længste fase. [Forsinkelser kan minimeres](https://web.dev/articles/optimize-inp#optimize_interactions). Hvis du vil reducere behandlingsvarigheden, skal du [optimere omkostningerne for hovedtråden](https://web.dev/articles/optimize-long-tasks) (typisk JS)."
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/InteractionToNextPaint.js | duration": {
-    "message": "Varighed"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/InteractionToNextPaint.js | inputDelay": {
-    "message": "Inputforsinkelse"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/InteractionToNextPaint.js | noInteractions": {
-    "message": "Der er ikke registreret nogen interaktioner"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/InteractionToNextPaint.js | phase": {
-    "message": "Fase"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/InteractionToNextPaint.js | presentationDelay": {
-    "message": "Præsentationsforsinkelse"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/InteractionToNextPaint.js | processingDuration": {
-    "message": "Behandlingstid"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/InteractionToNextPaint.js | title": {
-    "message": "INP efter fase"
-  },
   "node_modules/@paulirish/trace_engine/models/trace/insights/LCPDiscovery.js | description": {
     "message": "Optimer LCP ved at gøre LCP-billedet [synligt](https://web.dev/articles/optimize-lcp#1_eliminate_resource_load_delay) i HTML med det samme, og [undgå lazy loading](https://web.dev/articles/lcp-lazy-loading)"
   },
@@ -2564,36 +2555,6 @@
   "node_modules/@paulirish/trace_engine/models/trace/insights/LCPDiscovery.js | title": {
     "message": "Registrering af LCP-anmodning"
   },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | description": {
-    "message": "Hver [fase har specifikke forbedringsstrategier](https://web.dev/articles/optimize-lcp#lcp-breakdown). Det meste af LCP-tiden bør ideelt set bruges på at indlæse ressourcerne og ikke på forsinkelser."
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | duration": {
-    "message": "Varighed"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | elementRenderDelay": {
-    "message": "Forsinket gengivelse af element"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | fieldDuration": {
-    "message": "75. percentil for feltet"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | noLcp": {
-    "message": "Der blev ikke registreret nogen LCP"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | phase": {
-    "message": "Fase"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | resourceLoadDelay": {
-    "message": "Forsinkelse ved indlæsning af ressource"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | resourceLoadDuration": {
-    "message": "Varighed af indlæsning af ressource"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | timeToFirstByte": {
-    "message": "Time to First Byte"
-  },
-  "node_modules/@paulirish/trace_engine/models/trace/insights/LCPPhases.js | title": {
-    "message": "LCP efter fase"
-  },
   "node_modules/@paulirish/trace_engine/models/trace/insights/LegacyJavaScript.js | columnScript": {
     "message": "Script"
   },
@@ -2601,7 +2562,7 @@
     "message": "Bortkastede bytes"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/LegacyJavaScript.js | description": {
-    "message": "Polyfill-koder og transformeringer gør det muligt for browsere at anvende nye JavaScript-funktioner. Mange af dem er dog ikke nødvendige til moderne browsere. Du kan vælge at ændre din JavaScript-buildproces, så den ikke transpilerer [Baseline](https://web.dev/articles/baseline-and-polyfills)-funktioner, medmindre du ved, at du skal understøtte forældede browsere. [Se, hvorfor de fleste websites kan implementere ES6+-kode uden transpilering](https://philipwalton.com/articles/the-state-of-es5-on-the-web/)"
+    "message": "Polyfill-koder og transformeringer gør det muligt for ældre browsere at anvende nye JavaScript-funktioner. Mange af dem er dog ikke nødvendige til moderne browsere. Du kan vælge at ændre din JavaScript-buildproces, så den ikke transpilerer [Baseline](https://web.dev/articles/baseline-and-polyfills)-funktioner, medmindre du ved, at du skal understøtte ældre browsere. [Se, hvorfor de fleste websites kan implementere ES6+-kode uden transpilering](https://philipwalton.com/articles/the-state-of-es5-on-the-web/)"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/LegacyJavaScript.js | title": {
     "message": "Forældet JavaScript"
@@ -2621,8 +2582,32 @@
   "node_modules/@paulirish/trace_engine/models/trace/insights/ModernHTTP.js | title": {
     "message": "Moderne HTTP"
   },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | columnOrigin": {
+    "message": "Oprindelse"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | columnRequest": {
+    "message": "Anmodning"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | columnSource": {
+    "message": "Kilde"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | columnTime": {
+    "message": "Tidspunkt"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | columnWastedMs": {
+    "message": "Estimerede LCP-besparelser"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | crossoriginWarning": {
+    "message": "Ubrugt oprettelse af forbindelse på forhånd. Sørg for, at attributten crossorigin bruges korrekt."
+  },
   "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | description": {
     "message": "[Undgå at sammenkæde kritiske anmodninger](https://developer.chrome.com/docs/lighthouse/performance/critical-request-chains) ved at reducere kædernes længde, så ressourcernes downloadstørrelse bliver mindre, eller at udskyde download af unødvendige ressourcer, så sideindlæsningen forbedres."
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | estSavingTableDescription": {
+    "message": "Føj hints til at [oprette tilknytning på forhånd](https://developer.chrome.com/docs/lighthouse/performance/uses-rel-preconnect/) til dine vigtigste oprindelser, men prøv at bruge færre end 4."
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | estSavingTableTitle": {
+    "message": "Opret forbindelse til kandidater på forhånd"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | maxCriticalPathLatency": {
     "message": "Maksimal forsinkelse for kritisk sti:"
@@ -2630,14 +2615,32 @@
   "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | noNetworkDependencyTree": {
     "message": "Ingen gengivelsesopgaver påvirkes af netværksafhængigheder"
   },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | noPreconnectCandidates": {
+    "message": "Der er ingen yderligere oprindelser, der er gode kandidater til at oprette forbindelse på forhånd"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | noPreconnectOrigins": {
+    "message": "ingen oprindelser blev forbundet på forhånd"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | preconnectOriginsTableDescription": {
+    "message": "Hints til at [oprette forbindelse på forhånd](https://developer.chrome.com/docs/lighthouse/performance/uses-rel-preconnect/) hjælper browseren med at oprette en forbindelse tidligere i sideindlæsningen, hvilket sparer tid, når den første anmodning om den pågældende oprindelse foretages. Følgende er de kilder, som siden har oprettet forbindelse til på forhånd."
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | preconnectOriginsTableTitle": {
+    "message": "Oprindelser, der på forhånd er oprettet forbindelse til"
+  },
   "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | title": {
     "message": "Afhængighedstræ for netværket"
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | tooManyPreconnectLinksWarning": {
+    "message": "Der blev fundet mere end 4 preconnect forbindelser. Disse bør bruges sparsomt og kun til de vigtigste oprindelser."
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | unusedWarning": {
+    "message": "Ubrugt oprettelse af forbindelse på forhånd. Du bør kun bruge preconnect til oprindelser, som siden sandsynligvis vil anmode om."
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/NetworkDependencyTree.js | warningDescription": {
     "message": "Undgå at sammenkæde kritiske anmodninger ved at reducere kædernes længde, så ressourcernes downloadstørrelse bliver mindre, eller at udskyde download af unødvendige ressourcer, så sideindlæsningen forbedres."
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/RenderBlocking.js | description": {
-    "message": "Anmodninger blokerer for sidens oprindelige gengivelse, hvilket kan forsinke LCP. [Udsættelse eller indlejring](https://web.dev/learn/performance/understanding-the-critical-path#render-blocking_resources/) kan flytte disse netværksanmodninger væk fra den kritiske sti."
+    "message": "Anmodninger blokerer for sidens oprindelige gengivelse, hvilket kan forsinke LCP. [Udsættelse eller indlejring](https://web.dev/learn/performance/understanding-the-critical-path#render-blocking_resources) kan flytte disse netværksanmodninger væk fra den kritiske sti."
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/RenderBlocking.js | duration": {
     "message": "Varighed"
@@ -2685,7 +2688,7 @@
     "message": "Overførselsstørrelse"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/ThirdParties.js | description": {
-    "message": "Tredjepartskode kan have en væsentlig indvirkning på indlæsningen. [Reducer og udskyd indlæsningen af tredjepartskoden](https://developers.google.com/web/fundamentals/performance/optimizing-content-efficiency/loading-third-party-javascript/) for at prioritere din sides indhold."
+    "message": "Tredjepartskode kan have en væsentlig indvirkning på indlæsningen. [Reducer og udskyd indlæsningen af tredjepartskoden](https://web.dev/articles/optimizing-content-efficiency-loading-third-party-javascript/) for at prioritere din sides indhold."
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/ThirdParties.js | noThirdParties": {
     "message": "Der blev ikke fundet nogen tredjeparter"
@@ -2695,6 +2698,9 @@
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/Viewport.js | description": {
     "message": "Trykinteraktioner kan blive [forsinket med op til 300 ms](https://developer.chrome.com/blog/300ms-tap-delay-gone-away/), hvis viewport ikke er optimeret til mobilen."
+  },
+  "node_modules/@paulirish/trace_engine/models/trace/insights/Viewport.js | mobileTapDelayLabel": {
+    "message": "Forsinkelse ved tryk på mobil"
   },
   "node_modules/@paulirish/trace_engine/models/trace/insights/Viewport.js | title": {
     "message": "Optimer viewport til mobil"
@@ -3357,7 +3363,7 @@
     "message": "Gå til funktionen [`Improve Server Response Time`](https://support.nitropack.io/hc/en-us/articles/1500002321821-Improve-Server-Response-Time) i menuen `Caching`, og juster udløbstiden for sider i cachen for at forbedre indlæsningstiden og brugeroplevelsen."
   },
   "node_modules/lighthouse-stack-packs/packs/nitropack.js | uses-optimized-images": {
-    "message": "Komprimer, optimer og konverter automatisk dine billeder til WebP ved at aktivere indstillingen [`Image Optimization`](https://support.nitropack.io/hc/en-us/articles/14177271695121-How-to-serve-images-in-next-gen-formats-using-NitroPack)."
+    "message": "Komprimer, optimer og konvertér automatisk dine billeder til WebP ved at aktivere indstillingen [`Image Optimization`](https://support.nitropack.io/hc/en-us/articles/14177271695121-How-to-serve-images-in-next-gen-formats-using-NitroPack)."
   },
   "node_modules/lighthouse-stack-packs/packs/nitropack.js | uses-responsive-images": {
     "message": "Aktivér [`Adaptive Image Sizing`](https://support.nitropack.io/hc/en-us/articles/10123833029905-How-to-Enable-Adaptive-Image-Sizing-For-Your-Site) for at optimere dine billeder på forhånd og få dem til at matche dimensionerne for de containere, de vises i på alle enheder."
@@ -3587,8 +3593,14 @@
   "report/renderer/report-utils.js | footerIssue": {
     "message": "Indsend et problem"
   },
+  "report/renderer/report-utils.js | goBackToAudits": {
+    "message": "Gå tilbage til gennemgange"
+  },
   "report/renderer/report-utils.js | hide": {
     "message": "Skjul"
+  },
+  "report/renderer/report-utils.js | insightsNotice": {
+    "message": "Senere på året erstattes effektivitetsgennemgange med indsigter. [Få flere oplysninger, og giv feedback her](https://github.com/GoogleChrome/lighthouse/discussions/16462)."
   },
   "report/renderer/report-utils.js | labDataTitle": {
     "message": "Laboratoriedata"
@@ -3689,6 +3701,9 @@
   "report/renderer/report-utils.js | toplevelWarningsMessage": {
     "message": "Der blev registreret problemer, som påvirkede denne kørsel af Lighthouse:"
   },
+  "report/renderer/report-utils.js | tryInsights": {
+    "message": "Prøv indsigter"
+  },
   "report/renderer/report-utils.js | unattributable": {
     "message": "Kan ikke tilskrives"
   },
@@ -3717,7 +3732,10 @@
     "message": "Dækning"
   },
   "treemap/app/src/util.js | duplicateModulesLabel": {
-    "message": "Identiske moduler"
+    "message": "Duplikerede moduler"
+  },
+  "treemap/app/src/util.js | duplicatedBytesLabel": {
+    "message": "Duplikerede bytes"
   },
   "treemap/app/src/util.js | resourceBytesLabel": {
     "message": "Bytes i ressourcefil"
@@ -3727,6 +3745,9 @@
   },
   "treemap/app/src/util.js | toggleTableButtonLabel": {
     "message": "Vis/skjul tabel"
+  },
+  "treemap/app/src/util.js | transferBytesLabel": {
+    "message": "Overførselsstørrelse i bytes"
   },
   "treemap/app/src/util.js | unusedBytesLabel": {
     "message": "Ubrugte bytes"

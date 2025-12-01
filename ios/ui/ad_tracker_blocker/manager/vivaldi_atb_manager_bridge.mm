@@ -6,7 +6,7 @@
 
 #import "base/check.h"
 #import "base/notreached.h"
-#import "ios/ad_blocker/adblock_rule_service_factory.h"
+#import "ios/chrome/browser/ad_blocker/adblock_rule_service_factory.h"
 
 namespace vivaldi_adblocker {
 
@@ -37,7 +37,7 @@ void VivaldiATBManagerBridge::OnRuleServiceStateLoaded(
   this->StartObservingRuleSourceManager();
 }
 
-void VivaldiATBManagerBridge::OnStartApplyingIosRules(RuleGroup group) {
+void VivaldiATBManagerBridge::OnStartApplyingRules(RuleGroup group) {
   id<VivaldiATBConsumer> observer = observer_;
   if (!observer)
     return;
@@ -47,7 +47,7 @@ void VivaldiATBManagerBridge::OnStartApplyingIosRules(RuleGroup group) {
   }
 }
 
-void VivaldiATBManagerBridge::OnDoneApplyingIosRules(RuleGroup group) {
+void VivaldiATBManagerBridge::OnDoneApplyingRules(RuleGroup group) {
   id<VivaldiATBConsumer> observer = observer_;
   if (!observer)
     return;

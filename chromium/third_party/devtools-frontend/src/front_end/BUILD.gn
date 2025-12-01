@@ -126,6 +126,7 @@ group("unittests") {
     "entrypoints/main:unittests",
     "entrypoints/wasmparser_worker:unittests",
     "models/ai_assistance:unittests",
+    "models/ai_code_completion:unittests",
     "models/autofill_manager:unittests",
     "models/bindings:unittests",
     "models/breakpoints:unittests",
@@ -165,6 +166,7 @@ group("unittests") {
     "panels/autofill:unittests",
     "panels/browser_debugger:unittests",
     "panels/changes:unittests",
+    "panels/common:unittests",
     "panels/console:unittests",
     "panels/console_counters:unittests",
     "panels/coverage:unittests",
@@ -269,8 +271,5 @@ generated_file("test_inputs") {
   data_keys = [ "tests" ]
   rebase = target_gen_dir
 
-  deps = [
-    ":unittests",
-    "../inspector_overlay:unittests",
-  ]
+  deps = [ ":unittests" ]
 }

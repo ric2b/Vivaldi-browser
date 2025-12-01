@@ -1,7 +1,5 @@
 ci/Android FYI Release (Pixel 6)
 ci/Android Release (Pixel 2)
-ci/Android WebView O (dbg)
-ci/Android WebView P (dbg)
 ci/Android arm Builder (dbg)
 ci/Android arm64 Builder (dbg)
 ci/Android arm64 Builder All Targets (dbg)
@@ -39,27 +37,27 @@ ci/Linux Release (NVIDIA)
 ci/Linux TSan Builder
 ci/Linux TSan Tests
 ci/Linux Tests
-ci/Linux Tests (Wayland)
 ci/Linux Tests (dbg)(1)
 ci/Mac Builder
 ci/Mac Builder (dbg)
 ci/Mac Release (Intel)
 ci/Mac Retina Release (AMD)
-ci/Mac11 Tests
 ci/Mac12 Tests
 ci/Mac13 Tests
-ci/Oreo Phone Tester
 ci/Win Builder
 ci/Win Builder (dbg)
 ci/Win x64 Builder
 ci/Win10 Tests x64
 ci/Win10 x64 Release (NVIDIA)
+ci/android-10-arm64-rel
+ci/android-10-x86-rel
 ci/android-12-x64-rel
 ci/android-12l-x64-rel-cq
 ci/android-13-x64-rel
 ci/android-14-arm64-rel
 ci/android-14-tablet-landscape-arm64-rel
 ci/android-15-x64-rel
+ci/android-16-x64-rel
 ci/android-cast-arm-dbg
 ci/android-cast-arm-rel
 ci/android-cast-arm64-dbg
@@ -70,10 +68,6 @@ ci/android-cronet-x64-dbg
 ci/android-cronet-x86-dbg
 ci/android-cronet-x86-dbg-10-tests
 ci/android-official
-ci/android-oreo-x86-rel
-ci/android-pie-arm64-dbg
-ci/android-pie-arm64-rel
-ci/android-pie-x86-rel
 ci/android-webview-13-x64-hostside-rel
 ci/chromeos-amd64-generic-dbg
 ci/chromeos-amd64-generic-rel
@@ -95,9 +89,10 @@ ci/linux-cast-x64-rel
 ci/linux-chromeos-dbg
 ci/linux-chromeos-rel
 ci/linux-official
+ci/linux-wayland-mutter-rel-tests
+ci/linux-wayland-weston-rel-tests
 ci/mac-arm64-rel
 ci/mac-official
-ci/mac11-arm64-rel-tests
 ci/mac12-arm64-rel-tests
 ci/mac13-arm64-rel-tests
 ci/mac14-arm64-rel-tests

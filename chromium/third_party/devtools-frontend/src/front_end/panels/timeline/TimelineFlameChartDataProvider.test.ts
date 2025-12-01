@@ -2,15 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import * as Common from '../../core/common/common.js';
 import * as Platform from '../../core/platform/platform.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as Bindings from '../../models/bindings/bindings.js';
 import * as Trace from '../../models/trace/trace.js';
 import * as Workspace from '../../models/workspace/workspace.js';
-import {describeWithEnvironment} from '../../testing/EnvironmentHelpers.js';
+import {describeWithEnvironment, stubNoopSettings, updateHostConfig} from '../../testing/EnvironmentHelpers.js';
 import {setupIgnoreListManagerEnvironment} from '../../testing/TraceHelpers.js';
 import {TraceLoader} from '../../testing/TraceLoader.js';
 import * as PerfUi from '../../ui/legacy/components/perf_ui/perf_ui.js';
+import * as UI from '../../ui/legacy/legacy.js';
 
 import * as Timeline from './timeline.js';
 
@@ -21,21 +23,19 @@ describeWithEnvironment('TimelineFlameChartDataProvider', function() {
     const targetManager = SDK.TargetManager.TargetManager.instance({forceNew: true});
     const workspace = Workspace.Workspace.WorkspaceImpl.instance({forceNew: true});
     const resourceMapping = new Bindings.ResourceMapping.ResourceMapping(targetManager, workspace);
-    const debuggerWorkspaceBinding = Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding.instance({
+    const ignoreListManager = Workspace.IgnoreListManager.IgnoreListManager.instance({forceNew: true});
+    Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding.instance({
       forceNew: true,
       resourceMapping,
       targetManager,
-    });
-    Bindings.IgnoreListManager.IgnoreListManager.instance({
-      forceNew: true,
-      debuggerWorkspaceBinding,
+      ignoreListManager,
     });
   });
   afterEach(() => {
     SDK.TargetManager.TargetManager.removeInstance();
     Workspace.Workspace.WorkspaceImpl.removeInstance();
     Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding.removeInstance();
-    Bindings.IgnoreListManager.IgnoreListManager.removeInstance();
+    Workspace.IgnoreListManager.IgnoreListManager.removeInstance();
   });
 
   it('shows initiator arrows when an event that has them is selected', async function() {
@@ -110,9 +110,7 @@ describeWithEnvironment('TimelineFlameChartDataProvider', function() {
       const entityMapper = new Timeline.Utils.EntityMapper.EntityMapper(parsedTrace);
       dataProvider.setModel(parsedTrace, entityMapper);
       const timingsTrackGroup = dataProvider.timelineData().groups.find(g => g.name === 'Timings');
-      if (!timingsTrackGroup) {
-        assert.fail('Could not find Timings track flame chart group');
-      }
+      assert.isOk(timingsTrackGroup, 'Could not find Timings track flame chart group');
       const groupTreeEvents = dataProvider.groupTreeEvents(timingsTrackGroup);
       const allTimingEvents = [
         ...parsedTrace.UserTimings.consoleTimings,
@@ -129,9 +127,7 @@ describeWithEnvironment('TimelineFlameChartDataProvider', function() {
       const entityMapper = new Timeline.Utils.EntityMapper.EntityMapper(parsedTrace);
       dataProvider.setModel(parsedTrace, entityMapper);
       const timingsTrackGroup = dataProvider.timelineData().groups.find(g => g.name === 'Timings');
-      if (!timingsTrackGroup) {
-        assert.fail('Could not find Timings track flame chart group');
-      }
+      assert.isOk(timingsTrackGroup, 'Could not find Timings track flame chart group');
       const groupTreeEvents = dataProvider.groupTreeEvents(timingsTrackGroup);
       assert.strictEqual(groupTreeEvents?.length, 6);
       const allEventsAreSync = groupTreeEvents?.every(event => !Trace.Types.Events.isPhaseAsync(event.ph));
@@ -157,26 +153,14 @@ describeWithEnvironment('TimelineFlameChartDataProvider', function() {
     const {parsedTrace} = await TraceLoader.traceEngine(this, 'extension-tracks-and-marks.json.gz');
     const entityMapper = new Timeline.Utils.EntityMapper.EntityMapper(parsedTrace);
     dataProvider.setModel(parsedTrace, entityMapper);
-    const groupNames = dataProvider.timelineData().groups.map(g => g.name);
-    assert.deepEqual(
-        groupNames,
-        [
-          'Frames',
-          'Timings',
-          'Interactions',
-          'A track group — Custom track',
-          'Another Extension Track',
-          'An Extension Track — Custom track',
-          'TimeStamp track — Custom track',
-          'Main — http://localhost:3000/',
-          'Thread pool',
-          'Thread pool worker 1',
-          'Thread pool worker 2',
-          'Thread pool worker 3',
-          'StackSamplingProfiler',
-          'GPU',
-        ],
-    );
+    const groupNames = dataProvider.timelineData().groups.map(g => [g.name, g.subtitle]);
+    assert.deepEqual(groupNames, [
+      ['Frames', undefined], ['Timings', undefined], ['Interactions', undefined], ['A track group', '— Custom'],
+      ['Another Extension Track', undefined], ['An Extension Track', '— Custom'], ['TimeStamp track', '— Custom'],
+      ['Main — http://localhost:3000/', undefined], ['Thread pool', undefined], ['Thread pool worker 1', undefined],
+      ['Thread pool worker 2', undefined], ['Thread pool worker 3', undefined], ['StackSamplingProfiler', undefined],
+      ['GPU', undefined]
+    ]);
   });
 
   it('can return the FlameChart group for a given event', async function() {
@@ -286,6 +270,37 @@ describeWithEnvironment('TimelineFlameChartDataProvider', function() {
     });
   });
 
+  it('shows Debug with AI submenu items', async function() {
+    updateHostConfig({
+      devToolsAiSubmenuPrompts: {
+        enabled: true,
+      },
+    });
+    stubNoopSettings();
+    UI.ActionRegistration.registerActionExtension({
+      actionId: 'drjones.performance-panel-context',
+      title: () => 'Debug with AI' as Platform.UIString.LocalizedString,
+      category: UI.ActionRegistration.ActionCategory.GLOBAL,
+    });
+    const actionRegistryInstance = UI.ActionRegistry.ActionRegistry.instance({forceNew: true});
+    UI.ShortcutRegistry.ShortcutRegistry.instance({forceNew: true, actionRegistry: actionRegistryInstance});
+
+    const dataProvider = new Timeline.TimelineFlameChartDataProvider.TimelineFlameChartDataProvider();
+    const {parsedTrace} = await TraceLoader.traceEngine(this, 'one-second-interaction.json.gz');
+    const entityMapper = new Timeline.Utils.EntityMapper.EntityMapper(parsedTrace);
+    dataProvider.setModel(parsedTrace, entityMapper);
+    const contextMenu = dataProvider.customizedContextMenu(new MouseEvent('click'), 7, 0);
+    assert.exists(contextMenu);
+    const debugWithAiItem = contextMenu.buildDescriptor().subItems?.find(item => item.label === 'Debug with AI');
+    assert.exists(debugWithAiItem);
+    assert.deepEqual(
+        debugWithAiItem?.subItems?.map(item => item.label),
+        ['Start a chat', 'Label entry', 'Assess the purpose', 'Identify time spent', 'Find improvements']);
+
+    UI.ActionRegistry.ActionRegistry.reset();
+    UI.ShortcutRegistry.ShortcutRegistry.removeInstance();
+  });
+
   it('filters navigations to only return those that happen on the main frame', async function() {
     const dataProvider = new Timeline.TimelineFlameChartDataProvider.TimelineFlameChartDataProvider();
     const {parsedTrace} = await TraceLoader.traceEngine(this, 'multiple-navigations-with-iframes.json.gz');
@@ -314,58 +329,47 @@ describeWithEnvironment('TimelineFlameChartDataProvider', function() {
     assert.deepEqual(results[0], {index: 147, startTimeMilli: 122411041.395, provider: 'main'});
   });
 
-  it('delete annotations associated with an event', async function() {
+  it('persists track configurations to the setting if it is provided with one', async function() {
+    const {Settings} = Common.Settings;
+    const setting =
+        Settings.instance().createSetting<PerfUi.FlameChart.PersistedConfigPerTrace>('persist-flame-config', {});
+
     const dataProvider = new Timeline.TimelineFlameChartDataProvider.TimelineFlameChartDataProvider();
     const {parsedTrace} = await TraceLoader.traceEngine(this, 'web-dev-with-commit.json.gz');
     const entityMapper = new Timeline.Utils.EntityMapper.EntityMapper(parsedTrace);
     dataProvider.setModel(parsedTrace, entityMapper);
-    const entryIndex = 0;
-    const eventToFindAssociatedEntriesFor = dataProvider.eventByIndex(entryIndex);
-    const event = dataProvider.eventByIndex(1);
-    assert.exists(eventToFindAssociatedEntriesFor);
-    assert.exists(event);
+    dataProvider.setPersistedGroupConfigSetting(setting);
 
-    // This label annotation should be deleted
-    Timeline.ModificationsManager.ModificationsManager.activeManager()?.createAnnotation({
-      type: 'ENTRY_LABEL',
-      entry: eventToFindAssociatedEntriesFor,
-      label: 'label',
-    });
+    let groups = dataProvider.timelineData().groups;
 
-    Timeline.ModificationsManager.ModificationsManager.activeManager()?.createAnnotation({
-      type: 'ENTRY_LABEL',
-      entry: event,
-      label: 'label',
-    });
+    // To save the size of the assertion, let's only care about the first 3 groups.
+    groups = groups.slice(0, 3);
+    // Move the first group to the end.
+    const newVisualOrder = [1, 2, 0];
 
-    dataProvider.deleteAnnotationsForEntry(entryIndex);
-    // Make sure one of the annotations was deleted
-    assert.deepEqual(Timeline.ModificationsManager.ModificationsManager.activeManager()?.getAnnotations().length, 1);
-  });
+    dataProvider.handleTrackConfigurationChange(groups, newVisualOrder);
 
-  it('correctly identifies if an event has annotations', async function() {
-    const dataProvider = new Timeline.TimelineFlameChartDataProvider.TimelineFlameChartDataProvider();
-    const {parsedTrace} = await TraceLoader.traceEngine(this, 'web-dev-with-commit.json.gz');
-    const entityMapper = new Timeline.Utils.EntityMapper.EntityMapper(parsedTrace);
-    dataProvider.setModel(parsedTrace, entityMapper);
-    const eventIndex = 0;
-    const event = dataProvider.eventByIndex(eventIndex);
-    assert.exists(event);
-
-    // Create a label for an event
-    Timeline.ModificationsManager.ModificationsManager.activeManager()?.createAnnotation({
-      type: 'ENTRY_LABEL',
-      entry: event,
-      label: 'label',
-    });
-
-    // Made sure the event has annotations
-    assert.isTrue(dataProvider.entryHasAnnotations(eventIndex));
-
-    // Delete annotations for the event
-    dataProvider.deleteAnnotationsForEntry(eventIndex);
-
-    // Made sure the event does not have annotations
-    assert.isFalse(dataProvider.entryHasAnnotations(eventIndex));
+    const newSetting = setting.get();
+    const traceKey = Timeline.TrackConfiguration.keyForTraceConfig(parsedTrace);
+    assert.deepEqual(newSetting[traceKey], [
+      {
+        expanded: false,
+        hidden: false,
+        originalIndex: 0,
+        visualIndex: 2,
+      },
+      {
+        expanded: false,
+        hidden: false,
+        originalIndex: 1,
+        visualIndex: 0,
+      },
+      {
+        expanded: false,
+        hidden: false,
+        originalIndex: 2,
+        visualIndex: 1,
+      }
+    ]);
   });
 });

@@ -2,7 +2,7 @@
 
 # Note: don't forget to bump FDO_DISTRIBUTION_TAG when editing this file!
 
-git clone --branch 1.20.0 --depth=1 https://gitlab.freedesktop.org/wayland/wayland
+git clone --branch 1.23.1 --depth=1 https://gitlab.freedesktop.org/wayland/wayland
 cd wayland/
 git show -s HEAD
 meson build/ -Dtests=false -Ddocumentation=false

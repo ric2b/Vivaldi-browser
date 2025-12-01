@@ -80,9 +80,9 @@
 
 // This is needed by ext_tile related unit tests.
 #define EXT_TILE_DEBUG 1
-#define MC_TEMP_BUF_PELS                       \
-  (((MAX_SB_SIZE)*2 + (AOM_INTERP_EXTEND)*2) * \
-   ((MAX_SB_SIZE)*2 + (AOM_INTERP_EXTEND)*2))
+#define MC_TEMP_BUF_PELS                           \
+  (((MAX_SB_SIZE) * 2 + (AOM_INTERP_EXTEND) * 2) * \
+   ((MAX_SB_SIZE) * 2 + (AOM_INTERP_EXTEND) * 2))
 
 // Checks that the remaining bits start with a 1 and ends with 0s.
 // It consumes an additional byte, if already byte aligned before the check.

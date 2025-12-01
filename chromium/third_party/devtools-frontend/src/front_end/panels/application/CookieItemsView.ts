@@ -87,7 +87,7 @@ class CookiePreviewWidget extends UI.Widget.VBox {
   private value: HTMLDivElement;
 
   constructor() {
-    super();
+    super({jslog: `${VisualLogging.section('cookie-preview')}`});
     this.setMinimumSize(230, 45);
     this.cookie = null;
     this.showDecodedSetting = Common.Settings.Settings.instance().createSetting('cookie-view-show-decoded', false);
@@ -115,7 +115,6 @@ class CookiePreviewWidget extends UI.Widget.VBox {
     this.value = value;
 
     this.contentElement.classList.add('cookie-preview-widget');
-    this.contentElement.setAttribute('jslog', `${VisualLogging.section('cookie-preview')}`);
     this.contentElement.appendChild(value);
   }
 
@@ -172,11 +171,10 @@ export class CookieItemsView extends UI.Widget.VBox {
   private selectedCookie: SDK.Cookie.Cookie|null;
   #toolbar: StorageItemsToolbar;
   constructor(model: SDK.CookieModel.CookieModel, cookieDomain: string) {
-    super();
+    super({jslog: `${VisualLogging.pane('cookies-data')}`});
     this.registerRequiredCSS(cookieItemsViewStyles);
 
     this.element.classList.add('storage-view');
-    this.element.setAttribute('jslog', `${VisualLogging.pane('cookies-data')}`);
 
     this.model = model;
     this.cookieDomain = cookieDomain;
@@ -287,7 +285,8 @@ export class CookieItemsView extends UI.Widget.VBox {
       this.#toolbar.setDeleteAllGlyph('clear-list');
     }
     this.cookiesTable.setCookies(this.shownCookies, this.model.getCookieToBlockedReasonsMap());
-    UI.ARIAUtils.alert(i18nString(UIStrings.numberOfCookiesShownInTableS, {PH1: this.shownCookies.length}));
+    UI.ARIAUtils.LiveAnnouncer.alert(
+        i18nString(UIStrings.numberOfCookiesShownInTableS, {PH1: this.shownCookies.length}));
     this.#toolbar.setCanFilter(true);
     this.#toolbar.setCanDeleteAll(this.shownCookies.length > 0);
     this.#toolbar.setCanDeleteSelected(Boolean(this.cookiesTable.selectedCookie()));

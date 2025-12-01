@@ -8,11 +8,14 @@ $assert BATCH_TILE >= 4
 $SIMD_TILE = BATCH_TILE // 4
 $assert ACCUMULATORS <= SIMD_TILE
 $ABC = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-#include <assert.h>
-
 #include <arm_neon.h>
+#include <assert.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #include "src/xnnpack/common.h"
+#include "src/xnnpack/math.h"
+#include "src/xnnpack/microparams.h"
 #include "src/xnnpack/reduce.h"
 
 
@@ -21,7 +24,7 @@ void xnn_f16_f32acc_rsum_ukernel__neonfp16arith_u${BATCH_TILE}${ACC_SUFFIX}(
     size_t batch,
     const xnn_float16* input,
     float* output,
-    const struct xnn_f16_f32acc_scale_params params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f16_f32acc_scale_params* restrict params)
 {
   assert(batch != 0);
   assert(batch % sizeof(uint16_t) == 0);

@@ -3,8 +3,8 @@
 // This source code is licensed under the BSD-style license found in the
 // LICENSE file in the root directory of this source tree.
 
-#ifndef __XNNPACK_TEST_REPLICABLE_RANDOM_NUMBER_GENERATOR_H_
-#define __XNNPACK_TEST_REPLICABLE_RANDOM_NUMBER_GENERATOR_H_
+#ifndef XNNPACK_TEST_REPLICABLE_RANDOM_NUMBER_GENERATOR_H_
+#define XNNPACK_TEST_REPLICABLE_RANDOM_NUMBER_GENERATOR_H_
 
 #include <chrono>
 #include <cstddef>
@@ -26,7 +26,13 @@ class Xoshiro128Plus {
  public:
   using result_type = uint64_t;
 
-  explicit Xoshiro128Plus(uint64_t s1) : state_{s1, 0} {}
+  explicit Xoshiro128Plus(uint64_t s1) : state_{s1, 0} {
+    // The seed might not have 64 bits of entropy, which some <random> functions
+    // require to give good random data.
+    for (int i = 0; i < 10; ++i) {
+      (*this)();
+    }
+  }
 
   uint64_t operator()() {
     uint64_t s1 = state_[0];
@@ -72,7 +78,7 @@ class ReplicableRandomDevice {
         random_generator_(random_seed_),
         scoped_trace_(__FILE__, __LINE__,
                       "To replicate this failure, re-run the test with "
-                      "`--gunit_random_seed=" +
+                      "`--gtest_random_seed=" +
                           std::to_string(random_seed_) + "`.") {}
 
   // Wrapped methods from `BaseRandomDevice`.
@@ -139,4 +145,4 @@ class FuzzTest {
 
 }  // namespace xnnpack
 
-#endif  // __XNNPACK_TEST_REPLICABLE_RANDOM_NUMBER_GENERATOR_H_
+#endif  // XNNPACK_TEST_REPLICABLE_RANDOM_NUMBER_GENERATOR_H_

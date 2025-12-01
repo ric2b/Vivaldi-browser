@@ -180,7 +180,7 @@ impl Image {
     }
 
     // TODO: b/392112497 - remove this annotation once encoder feature is enabled by default.
-    #[allow(unused)]
+    #[allow(dead_code)]
     pub(crate) fn has_same_cicp(&self, other: &Image) -> bool {
         self.depth == other.depth
             && self.yuv_format == other.yuv_format
@@ -313,7 +313,7 @@ impl Image {
         Ok(&mut self.row16_mut(plane, row)?[0..width])
     }
 
-    pub(crate) fn row_generic(&self, plane: Plane, row: u32) -> AvifResult<PlaneRow> {
+    pub(crate) fn row_generic<'a>(&'a self, plane: Plane, row: u32) -> AvifResult<PlaneRow<'a>> {
         Ok(if self.depth == 8 {
             PlaneRow::Depth8(self.row(plane, row)?)
         } else {
@@ -332,11 +332,11 @@ impl Image {
         })
     }
 
-    #[cfg(feature = "libyuv")]
+    #[cfg(any(feature = "libyuv", feature = "sharpyuv"))]
     pub(crate) fn plane_ptrs_mut(&mut self) -> [*mut u8; 4] {
         ALL_PLANES.map(|x| {
             if self.has_plane(x) {
-                self.planes[x.as_usize()].unwrap_mut().ptr_mut()
+                self.planes[x.as_usize()].unwrap_mut().ptr_mut_generic()
             } else {
                 std::ptr::null_mut()
             }
@@ -440,6 +440,43 @@ impl Image {
             (self.planes[plane], self.row_bytes[plane]) = match &src.planes[plane] {
                 Some(src_plane) => (Some(src_plane.try_clone()?), src.row_bytes[plane]),
                 None => (None, 0),
+            }
+        }
+        Ok(())
+    }
+
+    #[cfg(feature = "encoder")]
+    pub(crate) fn copy_and_pad(&mut self, image: &Image) -> AvifResult<()> {
+        if image.width > self.width || image.height > self.height {
+            return Err(AvifError::InvalidArgument);
+        }
+        self.allocate_planes(Category::Color)?;
+        if image.has_alpha() {
+            self.allocate_planes(Category::Alpha)?;
+        }
+        for plane in ALL_PLANES {
+            let src_plane = match image.plane_data(plane) {
+                Some(pd) => pd,
+                None => continue,
+            };
+            if self.depth == 8 {
+                for y in 0..src_plane.height {
+                    let src_row = image.row_exact(plane, y)?;
+                    let dst_row = self.row_mut(plane, y)?;
+                    let dst_slice = &mut dst_row[0..src_row.len()];
+                    dst_slice.copy_from_slice(src_row);
+                    let dst_slice = &mut dst_row[src_row.len()..];
+                    dst_slice.fill(*src_row.last().unwrap());
+                }
+            } else {
+                for y in 0..src_plane.height {
+                    let src_row = image.row16_exact(plane, y)?;
+                    let dst_row = self.row16_mut(plane, y)?;
+                    let dst_slice = &mut dst_row[0..src_row.len()];
+                    dst_slice.copy_from_slice(src_row);
+                    let dst_slice = &mut dst_row[src_row.len()..];
+                    dst_slice.fill(*src_row.last().unwrap());
+                }
             }
         }
         Ok(())
@@ -637,14 +674,14 @@ impl Image {
             let opaque_value = self.max_channel();
             if self.depth == 8 {
                 for y in 0..plane_data.height {
-                    let row = &self.row(Plane::A, y).unwrap()[..plane_data.width as usize];
+                    let row = self.row_exact(Plane::A, y).unwrap();
                     if !row.iter().all(|pixel| *pixel == opaque_value as u8) {
                         return false;
                     }
                 }
             } else {
                 for y in 0..plane_data.height {
-                    let row = &self.row16(Plane::A, y).unwrap()[..plane_data.width as usize];
+                    let row = self.row16_exact(Plane::A, y).unwrap();
                     if !row.iter().all(|pixel| *pixel == opaque_value) {
                         return false;
                     }

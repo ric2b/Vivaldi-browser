@@ -11,7 +11,6 @@
 #import "ios/chrome/browser/badges/ui_bundled/badge_button.h"
 #import "ios/chrome/browser/badges/ui_bundled/badge_consumer.h"
 #import "ios/chrome/browser/badges/ui_bundled/badge_item.h"
-#import "ios/chrome/browser/badges/ui_bundled/badge_static_item.h"
 #import "ios/chrome/browser/badges/ui_bundled/badge_tappable_item.h"
 #import "ios/chrome/browser/badges/ui_bundled/badge_type_util.h"
 #import "ios/chrome/browser/infobars/model/badge_state.h"
@@ -35,6 +34,15 @@
 #import "ios/web/public/permissions/permissions.h"
 #import "ios/web/public/web_state_observer_bridge.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "base/strings/sys_string_conversions.h"
+#import "base/values.h"
+#import "ios/reader_mode/reader_mode_controller.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
+
 namespace {
 // Historgram name for when an overflow badge was tapped.
 const char kInfobarOverflowBadgeTappedUserAction[] =
@@ -48,10 +56,19 @@ const char kInfobarOverflowBadgeShownUserAction[] =
 @interface BadgeMediator () <CRWWebStateObserver,
                              InfobarBadgeTabHelperDelegate,
                              OverlayPresenterObserving,
+
+                             // Vivaldi
+                             ReaderModeControllerObserver,
+                             // End Vivaldi
+
                              WebStateListObserving> {
   std::unique_ptr<OverlayPresenterObserver> _overlayPresenterObserver;
   std::unique_ptr<WebStateListObserver> _webStateListObserver;
   std::unique_ptr<web::WebStateObserverBridge> _webStateObserver;
+
+  // Vivaldi: Reader mode state
+  BOOL _readerModeAvailable;
+  // End Vivaldi
 }
 
 // The WebStateList that this mediator listens for any changes on the active web
@@ -67,9 +84,6 @@ const char kInfobarOverflowBadgeShownUserAction[] =
 // The infobar banner OverlayPresenter.
 @property(nonatomic, readonly) OverlayPresenter* overlayPresenter;
 
-// The incognito badge, or nil if the Browser is not off-the-record.
-@property(nonatomic, readonly) id<BadgeItem> offTheRecordBadge;
-
 // Array of all available badges.
 @property(nonatomic, strong, readonly) NSArray<id<BadgeItem>>* badges;
 
@@ -81,15 +95,9 @@ const char kInfobarOverflowBadgeShownUserAction[] =
 @implementation BadgeMediator
 
 - (instancetype)initWithWebStateList:(WebStateList*)webStateList
-                    overlayPresenter:(OverlayPresenter*)overlayPresenter
-                         isIncognito:(BOOL)isIncognito {
+                    overlayPresenter:(OverlayPresenter*)overlayPresenter {
   self = [super init];
   if (self) {
-    // Create the incognito badge if `browser` is off-the-record.
-    if (isIncognito) {
-      _offTheRecordBadge =
-          [[BadgeStaticItem alloc] initWithBadgeType:kBadgeTypeIncognito];
-    }
     // Set up the OverlayPresenterObserver for the infobar banner presentation.
     _overlayPresenterObserver =
         std::make_unique<OverlayPresenterObserverBridge>(self);
@@ -108,6 +116,13 @@ const char kInfobarOverflowBadgeShownUserAction[] =
           self);
       _webState->AddObserver(_webStateObserver.get());
     }
+
+    // Vivaldi: Set up reader mode controller observer for this WebState
+    [self setupReaderModeObserverForWebState:_webState];
+    // Initialize reader mode state
+    _readerModeAvailable = NO;
+    // End Vivaldi
+
   }
   return self;
 }
@@ -118,6 +133,11 @@ const char kInfobarOverflowBadgeShownUserAction[] =
 }
 
 - (void)disconnect {
+
+  if (IsVivaldiRunning()) {
+    [self teardownReaderModeObserverForWebState:self.webState];
+  } // End Vivaldi
+
   self.consumer = nil;
   [self disconnectWebState];
   [self disconnectWebStateList];
@@ -173,6 +193,25 @@ const char kInfobarOverflowBadgeShownUserAction[] =
     item.badgeState = infobarTypeBadgeStatePair.second;
     [badges addObject:item];
   }
+
+  if (IsVivaldiRunning() && _readerModeAvailable) {
+    BadgeTappableItem* readerModeItem =
+        [[BadgeTappableItem alloc] initWithBadgeType:kBadgeTypeReaderMode];
+
+    if (self.webState) {
+      ReaderModeController* controller =
+          ReaderModeController::FromWebState(self.webState);
+      if (controller->IsReaderModeEnabled()) {
+        readerModeItem.badgeState = BadgeStateAccepted;
+      } else {
+        readerModeItem.badgeState = BadgeStateNone;
+      }
+    } else {
+      readerModeItem.badgeState = BadgeStateNone;
+    }
+    [badges addObject:readerModeItem];
+  } // End Vivaldi
+
   return badges;
 }
 
@@ -188,6 +227,12 @@ const char kInfobarOverflowBadgeShownUserAction[] =
   if (_webState == webState) {
     return;
   }
+
+  // Vivaldi
+  if (IsVivaldiRunning()) {
+    [self configureVivaldiWebState:webState oldWebState:_webState];
+  } // End Vivaldi
+
   if (_webState) {
     InfobarBadgeTabHelper::GetOrCreateForWebState(_webState)->SetDelegate(nil);
     _webState->RemoveObserver(_webStateObserver.get());
@@ -234,8 +279,7 @@ const char kInfobarOverflowBadgeShownUserAction[] =
     displayedBadge = [badges firstObject];
   }
   // Update the consumer with the new badge items.
-  [self.consumer setupWithDisplayedBadge:displayedBadge
-                         fullScreenBadge:self.offTheRecordBadge];
+  [self.consumer setupWithDisplayedBadge:displayedBadge];
 }
 
 #pragma mark - BadgeDelegate
@@ -293,6 +337,13 @@ const char kInfobarOverflowBadgeShownUserAction[] =
 }
 
 - (void)showModalForBadgeType:(BadgeType)badgeType {
+  // TODO: praveen@vivaldi.com, setBrowserForReaderMode will require a refactor
+  // In badge mediator file
+  if (IsVivaldiRunning() && badgeType == kBadgeTypeReaderMode) {
+    [self.dispatcher setBrowserForReaderMode];
+    return;
+  } // End Vivaldi
+
   [self addModalRequestForInfobarType:InfobarTypeForBadgeType(badgeType)];
 }
 
@@ -356,7 +407,6 @@ const char kInfobarOverflowBadgeShownUserAction[] =
   }
 
   [self.consumer updateDisplayedBadge:displayedBadge
-                      fullScreenBadge:self.offTheRecordBadge
                               infoBar:infoBar];
   [self updateConsumerReadStatus];
 }
@@ -395,6 +445,12 @@ const char kInfobarOverflowBadgeShownUserAction[] =
                        status:(const WebStateListStatus&)status {
   DCHECK_EQ(self.webStateList, webStateList);
   if (status.active_web_state_change()) {
+
+    // Vivaldi
+    [self handleWebStateChange:self.webState
+                   newWebState:status.new_active_web_state];
+    // End Vivaldi
+
     self.webState = status.new_active_web_state;
   }
 }
@@ -417,6 +473,11 @@ const char kInfobarOverflowBadgeShownUserAction[] =
 // Mark the `item`'s infobar type's read status to YES.
 - (void)onBadgeItemRead:(id<BadgeItem>)item {
   item.badgeState |= BadgeStateRead;
+
+  // Vivaldi
+  if (item.badgeType == kBadgeTypeReaderMode) { return; }
+  // End Vivaldi
+
   if (self.badgeTabHelper) {
     self.badgeTabHelper->UpdateBadgeForInfobarRead(
         InfobarTypeForBadgeType(item.badgeType));
@@ -437,6 +498,13 @@ const char kInfobarOverflowBadgeShownUserAction[] =
 
 // Shows the modal UI when `button` is tapped.
 - (void)handleTappedBadgeButton:(BadgeButton*)button {
+
+  // Vivaldi
+  if (button.badgeType == kBadgeTypeReaderMode) {
+    [self.dispatcher setBrowserForReaderMode];
+    return;
+  } // End Vivaldi
+
   InfobarType infobarType = InfobarTypeForBadgeType(button.badgeType);
   [self addModalRequestForInfobarType:infobarType];
   [self recordMetricsForBadgeButton:button infobarType:infobarType];
@@ -495,5 +563,145 @@ const char kInfobarOverflowBadgeShownUserAction[] =
       break;
   }
 }
+
+#pragma mark - Vivaldi
+
+#pragma mark - Badge Configuration
+
+- (void)configureVivaldiWebState:(web::WebState*)webState
+                     oldWebState:(web::WebState*)oldWebState {
+  // Clean up old WebState
+  if (oldWebState) {
+    [self teardownReaderModeObserverForWebState:oldWebState];
+  }
+
+  // Set up new WebState
+  if (webState) {
+    [self setupWebStateReaderMode:webState];
+  } else {
+    _readerModeAvailable = NO;
+  }
+}
+
+#pragma mark - ReaderModeControllerObserver
+
+- (void)onReaderModeAvailabilityChanged:(BOOL)available {
+  _readerModeAvailable = available;
+  [self updateConsumer];
+
+  if (available && self.webState) {
+    // Also check the enabled state to update badge appearance
+    ReaderModeController* controller =
+      ReaderModeController::FromWebState(self.webState);
+    if (controller) {
+      controller->CheckReaderModeEnabledState();
+    }
+  }
+}
+
+- (void)onReaderModeEnabledStateChanged:(BOOL)enabled {
+  // Badge visibility is controlled by availability,
+  // this just updates badge appearance
+  [self updateConsumer];
+}
+
+#pragma mark - Reader Mode Observer Management
+
+- (void)setupReaderModeObserverForWebState:(web::WebState*)webState {
+  if (webState) {
+    ReaderModeController* controller =
+      ReaderModeController::FromWebState(webState);
+    if (controller) {
+      controller->AddObserver(self);
+    }
+  }
+}
+
+- (void)teardownReaderModeObserverForWebState:(web::WebState*)webState {
+  if (webState) {
+    ReaderModeController* controller =
+      ReaderModeController::FromWebState(webState);
+    if (controller) {
+      controller->RemoveObserver(self);
+    }
+  }
+}
+
+#pragma mark - Reader Mode Event Handlers
+
+- (void)readerModeBadgeButtonTapped:(id)sender {
+  [self.dispatcher setBrowserForReaderMode];
+  ReaderModeController* controller =
+    ReaderModeController::FromWebState(self.webState);
+  if (controller) {
+    controller->ToggleReaderMode();
+    controller->CheckReaderModeEnabledState();
+  }
+}
+
+#pragma mark - WebState Management Helpers
+
+- (void)handleWebStateChange:(web::WebState*)oldWebState
+                 newWebState:(web::WebState*)newWebState {
+  // Clean up old web state observer
+  [self teardownReaderModeObserverForWebState:oldWebState];
+
+  // Set up new web state observer
+  [self setupReaderModeObserverForWebState:newWebState];
+
+    if (newWebState) {
+    // Check if reader mode controller already exists and has state
+      ReaderModeController* controller =
+        ReaderModeController::FromWebState(newWebState);
+      if (controller) {
+        // Use existing state if available
+        _readerModeAvailable = controller->IsReaderModeAvailable();
+      [self updateConsumer];
+      // Always check for updates to ensure we have the latest state
+      controller->CheckReaderModeAvailability();
+      controller->CheckReaderModeEnabledState();
+    } else {
+      // No controller yet - reset state and wait for availability check
+      _readerModeAvailable = NO;
+      [self updateConsumer];
+    }
+  }
+}
+
+- (void)setupWebStateReaderMode:(web::WebState*)webState {
+  [self setupReaderModeObserverForWebState:webState];
+
+  // Check current reader mode state when switching to this tab
+  ReaderModeController* controller =
+    ReaderModeController::FromWebState(webState);
+  if (controller) {
+    // Update our internal state based on the controller's current state
+    _readerModeAvailable = controller->IsReaderModeAvailable();
+
+    // Also check for updates to ensure we have the latest state
+    controller->CheckReaderModeAvailability();
+    controller->CheckReaderModeEnabledState();
+  } else {
+    // This will trigger controller creation
+    // through the WebStateUserData pattern
+    ReaderModeController::FromWebState(webState);
+  }
+}
+
+- (void)webState:(web::WebState*)webState didLoadPageWithSuccess:(BOOL)success {
+  DCHECK_EQ(webState, self.webState);
+  if (success) {
+    // Reset reader mode state for new page
+    _readerModeAvailable = NO;
+    [self updateConsumer];
+
+    // Check if reader mode is available for the new page
+    ReaderModeController* controller =
+      ReaderModeController::FromWebState(webState);
+    if (controller) {
+      controller->CheckReaderModeAvailability();
+    }
+  }
+} // End Vivaldi
 
 @end

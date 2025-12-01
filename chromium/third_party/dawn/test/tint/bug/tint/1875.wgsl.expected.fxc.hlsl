@@ -1,11 +1,10 @@
+
 static uint count = 0u;
 RWByteAddressBuffer outputs : register(u1);
-
 void push_output(uint value) {
-  uint tint_symbol_1 = 0u;
-  outputs.GetDimensions(tint_symbol_1);
-  uint tint_symbol_2 = ((tint_symbol_1 - 0u) / 4u);
-  outputs.Store((4u * min(count, (tint_symbol_2 - 1u))), asuint(value));
+  uint v = 0u;
+  outputs.GetDimensions(v);
+  outputs.Store((0u + (min(count, ((v / 4u) - 1u)) * 4u)), value);
   count = (count + 1u);
 }
 
@@ -20,5 +19,5 @@ void main() {
   push_output(a);
   push_output(b);
   push_output(c);
-  return;
 }
+

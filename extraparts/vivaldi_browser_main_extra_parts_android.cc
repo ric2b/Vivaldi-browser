@@ -25,17 +25,8 @@ void VivaldiBrowserMainExtraPartsAndroid::PostProfileInit(
     vivaldi_default_bookmarks::UpdatePartners(
         vivaldi_default_bookmarks::UpdaterClientImpl::Create(profile));
   }
-    direct_match::DirectMatchServiceFactory::GetInstance();
+  direct_match::DirectMatchServiceFactory::GetInstance();
 }
-
-//void VivaldiBrowserMainExtraPartsAndroid::PreProfileInit() {
-  //EnsureBrowserContextKeyedServiceFactoriesBuilt();
-//}
-
-//void VivaldiBrowserMainExtraPartsAndroid::
-    //EnsureBrowserContextKeyedServiceFactoriesBuilt() {
-  //direct_match::DirectMatchServiceFactory::GetInstance();
-//}
 
 std::unique_ptr<VivaldiBrowserMainExtraParts>
 VivaldiBrowserMainExtraParts::Create() {

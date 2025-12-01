@@ -62,7 +62,7 @@ class TestWebUIController1 : public TopChromeWebUIController {
   explicit TestWebUIController1(content::WebUI* web_ui)
       : TopChromeWebUIController(web_ui) {}
 
-  static constexpr std::string GetWebUIName() { return "Test1"; }
+  static constexpr std::string_view GetWebUIName() { return "Test1"; }
 };
 
 class TestWebUIConfig1
@@ -86,7 +86,7 @@ class TestWebUIController2 : public TopChromeWebUIController {
   explicit TestWebUIController2(content::WebUI* web_ui)
       : TopChromeWebUIController(web_ui) {}
 
-  static constexpr std::string GetWebUIName() { return "Test2"; }
+  static constexpr std::string_view GetWebUIName() { return "Test2"; }
 };
 
 class TestWebUIConfig2

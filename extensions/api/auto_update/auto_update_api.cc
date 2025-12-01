@@ -76,9 +76,11 @@ void AutoUpdateAPI::SendDidFindValidUpdate(const std::string& url,
 }
 
 /* static */
-void AutoUpdateAPI::SendUpdaterDidNotFindUpdate() {
+void AutoUpdateAPI::SendUpdaterDidNotFindUpdate(const std::string& reason) {
   ::vivaldi::BroadcastEventToAllProfiles(
-      auto_update::OnUpdaterDidNotFindUpdate::kEventName);
+      auto_update::OnUpdaterDidNotFindUpdate::kEventName,
+      auto_update::OnUpdaterDidNotFindUpdate::Create(
+          auto_update::ParseUpdateNotFoundReason(reason)));
 }
 
 /* static */

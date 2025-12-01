@@ -51,6 +51,11 @@
 #include "content/browser/browser_plugin/browser_plugin_guest.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 
+
+#if defined(USE_AURA)
+#include "content/browser/renderer_host/render_widget_host_view_aura.h"
+#endif
+
 namespace {
 
 bool VivaldiIsGuest(content::RenderWidgetHostImpl* host) {
@@ -678,6 +683,16 @@ void RenderWidgetHostViewChildFrame::StopFlingingIfNecessary(
   input_helper_->StopFlingingIfNecessary(event, ack_result);
 }
 
+
+void RenderWidgetHostViewChildFrame::WheelEventAck(
+    const blink::WebMouseWheelEvent& event,
+    blink::mojom::InputEventResultState ack_result) {
+  if (overscroll_controller_) {
+    overscroll_controller_->ReceivedEventACK(
+        event, (blink::mojom::InputEventResultState::kConsumed == ack_result));
+  }
+}
+
 void RenderWidgetHostViewChildFrame::GestureEventAck(
     const blink::WebGestureEvent& event,
     blink::mojom::InputEventResultSource ack_source,
@@ -690,6 +705,24 @@ void RenderWidgetHostViewChildFrame::GestureEventAck(
 #endif
   bool is_vivaldi_guest = vivaldi::IsVivaldiRunning() && VivaldiIsGuest(host());
   input_helper_->GestureEventAckHelper(event, ack_source, ack_result, is_vivaldi_guest);
+
+ if (overscroll_controller_) {
+    overscroll_controller_->ReceivedEventACK(
+        event, (blink::mojom::InputEventResultState::kConsumed == ack_result));
+    // Terminate an active fling when the ACK for a GSU generated from the fling
+    // progress (GSU with inertial state) is consumed and the overscrolling mode
+    // is not |OVERSCROLL_NONE|. The early fling termination generates a GSE
+    // which completes the overscroll action. Without this change the overscroll
+    // action would complete at the end of the active fling progress which
+    // causes noticeable delay in cases that the fling velocity is large.
+    // https://crbug.com/797855
+    if (event.GetType() == blink::WebInputEvent::Type::kGestureScrollUpdate &&
+        event.data.scroll_update.inertial_phase ==
+            blink::WebGestureEvent::InertialPhaseState::kMomentum &&
+        overscroll_controller_->overscroll_mode() != OVERSCROLL_NONE) {
+      StopFling();
+    }
+  }
 }
 
 void RenderWidgetHostViewChildFrame::ForwardTouchpadZoomEventIfNecessary(
@@ -1123,5 +1156,18 @@ void RenderWidgetHostViewChildFrame::HandleSwipeToMoveCursorGestureAck(
   }
 }
 #endif
+
+void RenderWidgetHostViewChildFrame::SetOverscrollControllerEnabled(
+    bool enabled) {
+  if (!enabled)
+    overscroll_controller_.reset();
+  else if (!overscroll_controller_)
+    overscroll_controller_ = std::make_unique<VivaldiOverscrollController>();
+}
+
+VivaldiOverscrollController*
+RenderWidgetHostViewChildFrame::overscroll_controller() {
+  return overscroll_controller_.get();
+}
 
 }  // namespace content

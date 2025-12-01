@@ -64,6 +64,9 @@
 #include "browser/win/vivaldi_utils.h"
 #endif  // BUILDFLAG(IS_WIN)
 
+#define TOPLEVEL_MINIMUM_WIDTH 500 // Minimum width for main window, popups and Settings.
+#define TOPLEVEL_MINIMUM_HEIGHT 400 // Minimum height for main window, popups and Settings.
+
 namespace {
 
 // Make sure we answer correctly for ClientView::CanClose to make sure the exit
@@ -92,8 +95,9 @@ class VivaldiWindowClientView : public views::ClientView {
   // On X11 this value is forwarded as a hint to the WM for its resize actions
   // using mouse and more. See VB-104294.
   // This size is used by settings, regular windows and popups.
+  // Size increased from 100x100 to the defined values with VB-118699
   gfx::Size GetMinimumSize() const override {
-    return gfx::Size(100, 100);
+    return gfx::Size(TOPLEVEL_MINIMUM_WIDTH, TOPLEVEL_MINIMUM_HEIGHT);
   }
 
  private:

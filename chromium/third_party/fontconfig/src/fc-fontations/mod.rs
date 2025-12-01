@@ -23,28 +23,35 @@
  */
 
 mod attributes;
+mod bitmap;
 mod capabilities;
+mod charset;
 mod foundries;
 mod instance_enumerate;
+mod lang;
+mod name_records;
 mod names;
 mod pattern_bindings;
 
 use attributes::append_style_elements;
+use bitmap::add_pixel_size;
 use capabilities::make_capabilities;
 use foundries::make_foundry;
+use lang::exclusive_lang;
 use names::add_names;
 
-use fc_fontations_bindgen::{
-    fcint::{
-        FC_CAPABILITY_OBJECT, FC_COLOR_OBJECT, FC_DECORATIVE_OBJECT, FC_FONTFORMAT_OBJECT,
-        FC_FONTVERSION_OBJECT, FC_FONT_HAS_HINT_OBJECT, FC_FOUNDRY_OBJECT, FC_OUTLINE_OBJECT,
-        FC_SCALABLE_OBJECT,
-    },
-    FcFontSet, FcFontSetAdd, FcPattern,
+use fontconfig_bindings::{FcFontSet, FcFontSetAdd, FcPattern};
+
+use fcint_bindings::{
+    FcLangSetFromCharSet, FC_CAPABILITY_OBJECT, FC_CHARSET_OBJECT, FC_COLOR_OBJECT, FC_FILE_OBJECT,
+    FC_FONTFORMAT_OBJECT, FC_FONTVERSION_OBJECT, FC_FONT_HAS_HINT_OBJECT, FC_FONT_WRAPPER_OBJECT,
+    FC_FOUNDRY_OBJECT, FC_LANG_OBJECT, FC_ORDER_OBJECT, FC_OUTLINE_OBJECT, FC_SCALABLE_OBJECT,
+    FC_SYMBOL_OBJECT,
 };
 
 use font_types::Tag;
-use pattern_bindings::{FcPatternBuilder, PatternElement};
+use pattern_bindings::{fc_wrapper::FcLangSetWrapper, FcPatternBuilder, PatternElement};
+use skrifa::MetadataProvider;
 use std::str::FromStr;
 
 use read_fonts::{FileRef, FontRef, TableProvider};
@@ -74,12 +81,24 @@ pub unsafe extern "C" fn add_patterns_to_fontset(
     let fileref = FileRef::new(&bytes).ok();
 
     let fonts = fonts_and_indices(fileref);
+
+    let mut patterns_added: u32 = 0;
     for (font, ttc_index) in fonts {
         for pattern in build_patterns_for_font(&font, font_file, ttc_index) {
-            if FcFontSetAdd(font_set, pattern) == 0 {
-                return 0;
+            unsafe {
+                if FcFontSetAdd(font_set, pattern) == 0 {
+                    return 0;
+                }
+                patterns_added += 1;
             }
         }
+    }
+
+    // Fontations does not natively understand WOFF/WOFF2 compressed file,
+    // if we are asked to scan one of those, only add wrapper information
+    // and filename.
+    if patterns_added == 0 {
+        try_append_woff_pattern(font_set, bytes.as_slice(), font_file);
     }
 
     1
@@ -95,6 +114,24 @@ enum InstanceMode {
     Default,
     Named(i32),
     Variable,
+}
+
+fn try_append_woff_pattern(font_set: *mut FcFontSet, bytes: &[u8], font_file: *const libc::c_char) {
+    let wrapper: Option<CString> = match bytes.get(0..4) {
+        Some(b"wOFF") => CString::new("WOFF").ok(),
+        Some(b"wOF2") => CString::new("WOFF2").ok(),
+        _ => None,
+    };
+
+    if let Some(w) = wrapper {
+        let mut pattern = FcPatternBuilder::new();
+        pattern.append_element(PatternElement::new(FC_FONT_WRAPPER_OBJECT as i32, w.into()));
+        add_font_file_name(&mut pattern, font_file);
+
+        pattern
+            .create_fc_pattern()
+            .map(|p| unsafe { FcFontSetAdd(font_set, p.into_raw() as *mut FcPattern) });
+    }
 }
 
 fn has_one_of_tables<I>(font_ref: &FontRef, tags: I) -> bool
@@ -122,9 +159,20 @@ fn has_hint(font_ref: &FontRef) -> bool {
     false
 }
 
+fn add_font_file_name(pattern: &mut FcPatternBuilder, font_file: *const libc::c_char) {
+    if !font_file.is_null() {
+        let filename = unsafe { std::ffi::CStr::from_ptr(font_file) };
+
+        pattern.append_element(PatternElement::new(
+            FC_FILE_OBJECT as i32,
+            filename.to_owned().into(),
+        ));
+    }
+}
+
 fn build_patterns_for_font(
     font: &FontRef,
-    _: *const libc::c_char,
+    font_file: *const libc::c_char,
     ttc_index: Option<i32>,
 ) -> Vec<*mut FcPattern> {
     let mut pattern = FcPatternBuilder::new();
@@ -175,11 +223,40 @@ fn build_patterns_for_font(
         foundry_string.into(),
     ));
 
+    pattern.append_element(PatternElement::new(
+        FC_SYMBOL_OBJECT as i32,
+        font.charmap().is_symbol().into(),
+    ));
+
     if let Some(capabilities) = make_capabilities(font) {
         pattern.append_element(PatternElement::new(
             FC_CAPABILITY_OBJECT as i32,
             capabilities.into(),
         ));
+    };
+
+    // CharSet and Langset.
+    if let Some(charset) = charset::make_charset(font) {
+        let exclusive_lang = exclusive_lang(font);
+
+        unsafe {
+            let langset = FcLangSetWrapper::from_raw(FcLangSetFromCharSet(
+                charset.as_ptr(),
+                exclusive_lang
+                    .as_ref()
+                    .map_or(std::ptr::null(), |lang| lang.as_bytes_with_nul().as_ptr()),
+            ));
+
+            pattern.append_element(PatternElement::new(
+                FC_CHARSET_OBJECT as i32,
+                charset.into(),
+            ));
+
+            // TODO: Move FcFreeTypeLangSet to a different name, as the function does not actually depend on FreeType.
+            if !langset.is_null() {
+                pattern.append_element(PatternElement::new(FC_LANG_OBJECT as i32, langset.into()));
+            }
+        }
     };
 
     let version = font
@@ -189,10 +266,21 @@ fn build_patterns_for_font(
         .unwrap_or_default()
         .to_bits();
 
+    add_font_file_name(&mut pattern, font_file);
+
+    pattern.append_element(PatternElement::new(
+        FC_FONT_WRAPPER_OBJECT as i32,
+        CString::new("SFNT").unwrap().into(),
+    ));
+
     pattern.append_element(PatternElement::new(
         FC_FONTVERSION_OBJECT as i32,
         version.into(),
     ));
+
+    add_pixel_size(&mut pattern, font);
+
+    pattern.append_element(PatternElement::new(FC_ORDER_OBJECT as i32, 0.into()));
 
     // So far the pattern elements applied to te whole font file, in the below,
     // clone the current pattern state and add instance specific
@@ -204,32 +292,14 @@ fn build_patterns_for_font(
         .flat_map(move |instance_mode| {
             let mut instance_pattern = pattern.clone();
 
+            // Family, full name, postscript name, etc.
+            // Includes adding style name to the pattern, which is then used by append_style_elements.
+            add_names(font, instance_mode, &mut instance_pattern);
+
             // Style names: fcfreetype adds TT_NAME_ID_WWS_SUBFAMILY, TT_NAME_ID_TYPOGRAPHIC_SUBFAMILY,
             // TT_NAME_ID_FONT_SUBFAMILY as FC_STYLE_OBJECT, FC_STYLE_OBJECT_LANG unless a named instance
             // is added,then the instance's name id is used as FC_STYLE_OBJECT.
-
             append_style_elements(font, instance_mode, ttc_index, &mut instance_pattern);
-
-            // For variable fonts:
-            // Names (mainly postscript name and style), weight, width and opsz (font-size?) are affected.
-            // * Add the variable font itself, with ranges for weight, width, opsz.
-            // * Add an entry for each named instance
-            //   * With instance name turning into FC_STYLE_OBJECT.
-            //   * Fixed width, wgth, opsz
-            // * Add the default instance with fixed values.
-            let mut had_decoratve = false;
-            // Family and full name.
-            add_names(
-                font,
-                instance_mode,
-                &mut instance_pattern,
-                &mut had_decoratve,
-            );
-
-            instance_pattern.append_element(PatternElement::new(
-                FC_DECORATIVE_OBJECT as i32,
-                had_decoratve.into(),
-            ));
 
             instance_pattern
                 .create_fc_pattern()
@@ -241,7 +311,7 @@ fn build_patterns_for_font(
 #[cfg(test)]
 mod test {
     use crate::add_patterns_to_fontset;
-    use fc_fontations_bindgen::{FcFontSetCreate, FcFontSetDestroy};
+    use fontconfig_bindings::{FcFontSetCreate, FcFontSetDestroy};
     use std::ffi::CString;
 
     #[test]

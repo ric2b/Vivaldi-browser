@@ -37,6 +37,7 @@ namespace eval trd {
   set tcltest(win.Windows-Memdebug)       veryquick
   set tcltest(win.Windows-Win32Heap)      veryquick
   set tcltest(win.Windows-Sanitize)       veryquick
+  set tcltest(win.Windows-WinRT)          veryquick
   set tcltest(win.Default)                full
 
   # Extra [make xyz] tests that should be run for various builds.
@@ -358,11 +359,17 @@ namespace eval trd {
   set build(Windows-Win32Heap) {
     WIN32HEAP=1
     DEBUG=4
+    ENABLE_SETLK=1
   }
   set build(Windows-Sanitize) {
     ASAN=1
   }
 
+  set build(Windows-WinRT) {
+    FOR_WINRT=1
+    ENABLE_SETLK=1
+    -DSQLITE_TEMP_STORE=3
+  }
 }
 
 
@@ -423,7 +430,7 @@ proc trd_extras {platform bld} {
 
 # Usage: 
 #
-#     trd_fuzztest_data
+#     trd_fuzztest_data $buildname
 #
 # This returns data used by testrunner.tcl to run commands equivalent 
 # to [make fuzztest]. The returned value is a list, which should be
@@ -443,16 +450,25 @@ proc trd_extras {platform bld} {
 # directory containing this file). "fuzzcheck" and "sessionfuzz" have .exe
 # extensions on windows.
 #
-proc trd_fuzztest_data {} {
+proc trd_fuzztest_data {buildname} {
   set EXE ""
   set lFuzzDb    [glob [file join $::testdir fuzzdata*.db]] 
   set lSessionDb [glob [file join $::testdir sessionfuzz-data*.db]]
+  set sanBuilds {All-Debug Apple Have-Not Update-Delete-Limit}
 
-  if {$::tcl_platform(platform)=="windows"} {
+  if {$::tcl_platform(platform) eq "windows"} {
     return [list fuzzcheck.exe $lFuzzDb]
+  } else {
+    set lRet [list [trd_get_bin_name fuzzcheck] $lFuzzDb]
+    if {[lsearch $sanBuilds $buildname]>=0} {
+      lappend lRet [trd_get_bin_name fuzzcheck-asan] $lFuzzDb 
+      if {$::tcl_platform(os) ne "OpenBSD"} {
+        lappend lRet [trd_get_bin_name fuzzcheck-ubsan] $lFuzzDb 
+      }
+    }
+    lappend lRet {sessionfuzz run} $lSessionDb
+    return $lRet
   }
-
-  return [list fuzzcheck $lFuzzDb {sessionfuzz run} $lSessionDb]
 }
 
 
@@ -520,7 +536,7 @@ proc make_script {cfg srcdir bMsvc} {
   set configOpts [list]                         ;# Extra args for [configure]
 
   # Define either SQLITE_OS_WIN or SQLITE_OS_UNIX, as appropriate.
-  if {$::tcl_platform(platform)=="windows"} {
+  if {$::tcl_platform(os) eq "Windows NT"} {
     lappend opts -DSQLITE_OS_WIN=1
   } else {
     lappend opts -DSQLITE_OS_UNIX=1
@@ -680,4 +696,16 @@ proc trd_test_script_properties {path} {
   }
 
   set trd_test_script_properties_cache($path)
+}
+
+# Usage:
+#
+#    trd_get_bin_name executable-file-name
+#
+# If the tcl platform is "unix", return $bin, else return
+# ${bin}.exe.
+proc trd_get_bin_name {bin} {
+  global tcl_platform
+  if {"unix" eq $tcl_platform(platform)} {return $bin}
+  return $bin.exe
 }

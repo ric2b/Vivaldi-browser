@@ -22,13 +22,15 @@
 #import "ios/chrome/browser/shared/model/web_state_list/tab_utils.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/public/commands/tab_strip_commands.h"
-#import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_group_action_type.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_group_item.h"
-#import "ios/chrome/browser/tab_switcher/ui_bundled/tab_strip/ui/tab_strip_features_utils.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_strip/ui/tab_strip_mutator.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_switcher_item.h"
 #import "url/gurl.h"
+
+// Vivaldi
+#import "ios/chrome/browser/shared/public/features/features.h"
+// End Vivaldi
 
 using tab_groups::SharingState;
 
@@ -120,41 +122,77 @@ UIContextMenuConfiguration* CreateUIContextMenuConfiguration(
 
   NSMutableArray<UIMenuElement*>* menuElements = [[NSMutableArray alloc] init];
 
-  // If groups are enabled, add "Add Tab to Group" menu.
-  if ([TabStripFeaturesUtils isModernTabStripWithTabGroups]) {
-    std::set<const TabGroup*> groups =
-        GetAllGroupsForBrowserList(_browserList, self.incognito);
-    CHECK(_webStateList);
-    int webStateIndex = GetWebStateIndex(
-        _webStateList.get(),
-        WebStateSearchCriteria{.identifier = tabSwitcherItem.identifier});
-    CHECK(_webStateList->ContainsIndex(webStateIndex));
-    const TabGroup* currentGroup =
-        _webStateList->GetGroupOfWebStateAt(webStateIndex);
-    auto addTabToGroupBlock = ^(const TabGroup* group) {
-      if (group) {
-        [weakSelf.mutator addItem:tabSwitcherItem toGroup:group];
-      } else {
-        [weakSelf.mutator createNewGroupWithItem:tabSwitcherItem];
-      }
-    };
-    if (currentGroup) {
-      auto removeTabFromGroupBlock = ^{
-        [weakSelf.mutator removeItemFromGroup:tabSwitcherItem];
-      };
-      UIMenuElement* moveTabToGroupMenu = [actionFactory
-          menuToMoveTabToGroupWithGroups:groups
-                            currentGroup:currentGroup
-                               moveBlock:addTabToGroupBlock
-                             removeBlock:removeTabFromGroupBlock];
-      [menuElements addObject:moveTabToGroupMenu];
+  // Vivaldi
+  web::WebState* pinnedWebState = GetWebState(
+      _webStateList.get(), WebStateSearchCriteria{
+      .identifier = tabSwitcherItem.identifier,
+      .pinned_state = WebStateSearchCriteria::PinnedState::kPinned,
+  });
+
+  const BOOL isPinActionEnabled = IsPinnedTabsEnabled() && !self.incognito;
+  BOOL pinned;
+  if (isPinActionEnabled) {
+    UIMenuElement* pinAction;
+
+    if (pinnedWebState) {
+      pinned = YES;
+      pinAction = [actionFactory actionToUnpinTabWithBlock:^{
+        __strong __typeof(self) strongSelf = weakSelf;
+        if (!strongSelf) return;
+
+        SetWebStatePinnedState(strongSelf->_webStateList.get(),
+                               tabSwitcherItem.identifier,
+                               /*pin_state=*/false);
+      }];
     } else {
-      UIMenuElement* addTabToGroupMenu =
-          [actionFactory menuToAddTabToGroupWithGroups:groups
-                                          numberOfTabs:1
-                                                 block:addTabToGroupBlock];
-      [menuElements addObject:addTabToGroupMenu];
+      pinned = NO;
+      pinAction = [actionFactory actionToPinTabWithBlock:^{
+        __strong __typeof(self) strongSelf = weakSelf;
+        if (!strongSelf) return;
+
+        SetWebStatePinnedState(strongSelf->_webStateList.get(),
+                               tabSwitcherItem.identifier,
+                               /*pin_state=*/true);
+      }];
     }
+
+    [menuElements addObject:pinAction];
+  }
+  // End Vivaldi
+
+  // Add "Add Tab to Group" menu.
+  std::set<const TabGroup*> groups =
+      GetAllGroupsForBrowserList(_browserList, self.incognito);
+  CHECK(_webStateList);
+  int webStateIndex = GetWebStateIndex(
+      _webStateList.get(),
+      WebStateSearchCriteria{.identifier = tabSwitcherItem.identifier});
+  CHECK(_webStateList->ContainsIndex(webStateIndex));
+  const TabGroup* currentGroup =
+      _webStateList->GetGroupOfWebStateAt(webStateIndex);
+  auto addTabToGroupBlock = ^(const TabGroup* group) {
+    if (group) {
+      [weakSelf.mutator addItem:tabSwitcherItem toGroup:group];
+    } else {
+      [weakSelf.mutator createNewGroupWithItem:tabSwitcherItem];
+    }
+  };
+  if (currentGroup) {
+    auto removeTabFromGroupBlock = ^{
+      [weakSelf.mutator removeItemFromGroup:tabSwitcherItem];
+    };
+    UIMenuElement* moveTabToGroupMenu =
+        [actionFactory menuToMoveTabToGroupWithGroups:groups
+                                         currentGroup:currentGroup
+                                            moveBlock:addTabToGroupBlock
+                                          removeBlock:removeTabFromGroupBlock];
+    [menuElements addObject:moveTabToGroupMenu];
+  } else {
+    UIMenuElement* addTabToGroupMenu =
+        [actionFactory menuToAddTabToGroupWithGroups:groups
+                                        numberOfTabs:1
+                                               block:addTabToGroupBlock];
+    [menuElements addObject:addTabToGroupMenu];
   }
 
   // If tab is not NTP, add "Share" menu.
@@ -169,9 +207,26 @@ UIContextMenuConfiguration* CreateUIContextMenuConfiguration(
   // Add "Close" menu to close this tab or all tabs except this one.
   NSMutableArray<UIMenuElement*>* closeMenuElements =
       [[NSMutableArray alloc] init];
+
+#if defined(VIVALDI_BUILD)
+  UIAction* closeTabAction;
+  if (IsPinnedTabsEnabled() && !self.incognito && pinned) {
+    closeTabAction =
+        [actionFactory actionToClosePinnedTabWithBlock:^{
+          [weakSelf.mutator closeItem:tabSwitcherItem];
+        }];
+  } else {
+    closeTabAction =
+        [actionFactory actionToCloseRegularTabWithBlock:^{
+          [weakSelf.mutator closeItem:tabSwitcherItem];
+        }];
+  }
+  #else
   UIAction* closeTabAction = [actionFactory actionToCloseRegularTabWithBlock:^{
     [weakSelf.mutator closeItem:tabSwitcherItem];
   }];
+  #endif // End Vivaldi
+
   [closeMenuElements addObject:closeTabAction];
   UIAction* closeOtherTabsAction =
       [actionFactory actionToCloseAllOtherTabsWithBlock:^{
@@ -253,50 +308,41 @@ UIContextMenuConfiguration* CreateUIContextMenuConfiguration(
 
   // Destructive actions.
   NSMutableArray<UIAction*>* destructiveActions = [[NSMutableArray alloc] init];
-  if (IsTabGroupSyncEnabled()) {
-    [destructiveActions
-        addObject:[actionFactory actionToCloseTabGroupWithBlock:^{
-          [weakSelf.mutator closeGroup:tabGroupItem];
-        }]];
-    if (!self.incognito) {
-      switch (sharingState) {
-        case SharingState::kNotShared: {
-          [destructiveActions
-              addObject:[actionFactory actionToDeleteTabGroupWithBlock:^{
-                [weakSelf.mutator deleteGroup:tabGroupItem
-                                   sourceView:originView];
-              }]];
-          break;
-        }
-        case SharingState::kShared: {
-          [destructiveActions
-              addObject:[actionFactory actionToLeaveSharedTabGroupWithBlock:^{
-                [weakSelf.handler
-                    startLeaveOrDeleteSharedGroupItem:tabGroupItem
-                                            forAction:TabGroupActionType::
-                                                          kLeaveSharedTabGroup
-                                           sourceView:originView];
-              }]];
-          break;
-        }
-        case SharingState::kSharedAndOwned: {
-          [destructiveActions
-              addObject:[actionFactory actionToDeleteSharedTabGroupWithBlock:^{
-                [weakSelf.handler
-                    startLeaveOrDeleteSharedGroupItem:tabGroupItem
-                                            forAction:TabGroupActionType::
-                                                          kDeleteSharedTabGroup
-                                           sourceView:originView];
-              }]];
-          break;
-        }
+  [destructiveActions addObject:[actionFactory actionToCloseTabGroupWithBlock:^{
+                        [weakSelf.mutator closeGroup:tabGroupItem];
+                      }]];
+  if (!self.incognito) {
+    switch (sharingState) {
+      case SharingState::kNotShared: {
+        [destructiveActions
+            addObject:[actionFactory actionToDeleteTabGroupWithBlock:^{
+              [weakSelf.mutator deleteGroup:tabGroupItem sourceView:originView];
+            }]];
+        break;
+      }
+      case SharingState::kShared: {
+        [destructiveActions
+            addObject:[actionFactory actionToLeaveSharedTabGroupWithBlock:^{
+              [weakSelf.handler
+                  startLeaveOrDeleteSharedGroupItem:tabGroupItem
+                                          forAction:TabGroupActionType::
+                                                        kLeaveSharedTabGroup
+                                         sourceView:originView];
+            }]];
+        break;
+      }
+      case SharingState::kSharedAndOwned: {
+        [destructiveActions
+            addObject:[actionFactory actionToDeleteSharedTabGroupWithBlock:^{
+              [weakSelf.handler
+                  startLeaveOrDeleteSharedGroupItem:tabGroupItem
+                                          forAction:TabGroupActionType::
+                                                        kDeleteSharedTabGroup
+                                         sourceView:originView];
+            }]];
+        break;
       }
     }
-  } else {
-    [destructiveActions
-        addObject:[actionFactory actionToDeleteTabGroupWithBlock:^{
-          [weakSelf.mutator deleteGroup:tabGroupItem sourceView:originView];
-        }]];
   }
   [menuElements addObject:CreateDisplayInlineUIMenu([destructiveActions copy])];
 

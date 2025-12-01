@@ -11,9 +11,9 @@
 #include <vector>
 
 #include "base/uuid.h"
-#include "base/hash/md5.h"
 #include "components/notes/note_node.h"
 #include "components/notes/notes_model.h"
+#include "crypto/obsolete/md5.h"
 
 namespace base {
 class Value;
@@ -167,7 +167,7 @@ class NotesCodec {
   std::set<base::Uuid> uuids_;
 
   // MD5 context used to compute MD5 hash of all notes data.
-  base::MD5Context md5_context_;
+  crypto::obsolete::Md5 md5_context_;
 
   // Checksums.
   std::string computed_checksum_;

@@ -14,6 +14,7 @@
 #include "base/functional/callback.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/notimplemented.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/trace_event/memory_allocator_dump.h"
@@ -49,6 +50,11 @@ namespace {
 constexpr auto kAllowedFillingSources = base::MakeFixedFlatSet<FillingSource>(
     {FillingSource::PASSWORD_FALLBACKS, FillingSource::CREDIT_CARD_FALLBACKS,
      FillingSource::ADDRESS_FALLBACKS});
+
+constexpr char
+    kUmaAccessoryActionSelectedForNonCredentialFieldWithoutSuggestions[] =
+        "KeyboardAccessory."
+        "AccessoryActionSelectedForNonCredentialFieldWithoutSuggestions";
 
 }  // namespace
 
@@ -127,10 +133,11 @@ void ManualFillingControllerImpl::NotifyFocusedInputChanged(
   }
 
   // Whenever the focus changes, reset the accessory.
-  if (ShouldShowAccessory())
+  if (ShouldShowAccessoryForLastFocusedFieldType()) {
     view_->SwapSheetWithKeyboard();
-  else
+  } else {
     view_->CloseAccessorySheet();
+  }
 
   UpdateVisibility();
 }
@@ -155,8 +162,9 @@ void ManualFillingControllerImpl::ShowAccessorySheetTab(
 void ManualFillingControllerImpl::UpdateSourceAvailability(
     FillingSource source,
     bool has_suggestions) {
-  if (has_suggestions == available_sources_.contains(source))
+  if (has_suggestions == available_sources_.contains(source)) {
     return;
+  }
 
   if (has_suggestions) {
     available_sources_.insert(source);
@@ -165,8 +173,9 @@ void ManualFillingControllerImpl::UpdateSourceAvailability(
   }
 
   available_sources_.erase(source);
-  if (!ShouldShowAccessory())
+  if (!ShouldShowAccessoryForLastFocusedFieldType()) {
     UpdateVisibility();
+  }
 }
 
 void ManualFillingControllerImpl::Hide() {
@@ -176,9 +185,17 @@ void ManualFillingControllerImpl::Hide() {
 void ManualFillingControllerImpl::OnFillingTriggered(
     AccessoryTabType type,
     const autofill::AccessorySheetField& selection) {
+  bool is_non_credential_field_without_suggestions =
+      last_focused_field_type_ != FocusedFieldType::kFillableUsernameField &&
+      last_focused_field_type_ != FocusedFieldType::kFillablePasswordField &&
+      !available_sources_.contains(FillingSource::AUTOFILL);
+  UMA_HISTOGRAM_BOOLEAN(
+      kUmaAccessoryActionSelectedForNonCredentialFieldWithoutSuggestions,
+      is_non_credential_field_without_suggestions);
   AccessoryController* controller = GetControllerForTabType(type);
-  if (!controller)
+  if (!controller) {
     return;  // Controller not available anymore.
+  }
   controller->OnFillingTriggered(last_focused_field_id_, selection);
   view_->SwapSheetWithKeyboard();  // Soft-close the keyboard.
 }
@@ -196,11 +213,19 @@ void ManualFillingControllerImpl::OnPasskeySelected(
 
 void ManualFillingControllerImpl::OnOptionSelected(
     AccessoryAction selected_action) const {
+  bool is_non_credential_field_without_suggestions =
+      last_focused_field_type_ != FocusedFieldType::kFillableUsernameField &&
+      last_focused_field_type_ != FocusedFieldType::kFillablePasswordField &&
+      !available_sources_.contains(FillingSource::AUTOFILL);
+  UMA_HISTOGRAM_BOOLEAN(
+      kUmaAccessoryActionSelectedForNonCredentialFieldWithoutSuggestions,
+      is_non_credential_field_without_suggestions);
   UMA_HISTOGRAM_ENUMERATION("KeyboardAccessory.AccessoryActionSelected",
                             selected_action, AccessoryAction::COUNT);
   AccessoryController* controller = GetControllerForAction(selected_action);
-  if (!controller)
+  if (!controller) {
     return;  // Controller not available anymore.
+  }
   controller->OnOptionSelected(selected_action);
 }
 
@@ -208,8 +233,9 @@ void ManualFillingControllerImpl::OnToggleChanged(
     AccessoryAction toggled_action,
     bool enabled) const {
   AccessoryController* controller = GetControllerForAction(toggled_action);
-  if (!controller)
+  if (!controller) {
     return;  // Controller not available anymore.
+  }
   controller->OnToggleChanged(toggled_action, enabled);
 }
 
@@ -247,8 +273,9 @@ ManualFillingControllerImpl::AsWeakPtr() {
 void ManualFillingControllerImpl::Initialize() {
   DCHECK(FromWebContents(&GetWebContents())) << "Don't call from constructor!";
   RegisterObserverForAllowedSources();
-  if (address_controller_)
+  if (address_controller_) {
     address_controller_->RefreshSuggestions();
+  }
 }
 
 ManualFillingControllerImpl::ManualFillingControllerImpl(
@@ -324,7 +351,8 @@ bool ManualFillingControllerImpl::OnMemoryDump(
   return true;
 }
 
-bool ManualFillingControllerImpl::ShouldShowAccessory() const {
+bool ManualFillingControllerImpl::ShouldShowAccessoryForLastFocusedFieldType()
+    const {
   switch (last_focused_field_type_) {
     // If there are suggestions, show on usual form fields.
     case FocusedFieldType::kFillablePasswordField:
@@ -352,10 +380,11 @@ bool ManualFillingControllerImpl::ShouldShowAccessory() const {
 
 void ManualFillingControllerImpl::UpdateVisibility() {
   TRACE_EVENT0("passwords", "ManualFillingControllerImpl::UpdateVisibility");
-  if (ShouldShowAccessory()) {
+  if (ShouldShowAccessoryForLastFocusedFieldType()) {
     for (const FillingSource& source : available_sources_) {
-      if (source == FillingSource::AUTOFILL)
+      if (source == FillingSource::AUTOFILL) {
         continue;  // Autofill suggestions have no sheet.
+      }
       AccessoryController* controller = GetControllerForFillingSource(source);
       if (!controller) {
         continue;  // Most-likely, the controller was cleaned up already.
@@ -368,10 +397,16 @@ void ManualFillingControllerImpl::UpdateVisibility() {
     if (plus_profiles_cache_) {
       plus_profiles_cache_->FetchAffiliatedPlusProfiles();
     }
-    view_->Show(ManualFillingViewInterface::WaitForKeyboard(
-        last_focused_field_type_ != FocusedFieldType::kUnfillableElement &&
-        last_focused_field_type_ != FocusedFieldType::kUnknown));
-
+    view_->Show(
+        ManualFillingViewInterface::WaitForKeyboard(
+            last_focused_field_type_ != FocusedFieldType::kUnfillableElement &&
+            last_focused_field_type_ != FocusedFieldType::kUnknown),
+        ManualFillingViewInterface::IsCredentialFieldOrHasAutofillSuggestions(
+            last_focused_field_type_ ==
+                FocusedFieldType::kFillableUsernameField ||
+            last_focused_field_type_ ==
+                FocusedFieldType::kFillablePasswordField ||
+            available_sources_.contains(FillingSource::AUTOFILL)));
   } else {
     if (plus_profiles_cache_) {
       plus_profiles_cache_->ClearCachedPlusProfiles();
@@ -384,8 +419,9 @@ void ManualFillingControllerImpl::RegisterObserverForAllowedSources() {
   for (FillingSource source : kAllowedFillingSources) {
     AccessoryController* sheet_controller =
         GetControllerForFillingSource(source);
-    if (!sheet_controller)
+    if (!sheet_controller) {
       continue;  // Ignore disallowed sheets.
+    }
     sheet_controller->RegisterFillingSourceObserver(base::BindRepeating(
         &ManualFillingControllerImpl::OnSourceAvailabilityChanged,
         weak_factory_.GetWeakPtr(), source));
@@ -438,6 +474,7 @@ AccessoryController* ManualFillingControllerImpl::GetControllerForAction(
     case AccessoryAction::CREATE_PLUS_ADDRESS_FROM_PASSWORD_SHEET:
     case AccessoryAction::SELECT_PLUS_ADDRESS_FROM_PASSWORD_SHEET:
     case AccessoryAction::MANAGE_PLUS_ADDRESS_FROM_PASSWORD_SHEET:
+    case AccessoryAction::RETRIEVE_TRUSTED_VAULT_KEY:
       return pwd_controller_.get();
     case AccessoryAction::MANAGE_ADDRESSES:
     case AccessoryAction::CREATE_PLUS_ADDRESS_FROM_ADDRESS_SHEET:
@@ -448,6 +485,7 @@ AccessoryController* ManualFillingControllerImpl::GetControllerForAction(
     case AccessoryAction::MANAGE_LOYALTY_CARDS:
       return payment_method_controller_.get();
     case AccessoryAction::AUTOFILL_SUGGESTION:
+    case AccessoryAction::AUTOFILL_SUGGESTION_FROM_ACCESSORY_SHEET:
     case AccessoryAction::COUNT:
       NOTREACHED() << "Controller not defined for action: "
                    << static_cast<int>(action);

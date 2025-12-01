@@ -1,3 +1,6 @@
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+
 licenses(["notice"])
 
 # Copyright 2020 Google LLC
@@ -13,10 +16,7 @@ licenses(["notice"])
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-package(default_visibility = [
-    "//:__subpackages__",
-    "//location/nearby/cpp/sharing/implementation:__subpackages__",
-])
+package(default_visibility = ["//:__subpackages__"])
 
 licenses(["notice"])
 

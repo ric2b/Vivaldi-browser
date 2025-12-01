@@ -55,9 +55,9 @@ extern const char kVivaldiUIDataHost[];
 extern const char kVivaldiWebUIHost[];
 extern const char kVivaldiThumbDataHost[];
 extern const char kVivaldiUIDataURL[];
+extern const char kVivaldiUIWindowURL[];
 extern const char kVivaldiWebUIURL[];
 extern const char kVivaldiThumbURL[];
-
 extern const char kWindowExtDataKey[];
 
 extern const char kSparkleAutoInstallSettingName[];

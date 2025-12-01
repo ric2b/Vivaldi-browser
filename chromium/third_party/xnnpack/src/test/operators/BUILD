@@ -11,22 +11,24 @@ load(
 
 OPERATOR_TEST_DEPS = [
     "@pthreadpool",
-    "//:XNNPACK",
-    "//:buffer",
     "//:aligned_allocator",
     "//:allocator",
+    "//:buffer",
     "//:cache",
     "//:common",
     "//:datatype",
     "//:fp16",
     "//:internal",
     "//:math",
-    "//:microkernel_configs",
-    "//:microparams",
+    "//:microparams_h",
     "//:normalization",
     "//:params",
     "//:quantization",
+    "//:XNNPACK",
+    "//src/configs:microkernel_configs",
+    "//src/configs:config_types",
     "//test:replicable_random_device",
+    "//:microkernel_hdrs",
 ]
 
 xnnpack_cxx_library(
@@ -42,7 +44,7 @@ xnnpack_cxx_library(
     visibility = ["//:__subpackages__"],
     deps = [
         "//:buffer",
-        "//:microparams",
+        "//:microparams_h",
         "//:quantization",
     ],
 )
@@ -52,7 +54,7 @@ xnnpack_cxx_library(
     testonly = True,
     hdrs = ["operator-test-utils.h"],
     # TODO: This shouldn't be required outside of here.
-    visibility = ["//:__subpackages__"],
+    visibility = ["//visibility:private"],
     deps = ["//test:replicable_random_device"],
 )
 
@@ -60,8 +62,8 @@ xnnpack_unit_test(
     name = "operator_utils_test",
     srcs = ["operator-utils.cc"],
     deps = [
-        "//:microkernel_configs",
         "//:operator_utils",
+        "//src/configs:microkernel_configs",
     ],
 )
 
@@ -115,7 +117,9 @@ xnnpack_unit_test(
         "batch-matrix-multiply-operator-tester.h",
     ],
     shard_count = 5,
-    deps = OPERATOR_TEST_DEPS + ["//:microkernels_h"],
+    deps = OPERATOR_TEST_DEPS + [
+        "//:requantization",
+    ],
 )
 
 xnnpack_unit_test(
@@ -143,7 +147,7 @@ xnnpack_unit_test(
     srcs = [
         "convert-nc.cc",
     ],
-    deps = OPERATOR_TEST_DEPS + ["//:microkernels_h"],
+    deps = OPERATOR_TEST_DEPS,
 )
 
 xnnpack_unit_test(
@@ -156,6 +160,7 @@ xnnpack_unit_test(
     shard_count = 10,
     deps = OPERATOR_TEST_DEPS + [
         ":convolution_test_helpers",
+        "//:operator_h",
     ],
 )
 
@@ -169,6 +174,7 @@ xnnpack_unit_test(
     shard_count = 10,
     deps = OPERATOR_TEST_DEPS + [
         ":convolution_test_helpers",
+        "//:operator_h",
     ],
 )
 
@@ -201,6 +207,7 @@ xnnpack_unit_test(
     shard_count = 10,
     deps = OPERATOR_TEST_DEPS + [
         ":convolution_test_helpers",
+        "//:operator_h",
     ],
 )
 
@@ -237,9 +244,7 @@ xnnpack_unit_test(
         "fully-connected-nc.cc",
         "fully-connected-operator-tester.h",
     ],
-    deps = OPERATOR_TEST_DEPS + [
-        "//:microkernels_h",
-    ],
+    deps = OPERATOR_TEST_DEPS,
 )
 
 xnnpack_unit_test(

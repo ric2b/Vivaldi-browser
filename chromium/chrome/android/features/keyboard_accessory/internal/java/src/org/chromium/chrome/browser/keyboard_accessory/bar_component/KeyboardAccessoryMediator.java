@@ -53,7 +53,6 @@ import java.util.Optional;
 // Vivaldi
 import org.chromium.base.ApplicationStatus;
 import org.vivaldi.browser.common.VivaldiUtils;
-import org.vivaldi.browser.screen_lock.ScreenLock;
 
 /**
  * This is the second part of the controller of the keyboard accessory component. It is responsible
@@ -133,6 +132,7 @@ class KeyboardAccessoryMediator
         TraceEvent.begin("KeyboardAccessoryMediator#onItemAvailable");
         assert typeId == AccessoryAction.CREDMAN_CONDITIONAL_UI_REENTRY
                         || typeId == AccessoryAction.GENERATE_PASSWORD_AUTOMATIC
+                        || typeId == AccessoryAction.RETRIEVE_TRUSTED_VAULT_KEY
                 : "Did not specify which Action type has been updated.";
         List<BarItem> retainedItems = collectItemsToRetain(typeId);
         retainedItems.addAll(
@@ -168,6 +168,7 @@ class KeyboardAccessoryMediator
             case SuggestionType.TITLE:
             case SuggestionType.SEPARATOR:
             case SuggestionType.UNDO_OR_CLEAR:
+            case SuggestionType.ALL_LOYALTY_CARDS_ENTRY:
             case SuggestionType.ALL_SAVED_PASSWORDS_ENTRY:
             case SuggestionType.GENERATE_PASSWORD_ENTRY:
             case SuggestionType.MANAGE_ADDRESS:
@@ -237,14 +238,6 @@ class KeyboardAccessoryMediator
                         VivaldiUtils.showMissingDeviceLockDialog(ApplicationStatus.getLastTrackedFocusedActivity());
                         return;
                     }
-                    // Note(david@vivaldi.com): Before autofill trigger screen lock.
-                    if (ScreenLock.getInstance().canReauthenticate()) {
-                        ScreenLock.getInstance().reauthenticate(succeed -> {
-                            if (succeed) {
-                                delegate.suggestionSelected(pos);
-                            }
-                        });
-                    } else
                     delegate.suggestionSelected(pos);
                 },
                 result -> delegate.deleteSuggestion(pos));
@@ -255,6 +248,7 @@ class KeyboardAccessoryMediator
             case AccessoryAction.AUTOFILL_SUGGESTION:
                 return BarItem.Type.SUGGESTION;
             case AccessoryAction.GENERATE_PASSWORD_AUTOMATIC:
+            case AccessoryAction.RETRIEVE_TRUSTED_VAULT_KEY:
                 return BarItem.Type.ACTION_BUTTON;
             case AccessoryAction.CREDMAN_CONDITIONAL_UI_REENTRY:
                 return BarItem.Type.ACTION_CHIP;
@@ -406,6 +400,8 @@ class KeyboardAccessoryMediator
         switch (actionType) {
             case AccessoryAction.GENERATE_PASSWORD_AUTOMATIC:
                 return R.string.password_generation_accessory_button;
+            case AccessoryAction.RETRIEVE_TRUSTED_VAULT_KEY:
+                return R.string.retrieve_trusted_vault_key_button;
             case AccessoryAction.CREDMAN_CONDITIONAL_UI_REENTRY:
                 return getCaptionIdForCredManEntry();
             case AccessoryAction.AUTOFILL_SUGGESTION:

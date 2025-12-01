@@ -19,9 +19,9 @@
 #include <vector>
 
 #import "internal/platform/implementation/apple/GNCUtils.h"
+#import "internal/platform/implementation/apple/Log/GNCLogger.h"
 #import "internal/platform/implementation/apple/Mediums/Ble/Sockets/Source/Shared/GNSSocket.h"
 #include "proto/mediums/ble_frames.pb.h"
-#import "GoogleToolboxForMac/GTMLogger.h"
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -100,6 +100,25 @@ NSData *GNCMGenerateBLEFramesDisconnectionPacket(NSData *serviceIDHash) {
   return packet;
 }
 
+NSData *GNCMGenerateBLEFramesPacketAcknowledgementPacket(NSData *serviceIDHash, int receivedSize) {
+  ::location::nearby::mediums::SocketControlFrame socket_control_frame;
+
+  socket_control_frame.set_type(
+      ::location::nearby::mediums::SocketControlFrame::PACKET_ACKNOWLEDGEMENT);
+  auto *packet_acknowledgement_frame = socket_control_frame.mutable_packet_acknowledgement();
+  std::string service_id_hash((char *)serviceIDHash.bytes, (size_t)serviceIDHash.length);
+  packet_acknowledgement_frame->set_service_id_hash(service_id_hash);
+  packet_acknowledgement_frame->set_received_size(receivedSize);
+
+  NSMutableData *packet = [NSMutableData dataWithBytes:kGNCMControlPacketServiceIDHash
+                                                length:sizeof(kGNCMControlPacketServiceIDHash)];
+  std::ostringstream stream;
+  socket_control_frame.SerializeToOstream(&stream);
+  NSData *frameData = [NSData dataWithBytes:stream.str().data() length:stream.str().length()];
+  [packet appendData:frameData];
+  return packet;
+}
+
 @implementation GNCMBLEL2CAPPacket
 
 - (instancetype)initWithCommand:(GNCMBLEL2CAPCommand)command data:(nullable NSData *)data {
@@ -116,7 +135,6 @@ NSData *GNCMGenerateBLEFramesDisconnectionPacket(NSData *serviceIDHash) {
 // TODO: b/399815436 - Add unit tests for this function.
 GNCMBLEL2CAPPacket *_Nullable GNCMParseBLEL2CAPPacket(NSData *data) {
   if (data.length < 1) {
-    GTMLoggerError(@"[NEARBY] Invalid packet length: %@", @(data.length));
     return nil;
   }
 
@@ -125,7 +143,6 @@ GNCMBLEL2CAPPacket *_Nullable GNCMParseBLEL2CAPPacket(NSData *data) {
   NSUInteger receivedDataLength = [data length];
   GNCMBLEL2CAPCommand command = (GNCMBLEL2CAPCommand)bytes[0];
   if (!IsSupportedCommand(command)) {
-    GTMLoggerError(@"[NEARBY] Invalid command: %lu", command);
     return nil;
   }
 
@@ -137,7 +154,7 @@ GNCMBLEL2CAPPacket *_Nullable GNCMParseBLEL2CAPPacket(NSData *data) {
 
     // Validate data length
     if (dataLength != (int)(receivedDataLength - 3)) {
-      GTMLoggerError(@"[NEARBY] Data length mismatch. Expected: %d, Actual: %lu", dataLength,
+      GNCLoggerError(@"[NEARBY] Data length mismatch. Expected: %d, Actual: %lu", dataLength,
                      receivedDataLength - 3);
       return nil;
     }
@@ -153,7 +170,7 @@ GNCMBLEL2CAPPacket *_Nullable GNCMParseBLEL2CAPPacket(NSData *data) {
 // TODO: b/399815436 - Add unit tests for this function.
 NSData *_Nullable GNCMGenerateBLEL2CAPPacket(GNCMBLEL2CAPCommand command, NSData *_Nullable data) {
   if (!IsSupportedCommand(command)) {
-    GTMLoggerError(@"[NEARBY] Invalid command to generate packet: %lu", command);
+    GNCLoggerError(@"[NEARBY] Invalid command to generate packet: %lu", command);
     return nil;
   }
 
@@ -161,7 +178,7 @@ NSData *_Nullable GNCMGenerateBLEL2CAPPacket(GNCMBLEL2CAPCommand command, NSData
   packet.push_back((uint8_t)command);
   if (data != nil) {
     if (data.length > 65535) {
-      GTMLoggerError(@"[NEARBY] Data length is too large: %lu", data.length);
+      GNCLoggerError(@"[NEARBY] Data length is too large: %lu", data.length);
       return nil;
     }
     // Prepare length bytes
@@ -205,7 +222,7 @@ NSData *_Nullable GNCMGenerateBLEL2CAPPacket(GNCMBLEL2CAPCommand command, NSData
 }
 
 - (void)socket:(GNSSocket *)socket didReceiveData:(NSData *)data {
-  GTMLoggerError(@"Unexpected -didReceiveData: call");
+  GNCLoggerError(@"Unexpected -didReceiveData: call");
 }
 
 @end

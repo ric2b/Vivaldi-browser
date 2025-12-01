@@ -32,6 +32,7 @@
 #include "libavutil/pixdesc.h"
 #include "avfilter.h"
 #include "filters.h"
+#include "formats.h"
 
 #define HIST_SIZE (3*256)
 
@@ -53,6 +54,8 @@ typedef struct ThumbContext {
 
     int planewidth[4];
     int planeheight[4];
+    int planes;
+    int bitdepth;
 } ThumbContext;
 
 #define OFFSET(x) offsetof(ThumbContext, x)
@@ -194,7 +197,7 @@ static int do_slice(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
         }
         break;
     default:
-        for (int plane = 0; plane < 3; plane++) {
+        for (int plane = 0; plane < s->planes; plane++) {
             const int slice_start = (s->planeheight[plane] * jobnr) / nb_jobs;
             const int slice_end = (s->planeheight[plane] * (jobnr+1)) / nb_jobs;
             const uint8_t *p = frame->data[plane] + slice_start * frame->linesize[plane];
@@ -202,10 +205,21 @@ static int do_slice(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
             const int planewidth = s->planewidth[plane];
             int *hhist = hist + 256 * plane;
 
-            for (int j = slice_start; j < slice_end; j++) {
-                for (int i = 0; i < planewidth; i++)
-                    hhist[p[i]]++;
-                p += linesize;
+            if (s->bitdepth > 8) {
+                const uint16_t *p16 = (const uint16_t *) p;
+                const int shift = s->bitdepth - 8;
+
+                for (int j = slice_start; j < slice_end; j++) {
+                    for (int i = 0; i < planewidth; i++)
+                        hhist[(p16[i] >> shift) & 0xFF]++;
+                    p16 += linesize >> 1;
+                }
+            } else {
+                for (int j = slice_start; j < slice_end; j++) {
+                    for (int i = 0; i < planewidth; i++)
+                        hhist[p[i]]++;
+                    p += linesize;
+                }
             }
         }
         break;
@@ -286,26 +300,49 @@ static int config_props(AVFilterLink *inlink)
     s->planewidth[0]  = s->planewidth[3]  = inlink->w;
     s->planeheight[1] = s->planeheight[2] = AV_CEIL_RSHIFT(inlink->h, desc->log2_chroma_h);
     s->planeheight[0] = s->planeheight[3] = inlink->h;
+    s->planes         = av_pix_fmt_count_planes(inlink->format) - !!(desc->flags & AV_PIX_FMT_FLAG_ALPHA);
+    s->bitdepth       = desc->comp[0].depth;
 
     return 0;
 }
 
-static const enum AVPixelFormat pix_fmts[] = {
+static const enum AVPixelFormat packed_rgb_fmts[] = {
     AV_PIX_FMT_RGB24, AV_PIX_FMT_BGR24,
     AV_PIX_FMT_RGBA,  AV_PIX_FMT_BGRA,
     AV_PIX_FMT_RGB0,  AV_PIX_FMT_BGR0,
     AV_PIX_FMT_ABGR,  AV_PIX_FMT_ARGB,
     AV_PIX_FMT_0BGR,  AV_PIX_FMT_0RGB,
-    AV_PIX_FMT_YUV410P, AV_PIX_FMT_YUV411P,
-    AV_PIX_FMT_YUV420P, AV_PIX_FMT_YUV422P,
-    AV_PIX_FMT_YUV440P, AV_PIX_FMT_YUV444P,
-    AV_PIX_FMT_YUVJ420P, AV_PIX_FMT_YUVJ422P,
-    AV_PIX_FMT_YUVJ440P, AV_PIX_FMT_YUVJ444P,
-    AV_PIX_FMT_YUVJ411P,
-    AV_PIX_FMT_YUVA420P, AV_PIX_FMT_YUVA422P, AV_PIX_FMT_YUVA444P,
-    AV_PIX_FMT_GBRP, AV_PIX_FMT_GBRAP,
     AV_PIX_FMT_NONE
 };
+
+static int query_formats(const AVFilterContext *ctx,
+                         AVFilterFormatsConfig **cfg_in,
+                         AVFilterFormatsConfig **cfg_out)
+{
+    const AVPixFmtDescriptor *desc = NULL;
+    AVFilterFormats *formats;
+
+    formats = ff_make_format_list(packed_rgb_fmts);
+    if (!formats)
+        return AVERROR(ENOMEM);
+
+
+    while ((desc = av_pix_fmt_desc_next(desc))) {
+        int color_comps = desc->nb_components - !!(desc->flags & AV_PIX_FMT_FLAG_ALPHA);
+        if ((color_comps == 1 || (desc->flags & AV_PIX_FMT_FLAG_PLANAR)) &&
+            !(desc->flags & (AV_PIX_FMT_FLAG_FLOAT | AV_PIX_FMT_FLAG_BITSTREAM)) &&
+            (desc->comp[0].depth <= 8 || HAVE_BIGENDIAN == !!(desc->flags & AV_PIX_FMT_FLAG_BE)) &&
+            (desc->nb_components < 3 || desc->comp[1].plane != desc->comp[2].plane) &&
+            desc->comp[0].depth <= 16)
+        {
+            int ret = ff_add_format(&formats, av_pix_fmt_desc_get_id(desc));
+            if (ret < 0)
+                return ret;
+        }
+    }
+
+    return ff_set_common_formats2(ctx, cfg_in, cfg_out, formats);
+}
 
 static const AVFilterPad thumbnail_inputs[] = {
     {
@@ -335,5 +372,5 @@ const FFFilter ff_vf_thumbnail = {
     .uninit        = uninit,
     FILTER_INPUTS(thumbnail_inputs),
     FILTER_OUTPUTS(thumbnail_outputs),
-    FILTER_PIXFMTS_ARRAY(pix_fmts),
+    FILTER_QUERY_FUNC2(query_formats),
 };

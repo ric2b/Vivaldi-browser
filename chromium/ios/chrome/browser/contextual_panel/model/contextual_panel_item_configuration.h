@@ -23,7 +23,7 @@ struct ContextualPanelItemConfiguration {
   static const int low_relevance;
 
   explicit ContextualPanelItemConfiguration(ContextualPanelItemType item_type);
-  ~ContextualPanelItemConfiguration();
+  virtual ~ContextualPanelItemConfiguration();
   ContextualPanelItemConfiguration(
       const ContextualPanelItemConfiguration& other) = delete;
   ContextualPanelItemConfiguration& operator=(
@@ -33,6 +33,13 @@ struct ContextualPanelItemConfiguration {
   // entrypoint loud moment states.
   bool CanShowLargeEntrypoint();
   bool CanShowEntrypointIPH();
+
+  // Returns the duration of the large entrypoint for this item.
+  base::TimeDelta GetLargeEntrypointDisplayedDuration();
+
+  // Notify the configuration that it transitioned to a small entrypoint so it
+  // can react accordingly depending on the type of configuration.
+  virtual void DidTransitionToSmallEntrypoint();
 
   // The different supported image types.
   enum class EntrypointImageType {
@@ -53,9 +60,17 @@ struct ContextualPanelItemConfiguration {
   // always will be shown using a larger entrypoint.
   bool entrypoint_message_large_entrypoint_always_shown = false;
 
+  // Optional. The duration of the large entrypoint if this is the primary item.
+  // If not set, `LargeContextualPanelEntrypointDisplayedInSeconds()` is used.
+  std::optional<base::TimeDelta> large_entrypoint_displayed_duration;
+
   // Required. The string the entrypoint's badge button should have for
-  // accessibility.
+  // accessibility label.
   std::string accessibility_label;
+
+  // Optional. The string the entrypoint's badge button should have for
+  // accessibility hint.
+  std::string accessibility_hint;
 
   // Required. The name of the image the UI can show the user if this item is
   // the primary item in the contextual panel.

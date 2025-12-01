@@ -5,7 +5,7 @@
 #include "app/vivaldi_apptools.h"
 #include "app/vivaldi_constants.h"
 #include "base/strings/string_number_conversions.h"
-#include "browser/vivaldi_runtime_feature.h"
+#include "browser/features/vivaldi_features.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/url_constants.h"
@@ -40,6 +40,8 @@
 #include "content/public/common/content_switches.h"
 #endif // IS_LINUX
 #endif // VIVALDI_V8_CONTEXT_SNAPSHOT
+
+#include "app/vivaldi_apptools.h"
 
 namespace vivaldi {
 
@@ -104,7 +106,7 @@ void VivaldiContentBrowserClientParts::OverrideWebPreferences(
         prefs->GetBoolean(vivaldiprefs::kMouseGesturesRockerGesturesEnabled)) {
       web_prefs->context_menu_on_mouse_up = true;
     }
-    if (vivaldi_runtime_feature::IsEnabled(profile, "double_click_menu") &&
+    if (base::FeatureList::IsEnabled(vivaldi_features::kDoubleClickMenu) &&
         prefs->GetBoolean(vivaldiprefs::kMouseGesturesDoubleClickMenuEnabled)) {
       web_prefs->vivaldi_show_context_menu_on_double_click = true;
     }
@@ -139,11 +141,28 @@ void VivaldiContentBrowserClientParts::OverrideWebPreferences(
     // are overridden for platform-apps like Vivaldi.
     extensions::WebViewGuest* guest =
         extensions::WebViewGuest::FromWebContents(web_contents);
-    if (guest && guest->IsNavigatingAwayFromVivaldiUI()) {
-      web_prefs->local_storage_enabled = true;
-      web_prefs->sync_xhr_in_documents_enabled = true;
-      web_prefs->cookie_enabled = true;
-      web_prefs->privileged_webgl_extensions_enabled = false;
+    if (guest) {
+      if (guest->IsNavigatingAwayFromVivaldiUI()) {
+        web_prefs->local_storage_enabled = true;
+        web_prefs->sync_xhr_in_documents_enabled = true;
+        web_prefs->cookie_enabled = true;
+        web_prefs->privileged_webgl_extensions_enabled = false;
+      }
+
+      auto owner_url = guest->GetOwnerSiteURL();
+
+      // maybe this is an embedded webview we want to keep JS on for?
+      bool owner_is_vivaldi_ui =
+          (owner_url.SchemeIs(extensions::kExtensionScheme) &&
+           vivaldi::IsVivaldiApp(owner_url.host()));
+
+      // Only if the owner url indicates vivaldi ext and the webview is marked
+      // as editor by name...
+      // This is not enough to enable JS in the webview. The other part lives in:
+      // PageSpecificContentSettingsDelegate::IsFrameAllowlistedForJavaScript
+      if (owner_is_vivaldi_ui && guest->IsVivaldiEditorView()) {
+        web_prefs->javascript_enabled = true;
+      }
     }
 
     // Tabs and web-panels.

@@ -8,12 +8,15 @@
 #import "base/strings/sys_string_conversions.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbol_configurations.h"
+#import "ios/chrome/browser/shared/ui/symbols/symbol_names.h"
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
 // End Vivaldi
 
 namespace {
+
+constexpr CGFloat kCloseSymbolSize = 22;
 
 // Returns the default configuration with the given `point_size`.
 UIImageConfiguration* DefaultSymbolConfigurationWithPointSize(
@@ -55,6 +58,14 @@ UIImage* SymbolWithConfiguration(NSString* symbol_name,
 }  // namespace
 
 extern "C" {
+
+UIImage* DefaultCloseButtonForToolbar() {
+  UIImageConfiguration* configuration = [UIImageSymbolConfiguration
+      configurationWithPointSize:kCloseSymbolSize
+                          weight:UIImageSymbolWeightRegular
+                           scale:UIImageSymbolScaleMedium];
+  return DefaultSymbolWithConfiguration(kXMarkSymbol, configuration);
+}
 
 UIImage* DefaultSymbolWithConfiguration(NSString* symbol_name,
                                         UIImageConfiguration* configuration) {

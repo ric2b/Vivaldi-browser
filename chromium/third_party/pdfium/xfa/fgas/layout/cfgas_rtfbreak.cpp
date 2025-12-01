@@ -42,8 +42,7 @@ void CFGAS_RTFBreak::SetLineStartPos(float fLinePos) {
 void CFGAS_RTFBreak::AddPositionedTab(float fTabPos) {
   int32_t iTabPos = std::min(
       FXSYS_roundf(fTabPos * kConversionFactor) + line_start_, line_width_);
-  auto it = std::lower_bound(positioned_tabs_.begin(), positioned_tabs_.end(),
-                             iTabPos);
+  auto it = std::ranges::lower_bound(positioned_tabs_, iTabPos);
   if (it != positioned_tabs_.end() && *it == iTabPos) {
     return;
   }
@@ -61,8 +60,7 @@ void CFGAS_RTFBreak::SetUserData(
 }
 
 bool CFGAS_RTFBreak::GetPositionedTab(int32_t* iTabPos) const {
-  auto it = std::upper_bound(positioned_tabs_.begin(), positioned_tabs_.end(),
-                             *iTabPos);
+  auto it = std::ranges::upper_bound(positioned_tabs_, *iTabPos);
   if (it == positioned_tabs_.end()) {
     return false;
   }
@@ -746,11 +744,11 @@ void CFGAS_RTFBreak::SplitTextLine(CFGAS_BreakLine* pCurLine,
 
 size_t CFGAS_RTFBreak::GetDisplayPos(const CFGAS_TextPiece* pPiece,
                                      pdfium::span<TextCharPos> pCharPos) const {
-  if (pPiece->iChars == 0 || !pPiece->pFont) {
+  if (pPiece->iChars == 0 || !pPiece->font) {
     return 0;
   }
 
-  RetainPtr<CFGAS_GEFont> pFont = pPiece->pFont;
+  RetainPtr<CFGAS_GEFont> font = pPiece->font;
   CFX_RectF rtText(pPiece->rtPiece);
   const bool bRTLPiece = FX_IsOdd(pPiece->iBidiLevel);
   const float fFontSize = pPiece->fFontSize;
@@ -759,8 +757,8 @@ size_t CFGAS_RTFBreak::GetDisplayPos(const CFGAS_TextPiece* pPiece,
     return 0;
   }
 
-  const int32_t iAscent = pFont->GetAscent();
-  const int32_t iDescent = pFont->GetDescent();
+  const int32_t iAscent = font->GetAscent();
+  const int32_t iDescent = font->GetDescent();
   const int32_t iMaxHeight = iAscent - iDescent;
   const float fAscent = iMaxHeight ? fFontSize * iAscent / iMaxHeight : 0;
   wchar_t wPrev = pdfium::unicode::kZeroWidthNoBreakSpace;
@@ -810,9 +808,9 @@ size_t CFGAS_RTFBreak::GetDisplayPos(const CFGAS_TextPiece* pPiece,
     }
 
     if (!bEmptyChar) {
-      current_char_pos.glyph_index_ = pFont->GetGlyphIndex(wForm);
+      current_char_pos.glyph_index_ = font->GetGlyphIndex(wForm);
       if (current_char_pos.glyph_index_ == 0xFFFF) {
-        current_char_pos.glyph_index_ = pFont->GetGlyphIndex(wch);
+        current_char_pos.glyph_index_ = font->GetGlyphIndex(wch);
       }
 #if BUILDFLAG(IS_APPLE)
       current_char_pos.ext_gid_ = current_char_pos.glyph_index_;

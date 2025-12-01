@@ -4,6 +4,15 @@
 
 #import "ios/chrome/browser/infobars/ui_bundled/presentation/infobar_banner_animator.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "components/prefs/pref_service.h"
+#import "ios/chrome/browser/shared/model/application_context/application_context.h"
+#import "ios/chrome/browser/shared/model/prefs/pref_names.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
+
 @implementation InfobarBannerAnimator
 
 - (NSTimeInterval)transitionDuration:
@@ -53,12 +62,36 @@
     presentedViewFinalFrame =
         [transitionContext finalFrameForViewController:presentedViewController];
     CGRect presentedViewStartFrame = presentedViewFinalFrame;
-    presentedViewStartFrame.origin.y = -CGRectGetWidth(containerView.bounds);
+    if (IsVivaldiRunning() &&
+        GetApplicationContext()
+            ->GetLocalState()->GetBoolean(prefs::kBottomOmnibox)) {
+      // Start from below the screen when animating from bottom
+      presentedViewStartFrame.origin.y = CGRectGetHeight(containerView.bounds);
+    } else { // Start from above the screen when animating from top (default)
+
+  presentedViewStartFrame.origin.y = -CGRectGetWidth(containerView.bounds);
+
+    } // End Vivaldi
+
     presentedView.frame = presentedViewStartFrame;
     presentedView.alpha = 0;
   } else {
     presentedViewFinalFrame = presentedView.frame;
-    presentedViewFinalFrame.origin.y = -CGRectGetWidth(containerView.bounds);
+
+    if (IsVivaldiRunning() &&
+        GetApplicationContext()
+            ->GetLocalState()->GetBoolean(prefs::kBottomOmnibox)) {
+      // Exit to below the screen when animating from bottom
+      // Adding 200 Points to so that the when user drag the banner to dismiss
+      // it goes out of the bounds and disappear
+      presentedViewFinalFrame.origin.y = CGRectGetHeight(containerView.bounds)
+                                                                        + 200.0;
+    } else { // Exit to above the screen when animating from top (default)
+
+  presentedViewFinalFrame.origin.y = -CGRectGetWidth(containerView.bounds);
+
+    } // End Vivaldi
+
   }
 
   UIViewPropertyAnimator* animator = [[UIViewPropertyAnimator alloc]

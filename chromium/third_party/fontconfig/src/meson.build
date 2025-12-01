@@ -1,5 +1,5 @@
 project('fontconfig', 'c',
-  version: '2.16.2',
+  version: '2.17.1',
   meson_version : '>= 1.6.1',
   default_options: [
     'c_std=c11,c99',
@@ -25,6 +25,7 @@ curversion = fc_version_minor - 1
 libversion = '@0@.@1@.0'.format(soversion, curversion)
 defversion = '@0@.@1@'.format(curversion, fc_version_micro)
 osxversion = curversion + 1
+cacheversion = '10'
 
 freetype_req = '>= 21.0.15'
 freetype_req_cmake = '>= 2.8.1'
@@ -33,6 +34,10 @@ cc = meson.get_compiler('c')
 math_dep = cc.find_library('m', required: false)
 
 conf = configuration_data()
+
+conf.set('FC_VERSION_MAJOR', fc_version_major)
+conf.set('FC_VERSION_MINOR', fc_version_minor)
+conf.set('FC_VERSION_MICRO', fc_version_micro)
 
 freetype_dep = dependency('freetype2', method: 'pkg-config', version: freetype_req, required: false)
 
@@ -177,7 +182,7 @@ add_project_arguments('-DHAVE_CONFIG_H', language: 'c')
 c_args = []
 
 deps = [freetype_dep, xml_dep]
-incbase = include_directories('.')
+incbase = include_directories('.', 'fc-lang')
 
 # For compatibility to autoconf (regardless of the usage in fontconfig)
 conf.set_quoted('PACKAGE_NAME', meson.project_name())
@@ -369,10 +374,10 @@ endif
 xml_path = ''
 escaped_xml_path = ''
 foreach p : fc_add_fonts
-  s = '\t<dir>' + p + '</dir>\n'
+  s = '<dir>' + p + '</dir>\n\t'
   xml_path += s
   # No substitution method for string
-  s = '\\t<dir>' + p + '</dir>\\n'
+  s = '<dir>' + p + '</dir>\\n\\t'
   escaped_xml_path += s
 endforeach
 conf.set_quoted('FC_FONTPATH', escaped_xml_path)
@@ -419,9 +424,7 @@ conf.set_quoted('CONFIGDIR', fc_configdir)
 conf.set_quoted('FC_CACHEDIR', fc_cachedir)
 conf.set_quoted('FC_TEMPLATEDIR', fc_templatedir)
 conf.set_quoted('FONTCONFIG_PATH', fc_baseconfigdir)
-conf.set_quoted('FC_FONTPATH', '')
 
-fonts_conf.set('FC_FONTPATH', '')
 fonts_conf.set('FC_CACHEDIR', fc_cachedir)
 fonts_conf.set('CONFIGDIR', fc_configdir)
 # strip off fc_baseconfigdir prefix if that is the prefix
@@ -481,9 +484,10 @@ fcstdint_h = fs.copyfile('src/fcstdint.h.in', 'fcstdint.h')
 makealias = files('src/makealias.py')[0]
 
 
+subdir('fontconfig')
 
 
-alias_input_headers = ['fontconfig/fontconfig.h', 'src/fcdeprecate.h', 'fontconfig/fcprivate.h']
+alias_input_headers = [fontconfig_h, 'src/fcdeprecate.h', 'fontconfig/fcprivate.h']
 if get_option('fontations').enabled()
   alias_input_headers += ['fontconfig/fcfontations.h']
 endif
@@ -595,7 +599,7 @@ install_data('fonts.dtd',
              install_tag: 'runtime')
 
 fc_headers = [
-  'fontconfig/fontconfig.h',
+  fontconfig_h,
   'fontconfig/fcfreetype.h',
   'fontconfig/fcprivate.h',
 ]
@@ -627,6 +631,8 @@ summary({
 }, section: 'General', bool_yn: true, list_sep: ', ')
 summary({
   'Hinting': preferred_hinting,
+  'Sub Pixel Rendering': preferred_sub_pixel_rendering,
+  'Bitmap': preferred_bitmap,
   'Font directories': fc_fonts_paths,
   'Additional font directories': fc_add_fonts,
 }, section: 'Defaults', bool_yn: true, list_sep: ', ')

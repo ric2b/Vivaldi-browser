@@ -395,7 +395,7 @@ pub(crate) struct GridImageHelper<'a> {
 }
 
 // These functions are not used in all configurations.
-#[allow(unused)]
+#[allow(dead_code)]
 impl GridImageHelper<'_> {
     pub(crate) fn is_grid_complete(&self) -> AvifResult<bool> {
         Ok(self.cell_index == self.expected_cell_count)
@@ -560,28 +560,27 @@ impl Decoder {
         Ok(Some(alpha_item_id))
     }
 
-    fn validate_gainmap_item(
+    fn harvest_and_validate_gainmap_properties(
         &mut self,
         gainmap_id: u32,
         tonemap_id: u32,
-        #[allow(unused)] color_item_id: u32, // This parameter is unused in some configurations.
+        #[allow(unused_variables)] color_item_id: u32, // This parameter is unused in some configurations.
     ) -> AvifResult<()> {
         let gainmap_item = self
             .items
             .get(&gainmap_id)
             .ok_or(AvifError::InvalidToneMappedImage("".into()))?;
-        // Find and adopt all colr boxes "at most one for a given value of colour type"
-        // (HEIF 6.5.5.1, from Amendment 3). Accept one of each type, and bail out if more than one
-        // of a given type is provided.
+        // ISO/IEC 23008-12:2024/AMD 1:2024(E) (HEIF), Section 6.6.2.4.1:
+        // The gain map input image shall be associated with a 'colr' item property of type 'nclx'
+        // which indicates any transformations that the encoder has done to improve compression.
+        // In this item property, colour_primaries and transfer_characteristics shall be set to 2.
         if let Some(nclx) = find_nclx(&gainmap_item.properties)? {
             self.gainmap.image.color_primaries = nclx.color_primaries;
             self.gainmap.image.transfer_characteristics = nclx.transfer_characteristics;
             self.gainmap.image.matrix_coefficients = nclx.matrix_coefficients;
             self.gainmap.image.yuv_range = nclx.yuv_range;
         }
-        if tonemap_id == 0 {
-            return Ok(());
-        }
+
         // Find and adopt all colr boxes "at most one for a given value of colour type"
         // (HEIF 6.5.5.1, from Amendment 3). Accept one of each type, and bail out if more than one
         // of a given type is provided.
@@ -598,6 +597,7 @@ impl Decoder {
         if let Some(icc) = find_icc(&tonemap_item.properties)? {
             self.gainmap.alt_icc.clone_from(icc);
         }
+
         if let Some(clli) = tonemap_item.clli() {
             self.gainmap.alt_clli = *clli;
         }
@@ -605,8 +605,8 @@ impl Decoder {
             self.gainmap.alt_plane_count = pixi.plane_depths.len() as u8;
             self.gainmap.alt_plane_depth = pixi.plane_depths[0];
         }
-        // HEIC files created by Apple have some of these properties set in the Tonemap item. So do
-        // not perform this validation when HEIC is enabled.
+        // HEIC files created by Apple do not conform to these validation rules so skip them when
+        // HEIC is enabled.
         #[cfg(not(feature = "heic"))]
         {
             if let Some(ispe) = find_property!(tonemap_item.properties, ImageSpatialExtents) {
@@ -624,6 +624,8 @@ impl Decoder {
                     "Box[tmap] missing mandatory ispe property".into(),
                 ));
             }
+            // HEIC files created by Apple have some of these properties set in the Tonemap item.
+            // So these checks are skipped when HEIC is enabled.
             if find_property!(tonemap_item.properties, PixelAspectRatio).is_some()
                 || find_property!(tonemap_item.properties, CleanAperture).is_some()
                 || find_property!(tonemap_item.properties, ImageRotation).is_some()
@@ -1109,12 +1111,12 @@ impl Decoder {
                     item_ids[DecodingItem::COLOR.usize()] = base_item_id;
                     self.read_and_parse_item(base_item_id, DecodingItem::COLOR)?;
 
-                    // Parse the gainmap making sure it's valid.
+                    // Parse the gainmap, making sure it's valid.
                     self.read_and_parse_item(gainmap_id, DecodingItem::GAINMAP)?;
 
-                    self.validate_gainmap_item(
+                    self.harvest_and_validate_gainmap_properties(
                         gainmap_id,
-                        primary_item_id,
+                        /*tonemap_id=*/ primary_item_id,
                         item_ids[DecodingItem::COLOR.usize()],
                     )?;
                     self.gainmap.metadata = self.tile_info[DecodingItem::COLOR.usize()]

@@ -183,6 +183,11 @@ class PLATFORM_EXPORT ResourceFetcher
     return freezable_task_runner_;
   }
 
+  const scoped_refptr<base::SingleThreadTaskRunner>& GetUnfreezableTaskRunner()
+      const {
+    return unfreezable_task_runner_;
+  }
+
   // Create a loader. This cannot be called after ClearContext is called.
   std::unique_ptr<URLLoader> CreateURLLoader(
       const network::ResourceRequest&,
@@ -606,10 +611,6 @@ class PLATFORM_EXPORT ResourceFetcher
       ResourceType resource_type,
       bool handled_by_serviceworker,
       const blink::ServiceWorkerRouterInfo* router_info);
-
-  void RecordResourceHistogram(std::string_view prefix,
-                               ResourceType type,
-                               RevalidationPolicyForMetrics policy) const;
 
   void ScheduleLoadingPotentiallyUnusedPreload(Resource*);
   void StartLoadAndFinishIfFailed(Resource*,

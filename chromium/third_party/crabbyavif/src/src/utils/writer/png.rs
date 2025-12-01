@@ -75,26 +75,26 @@ impl Writer for PngWriter {
             for y in 0..image.height {
                 match (image.depth == 8, depth == 8) {
                     (true, true) => {
-                        let y_row = image.row(Plane::Y, y)?;
-                        rgba_pixel_buffer.extend_from_slice(&y_row[..image.width as usize]);
+                        let y_row = image.row_exact(Plane::Y, y)?;
+                        rgba_pixel_buffer.extend_from_slice(y_row);
                     }
                     (false, false) => {
-                        let y_row = image.row16(Plane::Y, y)?;
-                        for pixel in &y_row[..image.width as usize] {
+                        let y_row = image.row16_exact(Plane::Y, y)?;
+                        for pixel in y_row {
                             let pixel16 = scale_to_16bit(*pixel, image.max_channel());
                             rgba_pixel_buffer.extend_from_slice(&pixel16.to_be_bytes());
                         }
                     }
                     (true, false) => {
-                        let y_row = image.row(Plane::Y, y)?;
-                        for pixel in &y_row[..image.width as usize] {
+                        let y_row = image.row_exact(Plane::Y, y)?;
+                        for pixel in y_row {
                             let pixel16 = scale_to_16bit(*pixel as u16, image.max_channel());
                             rgba_pixel_buffer.extend_from_slice(&pixel16.to_be_bytes());
                         }
                     }
                     (false, true) => {
-                        let y_row = image.row16(Plane::Y, y)?;
-                        for pixel in &y_row[..image.width as usize] {
+                        let y_row = image.row16_exact(Plane::Y, y)?;
+                        for pixel in y_row {
                             rgba_pixel_buffer.push(scale_to_8bit(*pixel, image.max_channel()));
                         }
                     }

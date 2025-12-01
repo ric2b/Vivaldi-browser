@@ -19,6 +19,7 @@
 #import "components/prefs/pref_service.h"
 #import "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/fullscreen/ui_bundled/fullscreen_animator.h"
+#import "ios/chrome/browser/intelligence/bwg/utils/bwg_constants.h"
 #import "ios/chrome/browser/intelligence/features/features.h"
 #import "ios/chrome/browser/intelligence/page_action_menu/ui/page_action_menu_entrypoint_view.h"
 #import "ios/chrome/browser/lens/ui_bundled/lens_entrypoint.h"
@@ -38,12 +39,14 @@
 #import "ios/chrome/browser/shared/public/commands/activity_service_commands.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/commands/browser_coordinator_commands.h"
+#import "ios/chrome/browser/shared/public/commands/bwg_commands.h"
 #import "ios/chrome/browser/shared/public/commands/help_commands.h"
 #import "ios/chrome/browser/shared/public/commands/lens_commands.h"
 #import "ios/chrome/browser/shared/public/commands/lens_overlay_commands.h"
 #import "ios/chrome/browser/shared/public/commands/load_query_commands.h"
 #import "ios/chrome/browser/shared/public/commands/open_lens_input_selection_command.h"
 #import "ios/chrome/browser/shared/public/commands/page_action_menu_commands.h"
+#import "ios/chrome/browser/shared/public/commands/page_action_menu_entry_point_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/shared/ui/util/layout_guide_names.h"
@@ -62,7 +65,6 @@
 #import "ios/chrome/browser/ui/location_bar/location_bar_constants+vivaldi.h"
 #import "ios/ui/toolbar/vivaldi_toolbar_constants.h"
 #import "ios/ui/vivaldi_overflow_menu/vivaldi_oveflow_menu_constants.h"
-#import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
@@ -98,11 +100,17 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
 // The injected text field.
 @property(nonatomic, weak) UIView* textField;
 
+// The injected incognito badge view.
+@property(nonatomic, strong) UIView* incognitoBadgeView;
+
 // The injected badge view.
 @property(nonatomic, strong) UIView* badgeView;
 
 // The injected Contextual Panel entrypoint view;
 @property(nonatomic, strong) UIView* contextualPanelEntrypointView;
+
+// The injected reader mode chip view.
+@property(nonatomic, strong) UIView* readerModeChipView;
 
 // The injected placeholder view;
 @property(nonatomic, strong) UIView* placeholderView;
@@ -159,6 +167,9 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
 
   // The location bar button to access the page action menu.
   PageActionMenuEntrypointView* _pageActionMenuEntrypointView;
+
+  // The placeholder view that holds the DSE icon.
+  UIImageView* _defaultSearchEngineIconView;
 }
 
 #pragma mark - public
@@ -182,17 +193,31 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
   _badgeView = badgeView;
 }
 
+- (void)setIncognitoBadgeView:(UIView*)incognitoBadgeView {
+  CHECK(!self.incognitoBadgeView);
+  _incognitoBadgeView = incognitoBadgeView;
+}
+
 - (void)setContextualPanelEntrypointView:
     (UIView*)contextualPanelEntrypointView {
   DCHECK(!self.contextualPanelEntrypointView);
   _contextualPanelEntrypointView = contextualPanelEntrypointView;
 }
 
+- (void)setReaderModeChipView:(UIView*)readerModeChipView {
+  DCHECK(!self.readerModeChipView);
+  _readerModeChipView = readerModeChipView;
+}
+
 - (void)setPlaceholderType:(LocationBarPlaceholderType)placeholderType {
   if (placeholderType == _placeholderType) {
     return;
   }
-  _placeholderType = placeholderType;
+  if (IsDiamondPrototypeEnabled()) {
+    _placeholderType = LocationBarPlaceholderType::kNone;
+  } else {
+    _placeholderType = placeholderType;
+  }
   if (self.isViewLoaded) {
     [self updatePlaceholderView];
   }
@@ -213,6 +238,10 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
   self.locationBarSteadyView.hidden = editing;
   } // End Vivaldi
 
+}
+
+- (id<PageActionMenuEntryPointCommands>)pageActionMenuEntryPointHandler {
+  return _pageActionMenuEntrypointView;
 }
 
 - (void)setIncognito:(BOOL)incognito {
@@ -268,6 +297,15 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
   return self.locationBarSteadyView.badgeViewVisibilityDelegate;
 }
 
+- (id<ReaderModeChipVisibilityDelegate>)readerModeChipVisibilityDelegate {
+  return self.locationBarSteadyView.readerModeChipVisibilityDelegate;
+}
+
+- (id<IncognitoBadgeViewVisibilityDelegate>)
+    incognitoBadgeViewVisibilityDelegate {
+  return self.locationBarSteadyView.incognitoBadgeViewVisibilityDelegate;
+}
+
 - (void)setHelpCommandsHandler:(id<HelpCommands>)helpCommandsHandler {
   _helpCommandsHandler = helpCommandsHandler;
 }
@@ -286,8 +324,15 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
         setContextualPanelEntrypointView:self.contextualPanelEntrypointView];
   }
 
+  if (self.incognitoBadgeView) {
+    [self.locationBarSteadyView setIncognitoBadgeView:self.incognitoBadgeView];
+  }
+
   DCHECK(self.badgeView) << "The badge view must be set at this point";
   [self.locationBarSteadyView setBadgeView:self.badgeView];
+  if (self.readerModeChipView) {
+    [self.locationBarSteadyView setReaderModeChipView:self.readerModeChipView];
+  }
 
   if (IsPageActionMenuEnabled()) {
     _pageActionMenuEntrypointView = [[PageActionMenuEntrypointView alloc] init];
@@ -295,23 +340,20 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
                addTarget:self
                   action:@selector(handlePageActionMenuEntrypointTapped)
         forControlEvents:UIControlEventTouchUpInside];
-  } else if (IsLensOverlayAvailable(_profilePrefs)) {
+    [self.layoutGuideCenter referenceView:_pageActionMenuEntrypointView
+                                underName:kPageActionMenuEntrypointGuide];
+  }
+
+  if (IsLensOverlayAvailable(_profilePrefs)) {
     _lensOverlayPlaceholderView = [[LensOverlayEntrypointButton alloc]
         initWithProfilePrefs:_profilePrefs];
     [self.layoutGuideCenter referenceView:_lensOverlayPlaceholderView
                                 underName:kLensOverlayEntrypointGuide];
 
-    BOOL showSpeedbumpMenu = GetLensOverlayOnboardingTreatment() ==
-                             LensOverlayOnboardingTreatment::kSpeedbumpMenu;
-    if (showSpeedbumpMenu) {
-      _lensOverlayPlaceholderView.menu = [self createSpeedbumpMenu];
-      _lensOverlayPlaceholderView.showsMenuAsPrimaryAction = YES;
-    } else {
-      [_lensOverlayPlaceholderView
-                 addTarget:self
-                    action:@selector(handleLensEntrypointPressed)
-          forControlEvents:UIControlEventTouchUpInside];
-    }
+    [_lensOverlayPlaceholderView
+               addTarget:self
+                  action:@selector(handleLensEntrypointPressed)
+        forControlEvents:UIControlEventTouchUpInside];
   }
 
   [_locationBarSteadyView.locationButton
@@ -348,6 +390,15 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
 
     [self registerForTraitChanges:@[ UITraitHorizontalSizeClass.class ]
                        withAction:@selector(sizeClassDidChange)];
+  }
+
+  if (base::FeatureList::IsEnabled(omnibox::kOmniboxMobileParityUpdateV2)) {
+    _defaultSearchEngineIconView = [[UIImageView alloc] init];
+    _defaultSearchEngineIconView.translatesAutoresizingMaskIntoConstraints = NO;
+    _defaultSearchEngineIconView.contentMode = UIViewContentModeCenter;
+    AddSizeConstraints(
+        _defaultSearchEngineIconView,
+        CGSizeMake(kOmniboxLeadingImageSize + 12.0f, kOmniboxLeadingImageSize));
   }
 
   // Vivaldi
@@ -424,7 +475,7 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
   [self.dispatcher cancelOmniboxEdit];
 }
 
-- (void)setSearchProviderName:(NSString*)searchProviderName {
+- (void)setPlaceholderText:(NSString*)searchProviderName {
   if (_searchProviderName == searchProviderName) {
     return;
   }
@@ -432,6 +483,10 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
   if (_isNTP) {
     [self updatePlaceholder];
   }
+}
+
+- (void)setPlaceholderDefaultSearchEngineIcon:(UIImage*)icon {
+  _defaultSearchEngineIconView.image = icon;
 }
 
 #pragma mark - LocationBarSteadyViewConsumer
@@ -491,7 +546,7 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
 }
 
 - (void)attemptShowingLensOverlayIPH {
-  if (IsLensOverlayAvailable(_profilePrefs) &&
+  if (IsLensOverlayAvailable(_profilePrefs) && !IsPageActionMenuEnabled() &&
       !self.locationBarSteadyView.badgesContainerView.placeholderView.hidden) {
     [self.helpCommandsHandler
         presentInProductHelpWithType:InProductHelpType::kLensOverlayEntrypoint];
@@ -694,6 +749,10 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
     state = kNoButton;
   }
 
+  if (IsDiamondPrototypeEnabled()) {
+    state = kNoButton;
+  }
+
   switch (state) {
     case kNoButton: {
       self.locationBarSteadyView.trailingButton.hidden = YES;
@@ -840,46 +899,9 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
          self.lensImageEnabled;
 }
 
-// Creates a new menu to use as the "speedbump" menu for the lens overlay
-// entrypoint. Only used in LensOverlayOnboardingTreatment::kSpeedbumpMenu.
-- (UIMenu*)createSpeedbumpMenu {
-  DCHECK(GetLensOverlayOnboardingTreatment() ==
-         LensOverlayOnboardingTreatment::kSpeedbumpMenu);
-
-  NSString* lensOverlayTitle =
-      l10n_util::GetNSString(IDS_IOS_LENS_OVERLAY_SPEEDBUMP_MENU_SCREEN);
-  __weak __typeof__(self) weakSelf = self;
-  UIAction* lensOverlayAction =
-      [UIAction actionWithTitle:lensOverlayTitle
-                          image:nil
-                     identifier:nil
-                        handler:^(UIAction* /* action */) {
-                          [weakSelf handleLensSpeedbumpMenuOpenLensOverlay];
-                        }];
-
-  NSString* cameraTitle =
-      l10n_util::GetNSString(IDS_IOS_LENS_OVERLAY_SPEEDBUMP_MENU_CAMERA);
-  UIAction* viewfinderAction =
-      [UIAction actionWithTitle:cameraTitle
-                          image:nil
-                     identifier:nil
-                        handler:^(UIAction* /* action */) {
-                          [weakSelf handleLensSpeedbumpMenuOpenLensViewFinder];
-                        }];
-  NSString* menuTitle = l10n_util::GetNSString(IDS_IOS_LENS_PRODUCT_NAME);
-  return [UIMenu menuWithTitle:menuTitle
-                      children:@[ lensOverlayAction, viewfinderAction ]];
-}
-
 // Updates placeholder in the steady view.
 - (void)updatePlaceholder {
   NSString* placeholderString = self.searchOrTypeURLPlaceholderText;
-
-  if (IsVivaldiRunning()) {
-    placeholderString =
-        l10n_util::GetNSString(IDS_IOS_SEARCH_OR_TYPE_WEB_ADDRESS);
-  } // End Vivaldi
-
   [self.locationBarSteadyView
       setLocationLabelPlaceholderText:placeholderString];
 }
@@ -898,8 +920,21 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
 
 - (UIMenu*)contextMenuUIMenu:(NSArray<UIMenuElement*>*)suggestedActions {
   NSMutableArray<UIMenuElement*>* menuElements = [[NSMutableArray alloc] init];
-
   __weak __typeof__(self) weakSelf = self;
+
+  if (IsDiamondPrototypeEnabled() && !self.locationBarSteadyView.hidden) {
+    UIImage* image =
+        DefaultSymbolWithPointSize(kShareSymbol, kSymbolActionPointSize);
+    UIAction* copyAction = [UIAction
+        actionWithTitle:l10n_util::GetNSString(IDS_IOS_SHARE_BUTTON_LABEL)
+                  image:image
+             identifier:nil
+                handler:^(UIAction* action) {
+                  [weakSelf.delegate locationBarShareTapped];
+                }];
+    [menuElements addObject:copyAction];
+  }
+
   UIImage* pasteImage = nil;
   if (IsBottomOmniboxAvailable()) {
 
@@ -1062,23 +1097,13 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
     if (GetApplicationContext()->GetLocalState()->GetBoolean(
             prefs::kBottomOmnibox)) {
       title = l10n_util::GetNSString(IDS_IOS_TOOLBAR_MENU_TOP_OMNIBOX);
-      if (@available(iOS 15.1, *)) {
-        image = DefaultSymbolWithPointSize(kMovePlatterToTopPhoneSymbol,
-                                           kSymbolActionPointSize);
-      } else {
-        image = CustomSymbolWithPointSize(kCustomMovePlatterToTopPhoneSymbol,
-                                          kSymbolActionPointSize);
-      }
+      image = DefaultSymbolWithPointSize(kMovePlatterToTopPhoneSymbol,
+                                         kSymbolActionPointSize);
       targetToolbarType = ToolbarType::kPrimary;
     } else {
       title = l10n_util::GetNSString(IDS_IOS_TOOLBAR_MENU_BOTTOM_OMNIBOX);
-      if (@available(iOS 15.1, *)) {
-        image = DefaultSymbolWithPointSize(kMovePlatterToBottomPhoneSymbol,
-                                           kSymbolActionPointSize);
-      } else {
-        image = CustomSymbolWithPointSize(kCustomMovePlatterToBottomPhoneSymbol,
-                                          kSymbolActionPointSize);
-      }
+      image = DefaultSymbolWithPointSize(kMovePlatterToBottomPhoneSymbol,
+                                         kSymbolActionPointSize);
       targetToolbarType = ToolbarType::kSecondary;
     }
     UIAction* moveAddressBarAction = [UIAction
@@ -1223,24 +1248,6 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
   }
 }
 
-- (void)handleLensSpeedbumpMenuOpenLensViewFinder {
-  RecordAction(UserMetricsAction("MobileToolbarLensOverlayTap"));
-
-  base::UmaHistogramEnumeration(
-      "Lens.Overlay.SpeedbumpMenu",
-      lens::LensOverlaySpeedbumpMenuSelection::kSearchWithCamera);
-  [self openLensViewFinder];
-}
-
-- (void)handleLensSpeedbumpMenuOpenLensOverlay {
-  RecordAction(UserMetricsAction("MobileToolbarLensOverlayTap"));
-
-  base::UmaHistogramEnumeration(
-      "Lens.Overlay.SpeedbumpMenu",
-      lens::LensOverlaySpeedbumpMenuSelection::kSearchYourScreen);
-  [self openLensOverlay];
-}
-
 - (void)handleLensEntrypointPressed {
   RecordAction(UserMetricsAction("MobileToolbarLensOverlayTap"));
   if (self.lensOverlayVisible) {
@@ -1252,7 +1259,11 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
 
 - (void)handlePageActionMenuEntrypointTapped {
   // TODO(crbug.com/402827015): Log opens.
-  [self.pageActionMenuHandler showPageActionMenu];
+  if (IsDirectBWGEntryPoint()) {
+    [self.BWGHandler startBWGFlowWithEntryPoint:bwg::EntryPoint::OmniboxChip];
+  } else {
+    [self.pageActionMenuHandler showPageActionMenu];
+  }
 }
 
 // Creates and shows the LVF input selection UI.
@@ -1268,6 +1279,7 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
 
 // Creates and shows the lens overlay UI.
 - (void)openLensOverlay {
+  // TODO(crbug.com/427478234): This event should be fired by the mediator.
   if (self.tracker) {
     self.tracker->NotifyEvent(
         feature_engagement::events::kLensOverlayEntrypointUsed);
@@ -1297,6 +1309,9 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
       CHECK(IsPageActionMenuEnabled());
       self.locationBarSteadyView.placeholderView =
           _pageActionMenuEntrypointView;
+      break;
+    case LocationBarPlaceholderType::kDefaultSearchEngineIcon:
+      self.locationBarSteadyView.placeholderView = _defaultSearchEngineIconView;
       break;
   }
 }

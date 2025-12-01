@@ -6,6 +6,7 @@
 
 #include "fxjs/xfa/cjx_node.h"
 
+#include <functional>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -79,11 +80,8 @@ const ExecEventParaInfo* GetExecEventParaInfoByName(
   }
 
   uint32_t uHash = FX_HashCode_GetW(wsEventName);
-  auto* result = std::lower_bound(
-      std::begin(kExecEventParaInfoTable), std::end(kExecEventParaInfoTable),
-      uHash, [](const ExecEventParaInfo& iter, const uint16_t& hash) {
-        return iter.hash_ < hash;
-      });
+  auto* result = std::ranges::lower_bound(
+      kExecEventParaInfoTable, uHash, std::less<>{}, &ExecEventParaInfo::hash_);
   if (result != std::end(kExecEventParaInfoTable) && result->hash_ == uHash) {
     return result;
   }
@@ -512,14 +510,12 @@ XFA_EventError CJX_Node::execSingleEventByName(WideStringView wsEventName,
       if (eType != XFA_Element::Subform) {
         return XFA_EventError::kNotExist;
       }
-
       return pNotify->ExecEventByDeepFirst(
           GetXFANode(), eventParaInfo->event_type_, false, false);
     case EventAppliesTo::kFieldOrExclusion: {
       if (eType != XFA_Element::ExclGroup && eType != XFA_Element::Field) {
         return XFA_EventError::kNotExist;
       }
-
       CXFA_Node* pParentNode = GetXFANode()->GetParent();
       if (pParentNode &&
           pParentNode->GetElementType() == XFA_Element::ExclGroup) {
@@ -534,15 +530,15 @@ XFA_EventError CJX_Node::execSingleEventByName(WideStringView wsEventName,
       if (eType != XFA_Element::Field) {
         return XFA_EventError::kNotExist;
       }
-
       return pNotify->ExecEventByDeepFirst(
           GetXFANode(), eventParaInfo->event_type_, false, false);
     case EventAppliesTo::kSignature: {
       if (!GetXFANode()->IsWidgetReady()) {
         return XFA_EventError::kNotExist;
       }
-      if (GetXFANode()->GetUIChildNode()->GetElementType() !=
-          XFA_Element::Signature) {
+      CXFA_Node* pChildNode = GetXFANode()->GetUIChildNode();
+      if (!pChildNode ||
+          pChildNode->GetElementType() != XFA_Element::Signature) {
         return XFA_EventError::kNotExist;
       }
       return pNotify->ExecEventByDeepFirst(
@@ -552,8 +548,9 @@ XFA_EventError CJX_Node::execSingleEventByName(WideStringView wsEventName,
       if (!GetXFANode()->IsWidgetReady()) {
         return XFA_EventError::kNotExist;
       }
-      if (GetXFANode()->GetUIChildNode()->GetElementType() !=
-          XFA_Element::ChoiceList) {
+      CXFA_Node* pChildNode = GetXFANode()->GetUIChildNode();
+      if (!pChildNode ||
+          pChildNode->GetElementType() != XFA_Element::Signature) {
         return XFA_EventError::kNotExist;
       }
       return pNotify->ExecEventByDeepFirst(

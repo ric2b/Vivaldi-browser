@@ -140,11 +140,10 @@ Interface) supplemental chapters.
 
 [syscall(2) notes]: https://man7.org/linux/man-pages/man2/syscall.2.html#NOTES
 
-*** note
-The `arg0` names below match minijail's seccomp filter syntax.
-It's not uncommon for source code to count from 1 instead of 0, so be aware as
-you go spelunking into implementations.
-***
+> **Note**:
+> The `arg0` names below match minijail's seccomp filter syntax.
+> It's not uncommon for source code to count from 1 instead of 0, so be aware as
+> you go spelunking into implementations.
 
 | arch   | syscall NR | return | arg0 | arg1 | arg2 | arg3 | arg4 | arg5 |
 |:------:|:----------:|:------:|:----:|:----:|:----:|:----:|:----:|:----:|
@@ -1831,7 +1830,7 @@ Compiled from [Linux 5.4.0 headers][linux-headers].
 ### Cross-arch Numbers
 
 This shows the syscall numbers for (hopefully) the same syscall name across architectures.
-Consult the [Random Names](#naming) section for common gotchas.
+Consult the [Random Names](#random-names) section for common gotchas.
 
 | syscall name | x86_64 | arm | arm64 | x86 |
 |---|:---:|:---:|:---:|:---:|

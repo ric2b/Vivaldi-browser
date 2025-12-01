@@ -91,7 +91,8 @@ bool FingerprintingProtectionPageActivationThrottle::
   //
 
   if (base::FeatureList::IsEnabled(
-          privacy_sandbox::kFingerprintingProtectionUx)) {
+          privacy_sandbox::kFingerprintingProtectionUx) &&
+      is_incognito_) {
     // Gate path (1).
     if (tracking_protection_settings_ == nullptr) {
       // If the Tracking Protection UX is enabled, we should never see a null
@@ -191,7 +192,9 @@ bool FingerprintingProtectionPageActivationThrottle::
     DoesUrlHaveTrackingProtectionException() const {
   // Check for a tracking protection exception. When UB is not available, also
   // check for a COOKIES exception for the top-level site.
-  if ((!base::FeatureList::IsEnabled(privacy_sandbox::kActUserBypassUx) &&
+  if ((!(base::FeatureList::IsEnabled(privacy_sandbox::kActUserBypassUx) &&
+         base::FeatureList::IsEnabled(
+             privacy_sandbox::kFingerprintingProtectionUx)) &&
        HasContentSettingsCookieException()) ||
       HasTrackingProtectionException()) {
     ukm::SourceId source_id =
@@ -213,6 +216,12 @@ FingerprintingProtectionPageActivationThrottle::GetActivation() const {
   GetActivationResult activation_based_on_flags;
   if (IsFpActivationDeterminedByFeatureFlags(&activation_based_on_flags)) {
     return activation_based_on_flags;
+  }
+
+  // Ensures activation is disabled on top-level URLs that are localhost.
+  if (net::IsLocalhost(navigation_handle()->GetURL())) {
+    return {.level = ActivationLevel::kDisabled,
+            .decision = ActivationDecision::ACTIVATION_CONDITIONS_NOT_MET};
   }
 
   if (DoesUrlHaveRefreshHeuristicException()) {

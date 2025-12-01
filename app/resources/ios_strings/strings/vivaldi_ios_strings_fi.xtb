@@ -15,6 +15,7 @@ other {Lisää välilehdet nippuun}}</translation>
 <translation id="2181990701313127304">Uusi välilehti nippuun</translation>
 <translation id="2351280151183279120">Jaa nippu</translation>
 <translation id="2353953000228441783">Sivuston oletusnäkymä</translation>
+<translation id="2360196772093551345">Pyydä mobiilisivua</translation>
 <translation id="2394192052244849643">Liitä ja etsi</translation>
 <translation id="2418705169960294134">Uusi yksityisvälilehti</translation>
 <translation id="2565593432251168402">Säilytä järjestys niputtamalla välilehtiä</translation>
@@ -63,6 +64,7 @@ other {{count} välilehtinippua suljettiin ja tallennettiin}}</translation>
 <translation id="6163856768888310791">Irrota nipusta</translation>
 <translation id="6168969409902608220">Nimeä nippu</translation>
 <translation id="6233792867654386826">Avaa syötetyt URL-osoitteet Vivaldissa.</translation>
+<translation id="6271462272606946663">Piilota mobiilisivupyyntö</translation>
 <translation id="6478587527114893588">Sule välilehtinippu.</translation>
 <translation id="6527405730445064713">Välilehtinippu. Laajennettu.</translation>
 <translation id="6532106788206463496">Tallenna muutokset</translation>
@@ -78,6 +80,7 @@ other {{count} välilehtinippua suljettiin ja tallennettiin}}</translation>
 <translation id="7363285031331302144">Järjestä avoimia välilehtiä niputtamalla niitä.</translation>
 <translation id="7395230742578757172">Avaa uuteen välilehtinippuun</translation>
 <translation id="7424676799308869002">Säilytetäänkö nippu?</translation>
+<translation id="7460698861522306757">Pyydä mobiilisivua</translation>
 <translation id="7498234416455752244">Jatka muokkausta</translation>
 <translation id="7549299604720382000">Uusi yksityinen välilehti</translation>
 <translation id="7585610907974664408">Uusi yksityinen välilehti nippuun</translation>

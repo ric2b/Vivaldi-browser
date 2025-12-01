@@ -59,8 +59,13 @@ class DeviceCreationTest : public testing::Test {
     void SetUp() override {
         dawnProcSetProcs(&GetProcs());
 
+        static constexpr auto kMultipleDevicesPerAdapter =
+            wgpu::InstanceFeatureName::MultipleDevicesPerAdapter;
         // Create an instance with default toggles and create an adapter from it.
-        wgpu::InstanceDescriptor safeInstanceDesc = {};
+        wgpu::InstanceDescriptor safeInstanceDesc = {
+            .requiredFeatureCount = 1,
+            .requiredFeatures = &kMultipleDevicesPerAdapter,
+        };
         instance = std::make_unique<Instance>(&safeInstanceDesc);
 
         wgpu::RequestAdapterOptions options = {};
@@ -75,7 +80,10 @@ class DeviceCreationTest : public testing::Test {
         wgpu::DawnTogglesDescriptor unsafeInstanceTogglesDesc = {};
         unsafeInstanceTogglesDesc.enabledToggleCount = 1;
         unsafeInstanceTogglesDesc.enabledToggles = &allowUnsafeApisToggle;
-        wgpu::InstanceDescriptor unsafeInstanceDesc = {};
+        wgpu::InstanceDescriptor unsafeInstanceDesc = {
+            .requiredFeatureCount = 1,
+            .requiredFeatures = &kMultipleDevicesPerAdapter,
+        };
         unsafeInstanceDesc.nextInChain = &unsafeInstanceTogglesDesc;
 
         unsafeInstance = std::make_unique<Instance>(&unsafeInstanceDesc);
@@ -192,6 +200,9 @@ TEST_F(DeviceCreationTest, CreateDeviceRequiringExperimentalFeatures) {
             continue;
         }
 
+        // wgpu::FeatureName::CoreFeaturesAndLimits is required implicitly in core mode
+        static constexpr uint32_t kDefaultExpectedFeatureCount = 1u;
+
         wgpu::DeviceDescriptor deviceDescriptor;
         deviceDescriptor.requiredFeatures = &featureName;
         deviceDescriptor.requiredFeatureCount = 1;
@@ -211,10 +222,19 @@ TEST_F(DeviceCreationTest, CreateDeviceRequiringExperimentalFeatures) {
 
             wgpu::SupportedFeatures supportedFeatures;
             device.GetFeatures(&supportedFeatures);
-            // wgpu::FeatureName::CoreFeaturesAndLimits is required implicitly in core mode
-            ASSERT_EQ(1u + 1u, supportedFeatures.featureCount);
-            EXPECT_TRUE(featureName == supportedFeatures.features[0] ||
-                        featureName == supportedFeatures.features[1]);
+            uint32_t expectedFeatureCount = kDefaultExpectedFeatureCount +
+                                            utils::FeatureAndImplicitlyEnabled(featureName).size();
+
+            ASSERT_EQ(expectedFeatureCount, supportedFeatures.featureCount);
+
+            bool foundFeatureName = false;
+            for (uint32_t fi = 0; fi < supportedFeatures.featureCount; ++fi) {
+                if (featureName == supportedFeatures.features[fi]) {
+                    foundFeatureName = true;
+                    break;
+                }
+            }
+            EXPECT_TRUE(foundFeatureName);
         }
 
         // Test creating device with AllowUnsafeApis enabled in device toggle descriptor will
@@ -233,10 +253,20 @@ TEST_F(DeviceCreationTest, CreateDeviceRequiringExperimentalFeatures) {
 
                 wgpu::SupportedFeatures supportedFeatures;
                 device.GetFeatures(&supportedFeatures);
-                // wgpu::FeatureName::CoreFeaturesAndLimits is required implicitly in core mode
-                ASSERT_EQ(1u + 1u, supportedFeatures.featureCount);
-                EXPECT_TRUE(featureName == supportedFeatures.features[0] ||
-                            featureName == supportedFeatures.features[1]);
+                uint32_t expectedFeatureCount =
+                    kDefaultExpectedFeatureCount +
+                    utils::FeatureAndImplicitlyEnabled(featureName).size();
+
+                ASSERT_EQ(expectedFeatureCount, supportedFeatures.featureCount);
+
+                bool foundFeatureName = false;
+                for (uint32_t fi = 0; fi < supportedFeatures.featureCount; ++fi) {
+                    if (featureName == supportedFeatures.features[fi]) {
+                        foundFeatureName = true;
+                        break;
+                    }
+                }
+                EXPECT_TRUE(foundFeatureName);
             }
 
             // Test on adapter with AllowUnsafeApis disabled.
@@ -246,10 +276,20 @@ TEST_F(DeviceCreationTest, CreateDeviceRequiringExperimentalFeatures) {
 
                 wgpu::SupportedFeatures supportedFeatures;
                 device.GetFeatures(&supportedFeatures);
-                // wgpu::FeatureName::CoreFeaturesAndLimits is required implicitly in core mode
-                ASSERT_EQ(1u + 1u, supportedFeatures.featureCount);
-                EXPECT_TRUE(featureName == supportedFeatures.features[0] ||
-                            featureName == supportedFeatures.features[1]);
+                uint32_t expectedFeatureCount =
+                    kDefaultExpectedFeatureCount +
+                    utils::FeatureAndImplicitlyEnabled(featureName).size();
+
+                ASSERT_EQ(expectedFeatureCount, supportedFeatures.featureCount);
+
+                bool foundFeatureName = false;
+                for (uint32_t fi = 0; fi < supportedFeatures.featureCount; ++fi) {
+                    if (featureName == supportedFeatures.features[fi]) {
+                        foundFeatureName = true;
+                        break;
+                    }
+                }
+                EXPECT_TRUE(foundFeatureName);
             }
         }
 
@@ -360,6 +400,37 @@ TEST_F(DeviceCreationTest, AdapterMaxImmediateSize) {
                 EXPECT_NE(device.Get(), nullptr);
             });
     }
+}
+
+// Test failed call to CreateDevice when adapter has been consumed because instance has not the
+// MultipleDevicesPerAdapter feature.
+TEST_F(DeviceCreationTest, AdapterIsConsumedWithoutMultipleDevicesPerAdapterFeature) {
+    auto instance = std::make_unique<Instance>();
+
+    wgpu::RequestAdapterOptions options = {};
+    options.backendType = wgpu::BackendType::Null;
+
+    auto adapter = instance->EnumerateAdapters(&options)[0];
+
+    wgpu::Device device1 = adapter.CreateDevice();
+    EXPECT_NE(device1, nullptr);
+
+    wgpu::Device device2 = adapter.CreateDevice();
+    EXPECT_EQ(device2, nullptr);
+}
+
+// Test failed call to CreateDevice when adapter has been explicitly asked to be consumed.
+TEST_F(DeviceCreationTest, AdapterIsConsumedWithConsumeAdapterDescriptor) {
+    wgpu::DawnConsumeAdapterDescriptor consumeAdapterDesc = {};
+    consumeAdapterDesc.consumeAdapter = true;
+    wgpu::DeviceDescriptor desc = {};
+    desc.nextInChain = &consumeAdapterDesc;
+    wgpu::Device device1 = adapter.CreateDevice(&desc);
+    EXPECT_NE(device1, nullptr);
+
+    desc.nextInChain = nullptr;
+    wgpu::Device device2 = adapter.CreateDevice(&desc);
+    EXPECT_EQ(device2, nullptr);
 }
 
 class DeviceCreationFutureTest : public DeviceCreationTest,

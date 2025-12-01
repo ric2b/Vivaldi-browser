@@ -21,6 +21,12 @@ def GetFromBrowserOptions(browser_options):
       ['--enable-features=PrivacySandboxSettings4'])
   browser_options.ConsolidateValuesForArg('--enable-features')
 
+  # Disable the HangWatcher so that it does not generate dumps, leading to test
+  # failures; see https://crbug.com/425223287.
+  browser_options.AppendExtraBrowserArgs(
+      ['--disable-features=EnableHangWatcher'])
+  browser_options.ConsolidateValuesForArg('--disable-features')
+
   # Sort to ensure determinism.
   args = list(sorted(browser_options.extra_browser_args))
   if browser_options.environment:
@@ -39,8 +45,9 @@ def GetFromBrowserOptions(browser_options):
   # might eventually scroll.
   args.append('--enable-gpu-benchmarking')
 
-  # Suppress all permission prompts by atomatically denying them.
-  args.append('--deny-permission-prompts')
+  # Suppress all permission prompts by automatically denying them.
+  if browser_options.deny_permission_prompts:
+    args.append('--deny-permission-prompts')
 
   # Override the need for a user gesture in order to play media.
   args.append('--autoplay-policy=no-user-gesture-required')

@@ -8,6 +8,8 @@ import { ShaderValidationTest } from '../shader_validation_test.js';
 export const g = makeTestGroup(ShaderValidationTest);
 
 const kCollectiveOps = [
+  { op: 'control_case_compute', stage: 'compute' },
+  { op: 'control_case_fragment', stage: 'fragment' },
   { op: 'textureSample', stage: 'fragment' },
   { op: 'textureSampleBias', stage: 'fragment' },
   { op: 'textureSampleCompare', stage: 'fragment' },
@@ -115,6 +117,11 @@ function generateCondition(condition: string): string {
 
 function generateOp(op: string): string {
   switch (op) {
+    case 'control_case':
+    case 'control_case_compute':
+    case 'control_case_fragment': {
+      return ``;
+    }
     case 'textureSample': {
       return `let x = ${op}(tex, s, vec2(0,0));\n`;
     }
@@ -243,7 +250,7 @@ g.test('basics')
  @group(2) @binding(0) var ro_storage_texture : texture_storage_2d<rgba8unorm, read>;
  @group(2) @binding(1) var rw_storage_texture : texture_storage_2d<rgba8unorm, read_write>;
 
- var<private> priv_var : array<f32, 4> = array(0,0,0,0);
+ var<private> priv_var : array<u32, 4> = array(0,0,0,0);
 
  const c = false;
  override o : f32;
@@ -272,10 +279,11 @@ g.test('basics')
 
     code += `\n}\n`;
 
-    t.expectCompileResult(t.params.expectation, code);
+    t.expectCompileResult(t.params.expectation || t.params.op.startsWith('control_case'), code);
   });
 
 const kSubgroupOps = [
+  'control_case',
   'subgroupAdd',
   'subgroupInclusiveAdd',
   'subgroupExclusiveAdd',
@@ -329,7 +337,7 @@ g.test('basics,subgroups')
  @group(2) @binding(0) var ro_storage_texture : texture_storage_2d<rgba8unorm, read>;
  @group(2) @binding(1) var rw_storage_texture : texture_storage_2d<rgba8unorm, read_write>;
 
- var<private> priv_var : array<f32, 4> = array(0,0,0,0);
+ var<private> priv_var : array<u32, 4> = array(0,0,0,0);
 
  const c = false;
  override o : f32;
@@ -358,7 +366,7 @@ g.test('basics,subgroups')
 
     code += `\n}\n`;
 
-    t.expectCompileResult(t.params.expectation, code);
+    t.expectCompileResult(t.params.expectation || t.params.op.startsWith('control_case'), code);
   });
 
 const kFragmentBuiltinValues = [

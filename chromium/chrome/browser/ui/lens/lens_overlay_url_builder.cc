@@ -9,6 +9,7 @@
 #include "base/base64url.h"
 #include "base/notreached.h"
 #include "base/strings/escape.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/browser_process.h"
 #include "components/language/core/common/language_util.h"
@@ -53,13 +54,10 @@ inline constexpr char kToolbeltModeParameterKey[] = "tbm";
 inline constexpr char kShoppingModeParameterValue[] = "28";
 inline constexpr char kUnimodalModeParameterValue[] = "26";
 inline constexpr char kMultimodalModeParameterValue[] = "24";
-inline constexpr char kMGTModeParameterValue[] = "50";
+inline constexpr char kAimModeParameterValue[] = "50";
 
 // Query parameter for the language code.
 inline constexpr char kLanguageCodeParameterKey[] = "hl";
-
-// Query parameter for the video context.
-inline constexpr char kVideoContextParameterKey[] = "vidcip";
 
 // Query parameter for the lens mode.
 inline constexpr char kLensModeParameterKey[] = "lns_mode";
@@ -77,6 +75,8 @@ inline constexpr char kInvocationSourcePageSearchContextMenu[] =
     "chrome.cr.ctxp";
 inline constexpr char kInvocationSourceImageSearchContextMenu[] =
     "chrome.cr.ctxi";
+inline constexpr char kInvocationSourceTextSearchContextMenu[] =
+    "chrome.cr.ctxt";
 inline constexpr char kInvocationSourceFindInPage[] = "chrome.cr.find";
 inline constexpr char kInvocationSourceToolbarIcon[] = "chrome.cr.tbic";
 inline constexpr char kInvocationSourceOmniboxIcon[] = "chrome.cr.obic";
@@ -132,10 +132,10 @@ inline constexpr char kClientIdQueryParameterValue[] = "lens-overlay";
 // time when the query leaves the client and is sent to the server.
 inline constexpr char kQuerySubmissionTimeQueryParameter[] = "qsubts";
 
-// Query parameter for the perceived query submission time. This should
-// be set to the time when the user performed the action that triggered
-// the query.
-inline constexpr char kUserPerceivedStateTimeQueryParameter[] = "pqsubts";
+// Query parameter for the client upload processing duration. This is the time
+// between the user-perceived query submission time and the time when the
+// search request is made (i.e. qsubts).
+inline constexpr char kClientUploadDurationQueryParameter[] = "cud";
 
 // Appends the url params from the map to the url.
 GURL AppendUrlParamsFromMap(
@@ -219,28 +219,6 @@ GURL AppendCommonSearchParametersToURL(const GURL& url_to_modify,
   return new_url;
 }
 
-GURL AppendVideoContextParamToURL(const GURL& url_to_modify,
-                                  std::optional<GURL> page_url) {
-  if (!page_url.has_value()) {
-    return url_to_modify;
-  }
-
-  lens::LensOverlayVideoParams video_params;
-  video_params.mutable_video_context_input_params()->set_url(page_url->spec());
-  std::string serialized_video_params;
-  if (!video_params.SerializeToString(&serialized_video_params)) {
-    return url_to_modify;
-  }
-  std::string encoded_video_params;
-  base::Base64UrlEncode(serialized_video_params,
-                        base::Base64UrlEncodePolicy::OMIT_PADDING,
-                        &encoded_video_params);
-  GURL new_url = url_to_modify;
-  new_url = net::AppendOrReplaceQueryParameter(
-      new_url, kVideoContextParameterKey, encoded_video_params);
-  return new_url;
-}
-
 GURL AppendInvocationSourceParamToURL(
     const GURL& url_to_modify,
     lens::LensOverlayInvocationSource invocation_source) {
@@ -254,6 +232,9 @@ GURL AppendInvocationSourceParamToURL(
       break;
     case lens::LensOverlayInvocationSource::kContentAreaContextMenuImage:
       param_value = kInvocationSourceImageSearchContextMenu;
+      break;
+    case lens::LensOverlayInvocationSource::kContentAreaContextMenuText:
+      param_value = kInvocationSourceTextSearchContextMenu;
       break;
     case lens::LensOverlayInvocationSource::kToolbar:
       param_value = kInvocationSourceToolbarIcon;
@@ -276,6 +257,8 @@ GURL AppendInvocationSourceParamToURL(
     case lens::LensOverlayInvocationSource::kLVFShutterButton:
     case lens::LensOverlayInvocationSource::kLVFGallery:
     case lens::LensOverlayInvocationSource::kContextMenu:
+    case lens::LensOverlayInvocationSource::kAIHub:
+    case lens::LensOverlayInvocationSource::kFREPromo:
       NOTREACHED() << "Invocation source not supported.";
   }
   return net::AppendOrReplaceQueryParameter(
@@ -289,10 +272,20 @@ GURL AppendDarkModeParamToURL(const GURL& url_to_modify, bool use_dark_mode) {
                     : kDarkModeParameterLightValue);
 }
 
-GURL AppendQuerySubmissionTimeParamToURL(const GURL& url_to_modify) {
-  return net::AppendOrReplaceQueryParameter(
-      url_to_modify, kQuerySubmissionTimeQueryParameter,
-      base::NumberToString(base::Time::Now().InMillisecondsSinceUnixEpoch()));
+GURL AppendQuerySubmissionTimeAndClientUploadDurationParamToURL(
+    const GURL& url_to_modify,
+    base::Time query_start_time) {
+  GURL new_url = url_to_modify;
+  base::Time query_submission_time = base::Time::Now();
+  new_url = net::AppendOrReplaceQueryParameter(
+      new_url, kClientUploadDurationQueryParameter,
+      base::NumberToString(
+          (query_submission_time - query_start_time).InMilliseconds()));
+  new_url = net::AppendOrReplaceQueryParameter(
+      new_url, kQuerySubmissionTimeQueryParameter,
+      base::NumberToString(
+          query_submission_time.InMillisecondsSinceUnixEpoch()));
+  return new_url;
 }
 
 GURL BuildTextOnlySearchURL(
@@ -325,17 +318,9 @@ GURL BuildTextOnlySearchURL(
   }
   url_with_query_params =
       AppendCommonSearchParametersToURL(url_with_query_params, use_dark_mode);
-  if (lens::features::UseVideoContextForTextOnlyLensOverlayRequests()) {
-    // All queries use the video context param to report page context
-    // information even if the page does not contain a video.
-    url_with_query_params =
-        AppendVideoContextParamToURL(url_with_query_params, page_url);
-  }
-  url_with_query_params = net::AppendOrReplaceQueryParameter(
-      url_with_query_params, kUserPerceivedStateTimeQueryParameter,
-      base::NumberToString(query_start_time.InMillisecondsSinceUnixEpoch()));
   url_with_query_params =
-      AppendQuerySubmissionTimeParamToURL(url_with_query_params);
+      AppendQuerySubmissionTimeAndClientUploadDurationParamToURL(
+          url_with_query_params, query_start_time);
   return url_with_query_params;
 }
 
@@ -357,13 +342,6 @@ GURL BuildLensSearchURL(
       url_with_query_params, additional_search_query_params);
   url_with_query_params =
       AppendCommonSearchParametersToURL(url_with_query_params, use_dark_mode);
-  if (text_query.has_value() &&
-      lens::features::UseVideoContextForMultimodalLensOverlayRequests()) {
-    // All pages use the video context param to report page context information
-    // even if the page does not contain a video.
-    url_with_query_params =
-        AppendVideoContextParamToURL(url_with_query_params, page_url);
-  }
   url_with_query_params = net::AppendOrReplaceQueryParameter(
       url_with_query_params, kTextQueryParameterKey,
       text_query.has_value() ? *text_query : "");
@@ -396,21 +374,19 @@ GURL BuildLensSearchURL(
                         &encoded_request_id);
   url_with_query_params = net::AppendOrReplaceQueryParameter(
       url_with_query_params, kRequestIdParameterKey, encoded_request_id);
-  url_with_query_params = net::AppendOrReplaceQueryParameter(
-      url_with_query_params, kUserPerceivedStateTimeQueryParameter,
-      base::NumberToString(query_start_time.InMillisecondsSinceUnixEpoch()));
   url_with_query_params =
-      AppendQuerySubmissionTimeParamToURL(url_with_query_params);
+      AppendQuerySubmissionTimeAndClientUploadDurationParamToURL(
+          url_with_query_params, query_start_time);
   return url_with_query_params;
 }
 
-const std::string GetTextQueryParameterValue(const GURL& url) {
+const std::string ExtractTextQueryParameterValue(const GURL& url) {
   std::string param_value = "";
   net::GetValueForKeyInQuery(url, kTextQueryParameterKey, &param_value);
   return param_value;
 }
 
-const std::string GetLensModeParameterValue(const GURL& url) {
+const std::string ExtractLensModeParameterValue(const GURL& url) {
   std::string param_value = "";
   net::GetValueForKeyInQuery(url, kLensModeParameterKey, &param_value);
   return param_value;
@@ -462,14 +438,19 @@ bool IsValidSearchResultsUrl(const GURL& url) {
              net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
 }
 
+bool IsAimQuery(const GURL& url) {
+  std::string param_value;
+  net::GetValueForKeyInQuery(url, kModeParameterKey, &param_value);
+  return param_value == kAimModeParameterValue;
+}
+
 bool ShouldOpenSearchURLInNewTab(const GURL& url) {
   std::string param_value;
   net::GetValueForKeyInQuery(url, kModeParameterKey, &param_value);
   const bool is_shopping_mode = param_value == kShoppingModeParameterValue;
-  const bool is_mgt_mode = param_value == kMGTModeParameterValue;
   return IsValidSearchResultsUrl(url) &&
          (is_shopping_mode ||
-          (is_mgt_mode && !lens::features::ShouldShowMGTInSidePanel()));
+          (IsAimQuery(url) && !lens::features::ShouldShowAimInSidePanel()));
 }
 
 GURL GetSearchResultsUrlFromRedirectUrl(const GURL& url) {
@@ -535,7 +516,8 @@ GURL GetSidePanelNewTabUrl(const GURL& side_panel_url, std::string vsrid) {
                                             kRequestIdParameterKey, vsrid);
 }
 
-GURL BuildTranslateLanguagesURL(std::string country, std::string language) {
+GURL BuildTranslateLanguagesURL(std::string_view country,
+                                std::string_view language) {
   GURL url = GURL(lens::features::GetLensOverlayTranslateEndpointURL());
   url =
       net::AppendOrReplaceQueryParameter(url, kCountryQueryParameter, country);
@@ -577,6 +559,21 @@ GURL AddPDFScrollToParametersToUrl(
   }
 
   return net::AppendOrReplaceRef(url, ref);
+}
+
+std::map<std::string, std::string> GetParametersMapWithoutQuery(
+    const GURL& url) {
+  std::map<std::string, std::string> additional_query_parameters;
+  net::QueryIterator query_iterator(url);
+  while (!query_iterator.IsAtEnd()) {
+    std::string_view key = query_iterator.GetKey();
+    if (kTextQueryParameterKey != key) {
+      additional_query_parameters.insert(std::make_pair(
+          query_iterator.GetKey(), query_iterator.GetUnescapedValue()));
+    }
+    query_iterator.Advance();
+  }
+  return additional_query_parameters;
 }
 
 }  // namespace lens

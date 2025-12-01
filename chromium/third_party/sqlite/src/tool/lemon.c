@@ -3695,7 +3695,7 @@ PRIVATE int compute_action(struct lemon *lemp, struct action *ap)
   switch( ap->type ){
     case SHIFT:  act = ap->x.stp->statenum;                        break;
     case SHIFTREDUCE: {
-      /* Since a SHIFT is inherient after a prior REDUCE, convert any
+      /* Since a SHIFT is inherent after a prior REDUCE, convert any
       ** SHIFTREDUCE action with a nonterminal on the LHS into a simple
       ** REDUCE action: */
       if( ap->sp->index>=lemp->nterminal
@@ -4035,10 +4035,10 @@ PRIVATE int translate_code(struct lemon *lemp, struct rule *rp){
     }
   }
   if( lhsdirect ){
-    sprintf(zLhs, "yymsp[%d].minor.yy%d",1-rp->nrhs,rp->lhs->dtnum);
+    lemon_sprintf(zLhs, "yymsp[%d].minor.yy%d",1-rp->nrhs,rp->lhs->dtnum);
   }else{
     rc = 1;
-    sprintf(zLhs, "yylhsminor.yy%d",rp->lhs->dtnum);
+    lemon_sprintf(zLhs, "yylhsminor.yy%d",rp->lhs->dtnum);
   }
 
   append_str(0,0,0,0);

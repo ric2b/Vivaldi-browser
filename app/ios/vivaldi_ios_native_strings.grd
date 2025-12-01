@@ -214,6 +214,12 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_VIVALDI_TAB_GRID_INCOGNITO_TABS_EMPTY_TITLE" desc="Title shown above a message on the Incognito tab switcher when there are no Incognito tabs. [iOS only]">
         Private Tabs
       </message>
+      <message name="IDS_VIVALDI_TAB_SWITCHER_TAB_STACKS_EMPTY_TITLE" desc="Title shown above a message on the tab stacks tab switcher when there are no items. [iOS only]">
+        Tab Stacks
+      </message>
+      <message name="IDS_VIVALDI_TAB_SWITCHER_TAB_STACKS_EMPTY_MESSAGE" desc="Message shown underneath a title on the tab stack tab switcher when there are no item.">
+        You’ll find your tab stacks here
+      </message>
       <message name="IDS_VIVALDI_TAB_SWITCHER_SYNC_TABS_EMPTY_TITLE" desc="Title shown above a message on the synced tab switcher when there are no items. [iOS only]">
         No Synced Tabs
       </message>
@@ -249,6 +255,24 @@ locale.  The strings in this file are specific to iOS.
       </message>
       <message name="IDS_VIVALDI_TAB_GRID_RECENT_TABS_EMPTY_DESCRIPTION" desc="Description for the state when recent tabs page contains neither recently closed tabs or synced tabs from other devices.">
         Recently visited tabs will appear here
+      </message>
+      <message name="IDS_IOS_TABS_SEARCH_SUGGESTED_ACTION_SEARCH_RECENT_TABS" desc="Title for a suggested action presented at the end of search results to search through recent tabs for the same search term.">
+        Search recent tabs
+      </message>
+      <message name="IDS_IOS_TAB_GRID_RECENT_TABS_UNAVAILABLE_MESSAGE" desc="Message shown in the Recent Tabs page of the tab grid when the IncognitoModeAvailability enterprise policy is set to forced. [iOS only]">
+        Your organization requires you to browse privately. Tabs aren't saved in Private mode. <ph name="BEGIN_LINK">BEGIN_LINK</ph>Learn more<ph name="END_LINK">END_LINK</ph>
+      </message>
+      <message name="IDS_IOS_TAB_GRID_RECENT_TABS_UNAVAILABLE_TITLE" desc="Title shown above a message in the Recent Tabs page of the tab grid when the IncognitoModeAvailability enterprise policy is set to forced. [iOS only]">
+        Recent tabs are unavailable
+      </message>
+      <message name="IDS_IOS_TAB_GRID_REMOTE_TABS_TITLE" desc="The accessibility label of the Remote Tabs page in the tab grid UI. [iOS only]">
+        Tabs from other devices
+      </message>
+      <message name="IDS_IOS_KEYBOARD_GO_TO_SYNCED_TABS_LIST" desc="The title of the keyboard shortcut to go to the synced tabs list from the tab grid menu." meaning="Used as a command title in the iPad command menu.">
+        Synced Tabs list
+      </message>
+      <message name="IDS_IOS_KEYBOARD_GO_TO_CLOSED_TABS_LIST" desc="The title of the keyboard shortcut to go to the recently closed tabs list from the tab grid menu." meaning="Used as a command title in the iPad command menu.">
+        Recently closed tabs list
       </message>
       <message name="IDS_VIVALDI_CONTENT_CONTEXT_NEWNOTE" desc="The iOS context menu item for adding a new note. ">
         New Note
@@ -590,9 +614,6 @@ locale.  The strings in this file are specific to iOS.
         Add New Group
       </message>
       <!-- END START PAGE AND SPEED DIAL -->
-      <message name="IDS_IOS_SEARCH_OR_TYPE_WEB_ADDRESS" desc="Prompt to enter text into the text field that will either perform web searches or navigate to a website. [CHAR_LIMIT=38]">
-        Search or type web address
-      </message>
       <message name="IDS_IOS_SEARCH_OR_TYPE_WEB_ADDRESS_WITH_SEARCH_ENGINE" desc="Prompt to enter text into the text field after search engine shortcut is activate that will either perform web searches or navigate to a website. [CHAR_LIMIT=38]">
         Search with <ph name="SEARCH_ENGINE">$1</ph>
       </message>
@@ -1564,6 +1585,11 @@ locale.  The strings in this file are specific to iOS.
         Changing this may reload some of your tabs
       </message>
       <!--END GENERAL SETTINGS -->
+      <!--GENERAL -> LANGUAGE SETTINGS-->
+      <message name="IDS_IOS_LANGUAGE_SETTINGS_DISABLE_TRANSLATE_INFOBAR_SWITCH_TITLE" desc="Title for the switch to enable or disable translation infobar banner in the language settings page. [Length: 30em] [iOS only]" meaning="Turning this switch on disables showing translation offer and success banner.">
+        Do not show "Offer to translate" banner
+      </message>
+      <!--END GENERAL -> LANGUAGE SETTINGS-->
       <!--PAGEZOOM SETTINGS -->
       <message name="IDS_IOS_PAGEZOOM_SETTING_TITLE" desc="Title for pagezoom settings title">
         Page Zoom
@@ -1608,6 +1634,23 @@ locale.  The strings in this file are specific to iOS.
          Open Zoom Setting
       </message>
       <!--END PAGEZOOM SETTINGS -->
+      <!--READER VIEW SETTINGS -->
+      <message name="IDS_IOS_READER_MODE_TITLE" desc="Title for reader view settings">
+        Reader View
+      </message>
+      <message name="IDS_IOS_READER_MODE_COLORS_TITLE" desc="Title for reader view settings colors styling">
+        Colors
+      </message>
+      <message name="IDS_IOS_READER_MODE_TYPOGRAPHY_TITLE" desc="Title for reader view settings colors styling section">
+        Typography
+      </message>
+      <message name="IDS_IOS_READER_MODE_DONE_TITLE" desc="Title for reader view settings done Button">
+        Done
+      </message>
+      <message name="IDS_IOS_READER_MODE_EXIT_READER_TITLE" desc="Title for reader view settings exit reader Button">
+        Exit
+      </message>
+      <!--END READER MODE SETTINGS -->
       <!-- ADDRESSBAR SETTINGS -->
       <message name="IDS_IOS_PREFS_VIVALDI_ADDRESSBAR" desc="Title for the addressbar settings">
         Address Bar
@@ -1921,7 +1964,16 @@ locale.  The strings in this file are specific to iOS.
          Private Tab
       </message>
       <message name="IDS_VIVALDI_SEARCH_ENGINE_SETTINGS_ENABLE_NICKNAME_TITLE" desc="(Vivaldi) Title of the enable search engine nickname toggle on the search engine settings UI.">
-        Enable Search Engine Nicknames
+        Enable Nicknames
+      </message>
+      <message name="IDS_VIVALDI_SEARCH_ENGINE_SETTINGS_ADD_CUSTOM_ENGINE_TITLE" desc="(Vivaldi) Title of the Add Custom Search Engine item on the search engine settings UI.">
+        Add Custom Search Engine
+      </message>
+      <message name="IDS_VIVALDI_SEARCH_ENGINE_SETTINGS_CONTEXT_EDIT_ENGINE_TITLE" desc="(Vivaldi) Title of the context menu item in search engine settings to trigger Edit action.">
+        Edit
+      </message>
+      <message name="IDS_VIVALDI_SEARCH_ENGINE_SETTINGS_CONTEXT_DELETE_ENGINE_TITLE" desc="(Vivaldi) Title of the context menu item in search engine settings to trigger Delete action.">
+        Delete
       </message>
       <message name="IDS_VIVALDI_SEARCH_ENGINE_RESTORE_DEFAULT_BUTTON_TITLE" desc="(Vivaldi) Title of the restore defaults toolbar button on the search engine list UI.">
          Restore Defaults
@@ -1938,6 +1990,65 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_VIVALDI_SEARCH_ENGINE_CANCEL_BUTTON_TITLE" desc="(Vivaldi) Cancel button of the dialog showing up to ask the user to confirm the restore the search engine list to defaults.">
         Cancel
       </message>
+      <!-- SEARCH ENGINE EDITOR -->
+      <message name="IDS_VIVALDI_SEARCH_ENGINE_EDITOR_ADD_ENGINE_TITLE" desc="(Vivaldi) Title of the Search Engine Editor navigation item for adding engine.">
+        Add Search Engine
+      </message>
+      <message name="IDS_VIVALDI_SEARCH_ENGINE_EDITOR_EDIT_ENGINE_TITLE" desc="(Vivaldi) Title of the Search Engine Editor navigation item editing existing search engine.">
+        Edit Search Engine
+      </message>
+      <message name="IDS_VIVALDI_SEARCH_ENGINE_NAME_LABEL" desc="Label for the search engine name input field.">
+        Name
+      </message>
+      <message name="IDS_VIVALDI_SEARCH_ENGINE_NAME_PLACEHOLDER" desc="Placeholder text for the search engine name input.">
+        New Engine
+      </message>
+      <message name="IDS_VIVALDI_SEARCH_ENGINE_NICKNAME_LABEL" desc="Label for the search engine nickname input field.">
+        Nickname
+      </message>
+      <message name="IDS_VIVALDI_SEARCH_ENGINE_NICKNAME_PLACEHOLDER" desc="Placeholder text for the nickname input field.">
+        New
+      </message>
+      <message name="IDS_VIVALDI_SEARCH_ENGINE_URL_LABEL" desc="Label for the main search URL input field.">
+        URL
+      </message>
+      <message name="IDS_VIVALDI_SEARCH_ENGINE_URL_FOOTNOTE" desc="Footnote for the search engine URL input field.">
+        Use &#37;s in the URL where the search query should be inserted.
+      </message>
+      <message name="IDS_VIVALDI_SEARCH_ENGINE_SUGGEST_URL_LABEL" desc="Label for the search engine suggest URL input field.">
+        Suggest URL
+      </message>
+      <message name="IDS_VIVALDI_SEARCH_ENGINE_MORE_OPTIONS" desc="Label for expanding additional search engine settings.">
+        More Options
+      </message>
+      <message name="IDS_VIVALDI_SEARCH_ENGINE_POST_PARAMS_LABEL" desc="Label for the POST parameters input field.">
+        POST Parameters
+      </message>
+      <message name="IDS_VIVALDI_SEARCH_ENGINE_IMAGE_SEARCH_URL_LABEL" desc="Label for the image search URL input field.">
+        Image Search URL
+      </message>
+      <message name="IDS_VIVALDI_SEARCH_ENGINE_IMAGE_SEARCH_POST_PARAMS_LABEL" desc="Label for image search POST parameters input field.">
+        Image Search POST Parameters
+      </message>
+      <message name="IDS_VIVALDI_SEARCH_ENGINE_NAME_EMPTY_ERROR" desc="Error message shown when the search engine name field is empty.">
+        Name cannot be empty.
+      </message>
+      <message name="IDS_VIVALDI_SEARCH_ENGINE_NICKNAME_EMPTY_ERROR" desc="Error message shown when the search engine nickname field is empty.">
+        Nickname cannot be empty.
+      </message>
+      <message name="IDS_VIVALDI_SEARCH_ENGINE_NICKNAME_SPACE_ERROR" desc="Error message shown when the search engine nickname field contains space.">
+        Nickname cannot have space.
+      </message>
+      <message name="IDS_VIVALDI_SEARCH_ENGINE_NICKNAME_DUPLICATE_ERROR" desc="Error message shown when the search engine nickname already used by another engine.">
+        Nickname in use by <ph name="ENGINE_NAME">$1<ex>StartPage</ex></ph>.
+      </message>
+      <message name="IDS_VIVALDI_SEARCH_ENGINE_URL_EMPTY_ERROR" desc="Error message shown when the search engine URL field is empty.">
+        URL cannot be empty.
+      </message>
+      <message name="IDS_VIVALDI_SEARCH_ENGINE_URL_INVALID_ERROR" desc="Error message shown when the search engine URL is invalid or missing protocol.">
+        You must provide a valid protocol.
+      </message>
+      <!-- END SEARCH ENGINE EDITOR -->
       <!-- END SEARCH ENGINE SETTINGS -->
       <!-- APPEARANCE SETTING -->
       <message name="IDS_VIVALDI_IOS_APPEARANCE_SETTING_TITLE" desc="Title for the appearance and theme settings">

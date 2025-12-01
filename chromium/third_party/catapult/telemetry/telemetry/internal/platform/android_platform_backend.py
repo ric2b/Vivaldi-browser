@@ -426,6 +426,17 @@ class AndroidPlatformBackend(
         return True
     return False
 
+  @decorators.Cache
+  def IsXrDevice(self):
+    """Checks whether the device is an Android XR device."""
+    feature_output = self._device.RunShellCommand(['pm', 'list', 'features'])
+    # Aligned with base/android/java/src/org/chromium/base/PackageManagerUtils.java
+    for line in feature_output:
+      if 'android.software.xr.immersive' in line \
+          or 'android.software.xr.api.openxr' in line:
+        return True
+    return False
+
   def GetDeviceHostClockOffset(self):
     """Returns the difference between the device and host clocks."""
     if self._device_host_clock_offset is None:
@@ -570,6 +581,11 @@ class AndroidPlatformBackend(
     saved_profile_location = posixpath.join(
         self._device.GetExternalStoragePath(),
         'profile', profile_base)
+    # For PC hardware types, which log in as the main user, the source path
+    # must be resolved to ensure it is accessible.
+    if self.IsPcHardwareType():
+      saved_profile_location = self._device.ResolveSpecialPath(
+          saved_profile_location)
     self._device.PushChangedFiles([(new_profile_dir, saved_profile_location)],
                                   delete_device_stale=True)
 
@@ -617,6 +633,7 @@ class AndroidPlatformBackend(
           _DEVICE_COPY_SCRIPT_FILE,
           _DEVICE_COPY_SCRIPT_LOCATION)
       self._device_copy_script = _DEVICE_COPY_SCRIPT_LOCATION
+
     self._device.RunShellCommand(
         ['sh', self._device_copy_script, source, dest], check_return=True)
 

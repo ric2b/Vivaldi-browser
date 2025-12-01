@@ -5,6 +5,8 @@
 #ifndef COMPONENTS_AUTOFILL_CORE_BROWSER_PERMISSIONS_AUTOFILL_AI_AUTOFILL_AI_PERMISSION_UTILS_H_
 #define COMPONENTS_AUTOFILL_CORE_BROWSER_PERMISSIONS_AUTOFILL_AI_AUTOFILL_AI_PERMISSION_UTILS_H_
 
+#include <string>
+
 namespace autofill {
 
 class AutofillClient;
@@ -36,6 +38,18 @@ enum class AutofillAiAction {
   kUseCachedServerClassificationModelResults
 };
 
+// Opt-in status for the AutofillAI feature.
+//
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+// LINT.IfChange(AutofillAiOptInStatus)
+enum class AutofillAiOptInStatus {
+  kOptedOut = 0,
+  kOptedIn = 1,
+  kMaxValue = kOptedIn
+};
+// LINT.ThenChange(/tools/metrics/histograms/metadata/autofill/enums.xml:AutofillAiOptInStatus)
+
 // Returns whether all permission-related requirements are met for `action`.
 // This includes:
 // - Feature state (`kAutofillAiWithDataSchema`, `kAutofillAiServerModel`).
@@ -46,7 +60,8 @@ enum class AutofillAiAction {
 //
 // See go/forms-ai:permissions for more detail.
 bool MayPerformAutofillAiAction(const AutofillClient& client,
-                                AutofillAiAction action);
+                                AutofillAiAction action,
+                                std::string* debug_message = nullptr);
 
 // Returns the AutofillAI opt-in status for the profile and account tied to
 // `client`. Opt-in status is a profile pref, but keyed by (hashed) GAIA id. In
@@ -57,7 +72,8 @@ bool MayPerformAutofillAiAction(const AutofillClient& client,
 // Sets the AutofillAI opt-in status for the profile and account tied to
 // `client`. Returns `false` if the opt-in status may not be changed and `true`
 // otherwise.
-bool SetAutofillAiOptInStatus(AutofillClient& client, bool opt_in_status);
+bool SetAutofillAiOptInStatus(AutofillClient& client,
+                              AutofillAiOptInStatus opt_in_status);
 
 }  // namespace autofill
 

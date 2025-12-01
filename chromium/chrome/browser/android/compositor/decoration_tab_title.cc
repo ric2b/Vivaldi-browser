@@ -160,6 +160,14 @@ void DecorationTabTitle::Update(int title_resource_id,
   show_bubble_ = show_bubble;
 }
 
+void DecorationTabTitle::SetShouldHideTitleText(bool should_hide_title_text) {
+  DecorationIconTitle::SetShouldHideTitleText(should_hide_title_text);
+}
+
+void DecorationTabTitle::SetShouldHideIcon(bool should_hide_icon) {
+  DecorationIconTitle::SetShouldHideIcon(should_hide_icon);
+}
+
 void DecorationTabTitle::setBounds(const gfx::Size& bounds) {
   // Place tab favicon.
   DecorationIconTitle::setBounds(bounds);

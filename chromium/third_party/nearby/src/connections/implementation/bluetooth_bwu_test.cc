@@ -17,8 +17,8 @@
 
 #include "gtest/gtest.h"
 #include "absl/time/time.h"
-#include "connections/implementation/bwu_handler.h"
 #include "connections/implementation/bluetooth_bwu_handler.h"
+#include "connections/implementation/bwu_handler.h"
 #include "connections/implementation/client_proxy.h"
 #include "connections/implementation/endpoint_channel.h"
 #include "connections/implementation/mediums/mediums.h"
@@ -75,7 +75,7 @@ TEST_F(BluetoothBwuTest, SoftAPBWUInit_STACreateEndpointChannel) {
       mediums_1, [&](ClientProxy* client,
                      std::unique_ptr<BwuHandler::IncomingSocketConnection>
                          mutable_connection) {
-        NEARBY_LOGS(WARNING) << "Server socket connection accept call back";
+        LOG(WARNING) << "Server socket connection accept call back";
         accept_latch.CountDown();
         EXPECT_TRUE(end_latch.Await(kWaitDuration).result());
       });

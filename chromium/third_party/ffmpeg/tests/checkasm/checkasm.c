@@ -208,7 +208,7 @@ static const struct {
     #if CONFIG_ME_CMP
         { "motion", checkasm_check_motion },
     #endif
-    #if CONFIG_MPEGVIDEOENC
+    #if CONFIG_MPEGVIDEOENCDSP
         { "mpegvideoencdsp", checkasm_check_mpegvideoencdsp },
     #endif
     #if CONFIG_OPUS_DECODER
@@ -256,6 +256,7 @@ static const struct {
     #if CONFIG_VVC_DECODER
         { "vvc_alf", checkasm_check_vvc_alf },
         { "vvc_mc",  checkasm_check_vvc_mc  },
+        { "vvc_sao", checkasm_check_vvc_sao },
     #endif
 #endif
 #if CONFIG_AVFILTER

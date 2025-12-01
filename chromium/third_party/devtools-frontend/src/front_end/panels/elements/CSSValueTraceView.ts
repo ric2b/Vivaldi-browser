@@ -1,7 +1,6 @@
 // Copyright 2025 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
-/* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
 import type * as SDK from '../../core/sdk/sdk.js';
 import * as Lit from '../../third_party/lit/lit.js';
@@ -40,53 +39,39 @@ function defaultView(input: ViewInput, output: object, target: HTMLElement): voi
   const hiddenSummary = !firstEvaluation || intermediateEvaluations.length === 0;
   const summaryTabIndex = hiddenSummary ? undefined : 0;
   const singleResult = evaluations.length === 0 && substitutions.length === 0;
+  // clang-format off
   render(
-      // clang-format off
     html`
-      <div
-       role=dialog
-       class="css-value-trace monospace"
-       @keydown=${onKeyDown}
-       >
-        ${substitutions.map(
-          line =>
-            html`<span class="trace-line-icon" aria-label="is equal to">↳</span
-              ><span class="trace-line">${line}</span>`,
+      <div role=dialog class="css-value-trace monospace" @keydown=${onKeyDown}>
+        ${substitutions.map(line => html`
+          <span class="trace-line-icon" aria-label="is equal to">↳</span>
+          <span class="trace-line">${line}</span>`,
         )}
-        ${firstEvaluation && intermediateEvaluations.length === 0
-          ? html`<span class="trace-line-icon" aria-label="is equal to">↳</span
-              ><span class="trace-line">${firstEvaluation}</span>`
-          : html`<details
-              @toggle=${input.onToggle}
-              ?hidden=${hiddenSummary}
-            >
-              <summary tabindex=${ifDefined(summaryTabIndex)}>
-                <span class="trace-line-icon" aria-label="is equal to">↳</span
-                ><devtools-icon class="marker"></devtools-icon
-                ><span class="trace-line">${firstEvaluation}</span>
-              </summary>
-              <div>
-                ${intermediateEvaluations.map(
-                  evaluation =>
-                    html`<span class="trace-line-icon" aria-label="is equal to"
-                        >↳</span
-                      ><span class="trace-line">${evaluation}</span>`,
-                )}
-              </div>
-            </details>`}
-        ${!finalResult
-          ? ''
-          : html`<span
-                class="trace-line-icon"
-                aria-label="is equal to"
-                ?hidden=${singleResult}
-              >↳</span
-              ><span class=${classMap({ 'trace-line': true, 'full-row': singleResult})}>${finalResult}</span>`}
-      </div>
-    `,
-      // clang-format on
-      target,
-  );
+        ${firstEvaluation && intermediateEvaluations.length === 0 ? html`
+          <span class="trace-line-icon" aria-label="is equal to">↳</span>
+          <span class="trace-line">${firstEvaluation}</span>`
+            : html`
+          <details @toggle=${input.onToggle} ?hidden=${hiddenSummary}>
+            <summary tabindex=${ifDefined(summaryTabIndex)}>
+              <span class="trace-line-icon" aria-label="is equal to">↳</span>
+              <devtools-icon class="marker"></devtools-icon>
+              <span class="trace-line">${firstEvaluation}</span>
+            </summary>
+            <div>
+              ${intermediateEvaluations.map(
+                evaluation => html`
+                  <span class="trace-line-icon" aria-label="is equal to" >↳</span>
+                  <span class="trace-line">${evaluation}</span>`,
+              )}
+            </div>
+          </details>`}
+        ${finalResult ? html`
+          <span class="trace-line-icon" aria-label="is equal to" ?hidden=${singleResult}>↳</span>
+          <span class=${classMap({ 'trace-line': true, 'full-row': singleResult})}>
+            ${finalResult}
+          </span>`: ''}
+      </div>`, target);
+  // clang-format on
 
   function onKeyDown(this: HTMLDivElement, e: KeyboardEvent): void {
     // prevent styles-tab keyboard navigation
@@ -125,7 +110,7 @@ export class CSSValueTraceView extends UI.Widget.VBox {
   #pendingFocus = false;
 
   constructor(element?: HTMLElement, view: View = defaultView) {
-    super(true, false, element);
+    super(element, {useShadowDom: true});
     this.registerRequiredCSS(
         cssValueTraceViewStyles,
         stylePropertiesTreeOutlineStyles,

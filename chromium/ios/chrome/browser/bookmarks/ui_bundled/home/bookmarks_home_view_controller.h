@@ -40,6 +40,10 @@ class GURL;
                                      inIncognito:(BOOL)inIncognito
                                           newTab:(BOOL)newTab;
 
+// The view controller wants to show the 'Set a Reminder' UI for `node`.
+- (void)bookmarkHomeViewController:(BookmarksHomeViewController*)controller
+    wantsToShowSetTabReminderUIForNode:(const bookmarks::BookmarkNode*)node;
+
 #if defined(VIVALDI_BUILD)
 // Note: (prio@vivaldi.com) - Add open in background option in the parameter
 // of protocol methods.

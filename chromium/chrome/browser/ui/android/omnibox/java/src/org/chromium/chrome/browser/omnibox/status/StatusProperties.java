@@ -87,7 +87,7 @@ public class StatusProperties {
          * @return The icon res.
          */
         @DrawableRes
-        int getIconResForTesting() {
+        public int getIconRes() {
             if (mIconRes == null) return 0;
             return mIconRes;
         }
@@ -108,7 +108,7 @@ public class StatusProperties {
         /**
          * @return The {@link Drawable} for this StatusIconResource.
          */
-        @Nullable Drawable getDrawable(Context context, Resources resources) {
+        public @Nullable Drawable getDrawable(Context context, Resources resources) {
             if (mBitmap != null) {
                 Drawable drawable = new BitmapDrawable(resources, mBitmap);
                 if (mTint != 0) {
@@ -190,7 +190,7 @@ public class StatusProperties {
 
         /** Returns a {@link Drawable} for this StatusIconResource. */
         @Override
-        @Nullable Drawable getDrawable(Context context, Resources resources) {
+        public @Nullable Drawable getDrawable(Context context, Resources resources) {
             Drawable icon = super.getDrawable(context, resources);
             if (icon == null) {
                 return null;
@@ -245,10 +245,6 @@ public class StatusProperties {
 
     /** Whether the icon is shown. */
     static final WritableBooleanPropertyKey SHOW_STATUS_ICON = new WritableBooleanPropertyKey();
-
-    /** Whether the icon background is shown. */
-    static final WritableBooleanPropertyKey SHOW_STATUS_ICON_BACKGROUND =
-            new WritableBooleanPropertyKey();
 
     /** The handler of status click events. */
     static final WritableObjectPropertyKey<View.OnClickListener> STATUS_CLICK_LISTENER =
@@ -310,7 +306,6 @@ public class StatusProperties {
                 INCOGNITO_BADGE_VISIBLE,
                 SEPARATOR_COLOR,
                 SHOW_STATUS_ICON,
-                SHOW_STATUS_ICON_BACKGROUND,
                 SHOW_STATUS_VIEW,
                 STATUS_CLICK_LISTENER,
                 STATUS_ACCESSIBILITY_TOAST_RES,

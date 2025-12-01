@@ -53,6 +53,9 @@
 
 namespace vivaldi {
 
+// deprecated chromium preferences
+inline constexpr char kHasSeenWelcomePage[] = "browser.has_seen_welcome_page";
+
 base::Value GetPlatformComputedDefault(const std::string& path);
 
 namespace {
@@ -62,55 +65,26 @@ namespace syncable_prefs_ids {
 // According to chromium code, These values are only used for histograms. While
 // we don't care about those, we should probably give them sensible values in
 // case they actually end up being used for sync itself.
+
+/* It is currently empty, so remove the declaration completely.
 enum {
-  // Starts with 1000000 to avoid clash with prefs listed in
-  // chrome_syncable_prefs_database.cc,
-  // common_syncable_prefs_database.cc and
-  // ios_chrome_syncable_prefs_database.cc.
-  kSyncedDefaultPrivateSearchProviderGUID = 1000000,
-  kSyncedDefaultSearchFieldProviderGUID = 1000001,
-  kSyncedDefaultPrivateSearchFieldProviderGUID = 1000002,
-  kSyncedDefaultSpeedDialsSearchProviderGUID = 1000003,
-  kSyncedDefaultSpeedDialsPrivateSearchProviderGUID = 1000004,
-  kSyncedDefaultImageSearchProviderGUID = 1000005,
-};
+// Starts with 1000000 to avoid clash with prefs listed in
+// chrome_syncable_prefs_database.cc,
+// common_syncable_prefs_database.cc and
+// ios_chrome_syncable_prefs_database.cc.
+
+// kSyncedDefault...SearchProviderGUID prefs occupied 1000000 up to 1000005 and
+// are deprecated.
+
+// Start with 1000006.
+
+ };
+*/
 
 // Prefs from the prefs_definitions.json have their own ids starting at 1.
 // We add this number so that they don't collide with anything.
 constexpr int kLowestIdForPrefsDefinitions = 1500000;
 }  // namespace syncable_prefs_ids
-
-const auto& SyncablePreferences() {
-  // Non-iOS specific list of syncable preferences.
-  static const auto kVivaldiSyncablePrefsAllowlist = base::MakeFixedFlatMap<
-      std::string_view, sync_preferences::SyncablePrefMetadata>({
-      {prefs::kSyncedDefaultPrivateSearchProviderGUID,
-       {syncable_prefs_ids::kSyncedDefaultPrivateSearchProviderGUID,
-        syncer::PREFERENCES, sync_preferences::PrefSensitivity::kNone,
-        sync_preferences::MergeBehavior::kNone}},
-      {prefs::kSyncedDefaultSearchFieldProviderGUID,
-       {syncable_prefs_ids::kSyncedDefaultSearchFieldProviderGUID,
-        syncer::PREFERENCES, sync_preferences::PrefSensitivity::kNone,
-        sync_preferences::MergeBehavior::kNone}},
-      {prefs::kSyncedDefaultPrivateSearchFieldProviderGUID,
-       {syncable_prefs_ids::kSyncedDefaultPrivateSearchFieldProviderGUID,
-        syncer::PREFERENCES, sync_preferences::PrefSensitivity::kNone,
-        sync_preferences::MergeBehavior::kNone}},
-      {prefs::kSyncedDefaultSpeedDialsSearchProviderGUID,
-       {syncable_prefs_ids::kSyncedDefaultSpeedDialsSearchProviderGUID,
-        syncer::PREFERENCES, sync_preferences::PrefSensitivity::kNone,
-        sync_preferences::MergeBehavior::kNone}},
-      {prefs::kSyncedDefaultSpeedDialsPrivateSearchProviderGUID,
-       {syncable_prefs_ids::kSyncedDefaultSpeedDialsPrivateSearchProviderGUID,
-        syncer::PREFERENCES, sync_preferences::PrefSensitivity::kNone,
-        sync_preferences::MergeBehavior::kNone}},
-      {prefs::kSyncedDefaultImageSearchProviderGUID,
-       {syncable_prefs_ids::kSyncedDefaultImageSearchProviderGUID,
-        syncer::PREFERENCES, sync_preferences::PrefSensitivity::kNone,
-        sync_preferences::MergeBehavior::kNone}},
-  });
-  return kVivaldiSyncablePrefsAllowlist;
-}
 
 const char kPrefsDefinitionFileName[] = "prefs_definitions.json";
 
@@ -336,6 +310,31 @@ base::Value::Dict ReadPrefsJson() {
   return std::move(*dictionary);
 }
 
+void RegisterProfilePrefsForMigration(
+    user_prefs::PrefRegistrySyncable* registry) {
+  // Added 08/2025 (deprecated since 10/2023)
+  registry->RegisterBooleanPref(vivaldiprefs::kAutoUpdateEnabled, true);
+
+  // Added 08/2025 (deprecated since 06/2025)
+  registry->RegisterStringPref(vivaldiprefs::kVivaldiExperiments,
+                               std::string());
+
+  // Added 08/2025
+  registry->RegisterStringPref(
+      vivaldiprefs::kSyncedDefaultPrivateSearchProviderGUID, std::string());
+  registry->RegisterStringPref(
+      vivaldiprefs::kSyncedDefaultSearchFieldProviderGUID, std::string());
+  registry->RegisterStringPref(
+      vivaldiprefs::kSyncedDefaultPrivateSearchFieldProviderGUID,
+      std::string());
+  registry->RegisterStringPref(
+      vivaldiprefs::kSyncedDefaultSpeedDialsSearchProviderGUID, std::string());
+  registry->RegisterStringPref(
+      vivaldiprefs::kSyncedDefaultSpeedDialsPrivateSearchProviderGUID,
+      std::string());
+  registry->RegisterStringPref(
+      vivaldiprefs::kSyncedDefaultImageSearchProviderGUID, std::string());
+}
 }  // namespace
 
 VivaldiPrefsDefinitions::PrefProperties::PrefProperties() = default;
@@ -621,12 +620,8 @@ base::Value VivaldiPrefsDefinitions::GetComputedDefault(
 
 void VivaldiPrefsDefinitions::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
-  // This pref is obsolete.
-  registry->RegisterBooleanPref(vivaldiprefs::kAutoUpdateEnabled, true);
-
   registry->RegisterDictionaryPref(
       vivaldiprefs::kVivaldiAccountPendingRegistration);
-  registry->RegisterListPref(vivaldiprefs::kVivaldiExperiments);
   registry->RegisterInt64Pref(vivaldiprefs::kVivaldiLastTopSitesVacuumDate, 0);
   registry->RegisterDictionaryPref(vivaldiprefs::kVivaldiPIPPlacement);
 
@@ -687,11 +682,16 @@ void VivaldiPrefsDefinitions::RegisterProfilePrefs(
         NOTREACHED();
     }
   }
+
+  // Register deprecated profile prefs.
+  // Keep it at the end, just like Chromium does.
+  RegisterProfilePrefsForMigration(registry);
 }
 
 void VivaldiPrefsDefinitions::MigrateObsoleteProfilePrefs(
       PrefService* profile_prefs) {
 #if !BUILDFLAG(IS_IOS)
+  // Added 11/2024
   if (profile_prefs->HasPrefPath(vivaldiprefs::kAddressBarInlineSearchSuggestEnabled)) {
     profile_prefs->SetBoolean(
         prefs::kSearchSuggestEnabled,
@@ -699,6 +699,8 @@ void VivaldiPrefsDefinitions::MigrateObsoleteProfilePrefs(
     profile_prefs->ClearPref(vivaldiprefs::kAddressBarInlineSearchSuggestEnabled);
   }
 #endif // !IS_IOS
+
+  // Added 02/2025
 if (profile_prefs->HasPrefPath(vivaldiprefs::kAddressBarOmniboxShowBookmarks)) {
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
   auto pref = vivaldiprefs::kAddressBarOmniboxBookmarksBoosted;
@@ -710,15 +712,85 @@ if (profile_prefs->HasPrefPath(vivaldiprefs::kAddressBarOmniboxShowBookmarks)) {
         profile_prefs->GetBoolean(vivaldiprefs::kAddressBarOmniboxShowBookmarks));
     profile_prefs->ClearPref(vivaldiprefs::kAddressBarOmniboxShowBookmarks);
   }
+
+  // Added 08/2025 (deprecated since 10/2023)
+  profile_prefs->ClearPref(vivaldiprefs::kAutoUpdateEnabled);
+
+  // Added 08/2025 (deprecated since  06/2025)
+  profile_prefs->ClearPref(vivaldiprefs::kVivaldiExperiments);
+
+  // Added 08/2025
+  if (profile_prefs->HasPrefPath(
+          vivaldiprefs::kSyncedDefaultPrivateSearchProviderGUID)) {
+    profile_prefs->SetString(
+        prefs::kDefaultPrivateSearchProviderGUID,
+        profile_prefs->GetString(
+            vivaldiprefs::kSyncedDefaultPrivateSearchProviderGUID));
+    profile_prefs->ClearPref(
+        vivaldiprefs::kSyncedDefaultPrivateSearchProviderGUID);
+  }
+  if (profile_prefs->HasPrefPath(
+          vivaldiprefs::kSyncedDefaultSearchFieldProviderGUID)) {
+    profile_prefs->SetString(
+        prefs::kDefaultSearchFieldProviderGUID,
+        profile_prefs->GetString(
+            vivaldiprefs::kSyncedDefaultSearchFieldProviderGUID));
+    profile_prefs->ClearPref(
+        vivaldiprefs::kSyncedDefaultSearchFieldProviderGUID);
+  }
+  if (profile_prefs->HasPrefPath(
+          vivaldiprefs::kSyncedDefaultPrivateSearchFieldProviderGUID)) {
+    profile_prefs->SetString(
+        prefs::kDefaultPrivateSearchFieldProviderGUID,
+        profile_prefs->GetString(
+            vivaldiprefs::kSyncedDefaultPrivateSearchFieldProviderGUID));
+    profile_prefs->ClearPref(
+        vivaldiprefs::kSyncedDefaultPrivateSearchFieldProviderGUID);
+  }
+  if (profile_prefs->HasPrefPath(
+          vivaldiprefs::kSyncedDefaultSpeedDialsSearchProviderGUID)) {
+    profile_prefs->SetString(
+        prefs::kDefaultSpeedDialsSearchProviderGUID,
+        profile_prefs->GetString(
+            vivaldiprefs::kSyncedDefaultSpeedDialsSearchProviderGUID));
+    profile_prefs->ClearPref(
+        vivaldiprefs::kSyncedDefaultSpeedDialsSearchProviderGUID);
+  }
+  if (profile_prefs->HasPrefPath(
+          vivaldiprefs::kSyncedDefaultSpeedDialsPrivateSearchProviderGUID)) {
+    profile_prefs->SetString(
+        prefs::kDefaultSpeedDialsPrivateSearchProviderGUID,
+        profile_prefs->GetString(
+            vivaldiprefs::kSyncedDefaultSpeedDialsPrivateSearchProviderGUID));
+    profile_prefs->ClearPref(
+        vivaldiprefs::kSyncedDefaultSpeedDialsPrivateSearchProviderGUID);
+  }
+  if (profile_prefs->HasPrefPath(
+          vivaldiprefs::kSyncedDefaultImageSearchProviderGUID)) {
+    profile_prefs->SetString(
+        prefs::kDefaultImageSearchProviderGUID,
+        profile_prefs->GetString(
+            vivaldiprefs::kSyncedDefaultImageSearchProviderGUID));
+    profile_prefs->ClearPref(
+        vivaldiprefs::kSyncedDefaultImageSearchProviderGUID);
+  }
+  // Added 08/2025. Added for cr140.
+#if CHROME_VERSION_MAJOR > 144
+  #error "We do not need to migrate kHasSeenWelcomePage forever, remove this now."
+#endif // CHROME_VERSION_MAJOR > 144
+  if (profile_prefs->HasPrefPath(kHasSeenWelcomePage)) {
+    profile_prefs->SetBoolean(vivaldiprefs::kStartupHasSeenWelcomePage,
+                              profile_prefs->GetBoolean(kHasSeenWelcomePage));
+  }
 }
 
 std::optional<sync_preferences::SyncablePrefMetadata>
 VivaldiPrefsDefinitions::GetSyncablePrefMetadata(
     const std::string_view pref_name) const {
-  const auto it = SyncablePreferences().find(pref_name);
-  if (it != SyncablePreferences().end()) {
-    return it->second;
-  }
+  // If you need to register more syncable prefs, you will need to add a way to
+  // look them up from here. See chrome_syncable_prefs_database.cc for a way to
+  // do this. See the commented out enum at the top for details about which ids
+  // we use.
 
   const auto& item = pref_properties_.find(std::string(pref_name));
   if (item == pref_properties_.end() || !item->second.definition ||

@@ -1,13 +1,14 @@
-[numthreads(1, 1, 1)]
-void unused_entry_point() {
-  return;
-}
 
 RWByteAddressBuffer a : register(u0);
-
 void main() {
-  uint tint_symbol_2 = 0u;
-  a.GetDimensions(tint_symbol_2);
-  uint tint_symbol_3 = (tint_symbol_2 / 4u);
-  a.Store((4u * min(1u, (tint_symbol_3 - 1u))), asuint((a.Load((4u * min(1u, (tint_symbol_3 - 1u)))) + 1u)));
+  uint v = 0u;
+  a.GetDimensions(v);
+  uint v_1 = ((v / 4u) - 1u);
+  uint v_2 = (min(uint(int(1)), v_1) * 4u);
+  a.Store((0u + v_2), (a.Load((0u + v_2)) + 1u));
 }
+
+[numthreads(1, 1, 1)]
+void unused_entry_point() {
+}
+

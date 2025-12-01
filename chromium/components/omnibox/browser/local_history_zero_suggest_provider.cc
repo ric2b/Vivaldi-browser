@@ -16,6 +16,7 @@
 #include "base/i18n/case_conversion.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/timer/elapsed_timer.h"
 #include "base/trace_event/trace_event.h"
@@ -23,6 +24,7 @@
 #include "components/google/core/common/google_util.h"
 #include "components/history/core/browser/history_database.h"
 #include "components/history/core/browser/history_service.h"
+#include "components/history/core/browser/history_types.h"
 #include "components/history/core/browser/keyword_search_term.h"
 #include "components/history/core/browser/keyword_search_term_util.h"
 #include "components/history/core/browser/url_database.h"
@@ -226,7 +228,7 @@ void LocalHistoryZeroSuggestProvider::QueryURLDatabase(
     return;
   }
 
-  std::vector<std::unique_ptr<history::KeywordSearchTermVisit>> results;
+  history::KeywordSearchTermVisitList results;
   const base::ElapsedTimer db_query_timer;
   auto enumerator = url_db->CreateKeywordSearchTermVisitEnumerator(
       template_url_service->GetDefaultSearchProvider()->id());

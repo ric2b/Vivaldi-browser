@@ -85,9 +85,9 @@ http_archive(
 # pthreadpool library, used for parallelization
 http_archive(
     name = "pthreadpool",
-    sha256 = "745e56516d6a58d183eb33d9017732d87cff43ce9f78908906f9faa52633e421",
-    strip_prefix = "pthreadpool-b92447772365661680f486e39a91dfe6675adafc",
-    urls = ["https://github.com/google/pthreadpool/archive/b92447772365661680f486e39a91dfe6675adafc.zip"],
+    sha256 = "516ba8d05c30e016d7fd7af6a7fc74308273883f857faf92bc9bb630ab6dba2c",
+    strip_prefix = "pthreadpool-c2ba5c50bb58d1397b693740cf75fad836a0d1bf",
+    urls = ["https://github.com/google/pthreadpool/archive/c2ba5c50bb58d1397b693740cf75fad836a0d1bf.zip"],
 )
 # LINT.ThenChange(cmake/DownloadPThreadPool.cmake,MODULE.bazel:pthreadpool)
 
@@ -95,10 +95,10 @@ http_archive(
 # cpuinfo library, used for detecting processor characteristics
 http_archive(
     name = "cpuinfo",
-    sha256 = "593ac799e8c9382362e7b29a58917053299fa906e271185204bb571465bb2f79",
-    strip_prefix = "cpuinfo-b73ae6ce38d5dd0b7fe46dbe0a4b5f4bab91c7ea",
+    sha256 = "a074e612706113048f1bb2937e7af3c5b57a037ce048d3cfaaca2931575819d2",
+    strip_prefix = "cpuinfo-e4cadd02a8b386c38b84f0a19eddacec3f433baa",
     urls = [
-        "https://github.com/pytorch/cpuinfo/archive/b73ae6ce38d5dd0b7fe46dbe0a4b5f4bab91c7ea.zip",
+        "https://github.com/pytorch/cpuinfo/archive/e4cadd02a8b386c38b84f0a19eddacec3f433baa.zip",
     ],
 )
 # LINT.ThenChange(cmake/DownloadCpuinfo.cmake,MODULE.bazel:cpuinfo)
@@ -107,10 +107,10 @@ http_archive(
 # KleidiAI library, used for ARM microkernels.
 http_archive(
     name = "KleidiAI",
-    sha256 = "ca8b8ee0c3dd2284c1eae3ac07f7064ce92317ac7c3cfcd1d511662e0594cdb8",
-    strip_prefix = "kleidiai-fb4caf0937a45002861cc12788b6018bfb89ae58",
+    sha256 = "b1ba8f690704a37f2ff924f98edfb3d3486a5d07142d0723dd22ff0c0391e2df",
+    strip_prefix = "kleidiai-f362d32fa5f8c8f36da487e13f5b59c911ce6b22",
     urls = [
-        "https://github.com/ARM-software/kleidiai/archive/fb4caf0937a45002861cc12788b6018bfb89ae58.zip",
+        "https://github.com/ARM-software/kleidiai/archive/f362d32fa5f8c8f36da487e13f5b59c911ce6b22.zip",
     ],
 )
 # LINT.ThenChange(cmake/DownloadKleidiAI.cmake,MODULE.bazel:kleidiai)
@@ -123,3 +123,4 @@ http_archive(
     urls = [
         "https://github.com/google/ruy/archive/9f53ba413e6fc879236dcaa3e008915973d67a4f.zip",
     ],
+)

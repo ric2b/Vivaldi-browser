@@ -62,6 +62,7 @@
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "services/network/public/cpp/simple_url_loader.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
 #include "url/gurl.h"
 
@@ -129,17 +130,12 @@ const base::FeatureParam<int> kAutofillMaxServerAttempts(
     "max-attempts",
     5);
 
-enum class RequestType {
-  kRequestQuery,
-  kRequestUpload,
-};
-
 // Used in `ShouldThrottleUpload` to specify which part of the upload is
 // checked for throttling.
 enum class UploadType {
   kVote,
   kMetadata,
-  kSecondaryFormSignature,
+  kStructuralFormSignature,
 };
 
 // Returns the base URL for the autofill server.
@@ -196,12 +192,13 @@ bool IsAutofillExperimentId(int id) {
   });
 }
 
-std::string GetMetricName(RequestType request_type, std::string_view suffix) {
-  auto TypeToName = [](RequestType type) -> std::string_view {
+std::string GetMetricName(CrowdsourcingRequestType request_type,
+                          std::string_view suffix) {
+  auto TypeToName = [](CrowdsourcingRequestType type) -> std::string_view {
     switch (type) {
-      case RequestType::kRequestQuery:
+      case CrowdsourcingRequestType::kRequestQuery:
         return "Query";
-      case RequestType::kRequestUpload:
+      case CrowdsourcingRequestType::kRequestUpload:
         return "Upload";
     }
     NOTREACHED();
@@ -210,9 +207,9 @@ std::string GetMetricName(RequestType request_type, std::string_view suffix) {
 }
 
 net::NetworkTrafficAnnotationTag GetNetworkTrafficAnnotation(
-    RequestType request_type) {
+    CrowdsourcingRequestType request_type) {
   switch (request_type) {
-    case RequestType::kRequestQuery:
+    case CrowdsourcingRequestType::kRequestQuery:
       return net::DefineNetworkTrafficAnnotation("autofill_query", R"(
         semantics {
           sender: "Autofill"
@@ -263,7 +260,7 @@ net::NetworkTrafficAnnotationTag GetNetworkTrafficAnnotation(
             }
           }
         })");
-    case RequestType::kRequestUpload:
+    case CrowdsourcingRequestType::kRequestUpload:
       return net::DefineNetworkTrafficAnnotation("autofill_upload", R"(
       semantics {
         sender: "Autofill"
@@ -364,12 +361,8 @@ LogBuffer& operator<<(LogBuffer& out, const AutofillUploadContents& upload) {
     out << Tr{}
         << "submission_event:" << static_cast<int>(upload.submission_event());
   }
-  if (upload.action_signature())
-    out << Tr{} << "action_signature:" << upload.action_signature();
   if (upload.login_form_signature())
     out << Tr{} << "login_form_signature:" << upload.login_form_signature();
-  if (!upload.form_name().empty())
-    out << Tr{} << "form_name:" << upload.form_name();
   if (upload.has_passwords_revealed())
     out << Tr{} << "passwords_revealed:" << upload.passwords_revealed();
   if (upload.has_has_form_tag())
@@ -388,6 +381,10 @@ LogBuffer& operator<<(LogBuffer& out, const AutofillUploadContents& upload) {
     out << Tr{}
         << "secondary_form_signature:" << upload.secondary_form_signature();
   }
+  if (upload.has_structural_form_signature()) {
+    out << Tr{}
+        << "structural_form_signature:" << upload.structural_form_signature();
+  }
   if (upload.has_last_credit_card_form_submitted()) {
     out << Tr{} << "last_credit_card_form_submitted:"
         << upload.last_credit_card_form_submitted();
@@ -403,12 +400,6 @@ LogBuffer& operator<<(LogBuffer& out, const AutofillUploadContents& upload) {
     }
     out << Tr{} << "autofill_type:" << types_as_strings;
 
-    if (!field.name().empty())
-      out << Tr{} << "name:" << field.name();
-    if (!field.autocomplete().empty())
-      out << Tr{} << "autocomplete:" << field.autocomplete();
-    if (!field.type().empty())
-      out << Tr{} << "type:" << field.type();
     if (field.generation_type()) {
       out << Tr{}
           << "generation_type:" << static_cast<int>(field.generation_type());
@@ -430,7 +421,7 @@ std::string_view GetUploadEventPreferenceName(UploadType upload_type) {
       return prefs::kAutofillVoteUploadEvents;
     case UploadType::kMetadata:
       return prefs::kAutofillMetadataUploadEvents;
-    case UploadType::kSecondaryFormSignature:
+    case UploadType::kStructuralFormSignature:
       return prefs::kAutofillVoteSecondaryFormSignatureUploadEvents;
   }
   NOTREACHED();
@@ -447,8 +438,8 @@ std::string_view GetUploadEventPreferenceName(UploadType upload_type) {
 // metadata part of the upload. Metadata throttling is shared by Autofill and
 // the Password Manager, ensuring that together they don't upload metadata more
 // frequently than desired.
-// If `upload_type` equals `UploadType::kSecondaryFormSignature`,
-// `form_signature` is assumed to be the secondary (alternative) form signature.
+// If `upload_type` equals `UploadType::kStructuralFormSignature`,
+// `form_signature` is assumed to be the structural form signature.
 bool ShouldThrottleUpload(FormSignature form_signature,
                           UploadType upload_type,
                           base::TimeDelta throttle_reset_period,
@@ -486,7 +477,7 @@ bool ShouldThrottleUpload(FormSignature form_signature,
       break;
     }
     // The secondary form signature should be uploaded only once (go/bnxhp).
-    case UploadType::kSecondaryFormSignature:
+    case UploadType::kStructuralFormSignature:
     case UploadType::kMetadata:
       mask = 1;
       break;
@@ -522,20 +513,20 @@ std::optional<std::string> GetUploadPayloadForApi(
 // Gets an API method URL given its type (query or upload), an optional
 // resource ID, and the HTTP method to be used.
 // Example usage:
-// * GetAPIMethodUrl(RequestType::kRequestQuery, "1234", "GET") will return
-//   "/v1/pages/1234".
-// * GetAPIMethodUrl(RequestType::kRequestQuery, "1234", "POST") will return
-//   "/v1/pages:get".
-// * GetAPIMethodUrl(RequestType::kRequestUpload, "", "POST") will return
-//   "/v1/forms:vote".
-std::string GetAPIMethodUrl(RequestType type,
+// * GetAPIMethodUrl(CrowdsourcingRequestType::kRequestQuery, "1234", "GET")
+// will return "/v1/pages/1234".
+// * GetAPIMethodUrl(CrowdsourcingRequestType::kRequestQuery, "1234", "POST")
+// will return "/v1/pages:get".
+// * GetAPIMethodUrl(CrowdsourcingRequestType::kRequestUpload, "", "POST")
+// will return "/v1/forms:vote".
+std::string GetAPIMethodUrl(CrowdsourcingRequestType type,
                             std::string_view resource_id,
                             std::string_view method) {
   const char* api_method_url = [&] {
     switch (type) {
-      case RequestType::kRequestQuery:
+      case CrowdsourcingRequestType::kRequestQuery:
         return method == "POST" ? "/v1/pages:get" : "/v1/pages";
-      case RequestType::kRequestUpload:
+      case CrowdsourcingRequestType::kRequestUpload:
         return "/v1/forms:vote";
     }
     NOTREACHED();
@@ -548,9 +539,9 @@ std::string GetAPIMethodUrl(RequestType type,
 
 // Gets HTTP body payload for API POST request.
 std::optional<std::string> GetAPIBodyPayload(std::string payload,
-                                             RequestType type) {
+                                             CrowdsourcingRequestType type) {
   // Don't do anything for payloads not related to Query.
-  if (type != RequestType::kRequestQuery) {
+  if (type != CrowdsourcingRequestType::kRequestQuery) {
     return std::move(payload);
   }
   // Wrap query payload in a request proto to interface with API Query method.
@@ -677,7 +668,7 @@ class ScopedCallbackRunner<R(Args...)> final {
 struct AutofillCrowdsourcingManager::FormRequestData {
   ScopedCallbackRunner<void(std::optional<QueryResponse>)> callback;
   std::vector<FormSignature> form_signatures;
-  RequestType request_type;
+  CrowdsourcingRequestType request_type;
   std::optional<net::IsolationInfo> isolation_info;
   std::string payload;
   int num_attempts = 0;
@@ -791,7 +782,7 @@ bool AutofillCrowdsourcingManager::StartQueryRequest(
   return StartRequest(FormRequestData{
       .callback = std::move(scoped_callback_runner),
       .form_signatures = std::move(queried_form_signatures),
-      .request_type = RequestType::kRequestQuery,
+      .request_type = CrowdsourcingRequestType::kRequestQuery,
       .isolation_info = std::move(isolation_info),
       .payload = std::move(payload).value(),
   });
@@ -812,6 +803,13 @@ bool AutofillCrowdsourcingManager::StartUploadRequest(
   const FormSignature form_signature(upload_contents[0].form_signature());
   const FormSignature secondary_form_signature(
       upload_contents[0].secondary_form_signature());
+  const FormSignature structural_form_signature(
+      upload_contents[0].structural_form_signature());
+  const FormSignature throttled_form_signature =
+      base::FeatureList::IsEnabled(
+          features::kAutofillUseStructuralSignatureInsteadOfSecondary)
+          ? structural_form_signature
+          : secondary_form_signature;
   // Autofill vote uploads are limited via throttling so that only one vote is
   // uploaded per form_submission_source and form signature in a given period of
   // time.
@@ -829,11 +827,14 @@ bool AutofillCrowdsourcingManager::StartUploadRequest(
 
   // Secondary form signature throttling does not cancel the upload, but only
   // clears the secondary form signature.
-  if (secondary_form_signature &&
+  if (throttled_form_signature &&
       ShouldThrottleUpload(
-          secondary_form_signature, UploadType::kSecondaryFormSignature,
+          throttled_form_signature, UploadType::kStructuralFormSignature,
           throttle_reset_period_, prefs, form_submission_source)) {
     for (AutofillUploadContents& upload : upload_contents) {
+      // Only the throttled signature will be set, but clearing both for
+      // simplicity.
+      upload.clear_structural_form_signature();
       upload.clear_secondary_form_signature();
     }
   }
@@ -876,7 +877,7 @@ bool AutofillCrowdsourcingManager::StartUploadRequest(
 
     return StartRequest(FormRequestData{
         .form_signatures = {form_signature},
-        .request_type = RequestType::kRequestUpload,
+        .request_type = CrowdsourcingRequestType::kRequestUpload,
         .isolation_info = std::nullopt,
         .payload = std::move(payload).value(),
     });
@@ -910,7 +911,7 @@ std::tuple<GURL, std::string> AutofillCrowdsourcingManager::GetRequestURLAndMeth
   std::string resource_id;
   std::string method = "POST";
 
-  if (request_data.request_type == RequestType::kRequestQuery) {
+  if (request_data.request_type == CrowdsourcingRequestType::kRequestQuery) {
     if (GetPayloadLength(request_data.payload) <= kMaxQueryGetSize) {
       resource_id = request_data.payload;
       method = "GET";
@@ -939,15 +940,16 @@ bool AutofillCrowdsourcingManager::StartRequest(FormRequestData request_data) {
 #if BUILDFLAG(IS_IOS)
   DCHECK(!request_data.isolation_info);
 #else
-  DCHECK((request_data.request_type == RequestType::kRequestUpload) ==
-         !request_data.isolation_info);
+  DCHECK(
+      (request_data.request_type == CrowdsourcingRequestType::kRequestUpload) ==
+      !request_data.isolation_info);
 #endif
   // Get the URL and method to use for this request.
   auto [request_url, method] = GetRequestURLAndMethod(request_data);
 
   // Track the URL length for GET queries because the URL length can be in the
   // thousands when rich metadata is enabled.
-  if (request_data.request_type == RequestType::kRequestQuery &&
+  if (request_data.request_type == CrowdsourcingRequestType::kRequestQuery &&
       method == "GET") {
     base::UmaHistogramCounts100000(kUmaGetUrlLength,
                                    request_url.spec().length());
@@ -1093,6 +1095,11 @@ void AutofillCrowdsourcingManager::OnSimpleLoaderComplete(
       GetMetricName(request_data.request_type, "RequestDuration"),
       base::TimeTicks::Now() - request_start);
 
+  if (!simple_loader->LoadedFromCache()) {
+    AutofillCrowdsourcingManager::RecordRequestsInLastMinute(
+        request_data.request_type);
+  }
+
   if (!success) {
     std::string error_message =
         (response_body != nullptr) ? *response_body : "";
@@ -1124,7 +1131,7 @@ void AutofillCrowdsourcingManager::OnSimpleLoaderComplete(
     return;
   }
 
-  if (request_data.request_type != RequestType::kRequestQuery) {
+  if (request_data.request_type != CrowdsourcingRequestType::kRequestQuery) {
     return;
   }
 
@@ -1136,6 +1143,44 @@ void AutofillCrowdsourcingManager::OnSimpleLoaderComplete(
         .Run(QueryResponse(std::move(*response_body),
                            std::move(request_data.form_signatures)));
   }
+}
+
+// static
+void AutofillCrowdsourcingManager::RecordRequestsInLastMinute(
+    CrowdsourcingRequestType request_type) {
+  std::deque<base::TimeTicks>& timestamps =
+      GetRecentRequestTimestamps(request_type);
+
+  base::TimeTicks now = base::TimeTicks::Now();
+  base::TimeTicks cutoff_time = now - base::Minutes(1);
+  timestamps.push_back(now);
+  while (!timestamps.empty() && timestamps.front() < cutoff_time) {
+    timestamps.pop_front();
+  }
+  base::UmaHistogramCounts10000(
+      GetMetricName(request_type, "RequestsInLastMinute"), timestamps.size());
+}
+
+// static
+std::deque<base::TimeTicks>&
+AutofillCrowdsourcingManager::GetRecentRequestTimestamps(
+    CrowdsourcingRequestType request_type) {
+  // Recent query timestamps, used to measure the number of requests sent in a
+  // sliding time window.
+  static base::NoDestructor<std::deque<base::TimeTicks>>
+      recent_query_timestamps;
+  // Recent upload timestamps, used to measure the number of requests sent in a
+  // sliding time window.
+  static base::NoDestructor<std::deque<base::TimeTicks>>
+      recent_upload_timestamps;
+
+  switch (request_type) {
+    case CrowdsourcingRequestType::kRequestQuery:
+      return *recent_query_timestamps;
+    case CrowdsourcingRequestType::kRequestUpload:
+      return *recent_upload_timestamps;
+  }
+  NOTREACHED();
 }
 
 }  // namespace autofill

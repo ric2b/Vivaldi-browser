@@ -4,6 +4,9 @@
 
 package org.chromium.chrome.browser;
 
+import static org.chromium.build.NullUtil.assertNonNull;
+import static org.chromium.build.NullUtil.assumeNonNull;
+
 import android.content.Intent;
 import android.content.pm.ResolveInfo;
 import android.graphics.Rect;
@@ -14,7 +17,6 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 
-import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.Callback;
@@ -22,6 +24,8 @@ import org.chromium.base.PackageManagerUtils;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.supplier.Supplier;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.firstrun.FirstRunStatus;
@@ -60,11 +64,12 @@ import org.vivaldi.browser.panels.PanelUtils;
 import org.vivaldi.browser.translate.VivaldiTranslateBridge;
 
 /** A class that handles selection action mode for the active {@link Tab}. */
+@NullMarked
 public class ChromeActionModeHandler {
     /** Observes the active WebContents being initialized into a Tab. */
     private final Callback<WebContents> mInitWebContentsObserver;
 
-    private Tab mActiveTab;
+    private @Nullable Tab mActiveTab;
 
     /**
      * @param activityTabProvider {@link ActivityTabProvider} instance.
@@ -88,7 +93,7 @@ public class ChromeActionModeHandler {
                             SelectionPopupController.fromWebContents(webContents);
                     spc.setActionModeCallback(
                             new ChromeActionModeCallback(
-                                    mActiveTab,
+                                    assertNonNull(mActiveTab),
                                     webContents,
                                     searchCallback,
                                     showWebSearch,
@@ -100,7 +105,7 @@ public class ChromeActionModeHandler {
 
         new ActivityTabProvider.ActivityTabTabObserver(activityTabProvider) {
             @Override
-            public void onObservingDifferentTab(Tab tab, boolean hint) {
+            public void onObservingDifferentTab(@Nullable Tab tab, boolean hint) {
                 // ActivityTabProvider will null out the tab passed to onObservingDifferentTab when
                 // the tab is non-interactive (e.g. when entering the TabSwitcher), but in those
                 // cases we actually still want to use the most recently selected tab.
@@ -116,12 +121,14 @@ public class ChromeActionModeHandler {
 
             @Override
             public void onPageLoadStarted(Tab tab, GURL url) {
-                SelectionPopupController.fromWebContents(tab.getWebContents()).clearSelection();
+                SelectionPopupController.fromWebContents(assertNonNull(tab.getWebContents()))
+                        .clearSelection();
             }
 
             @Override
             public void onContentChanged(Tab tab) {
-                SelectionPopupController.fromWebContents(tab.getWebContents()).clearSelection();
+                SelectionPopupController.fromWebContents(assertNonNull(tab.getWebContents()))
+                        .clearSelection();
             }
         };
     }
@@ -141,9 +148,6 @@ public class ChromeActionModeHandler {
         private final Supplier<ShareDelegate> mShareDelegateSupplier;
         private final Supplier<ReadAloudController> mReadAloudControllerSupplier;
         private final BrowserControlsStateProvider mControlsState;
-
-        // Vivaldi
-        private String mTranslateText;
 
         // Used for recording UMA histograms.
         private long mContextMenuStartTime;
@@ -203,7 +207,7 @@ public class ChromeActionModeHandler {
                     if (BuildConfig.IS_VIVALDI && // Vivaldi VAB-9670
                             item.getItemId() == R.id.select_action_menu_translate) {
                         item.setTitle(R.string.translate_vivaldi_context_menu);
-                        Intent webappIntent = TabUtils.getActivity(mTab).getIntent();
+                        Intent webappIntent = assertNonNull(TabUtils.getActivity(mTab)).getIntent();
                         if (webappIntent != null && webappIntent.getData() != null &&
                                 webappIntent.getData().toString().contains("webapp")) {
                                     item.setVisible(false); // Removes option in PWAs
@@ -229,13 +233,16 @@ public class ChromeActionModeHandler {
 
         private void showShareIph() {
             View view = mTab.getView();
+            assumeNonNull(view);
             int padding =
                     view.getResources()
                             .getDimensionPixelSize(R.dimen.iph_shared_highlighting_padding_top);
             Rect anchorRect = new Rect(view.getWidth() / 2, padding, view.getWidth() / 2, padding);
             UserEducationHelper mUserEducationHelper =
                     new UserEducationHelper(
-                            TabUtils.getActivity(mTab), mTab.getProfile(), new Handler());
+                            assertNonNull(TabUtils.getActivity(mTab)),
+                            mTab.getProfile(),
+                            new Handler());
             mUserEducationHelper.requestShowIph(
                     new IphCommandBuilder(
                                     view.getResources(),
@@ -265,7 +272,7 @@ public class ChromeActionModeHandler {
                 int groupId,
                 int id,
                 @Nullable Intent intent,
-                @Nullable View.OnClickListener clickListener) {
+                View.@Nullable OnClickListener clickListener) {
             boolean res =
                     handleItemClick(id)
                             || mHelper.onDropdownItemClicked(groupId, id, intent, clickListener);
@@ -282,7 +289,8 @@ public class ChromeActionModeHandler {
                             if (result != null && result) search(selectedText);
                         };
                 LocaleManager.getInstance()
-                        .showSearchEnginePromoIfNeeded(TabUtils.getActivity(mTab), callback);
+                        .showSearchEnginePromoIfNeeded(
+                                assertNonNull(TabUtils.getActivity(mTab)), callback);
                 mHelper.dismissMenu();
                 return true;
             } else if (mShareDelegateSupplier.get() != null
@@ -296,7 +304,7 @@ public class ChromeActionModeHandler {
                         .get()
                         .share(
                                 new ShareParams.Builder(
-                                                mTab.getWindowAndroid(),
+                                                assertNonNull(mTab.getWindowAndroid()),
                                                 /* title= */ "",
                                                 /* url= */ "")
                                         .setText(sanitizeTextForShare(mHelper.getSelectedText()))
@@ -334,8 +342,9 @@ public class ChromeActionModeHandler {
                 return true;
             }  else if (mShareDelegateSupplier.get() != null
                     && id == org.chromium.chrome.R.id.select_action_menu_translate) { // Vivaldi
-                mTranslateText = mHelper.getSelectedText();
-                if (!DeviceFormFactor.isNonMultiDisplayContextOnTablet(TabUtils.getActivity(mTab))) {
+                final String translateText = mHelper.getSelectedText();
+                if (!DeviceFormFactor.isNonMultiDisplayContextOnTablet(
+                        assertNonNull(TabUtils.getActivity(mTab)))) {
                     VivaldiTranslateBridge bridge = new VivaldiTranslateBridge();
                     bridge.addObserver(new VivaldiTranslateBridge.TranslationObserver() {
                         @Override
@@ -356,8 +365,10 @@ public class ChromeActionModeHandler {
 
                         @Override
                         public void onLanguageDetermined(String langCode) {
-                            PanelUtils.translateText(TabUtils.getActivity(mTab),
-                                    mTranslateText, langCode);
+                            PanelUtils.translateText(
+                                    TabUtils.getActivity(mTab),
+                                    translateText,
+                                    langCode);
                         }
                     });
                     bridge.determineTextLanguage(mTab.getWebContents(), mHelper.getSelectedText());

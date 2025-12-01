@@ -240,7 +240,6 @@ class CORE_EXPORT WebFrameWidgetImpl
                      base::OnceCallback<void(bool)>,
                      bool speculative) override;
   bool SpeculativeDecodeRequestInFlight() const override;
-  void RequestBeginMainFrameNotExpected(bool request) final;
   int GetLayerTreeId() final;
   const cc::LayerTreeSettings* GetLayerTreeSettings() final;
   void UpdateBrowserControlsState(
@@ -394,6 +393,7 @@ class CORE_EXPORT WebFrameWidgetImpl
   FrameWidgetTestHelper* GetFrameWidgetTestHelperForTesting() override;
   void PrepareForFinalLifecyclUpdateForTesting() override;
   void ApplyLocalSurfaceIdUpdate(const viz::LocalSurfaceId& id) override;
+  bool InsertVisualStateRequest(base::OnceClosure callback) override;
 
   // Called when a drag-n-drop operation should begin.
   virtual void StartDragging(LocalFrame* source_frame,
@@ -728,9 +728,6 @@ class CORE_EXPORT WebFrameWidgetImpl
   // compositor submits a frame.
   void PropagateHistorySequenceNumberToCompositor();
 
-  // Ask compositor to create the shared memory for smoothness ukm region.
-  base::ReadOnlySharedMemoryRegion CreateSharedMemoryForSmoothnessUkm();
-
   // Ask compositor to create the shared memory for dropped frames ukm region.
   base::ReadOnlySharedMemoryRegion CreateSharedMemoryForDroppedFramesUkm();
 #if BUILDFLAG(IS_ANDROID)
@@ -758,7 +755,6 @@ class CORE_EXPORT WebFrameWidgetImpl
   void OnDevToolsSessionConnectionChanged(bool attached);
 
   // Vivaldi
-  void LoadImageAt(const gfx::Point& point) override;
   void SetImagesEnabled(const bool show_images) override;
   void SetServeResourceFromCacheOnly(const bool only_cache) override;
 
@@ -804,7 +800,6 @@ class CORE_EXPORT WebFrameWidgetImpl
       override;
   void BeginUpdateLayers() override;
   void EndUpdateLayers() override;
-  void DidCommitAndDrawCompositorFrame() override;
   void DidObserveFirstScrollDelay(
       base::TimeDelta first_scroll_delay,
       base::TimeTicks first_scroll_timestamp) override;
@@ -968,13 +963,6 @@ class CORE_EXPORT WebFrameWidgetImpl
       base::FunctionRef<void(RemoteFrame*)> callback);
 
   void SendOverscrollEventFromImplSide(const gfx::Vector2dF& overscroll_delta,
-                                       cc::ElementId scroll_latched_element_id);
-  // TODO(crbug.com/372627916): This function is not used when
-  // MultipleImplOnlyScrollAnimations is enabled. It should be considered
-  // deprecated and should be deleted when the MultipleImplOnlyScrollAnimations
-  // code path is the only existing code path.
-  void SendEndOfScrollEventsDeprecated(bool affects_outer_viewport,
-                                       bool affects_inner_viewport,
                                        cc::ElementId scroll_latched_element_id);
   void SendEndOfScrollEvents(const cc::CompositorCommitData& commit_data);
   void SendScrollSnapChangingEventIfNeeded(

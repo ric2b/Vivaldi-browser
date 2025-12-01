@@ -44,7 +44,7 @@ eval `echo $version |
 
 sed -i configure.ac -e "/^AC_INIT(/s/2\.[0-9.]*/$version/"
 
-sed -i fontconfig/fontconfig.h \
+sed -i fontconfig/fontconfig.h.in \
 	-e "/^#define FC_MAJOR/s/[0-9][0-9]*/$major/" \
 	-e "/^#define FC_MINOR/s/[0-9][0-9]*/$minor/" \
 	-e "/^#define FC_REVISION/s/[0-9][0-9]*/$revision/"
@@ -129,7 +129,7 @@ fi
 
 $test git commit -m"Bump version to $version" \
 	configure.ac \
-	fontconfig/fontconfig.h \
+	fontconfig/fontconfig.h.in \
 	meson.build \
 	NEWS
 

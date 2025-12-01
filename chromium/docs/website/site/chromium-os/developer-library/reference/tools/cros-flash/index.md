@@ -163,15 +163,6 @@ cros flash --no-reboot ssh://${DUT_IP} path/to/image
 `cros flash` is in the chromite repo. The script is
 `chromite/cli/cros/cros_flash.py`. The source is [available here].
 
-### Failures related to update engine
-
-Make sure that update-engine service on device is running. If not:
-
-```bash
-# On the device
-start update-engine
-```
-
 [available here]: https://chromium.googlesource.com/chromiumos/chromite/+/HEAD/cli/cros/cros_flash.py
 [devserver]: https://chromium.googlesource.com/chromiumos/chromite/+/HEAD/docs/devserver.md
 [Setting up SSH Access]: /chromium-os/developer-library/guides/development/developer-guide/#Set-up-SSH-connection-between-chroot-and-DUT

@@ -50,12 +50,14 @@ struct ModelRuntime {
       return false;
     }
     for (uint32_t i = 0; i < model->num_values; ++i) {
-      if ((model->values[i].flags & (XNN_VALUE_FLAG_EXTERNAL_INPUT |
-                                     XNN_VALUE_FLAG_EXTERNAL_OUTPUT)) == 0) {
+      uint32_t flags = xnn_subgraph_get_value_flags(model.get(), i);
+      if ((flags & (XNN_VALUE_FLAG_EXTERNAL_INPUT |
+                    XNN_VALUE_FLAG_EXTERNAL_OUTPUT)) == 0) {
         continue;
       }
       // Make a buffer for this external value.
-      size_t size = xnn_tensor_get_size(&model->values[i]) + XNN_EXTRA_BYTES;
+      size_t size =
+          xnn_subgraph_get_value_size(model.get(), i) + XNN_EXTRA_BYTES;
       external_values.push_back(
           xnn_external_value{i, xnn_allocate_zero_simd_memory(size)});
     }
@@ -216,7 +218,7 @@ static void FP32LayerNorm(benchmark::State& state) {
 static void FP32L2Norm(benchmark::State& state) {
   BenchmarkInvoke(state, [&state]() {
     return models::FP32L2Norm(state.range(0), state.range(1), state.range(2),
-                                 state.range(3));
+                              state.range(3));
   });
 }
 
@@ -241,6 +243,36 @@ static void FP32DepthwiseSeparable(benchmark::State& state) {
                                           state.range(2), state.range(3),
                                           state.range(4), weights);
   });
+}
+
+static void QD8TransformerBlock(benchmark::State& state) {
+  BenchmarkInvoke(state, [&state]() {
+    return models::QD8TransformerBlock(
+        FLAGS_batch_size, /*sequence_length=*/state.range(0),
+        /*embedding_dim=*/state.range(1), /*num_heads=*/state.range(2),
+        /*head_dim=*/state.range(3), /*hidden_dim=*/state.range(4));
+  });
+}
+
+static void FP32TransformerBlock(benchmark::State& state) {
+  BenchmarkInvoke(state, [&state]() {
+    return models::FP32TransformerBlock(
+        FLAGS_batch_size, /*sequence_length=*/state.range(0),
+        /*embedding_dim=*/state.range(1), /*num_heads=*/state.range(2),
+        /*head_dim=*/state.range(3), /*hidden_dim=*/state.range(4));
+  });
+}
+
+static void FP16TransformerBlock(benchmark::State& state) {
+  BenchmarkInvoke(
+      state,
+      [&state]() {
+        return models::FP32TransformerBlock(
+            FLAGS_batch_size, /*sequence_length=*/state.range(0),
+            /*embedding_dim=*/state.range(1), /*num_heads=*/state.range(2),
+            /*head_dim=*/state.range(3), /*hidden_dim=*/state.range(4));
+      },
+      XNN_FLAG_FORCE_FP16_INFERENCE);
 }
 
 static void AttentionArguments(benchmark::internal::Benchmark* b) {
@@ -293,35 +325,82 @@ static void DepthwiseSeparableArguments(benchmark::internal::Benchmark* b) {
   b->Args({512, 512, 3, 128, 128});
 }
 
+static void TransformerBlockArguments(benchmark::internal::Benchmark* b) {
+  b->ArgNames({"T", "D", "N", "H", "F"});
+
+  // GeminiXXS parameters.
+  b->Args({128, 1536, 6, 256, 8 * 1536});
+
+  // GeminiV3- NanoV3 parameters.
+  b->Args({128, 2048, 8, 256, 8 * 2048});
+
+  // Gemma2-2B parameters.
+  b->Args({128, 2304, 8, 256, 9216});
+
+  // Gemma3-1B parameters.
+  b->Args({128, 1152, 4, 256, 6 * 1152});
+}
+
 BENCHMARK(FP32Attention)
     ->Unit(benchmark::kMicrosecond)
+    ->MeasureProcessCPUTime()
     ->UseRealTime()
     ->Apply(AttentionArguments);
 
 BENCHMARK(FP16Attention)
     ->Unit(benchmark::kMicrosecond)
+    ->MeasureProcessCPUTime()
     ->UseRealTime()
     ->Apply(AttentionArguments);
 
-BENCHMARK(FP32MobileNetV1)->Unit(benchmark::kMicrosecond)->UseRealTime();
-BENCHMARK(FP32MobileNetV2)->Unit(benchmark::kMicrosecond)->UseRealTime();
-BENCHMARK(FP32MobileNetV3Large)->Unit(benchmark::kMicrosecond)->UseRealTime();
-BENCHMARK(FP32MobileNetV3Small)->Unit(benchmark::kMicrosecond)->UseRealTime();
+BENCHMARK(FP32MobileNetV1)
+    ->Unit(benchmark::kMicrosecond)
+    ->MeasureProcessCPUTime()
+    ->UseRealTime();
+BENCHMARK(FP32MobileNetV2)
+    ->Unit(benchmark::kMicrosecond)
+    ->MeasureProcessCPUTime()
+    ->UseRealTime();
+BENCHMARK(FP32MobileNetV3Large)
+    ->Unit(benchmark::kMicrosecond)
+    ->MeasureProcessCPUTime()
+    ->UseRealTime();
+BENCHMARK(FP32MobileNetV3Small)
+    ->Unit(benchmark::kMicrosecond)
+    ->MeasureProcessCPUTime()
+    ->UseRealTime();
 
-BENCHMARK(FP16MobileNetV1)->Unit(benchmark::kMicrosecond)->UseRealTime();
-BENCHMARK(FP16MobileNetV2)->Unit(benchmark::kMicrosecond)->UseRealTime();
-BENCHMARK(FP16MobileNetV3Large)->Unit(benchmark::kMicrosecond)->UseRealTime();
-BENCHMARK(FP16MobileNetV3Small)->Unit(benchmark::kMicrosecond)->UseRealTime();
+BENCHMARK(FP16MobileNetV1)
+    ->Unit(benchmark::kMicrosecond)
+    ->MeasureProcessCPUTime()
+    ->UseRealTime();
+BENCHMARK(FP16MobileNetV2)
+    ->Unit(benchmark::kMicrosecond)
+    ->MeasureProcessCPUTime()
+    ->UseRealTime();
+BENCHMARK(FP16MobileNetV3Large)
+    ->Unit(benchmark::kMicrosecond)
+    ->MeasureProcessCPUTime()
+    ->UseRealTime();
+BENCHMARK(FP16MobileNetV3Small)
+    ->Unit(benchmark::kMicrosecond)
+    ->MeasureProcessCPUTime()
+    ->UseRealTime();
 
 BENCHMARK(QD8Attention)
     ->Unit(benchmark::kMicrosecond)
+    ->MeasureProcessCPUTime()
     ->UseRealTime()
     ->Apply(AttentionArguments);
 
-BENCHMARK(QS8MobileNetV2)->Unit(benchmark::kMicrosecond)->UseRealTime();
+BENCHMARK(QS8MobileNetV2)
+    ->Unit(benchmark::kMicrosecond)
+    ->MeasureProcessCPUTime()
+    ->UseRealTime();
 
 BENCHMARK(FP32Elementwise)
     ->Unit(benchmark::kMicrosecond)
+    ->MeasureProcessCPUTime()
     ->UseRealTime()
     ->ArgNames({"B", "N", "D"})
     ->Args({1024, 1024, 6})
@@ -331,27 +410,50 @@ BENCHMARK(FP32Elementwise)
 
 BENCHMARK(FP32LayerNorm)
     ->Unit(benchmark::kMicrosecond)
+    ->MeasureProcessCPUTime()
     ->UseRealTime()
     ->Apply(LayerNormArguments);
 
 BENCHMARK(FP32L2Norm)
     ->Unit(benchmark::kMicrosecond)
+    ->MeasureProcessCPUTime()
     ->UseRealTime()
     ->Apply(L2NormArguments);
 
 BENCHMARK(FP32SoftmaxDecomp)
     ->Unit(benchmark::kMicrosecond)
+    ->MeasureProcessCPUTime()
     ->UseRealTime()
     ->Apply(SoftmaxArguments);
 
 BENCHMARK(FP32SoftmaxFused)
     ->Unit(benchmark::kMicrosecond)
+    ->MeasureProcessCPUTime()
     ->UseRealTime()
     ->Apply(SoftmaxArguments);
 
 BENCHMARK(FP32DepthwiseSeparable)
     ->Unit(benchmark::kMicrosecond)
+    ->MeasureProcessCPUTime()
     ->UseRealTime()
     ->Apply(DepthwiseSeparableArguments);
+
+BENCHMARK(QD8TransformerBlock)
+    ->Unit(benchmark::kMicrosecond)
+    ->MeasureProcessCPUTime()
+    ->UseRealTime()
+    ->Apply(TransformerBlockArguments);
+
+BENCHMARK(FP32TransformerBlock)
+    ->Unit(benchmark::kMicrosecond)
+    ->MeasureProcessCPUTime()
+    ->UseRealTime()
+    ->Apply(TransformerBlockArguments);
+
+BENCHMARK(FP16TransformerBlock)
+    ->Unit(benchmark::kMicrosecond)
+    ->MeasureProcessCPUTime()
+    ->UseRealTime()
+    ->Apply(TransformerBlockArguments);
 
 XNN_BENCHMARK_MAIN();

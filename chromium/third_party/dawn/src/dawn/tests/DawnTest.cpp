@@ -58,6 +58,7 @@
 #include "dawn/utils/SystemUtils.h"
 #include "dawn/utils/TerribleCommandBuffer.h"
 #include "dawn/utils/TestUtils.h"
+#include "dawn/utils/Timer.h"
 #include "dawn/utils/WGPUHelpers.h"
 #include "dawn/utils/WireHelper.h"
 #include "dawn/wire/WireClient.h"
@@ -425,7 +426,13 @@ std::unique_ptr<native::Instance> DawnTestEnvironment::CreateInstance(
 
     wgpu::InstanceDescriptor instanceDesc{};
     instanceDesc.nextInChain = &dawnInstanceDesc;
-    instanceDesc.capabilities.timedWaitAnyEnable = !UsesWire();
+    std::vector<wgpu::InstanceFeatureName> features = {
+        wgpu::InstanceFeatureName::MultipleDevicesPerAdapter};
+    if (!UsesWire()) {
+        features.push_back(wgpu::InstanceFeatureName::TimedWaitAny);
+    }
+    instanceDesc.requiredFeatureCount = features.size();
+    instanceDesc.requiredFeatures = features.data();
 
     auto instance = std::make_unique<native::Instance>(
         reinterpret_cast<const WGPUInstanceDescriptor*>(&instanceDesc));
@@ -1108,24 +1115,23 @@ std::vector<wgpu::FeatureName> DawnTestBase::GetRequiredFeatures() {
     return {};
 }
 
-wgpu::Limits DawnTestBase::GetRequiredLimits(const wgpu::Limits&) {
-    return {};
+void DawnTestBase::GetRequiredLimits(const dawn::utils::ComboLimits& supported,
+                                     dawn::utils::ComboLimits& required) {}
+
+bool DawnTestBase::GetRequireUseTieredLimits() {
+    return false;
 }
 
 const TestAdapterProperties& DawnTestBase::GetAdapterProperties() const {
     return mParam.adapterProperties;
 }
 
-wgpu::Limits DawnTestBase::GetAdapterLimits() {
-    wgpu::Limits supportedLimits = {};
-    adapter.GetLimits(&supportedLimits);
-    return supportedLimits;
+const dawn::utils::ComboLimits& DawnTestBase::GetAdapterLimits() {
+    return adapterLimits;
 }
 
-wgpu::Limits DawnTestBase::GetSupportedLimits() {
-    wgpu::Limits supportedLimits = {};
-    device.GetLimits(&supportedLimits);
-    return supportedLimits;
+const dawn::utils::ComboLimits& DawnTestBase::GetSupportedLimits() {
+    return deviceLimits;
 }
 
 bool DawnTestBase::SupportsFeatures(const std::vector<wgpu::FeatureName>& features) {
@@ -1176,14 +1182,15 @@ WGPUDevice DawnTestBase::CreateDeviceImpl(std::string isolationKey,
         requiredFeatures.push_back(wgpu::FeatureName::ImplicitDeviceSynchronization);
     }
 
-    wgpu::Limits supportedLimits;
+    dawn::utils::ComboLimits supportedLimits;
     native::GetProcs().adapterGetLimits(mBackendAdapter.Get(),
-                                        reinterpret_cast<WGPULimits*>(&supportedLimits));
-    wgpu::Limits requiredLimits = GetRequiredLimits(supportedLimits);
+                                        reinterpret_cast<WGPULimits*>(supportedLimits.GetLinked()));
+    dawn::utils::ComboLimits requiredLimits{};
+    GetRequiredLimits(supportedLimits, requiredLimits);
 
     wgpu::DeviceDescriptor deviceDescriptor =
         *reinterpret_cast<const wgpu::DeviceDescriptor*>(descriptor);
-    deviceDescriptor.requiredLimits = &requiredLimits;
+    deviceDescriptor.requiredLimits = requiredLimits.GetLinked();
     deviceDescriptor.requiredFeatures = requiredFeatures.data();
     deviceDescriptor.requiredFeatureCount = requiredFeatures.size();
 
@@ -1295,11 +1302,17 @@ void DawnTestBase::SetUp() {
         &adapter);
     FlushWire();
     DAWN_ASSERT(adapter);
+    mRequireUseTieredLimits = GetRequireUseTieredLimits();
+    if (mRequireUseTieredLimits) {
+        mBackendAdapter.SetUseTieredLimits(true);
+    }
+    adapter.GetLimits(adapterLimits.GetLinked());
 
     device = CreateDevice();
     backendDevice = mLastCreatedBackendDevice;
     DAWN_ASSERT(backendDevice);
     DAWN_ASSERT(device);
+    device.GetLimits(deviceLimits.GetLinked());
 
     queue = device.GetQueue();
 }
@@ -1307,8 +1320,16 @@ void DawnTestBase::SetUp() {
 void DawnTestBase::TearDown() {
     ResolveDeferredExpectationsNow();
 
+    if (mRequireUseTieredLimits) {
+        mBackendAdapter.SetUseTieredLimits(false);
+    }
     if (!UsesWire()) {
         EXPECT_EQ(mLastWarningCount, GetDeprecationWarningCountForTesting());
+    }
+
+    if (mExpectedTimeMaxSec != 0.0f) {
+        float real_time_taken = mTimer->GetElapsedTime();
+        EXPECT_GE(mExpectedTimeMaxSec, real_time_taken);
     }
 }
 
@@ -1890,6 +1911,12 @@ std::unique_ptr<platform::Platform> DawnTestBase::CreateTestPlatform() {
     return nullptr;
 }
 
+void DawnTestBase::StartTestTimer(float expected_max_time) {
+    mTimer.reset(utils::CreateTimer());
+    mExpectedTimeMaxSec = expected_max_time;
+    mTimer->Start();
+}
+
 void DawnTestBase::ResolveDeferredExpectationsNow() {
     FlushWire();
 
@@ -2115,5 +2142,28 @@ testing::AssertionResult ExpectBetweenColors<T>::Check(const void* data, size_t 
 }
 
 template class ExpectBetweenColors<utils::RGBA8>;
+
+template <typename T>
+testing::AssertionResult ExpectBetweenSnormTextureBounds<T>::Check(const void* data, size_t size) {
+    DAWN_ASSERT(size == sizeof(T) * expectedLower.size());
+    DAWN_ASSERT(expectedLower.size() == expectedUpper.size());
+
+    const T* actual = static_cast<const T*>(data);
+
+    for (size_t i = 0; i < expectedLower.size(); ++i) {
+        if (!(actual[i] >= expectedLower[i] && actual[i] <= expectedUpper[i])) {
+            return testing::AssertionFailure()
+                   << absl::StrFormat("Expected data[%d] to be between %d and %d, actual %d\n", i,
+                                      expectedLower[i], expectedUpper[i], actual[i]);
+        }
+    }
+
+    return testing::AssertionSuccess();
+}
+
+template class ExpectBetweenSnormTextureBounds<int8_t>;
+template class ExpectBetweenSnormTextureBounds<int16_t>;
+template class ExpectBetweenSnormTextureBounds<uint16_t>;
+
 }  // namespace detail
 }  // namespace dawn

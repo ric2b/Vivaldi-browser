@@ -81,7 +81,22 @@ declare interface Matrix {
   data: number[];
 }
 
+// https://github.com/w3c/csswg-drafts/issues/9452
+interface ScrollIntoViewOptions {
+  container?: ScrollIntoViewContainer;
+}
+
+type ScrollIntoViewContainer = 'all'|'nearest';
+
 // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Set/
 interface Set<T> {
   difference(other: Set<T>): Set<T>;
+}
+
+// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Uint8Array/fromBase64
+interface Uint8ArrayConstructor {
+  fromBase64(string: string, options?: {
+    alphabet?: string,
+    lastChunkHandling?: string
+  }): Uint8Array;
 }

@@ -28,7 +28,19 @@
 #endif
 
 namespace {
+bool HasPanelsAndWorkspaces() {
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
+  return false;
+#else
+  return true;
+#endif
+}
+
 void GetPanels(PrefService* prefs, sync_sessions::VivaldiSpecific& specific) {
+  if (!HasPanelsAndWorkspaces()) {
+    return;
+  }
+
   const base::Value& value = prefs->GetValue("vivaldi.panels.web.elements");
   auto* list = value.GetIfList();
   if (!list)
@@ -70,6 +82,10 @@ void GetPanels(PrefService* prefs, sync_sessions::VivaldiSpecific& specific) {
 
 void GetWorkspaces(PrefService* prefs,
                    sync_sessions::VivaldiSpecific& specific) {
+  if (!HasPanelsAndWorkspaces()) {
+    return;
+  }
+
   const base::Value& value = prefs->GetValue("vivaldi.workspaces.list");
   auto* list = value.GetIfList();
   if (!list)
@@ -250,6 +266,8 @@ void VivaldiLocalSessionObserver::TriggerSync() {
   if (!prefs)
     return;
 
+  // VB-112164 - we may skip this on android, but as we pushed the panels
+  // by mistake it will now clean them up.
   sync_sessions::VivaldiSpecific specific;
   GetPanels(prefs, specific);
   GetWorkspaces(prefs, specific);

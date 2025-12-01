@@ -36,6 +36,7 @@
 #include "libavutil/opt.h"
 #include "libavutil/pixdesc.h"
 #include "libavutil/stereo3d.h"
+#include "libavutil/tdrdi.h"
 #include "libavutil/timecode.h"
 
 #include "aom_film_grain.h"
@@ -1110,7 +1111,7 @@ static int hls_slice_header(SliceHeader *sh, const HEVCContext *s, GetBitContext
     if (pps->tiles_enabled_flag || pps->entropy_coding_sync_enabled_flag) {
         unsigned num_entry_point_offsets = get_ue_golomb_long(gb);
         // It would be possible to bound this tighter but this here is simpler
-        if (num_entry_point_offsets > get_bits_left(gb)) {
+        if (num_entry_point_offsets > get_bits_left(gb) || num_entry_point_offsets > UINT16_MAX) {
             av_log(s->avctx, AV_LOG_ERROR, "num_entry_point_offsets %d is invalid\n", num_entry_point_offsets);
             return AVERROR_INVALIDDATA;
         }
@@ -1154,11 +1155,17 @@ static int hls_slice_header(SliceHeader *sh, const HEVCContext *s, GetBitContext
     }
 
     ret = get_bits1(gb);
-    if (!ret) {
+    if (!ret && get_bits_left(gb) >= 0) {
         av_log(s->avctx, AV_LOG_ERROR, "alignment_bit_equal_to_one=0\n");
         return AVERROR_INVALIDDATA;
     }
     sh->data_offset = align_get_bits(gb) - gb->buffer;
+
+    if (get_bits_left(gb) < 0) {
+        av_log(s->avctx, AV_LOG_ERROR,
+               "Overread slice header by %d bits\n", -get_bits_left(gb));
+        return AVERROR_INVALIDDATA;
+    }
 
     // Inferred parameters
     sh->slice_qp = 26U + pps->pic_init_qp_minus26 + sh->slice_qp_delta;
@@ -1177,12 +1184,6 @@ static int hls_slice_header(SliceHeader *sh, const HEVCContext *s, GetBitContext
     if (sh->dependent_slice_segment_flag &&
         (!sh->slice_ctb_addr_rs || !pps->ctb_addr_rs_to_ts[sh->slice_ctb_addr_rs])) {
         av_log(s->avctx, AV_LOG_ERROR, "Impossible slice segment.\n");
-        return AVERROR_INVALIDDATA;
-    }
-
-    if (get_bits_left(gb) < 0) {
-        av_log(s->avctx, AV_LOG_ERROR,
-               "Overread slice header by %d bits\n", -get_bits_left(gb));
         return AVERROR_INVALIDDATA;
     }
 
@@ -2751,7 +2752,7 @@ static int hls_decode_entry(HEVCContext *s, GetBitContext *gb)
     const HEVCPPS   *const pps = s->pps;
     const HEVCSPS   *const sps = pps->sps;
     const uint8_t *slice_data = gb->buffer + s->sh.data_offset;
-    const size_t   slice_size = gb->buffer_end - gb->buffer - s->sh.data_offset;
+    const size_t   slice_size = get_bits_bytesize(gb, 1) - s->sh.data_offset;
     int ctb_size    = 1 << sps->log2_ctb_size;
     int more_data   = 1;
     int x_ctb       = 0;
@@ -4101,6 +4102,55 @@ static int hevc_update_thread_context(AVCodecContext *dst,
 }
 #endif
 
+static int hevc_sei_to_context(AVCodecContext *avctx, HEVCSEI *sei)
+{
+    int ret;
+
+    if (sei->tdrdi.num_ref_displays) {
+        AVBufferRef *buf;
+        size_t size;
+        AV3DReferenceDisplaysInfo *tdrdi = av_tdrdi_alloc(sei->tdrdi.num_ref_displays, &size);
+
+        if (!tdrdi)
+            return AVERROR(ENOMEM);
+
+        buf = av_buffer_create((uint8_t *)tdrdi, size, NULL, NULL, 0);
+        if (!buf) {
+            av_free(tdrdi);
+            return AVERROR(ENOMEM);
+        }
+
+        tdrdi->prec_ref_display_width = sei->tdrdi.prec_ref_display_width;
+        tdrdi->ref_viewing_distance_flag = sei->tdrdi.ref_viewing_distance_flag;
+        tdrdi->prec_ref_viewing_dist = sei->tdrdi.prec_ref_viewing_dist;
+        tdrdi->num_ref_displays = sei->tdrdi.num_ref_displays;
+        for (int i = 0; i < sei->tdrdi.num_ref_displays; i++) {
+            AV3DReferenceDisplay *display = av_tdrdi_get_display(tdrdi, i);
+
+            display->left_view_id                  = sei->tdrdi.left_view_id[i];
+            display->right_view_id                 = sei->tdrdi.right_view_id[i];
+            display->exponent_ref_display_width    = sei->tdrdi.exponent_ref_display_width[i];
+            display->mantissa_ref_display_width    = sei->tdrdi.mantissa_ref_display_width[i];
+            display->exponent_ref_viewing_distance = sei->tdrdi.exponent_ref_viewing_distance[i];
+            display->mantissa_ref_viewing_distance = sei->tdrdi.mantissa_ref_viewing_distance[i];
+            display->additional_shift_present_flag = sei->tdrdi.additional_shift_present_flag[i];
+            display->num_sample_shift              = sei->tdrdi.num_sample_shift[i];
+        }
+        ret = ff_frame_new_side_data_from_buf_ext(avctx, &avctx->decoded_side_data, &avctx->nb_decoded_side_data,
+                                                  AV_FRAME_DATA_3D_REFERENCE_DISPLAYS, &buf);
+        if (ret < 0) {
+            av_buffer_unref(&buf);
+            return ret;
+        }
+    }
+
+    ret = ff_h2645_sei_to_context(avctx, &sei->common);
+    if (ret < 0)
+        return ret;
+
+    return 0;
+}
+
 static av_cold int hevc_decode_init(AVCodecContext *avctx)
 {
     HEVCContext *s = avctx->priv_data;
@@ -4124,7 +4174,7 @@ static av_cold int hevc_decode_init(AVCodecContext *avctx)
                 return ret;
             }
 
-            ret = ff_h2645_sei_to_context(avctx, &s->sei.common);
+            ret = hevc_sei_to_context(avctx, &s->sei);
             if (ret < 0)
                 return ret;
         }

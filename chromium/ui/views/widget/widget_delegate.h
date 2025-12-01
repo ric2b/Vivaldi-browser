@@ -26,9 +26,6 @@
 class AutoPipSettingView;
 class DesktopMediaPickerDialogView;
 class DigitalIdentityMultiStepDialogDelegate;
-class DownloadBubbleContentsViewTest;
-class DownloadBubbleSecurityViewTest;
-class DownloadToolbarUIController;
 class ExtensionsMenuCoordinator;
 class ExternalProtocolNoHandlersTelSchemeDialog;
 class ForceInstalledDeprecatedAppsDialogView;
@@ -59,6 +56,12 @@ class WebDialogBrowserTest;
 FORWARD_DECLARE_TEST(AcceleratorCommandsFullscreenBrowserTest,
                      ToggleFullscreen);
 FORWARD_DECLARE_TEST(TabStripScrollContainerTest, AnchoredWidgetHidesOnScroll);
+
+#if !BUILDFLAG(IS_CHROMEOS)
+class DownloadBubbleContentsViewTest;
+class DownloadBubbleSecurityViewTest;
+class DownloadToolbarUIController;
+#endif
 
 namespace arc {
 class ArcTaskWindowBuilder;
@@ -165,11 +168,6 @@ namespace crostini {
 class AppRestartDialog;
 }
 
-namespace enterprise_connectors {
-class ContentAnalysisDialogController;
-class ContentAnalysisDialogBehaviorBrowserTest;
-}  // namespace enterprise_connectors
-
 namespace exo {
 class ShellSurfaceBase;
 }
@@ -255,7 +253,6 @@ class SubAppsInstallDialogController;
 
 namespace webid {
 class AccountSelectionModalView;
-class TestAccountSelectionView;
 }  // namespace webid
 
 namespace vivaldi {
@@ -383,9 +380,11 @@ class VIEWS_EXPORT WidgetDelegate {
     // See comments atop `SetOwnedByWidget()`.
     friend class ::AutoPipSettingView;
     friend class ::DigitalIdentityMultiStepDialogDelegate;
+#if !BUILDFLAG(IS_CHROMEOS)
     friend class ::DownloadBubbleContentsViewTest;
     friend class ::DownloadBubbleSecurityViewTest;
     friend class ::DownloadToolbarUIController;
+#endif
     friend class ::ExtensionsMenuCoordinator;
     friend class ::ExternalProtocolNoHandlersTelSchemeDialog;
     friend class ::ForceInstalledDeprecatedAppsDialogView;
@@ -441,9 +440,6 @@ class VIEWS_EXPORT WidgetDelegate {
     friend class ::constrained_window::BrowserModalHelper;
     friend class ::content::ShellPlatformDelegate;
     friend class ::crostini::AppRestartDialog;
-    friend class ::enterprise_connectors::ContentAnalysisDialogController;
-    friend class ::enterprise_connectors::
-        ContentAnalysisDialogBehaviorBrowserTest;
     friend class ::exo::ShellSurfaceBase;
     friend class ::extensions::WebFileHandlersPermissionHandler;
     friend class ::javascript_dialogs::AppModalDialogViewViews;
@@ -456,7 +452,6 @@ class VIEWS_EXPORT WidgetDelegate {
     friend class ::web_app::IsolatedWebAppInstallerViewController;
     friend class ::web_app::SubAppsInstallDialogController;
     friend class ::webid::AccountSelectionModalView;
-    friend class ::webid::TestAccountSelectionView;
 
     // Vivaldi
     friend class ::vivaldi::VivaldiMessageBoxDialog;
@@ -516,7 +511,7 @@ class VIEWS_EXPORT WidgetDelegate {
   // Called whenever the widget's position changes.
   virtual void OnWidgetMove();
 
-  // Called with the display changes (color depth or resolution).
+  // Called when the display changes (color depth or resolution).
   virtual void OnDisplayChanged();
 
   // Called when the work area (the desktop area minus task bars,

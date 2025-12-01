@@ -18,7 +18,6 @@
 #include "media/base/video_codecs.h"
 #include "media/base/video_color_space.h"
 #include "ui/gfx/color_space.h"
-#include "url/gurl.h"
 
 namespace media {
 
@@ -60,6 +59,10 @@ class MEDIA_EXPORT MediaClient {
   // Returns true if the compressed audio |codec| format is supported by the
   // audio sink.
   virtual bool IsSupportedBitstreamAudioCodec(AudioCodec codec) = 0;
+
+  // Returns true if audio tracks should be suppressed (neither decoded nor
+  // rendered).
+  virtual bool ShouldSuppressAudioTracks() = 0;
 
   // Optionally returns audio renderer algorithm parameters.
   virtual std::optional<::media::AudioRendererAlgorithmParameters>

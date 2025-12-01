@@ -6,7 +6,7 @@ import * as Root from '../../core/root/root.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as Protocol from '../../generated/protocol.js';
 import * as IssuesManager from '../../models/issues_manager/issues_manager.js';
-import {createTarget} from '../../testing/EnvironmentHelpers.js';
+import {createTarget, expectConsoleLogs} from '../../testing/EnvironmentHelpers.js';
 import {
   describeWithMockConnection,
 } from '../../testing/MockConnection.js';
@@ -63,6 +63,10 @@ describeWithMockConnection('ElementsTreeOutline', () => {
 
     treeOutline.rootDOMNode = optionNode;
     assert.isNotNull(treeOutline.findTreeElement(checkmarkNode!));
+  });
+
+  expectConsoleLogs({
+    warn: ['Content security policy issue without details received.'],
   });
 
   it('should include the ::picker-icon pseudo element', () => {
@@ -152,17 +156,16 @@ describeWithMockConnection('ElementsTreeOutline', () => {
     // Test that <select> issue can be added to the tree element.
     {
       const inspectorIssue = {
-        code: Protocol.Audits.InspectorIssueCode.SelectElementAccessibilityIssue,
+        code: Protocol.Audits.InspectorIssueCode.ElementAccessibilityIssue,
         details: {
-          selectElementAccessibilityIssueDetails: {
+          elementAccessibilityIssueDetails: {
             nodeId: 2 as Protocol.DOM.BackendNodeId,
-            selectElementAccessibilityIssueReason:
-                Protocol.Audits.SelectElementAccessibilityIssueReason.DisallowedSelectChild,
+            elementAccessibilityIssueReason: Protocol.Audits.ElementAccessibilityIssueReason.DisallowedSelectChild,
             hasDisallowedAttributes: false,
           },
         },
       };
-      const issue = IssuesManager.SelectElementAccessibilityIssue.SelectElementAccessibilityIssue.fromInspectorIssue(
+      const issue = IssuesManager.ElementAccessibilityIssue.ElementAccessibilityIssue.fromInspectorIssue(
           mockModel, inspectorIssue)[0];
       issuesManager.dispatchEventToListeners(
           IssuesManager.IssuesManager.Events.ISSUE_ADDED, {issuesModel: mockModel, issue});

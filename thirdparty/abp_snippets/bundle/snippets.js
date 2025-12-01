@@ -16,7 +16,7 @@
  */
 
 import {snippets as main} from "./main.js";
-import {snippets as isolated} from "./isolated.js";
+import {snippets as isolated} from "./isolated-lite.js";
 
 export const snippets = {
   ...main,

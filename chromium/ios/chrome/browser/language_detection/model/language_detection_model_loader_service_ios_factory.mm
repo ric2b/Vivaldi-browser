@@ -42,13 +42,9 @@ LanguageDetectionModelLoaderServiceIOSFactory::
 std::unique_ptr<KeyedService>
 LanguageDetectionModelLoaderServiceIOSFactory::BuildServiceInstanceFor(
     web::BrowserState* context) const {
-
-#if !defined(VIVALDI_BUILD)
   if (!translate::IsTFLiteLanguageDetectionEnabled()) {
     return nullptr;
   }
-#endif // End Vivaldi
-
   ProfileIOS* profile = ProfileIOS::FromBrowserState(context);
   return std::make_unique<
       language_detection::LanguageDetectionModelLoaderServiceIOS>(

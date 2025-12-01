@@ -272,9 +272,6 @@ class MODULES_EXPORT AudioContext final
   // posting a main thread task to perform the actual resolving, if needed.
   void ResolvePromisesForUnpause();
 
-  AudioIOPosition OutputPosition() const
-      VALID_CONTEXT_REQUIRED(main_thread_sequence_checker_);
-
   // Send notification to browser that an AudioContext has started or stopped
   // playing audible audio.
   void NotifyAudibleAudioStarted()
@@ -329,10 +326,12 @@ class MODULES_EXPORT AudioContext final
   // https://webaudio.github.io/web-audio-api/#dom-audiocontext-suspended-by-user-slot
   bool suspended_by_user_ = false;
 
-  unsigned context_id_;
+  uint32_t context_id_;
   Member<ScriptPromiseResolver<IDLUndefined>> close_resolver_;
 
-  AudioIOPosition output_position_;
+  // Protected by the graph lock.
+  AudioIOPosition output_position_{0.0, 0.0, 0.0};
+
   AudioCallbackMetric callback_metric_;
 
   // Accessed only on the thread pulling audio from the graph.
@@ -465,6 +464,15 @@ class MODULES_EXPORT AudioContext final
       media_player_receiver_;
   HeapMojoAssociatedRemote<media::mojom::blink::MediaPlayerObserver>
       media_player_observer_;
+
+  // The timestamp when the audio context most recently became audible.
+  base::TimeTicks audible_start_timestamp_;
+  // Total accumulated time this audio context has been audible.
+  base::TimeDelta total_audible_duration_;
+
+  // Set to true when the DidClose() method is called. Used to detect if the
+  // context is destroyed without being properly closed.
+  bool is_closed_ = false;
 
   SEQUENCE_CHECKER(main_thread_sequence_checker_);
 };

@@ -10,7 +10,6 @@
 #include "device/vr/buildflags/buildflags.h"
 
 namespace device::features {
-COMPONENT_EXPORT(VR_FEATURES) BASE_DECLARE_FEATURE(kWebXrHandInput);
 COMPONENT_EXPORT(VR_FEATURES) BASE_DECLARE_FEATURE(kWebXrWebGpuBinding);
 COMPONENT_EXPORT(VR_FEATURES) BASE_DECLARE_FEATURE(kWebXrIncubations);
 COMPONENT_EXPORT(VR_FEATURES) BASE_DECLARE_FEATURE(kWebXrInternals);
@@ -51,6 +50,7 @@ COMPONENT_EXPORT(VR_FEATURES) bool IsOpenXrEnabled();
 COMPONENT_EXPORT(VR_FEATURES) bool IsOpenXrArEnabled();
 
 #endif  // ENABLE_OPENXR
+
 COMPONENT_EXPORT(VR_FEATURES) bool IsXrDevice();
 
 COMPONENT_EXPORT(VR_FEATURES) bool IsHandTrackingEnabled();

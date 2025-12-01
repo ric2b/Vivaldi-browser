@@ -396,8 +396,7 @@ impl Tile {
             // sample_table.sync_samples is 1-based.
             if index == 0 || index > tile.input.samples.len() {
                 return Err(AvifError::BmffParseFailed(format!(
-                    "invalid sync sample number {}",
-                    index
+                    "invalid sync sample number {index}"
                 )));
             }
             tile.input.samples[index - 1].sync = true;

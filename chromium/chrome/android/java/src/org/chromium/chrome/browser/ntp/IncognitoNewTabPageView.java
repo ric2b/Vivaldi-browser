@@ -15,6 +15,8 @@ import android.widget.ScrollView;
 
 import androidx.annotation.ColorInt;
 
+import org.chromium.build.annotations.Initializer;
+import org.chromium.build.annotations.NullMarked;
 import org.chromium.chrome.R;
 import org.chromium.components.browser_ui.widget.FadingShadow;
 import org.chromium.components.browser_ui.widget.FadingShadowView;
@@ -27,6 +29,7 @@ import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.build.BuildConfig;
 
 /** The New Tab Page for use in the incognito profile. */
+@NullMarked
 public class IncognitoNewTabPageView extends FrameLayout {
     private IncognitoNewTabPageManager mManager;
     private boolean mFirstShow = true;
@@ -86,8 +89,8 @@ public class IncognitoNewTabPageView extends FrameLayout {
         // FOCUS_BEFORE_DESCENDANTS is needed to support keyboard shortcuts. Otherwise, pressing
         // any shortcut causes the UrlBar to be focused. See ViewRootImpl.leaveTouchMode().
         mScrollView.setDescendantFocusability(FOCUS_BEFORE_DESCENDANTS);
-        if (!ChromeApplicationImpl.isVivaldi()) { // Vivaldi Remove fading shadow
         mFadingShadowBottom = findViewById(R.id.shadow_bottom);
+        if (!ChromeApplicationImpl.isVivaldi()) { // Vivaldi Remove fading shadow
         mFadingShadowBottom.init(bgColor, FadingShadow.POSITION_BOTTOM);
         mScrollView.setOnScrollChangeListener(
                 new OnScrollChangeListener() {
@@ -99,6 +102,17 @@ public class IncognitoNewTabPageView extends FrameLayout {
                     }
                 });
         } // End Vivaldi
+    }
+
+    /**
+     * Initialize the incognito New Tab Page.
+     * @param manager The manager that handles external dependencies of the view.
+     */
+    @Initializer
+    void initialize(IncognitoNewTabPageManager manager) {
+        mManager = manager;
+        inflateConditionalLayouts();
+        mManager.initCookieControlsManager();
     }
 
     private void inflateConditionalLayouts() {
@@ -134,16 +148,6 @@ public class IncognitoNewTabPageView extends FrameLayout {
             mManager.onLoadingComplete();
             mFirstShow = false;
         }
-    }
-
-    /**
-     * Initialize the incognito New Tab Page.
-     * @param manager The manager that handles external dependencies of the view.
-     */
-    void initialize(IncognitoNewTabPageManager manager) {
-        mManager = manager;
-        inflateConditionalLayouts();
-        mManager.initCookieControlsManager();
     }
 
     /** @return The IncognitoNewTabPageManager associated with this IncognitoNewTabPageView. */

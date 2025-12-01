@@ -110,13 +110,13 @@ DataVector<wchar_t> GetUnicodeNormalization(wchar_t wch) {
   }
   wch = wFind & 0x0FFF;
   wFind >>= 12;
-  auto pMap = kUnicodeDataNormalizationMaps[wFind - 2].subspan(
+  auto maps = kUnicodeDataNormalizationMaps[wFind - 2].subspan(
       static_cast<size_t>(wch));
   if (wFind == 4) {
-    wFind = pMap.front();
-    pMap = pMap.subspan<1u>();
+    wFind = maps.front();
+    maps = maps.subspan<1u>();
   }
-  const auto range = pMap.first(static_cast<size_t>(wFind));
+  const auto range = maps.first(static_cast<size_t>(wFind));
   return DataVector<wchar_t>(range.begin(), range.end());
 }
 
@@ -151,6 +151,11 @@ bool IsHyphenCode(wchar_t c) {
   return c == 0x2D || c == 0xAD;
 }
 
+bool IsNormalCharacter(const CPDF_TextPage::CharInfo& char_info) {
+  return char_info.unicode() != 0 ? !IsControlChar(char_info)
+                                  : char_info.char_code() != 0;
+}
+
 bool IsRectIntersect(const CFX_FloatRect& rect1, const CFX_FloatRect& rect2) {
   CFX_FloatRect rect = rect1;
   rect.Intersect(rect2);
@@ -180,24 +185,24 @@ bool IsRightToLeft(const CPDF_TextObject& text_obj) {
          CFX_BidiChar::Direction::kRight;
 }
 
-int GetCharWidth(uint32_t charCode, CPDF_Font* pFont) {
+int GetCharWidth(uint32_t charCode, CPDF_Font* font) {
   if (charCode == CPDF_Font::kInvalidCharCode) {
     return 0;
   }
 
-  int w = pFont->GetCharWidthF(charCode);
+  int w = font->GetCharWidthF(charCode);
   if (w > 0) {
     return w;
   }
 
   ByteString str;
-  pFont->AppendChar(&str, charCode);
-  w = pFont->GetStringWidth(str.AsStringView());
+  font->AppendChar(&str, charCode);
+  w = font->GetStringWidth(str.AsStringView());
   if (w > 0) {
     return w;
   }
 
-  FX_RECT rect = pFont->GetCharBBox(charCode);
+  FX_RECT rect = font->GetCharBBox(charCode);
   if (!rect.Valid()) {
     return 0;
   }
@@ -284,7 +289,8 @@ CFX_FloatRect GetLooseBounds(const CPDF_TextPage::CharInfo& charinfo) {
 
   const CPDF_TextObject* text_object = charinfo.text_object();
   float font_size = GetFontSize(text_object);
-  if (text_object && !FXSYS_IsFloatZero(font_size)) {
+  if (text_object && !FXSYS_IsFloatZero(font_size) &&
+      charinfo.char_code() != CPDF_Font::kInvalidCharCode) {
     RetainPtr<CPDF_Font> font = text_object->GetFont();
     bool is_vert_writing = font->IsVertWriting();
     if (is_vert_writing && font->IsCIDFont()) {
@@ -382,8 +388,7 @@ void CPDF_TextPage::Init() {
   for (int i = 0; i < nCount; ++i) {
     const CharInfo& charinfo = char_list_[i];
     if (charinfo.char_type() == CharType::kGenerated ||
-        (charinfo.unicode() != 0 && !IsControlChar(charinfo)) ||
-        (charinfo.unicode() == 0 && charinfo.char_code() != 0)) {
+        IsNormalCharacter(charinfo)) {
       char_indices_.back().count++;
       skipped = true;
     } else {
@@ -780,48 +785,50 @@ void CPDF_TextPage::ProcessFormObject(CPDF_FormObject* pFormObj,
 
 void CPDF_TextPage::AddCharInfoByLRDirection(wchar_t wChar,
                                              const CharInfo& info) {
-  CharInfo info2 = info;
-  if (IsControlChar(info2)) {
-    char_list_.push_back(info2);
+  if (!IsNormalCharacter(info)) {
+    char_list_.push_back(info);
     return;
   }
+
   DataVector<wchar_t> normalized;
   if (wChar >= 0xFB00 && wChar <= 0xFB06) {
     normalized = GetUnicodeNormalization(wChar);
   }
   if (normalized.empty()) {
     text_buf_.AppendChar(wChar);
-    char_list_.push_back(info2);
+    char_list_.push_back(info);
     return;
   }
-  info2.set_char_type(CharType::kPiece);
+  CharInfo modified_info = info;
+  modified_info.set_char_type(CharType::kPiece);
   for (wchar_t normalized_char : normalized) {
-    info2.set_unicode(normalized_char);
+    modified_info.set_unicode(normalized_char);
     text_buf_.AppendChar(normalized_char);
-    char_list_.push_back(info2);
+    char_list_.push_back(modified_info);
   }
 }
 
 void CPDF_TextPage::AddCharInfoByRLDirection(wchar_t wChar,
                                              const CharInfo& info) {
-  CharInfo info2 = info;
-  if (IsControlChar(info2)) {
-    char_list_.push_back(info2);
+  if (!IsNormalCharacter(info)) {
+    char_list_.push_back(info);
     return;
   }
+
+  CharInfo modified_info = info;
   wChar = pdfium::unicode::GetMirrorChar(wChar);
   DataVector<wchar_t> normalized = GetUnicodeNormalization(wChar);
   if (normalized.empty()) {
-    info2.set_unicode(wChar);
+    modified_info.set_unicode(wChar);
     text_buf_.AppendChar(wChar);
-    char_list_.push_back(info2);
+    char_list_.push_back(modified_info);
     return;
   }
-  info2.set_char_type(CharType::kPiece);
+  modified_info.set_char_type(CharType::kPiece);
   for (wchar_t normalized_char : normalized) {
-    info2.set_unicode(normalized_char);
+    modified_info.set_unicode(normalized_char);
     text_buf_.AppendChar(normalized_char);
-    char_list_.push_back(info2);
+    char_list_.push_back(modified_info);
   }
 }
 
@@ -951,14 +958,14 @@ CPDF_TextPage::MarkedContentState CPDF_TextPage::PreMarkedContent(
 
   WideString actual_text;
   bool bExist = false;
-  RetainPtr<const CPDF_Dictionary> pDict;
+  RetainPtr<const CPDF_Dictionary> dict;
   for (size_t i = 0; i < nContentMarks; ++i) {
     const CPDF_ContentMarkItem* item = pMarks->GetItem(i);
-    pDict = item->GetParam();
-    if (!pDict) {
+    dict = item->GetParam();
+    if (!dict) {
       continue;
     }
-    RetainPtr<const CPDF_String> temp = pDict->GetStringFor("ActualText");
+    RetainPtr<const CPDF_String> temp = dict->GetStringFor("ActualText");
     if (temp) {
       bExist = true;
       actual_text = temp->GetUnicodeText();
@@ -971,25 +978,12 @@ CPDF_TextPage::MarkedContentState CPDF_TextPage::PreMarkedContent(
   if (prev_text_obj_) {
     const CPDF_ContentMarks* pPrevMarks = prev_text_obj_->GetContentMarks();
     if (pPrevMarks->CountItems() == nContentMarks &&
-        pPrevMarks->GetItem(nContentMarks - 1)->GetParam() == pDict) {
+        pPrevMarks->GetItem(nContentMarks - 1)->GetParam() == dict) {
       return MarkedContentState::kDone;
     }
   }
 
   if (actual_text.IsEmpty()) {
-    return MarkedContentState::kPass;
-  }
-
-  RetainPtr<CPDF_Font> pFont = pTextObj->GetFont();
-  bExist = false;
-  for (size_t i = 0; i < actual_text.GetLength(); ++i) {
-    if (pFont->CharCodeFromUnicode(actual_text[i]) !=
-        CPDF_Font::kInvalidCharCode) {
-      bExist = true;
-      break;
-    }
-  }
-  if (!bExist) {
     return MarkedContentState::kPass;
   }
 
@@ -1015,9 +1009,9 @@ void CPDF_TextPage::ProcessMarkedContent(const TransformedTextObject& obj) {
   WideString actual_text;
   for (size_t n = 0; n < nContentMarks; ++n) {
     const CPDF_ContentMarkItem* item = pMarks->GetItem(n);
-    RetainPtr<const CPDF_Dictionary> pDict = item->GetParam();
-    if (pDict) {
-      actual_text = pDict->GetUnicodeTextFor("ActualText");
+    RetainPtr<const CPDF_Dictionary> dict = item->GetParam();
+    if (dict) {
+      actual_text = dict->GetUnicodeTextFor("ActualText");
     }
   }
   if (actual_text.IsEmpty()) {
@@ -1051,7 +1045,7 @@ void CPDF_TextPage::ProcessMarkedContent(const TransformedTextObject& obj) {
     char_box.Translate(k * step, 0);
     temp_text_buf_.AppendChar(wChar);
     temp_char_list_.push_back(
-        CharInfo(CharType::kPiece, font->CharCodeFromUnicode(wChar), wChar,
+        CharInfo(CharType::kPiece, CPDF_Font::kInvalidCharCode, wChar,
                  pTextObj->GetPos(), char_box, matrix, pTextObj));
   }
 }

@@ -58,7 +58,12 @@ VivaldiContextMenuViews::VivaldiContextMenuViews(
   views::MenuController::VivaldiSetContextMenu(true);
 }
 
-VivaldiContextMenuViews::~VivaldiContextMenuViews() {}
+VivaldiContextMenuViews::~VivaldiContextMenuViews() {
+}
+
+void VivaldiContextMenuViews::ResetRenderView() {
+  render_view_context_menu_ = nullptr;
+}
 
 void VivaldiContextMenuViews::Init(
     ui::SimpleMenuModel* menu_model,

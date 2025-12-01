@@ -1,0 +1,37 @@
+// Copyright (c) 2019 Vivaldi Technologies AS. All rights reserved
+
+#ifndef BROWSER_AD_BLOCKER_ADBLOCK_RULE_SERVICE_FACTORY_H_
+#define BROWSER_AD_BLOCKER_ADBLOCK_RULE_SERVICE_FACTORY_H_
+
+#include <memory>
+
+#include "base/memory/singleton.h"
+#include "components/keyed_service/content/browser_context_keyed_service_factory.h"
+
+namespace adblock_filter {
+
+class RuleService;
+
+class RuleServiceFactory : public BrowserContextKeyedServiceFactory {
+ public:
+  static RuleService* GetForBrowserContext(content::BrowserContext* context);
+  static RuleServiceFactory* GetInstance();
+
+ private:
+  friend base::DefaultSingletonTraits<RuleServiceFactory>;
+
+  RuleServiceFactory();
+  ~RuleServiceFactory() override;
+  RuleServiceFactory(const RuleServiceFactory&) = delete;
+  RuleServiceFactory& operator=(const RuleServiceFactory&) = delete;
+
+  // BrowserContextKeyedBaseFactory methods:
+  content::BrowserContext* GetBrowserContextToUse(
+      content::BrowserContext* context) const override;
+  std::unique_ptr<KeyedService> BuildServiceInstanceForBrowserContext(
+      content::BrowserContext* context) const override;
+};
+
+}  // namespace adblock_filter
+
+#endif  // BROWSER_AD_BLOCKER_ADBLOCK_RULE_SERVICE_FACTORY_H_

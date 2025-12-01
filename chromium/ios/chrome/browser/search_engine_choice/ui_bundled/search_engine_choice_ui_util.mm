@@ -9,7 +9,6 @@
 
 #import "base/strings/utf_string_conversions.h"
 #import "build/branding_buildflags.h"
-#import "components/grit/components_scaled_resources.h"
 #import "components/regional_capabilities/regional_capabilities_service.h"
 #import "components/search_engines/template_url.h"
 #import "components/search_engines/template_url_service.h"
@@ -23,6 +22,11 @@
 #endif
 
 namespace {
+
+const CGFloat kSearchEngineMinFaviconSizePt = 8;
+
+}  // namespace
+
 int GetResourceIdFromTemplateURL(const TemplateURL& template_url) {
 #if BUILDFLAG(ENABLE_BUILTIN_SEARCH_PROVIDER_ASSETS)
   // This would be better served by ResourcesUtil::GetThemeResourceId(), but
@@ -37,20 +41,10 @@ int GetResourceIdFromTemplateURL(const TemplateURL& template_url) {
   if (resource_it != std::end(kSearchEnginesScaledResources)) {
     return resource_it->id;
   }
-
-  if (resource_name == "IDR_SEARCH_ENGINE_GOOGLE_IMAGE") {
-    // Unlike the other logos which are in `kSearchEnginesScaledResources`,
-    // the Google logo is included via
-    // `components/resources/search_engine_choice_scaled_resources.grdp`
-    // TODO(crbug.com/422992330): Fix this discrepancy now that all OSE assets
-    // are restricted to branded builds.
-    return IDR_SEARCH_ENGINE_GOOGLE_IMAGE;
-  }
 #endif
 
   return IDR_DEFAULT_FAVICON;
 }
-}  // namespace
 
 UIImage* SearchEngineFaviconFromTemplateURL(const TemplateURL& template_url) {
   // Only works for prepopulated search engines.
@@ -104,11 +98,12 @@ void GetSearchEngineFavicon(
         TemplateURLRef::SearchTermsArgs(std::u16string()),
         template_url_service->search_terms_data()));
     favicon_loader->FaviconForPageUrl(
-        itemURL, kDesiredMediumFaviconSizePt, kMinFaviconSizePt,
+        itemURL, kDesiredMediumFaviconSizePt, kSearchEngineMinFaviconSizePt,
         /*fallback_to_google_server=*/YES, favicon_block_handler);
   } else {
     GURL itemURL = template_url.favicon_url();
     favicon_loader->FaviconForIconUrl(itemURL, kDesiredMediumFaviconSizePt,
-                                      kMinFaviconSizePt, favicon_block_handler);
+                                      kSearchEngineMinFaviconSizePt,
+                                      favicon_block_handler);
   }
 }

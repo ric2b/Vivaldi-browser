@@ -6,6 +6,11 @@ update_target("//components/sync_sessions:sync_sessions") {
   ]
 }
 
+update_target("//components/sync/base:base") {
+  configs += [
+     "//vivaldi/gn/config:release_kind"
+  ]
+}
 update_target("//components/sync/engine:engine") {
   deps += [
     "//vivaldi/sync/test:fake_server",

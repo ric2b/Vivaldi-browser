@@ -12,11 +12,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "src/xnnpack/simd/f32-wasmsimd.h"
-
 #include "src/xnnpack/common.h"
-// #include "src/xnnpack/math.h"
 #include "src/xnnpack/microparams.h"
+#include "src/xnnpack/simd/f32-wasmsimd.h"
 #include "src/xnnpack/vunary.h"
 
 
@@ -24,7 +22,7 @@ void xnn_f32_vcos_ukernel__wasmsimd_rational_5_4_div_u4(
     size_t batch,
     const float* input,
     float* output,
-    const struct xnn_f32_default_params unused_params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f32_default_params* unused_params)
 {
   assert(batch != 0);
   assert(batch % sizeof(float) == 0);
@@ -124,7 +122,7 @@ void xnn_f32_vcos_ukernel__wasmsimd_rational_5_4_div_u8(
     size_t batch,
     const float* input,
     float* output,
-    const struct xnn_f32_default_params unused_params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f32_default_params* unused_params)
 {
   assert(batch != 0);
   assert(batch % sizeof(float) == 0);
@@ -273,7 +271,7 @@ void xnn_f32_vcos_ukernel__wasmsimd_rational_5_4_div_u12(
     size_t batch,
     const float* input,
     float* output,
-    const struct xnn_f32_default_params unused_params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f32_default_params* unused_params)
 {
   assert(batch != 0);
   assert(batch % sizeof(float) == 0);
@@ -439,7 +437,7 @@ void xnn_f32_vcos_ukernel__wasmsimd_rational_5_4_div_u16(
     size_t batch,
     const float* input,
     float* output,
-    const struct xnn_f32_default_params unused_params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f32_default_params* unused_params)
 {
   assert(batch != 0);
   assert(batch % sizeof(float) == 0);

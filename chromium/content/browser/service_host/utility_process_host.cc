@@ -75,6 +75,7 @@
 #endif
 
 #if BUILDFLAG(IS_WIN)
+#include "base/synchronization/waitable_event.h"
 #include "components/app_launch_prefetch/app_launch_prefetch.h"
 #include "media/capture/capture_switches.h"
 #include "services/audio/public/mojom/audio_service.mojom.h"
@@ -178,8 +179,8 @@ UtilityProcessHost::UtilityProcessHost(Options options,
 #endif  // BUILDFLAG(ENABLE_GPU_CHANNEL_MEDIA_CAPTURE)
       client_(std::move(client)) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  process_ = std::make_unique<BrowserChildProcessHostImpl>(
-      PROCESS_TYPE_UTILITY, this, ChildProcessHost::IpcMode::kNormal);
+  process_ =
+      std::make_unique<BrowserChildProcessHostImpl>(PROCESS_TYPE_UTILITY, this);
 }
 
 UtilityProcessHost::~UtilityProcessHost() {
@@ -398,6 +399,8 @@ bool UtilityProcessHost::StartProcess() {
       network::switches::kDisableSharedDictionaryStorageCleanupForTesting,
       network::switches::kStoreProbabilisticRevealTokens,
       sandbox::policy::switches::kNoSandbox,
+      sandbox::policy::switches::kDisableLandlockSandbox,
+      sandbox::policy::switches::kDisableSeccompFilterSandbox,
 #if BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_CHROMEOS)
       switches::kDisableDevShmUsage,
 #endif
@@ -405,7 +408,7 @@ bool UtilityProcessHost::StartProcess() {
       sandbox::policy::switches::kDisableMetalShaderCache,
       sandbox::policy::switches::kEnableSandboxLogging,
 #endif
-      switches::kEnableBackgroundThreadPool,
+      switches::kBackgroundThreadPoolFieldTrial,
       switches::kEnableExperimentalCookieFeatures,
       switches::kForceTextDirection,
       switches::kForceUIDirection,
@@ -533,6 +536,12 @@ bool UtilityProcessHost::StartProcess() {
   if (!options_.preload_libraries_.empty()) {
     delegate->SetPreloadLibraries(options_.preload_libraries_);
   }
+
+  // Not possible to transfer the event for an unsandboxed process.
+  if (!sandbox::policy::IsUnsandboxedSandboxType(options_.sandbox_type_)) {
+    delegate->SetBootstrapStatusEvent(bootstrap_signal_event_.emplace());
+  }
+
 #endif  // BUILDFLAG(IS_WIN)
 
 #if BUILDFLAG(USE_ZYGOTE)
@@ -566,7 +575,17 @@ void UtilityProcessHost::OnProcessCrashed(int exit_code) {
   // Take ownership of |client_| so the destructor doesn't notify it of
   // termination.
   auto client = std::move(client_);
-  client->OnProcessCrashed();
+
+  Client::CrashType type = Client::CrashType::kPostIpcInitialization;
+
+#if BUILDFLAG(IS_WIN)
+  if (bootstrap_signal_event_) {
+    type = bootstrap_signal_event_->IsSignaled()
+               ? Client::CrashType::kPostIpcInitialization
+               : Client::CrashType::kPreIpcInitialization;
+  }
+#endif  // BUILDFLAG(IS_WIN)
+  client->OnProcessCrashed(type);
 }
 
 std::optional<std::string> UtilityProcessHost::GetServiceName() {

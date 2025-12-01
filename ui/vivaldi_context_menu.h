@@ -167,6 +167,7 @@ class VivaldiContextMenu : public VivaldiMenu {
   virtual void SetIcon(const gfx::Image& icon, int id) {}
   virtual void SetTitle(const std::u16string& title, int id) {}
   virtual void Refresh() {}
+  virtual void ResetRenderView() {}
   virtual void UpdateMenu(ui::SimpleMenuModel* menu_model, int id) {}
   virtual bool HasDarkTextColor();
   virtual bool IsViews() = 0;

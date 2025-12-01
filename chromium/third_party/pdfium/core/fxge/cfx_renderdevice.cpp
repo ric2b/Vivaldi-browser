@@ -137,44 +137,41 @@ uint8_t CalculateDestAlpha(uint8_t back_alpha, int src_alpha) {
   return back_alpha + src_alpha - back_alpha * src_alpha / 255;
 }
 
-void ApplyAlpha(uint8_t* dest, const FX_BGRA_STRUCT<uint8_t>& bgra, int alpha) {
-  UNSAFE_TODO({
-    dest[0] = FXDIB_ALPHA_MERGE(dest[0], bgra.blue, alpha);
-    dest[1] = FXDIB_ALPHA_MERGE(dest[1], bgra.green, alpha);
-    dest[2] = FXDIB_ALPHA_MERGE(dest[2], bgra.red, alpha);
-  });
+void ApplyAlpha(pdfium::span<uint8_t, 3> dest,
+                const FX_BGRA_STRUCT<uint8_t>& bgra,
+                int alpha) {
+  dest[0] = FXDIB_ALPHA_MERGE(dest[0], bgra.blue, alpha);
+  dest[1] = FXDIB_ALPHA_MERGE(dest[1], bgra.green, alpha);
+  dest[2] = FXDIB_ALPHA_MERGE(dest[2], bgra.red, alpha);
 }
 
 void ApplyDestAlpha(uint8_t back_alpha,
                     int src_alpha,
                     const FX_BGRA_STRUCT<uint8_t>& bgra,
-                    uint8_t* dest) {
+                    pdfium::span<uint8_t, 4> dest) {
   uint8_t dest_alpha = CalculateDestAlpha(back_alpha, src_alpha);
-  ApplyAlpha(dest, bgra, src_alpha * 255 / dest_alpha);
-  UNSAFE_TODO(dest[3] = dest_alpha);
+  ApplyAlpha(dest.first<3u>(), bgra, src_alpha * 255 / dest_alpha);
+  dest[3] = dest_alpha;
 }
 
 void NormalizeArgb(int src_value,
                    const FX_BGRA_STRUCT<uint8_t>& bgra,
-                   uint8_t* dest,
+                   pdfium::span<uint8_t, 4> dest,
                    int src_alpha) {
-  UNSAFE_TODO({
-    uint8_t back_alpha = dest[3];
-    if (back_alpha == 0) {
-      FXARGB_SetDIB(dest,
-                    ArgbEncode(src_alpha, bgra.red, bgra.green, bgra.blue));
-    } else if (src_alpha != 0) {
-      ApplyDestAlpha(back_alpha, src_alpha, bgra, dest);
-    }
-  });
+  uint8_t back_alpha = dest[3];
+  if (back_alpha == 0) {
+    FXARGB_SetDIB(dest, ArgbEncode(src_alpha, bgra.red, bgra.green, bgra.blue));
+  } else if (src_alpha != 0) {
+    ApplyDestAlpha(back_alpha, src_alpha, bgra, dest);
+  }
 }
 
 void NormalizeDest(bool has_alpha,
                    int src_value,
                    const FX_BGRA_STRUCT<uint8_t>& bgra,
-                   uint8_t* dest) {
+                   pdfium::span<uint8_t> dest) {
   if (has_alpha) {
-    NormalizeArgb(src_value, bgra, dest,
+    NormalizeArgb(src_value, bgra, dest.first<4u>(),
                   CalcAlpha(TextGammaAdjust(src_value), bgra.alpha));
     return;
   }
@@ -183,33 +180,27 @@ void NormalizeDest(bool has_alpha,
     return;
   }
 
-  ApplyAlpha(dest, bgra, src_alpha);
+  ApplyAlpha(dest.first<3u>(), bgra, src_alpha);
 }
 
 void NormalizeSrc(bool has_alpha,
                   int src_value,
                   const FX_BGRA_STRUCT<uint8_t>& bgra,
-                  uint8_t* dest) {
+                  pdfium::span<uint8_t> dest) {
   if (!has_alpha) {
-    ApplyAlpha(dest, bgra, CalcAlpha(TextGammaAdjust(src_value), bgra.alpha));
+    ApplyAlpha(dest.first<3u>(), bgra,
+               CalcAlpha(TextGammaAdjust(src_value), bgra.alpha));
     return;
   }
   int src_alpha = CalcAlpha(TextGammaAdjust(src_value), bgra.alpha);
   if (src_alpha != 0) {
-    NormalizeArgb(src_value, bgra, dest, src_alpha);
+    NormalizeArgb(src_value, bgra, dest.first<4u>(), src_alpha);
   }
 }
 
-void NextPixel(const uint8_t** src_scan, uint8_t** dst_scan, int bpp) {
-  UNSAFE_TODO({
-    *src_scan += 3;
-    *dst_scan += bpp;
-  });
-}
-
-void SetAlpha(bool has_alpha, uint8_t* alpha) {
+void SetAlpha(bool has_alpha, pdfium::span<uint8_t> alpha) {
   if (has_alpha) {
-    UNSAFE_TODO(alpha[3] = 255);
+    alpha[3] = 255;
   }
 }
 
@@ -226,7 +217,7 @@ void DrawNormalTextHelper(const RetainPtr<CFX_DIBitmap>& bitmap,
   // TODO(crbug.com/42271020): Add support for `FXDIB_Format::kBgraPremul`.
   CHECK(!bitmap->IsPremultiplied());
   const bool has_alpha = bitmap->IsAlphaFormat();
-  const int bytes_per_pixel = has_alpha ? 4 : bitmap->GetBPP() / 8;
+  const size_t bytes_per_pixel = has_alpha ? 4 : bitmap->GetBPP() / 8;
   for (int row = 0; row < nrows; ++row) {
     FX_SAFE_INT32 safe_dest_row = row;
     safe_dest_row += top;
@@ -239,20 +230,19 @@ void DrawNormalTextHelper(const RetainPtr<CFX_DIBitmap>& bitmap,
         pGlyph->GetScanline(row)
             .subspan(static_cast<size_t>((start_col - left) * 3))
             .data();
-    uint8_t* dest_scan =
-        bitmap->GetWritableScanline(dest_row)
-            .subspan(static_cast<size_t>(start_col * bytes_per_pixel))
-            .data();
+    auto dest_span = bitmap->GetWritableScanline(dest_row).subspan(
+        static_cast<size_t>(start_col * bytes_per_pixel));
     if (x_subpixel == 0) {
       for (int col = start_col; col < end_col; ++col) {
         if (normalize) {
           int src_value = AverageRgb(&src_scan[0]);
-          NormalizeDest(has_alpha, src_value, bgra, dest_scan);
+          NormalizeDest(has_alpha, src_value, bgra, dest_span);
         } else {
-          MergeGammaAdjustRgb(&src_scan[0], bgra, &dest_scan[0]);
-          SetAlpha(has_alpha, dest_scan);
+          MergeGammaAdjustRgb(&src_scan[0], bgra, &dest_span[0]);
+          SetAlpha(has_alpha, dest_span);
         }
-        NextPixel(&src_scan, &dest_scan, bytes_per_pixel);
+        UNSAFE_TODO(src_scan += 3;);
+        dest_span = dest_span.subspan(bytes_per_pixel);
       }
       continue;
     }
@@ -261,63 +251,67 @@ void DrawNormalTextHelper(const RetainPtr<CFX_DIBitmap>& bitmap,
         if (normalize) {
           int src_value = start_col > left ? AverageRgb(&src_scan[-1])
                                            : (src_scan[0] + src_scan[1]) / 3;
-          NormalizeSrc(has_alpha, src_value, bgra, dest_scan);
+          NormalizeSrc(has_alpha, src_value, bgra, dest_span);
         } else {
           if (start_col > left) {
-            MergeGammaAdjust(src_scan[-1], bgra.red, bgra.alpha, &dest_scan[2]);
+            MergeGammaAdjust(src_scan[-1], bgra.red, bgra.alpha, &dest_span[2]);
           }
-          MergeGammaAdjust(src_scan[0], bgra.green, bgra.alpha, &dest_scan[1]);
-          MergeGammaAdjust(src_scan[1], bgra.blue, bgra.alpha, &dest_scan[0]);
-          SetAlpha(has_alpha, dest_scan);
+          MergeGammaAdjust(src_scan[0], bgra.green, bgra.alpha, &dest_span[1]);
+          MergeGammaAdjust(src_scan[1], bgra.blue, bgra.alpha, &dest_span[0]);
+          SetAlpha(has_alpha, dest_span);
         }
-        NextPixel(&src_scan, &dest_scan, bytes_per_pixel);
+        src_scan += 3;
+        dest_span = dest_span.subspan(bytes_per_pixel);
         for (int col = start_col + 1; col < end_col; ++col) {
           if (normalize) {
             int src_value = AverageRgb(&src_scan[-1]);
-            NormalizeDest(has_alpha, src_value, bgra, dest_scan);
+            NormalizeDest(has_alpha, src_value, bgra, dest_span);
           } else {
-            MergeGammaAdjustRgb(&src_scan[-1], bgra, &dest_scan[0]);
-            SetAlpha(has_alpha, dest_scan);
+            MergeGammaAdjustRgb(&src_scan[-1], bgra, &dest_span[0]);
+            SetAlpha(has_alpha, dest_span);
           }
-          NextPixel(&src_scan, &dest_scan, bytes_per_pixel);
+          src_scan += 3;
+          dest_span = dest_span.subspan(bytes_per_pixel);
         }
         continue;
       }
       if (normalize) {
         int src_value =
             start_col > left ? AverageRgb(&src_scan[-2]) : src_scan[0] / 3;
-        NormalizeSrc(has_alpha, src_value, bgra, dest_scan);
+        NormalizeSrc(has_alpha, src_value, bgra, dest_span);
       } else {
         if (start_col > left) {
-          MergeGammaAdjust(src_scan[-2], bgra.red, bgra.alpha, &dest_scan[2]);
-          MergeGammaAdjust(src_scan[-1], bgra.green, bgra.alpha, &dest_scan[1]);
+          MergeGammaAdjust(src_scan[-2], bgra.red, bgra.alpha, &dest_span[2]);
+          MergeGammaAdjust(src_scan[-1], bgra.green, bgra.alpha, &dest_span[1]);
         }
-        MergeGammaAdjust(src_scan[0], bgra.blue, bgra.alpha, &dest_scan[0]);
-        SetAlpha(has_alpha, dest_scan);
+        MergeGammaAdjust(src_scan[0], bgra.blue, bgra.alpha, &dest_span[0]);
+        SetAlpha(has_alpha, dest_span);
       }
-      NextPixel(&src_scan, &dest_scan, bytes_per_pixel);
+      src_scan += 3;
+      dest_span = dest_span.subspan(bytes_per_pixel);
       for (int col = start_col + 1; col < end_col; ++col) {
         if (normalize) {
           int src_value = AverageRgb(&src_scan[-2]);
-          NormalizeDest(has_alpha, src_value, bgra, dest_scan);
+          NormalizeDest(has_alpha, src_value, bgra, dest_span);
         } else {
-          MergeGammaAdjustRgb(&src_scan[-2], bgra, &dest_scan[0]);
-          SetAlpha(has_alpha, dest_scan);
+          MergeGammaAdjustRgb(&src_scan[-2], bgra, &dest_span[0]);
+          SetAlpha(has_alpha, dest_span);
         }
-        NextPixel(&src_scan, &dest_scan, bytes_per_pixel);
+        src_scan += 3;
+        dest_span = dest_span.subspan(bytes_per_pixel);
       }
     });
   }
 }
 
-bool ShouldDrawDeviceText(const CFX_Font* pFont,
+bool ShouldDrawDeviceText(const CFX_Font* font,
                           const CFX_TextRenderOptions& options) {
 #if BUILDFLAG(IS_APPLE)
   if (options.font_is_cid) {
     return false;
   }
 
-  const ByteString bsPsName = pFont->GetPsName();
+  const ByteString bsPsName = font->GetPsName();
   if (bsPsName.Contains("+ZJHL")) {
     return false;
   }
@@ -1086,7 +1080,7 @@ void CFX_RenderDevice::SyncInternalBitmaps() {
 #endif  // defined(PDF_USE_SKIA)
 
 bool CFX_RenderDevice::DrawNormalText(pdfium::span<const TextCharPos> pCharPos,
-                                      CFX_Font* pFont,
+                                      CFX_Font* font,
                                       float font_size,
                                       const CFX_Matrix& mtText2Device,
                                       uint32_t fill_color,
@@ -1128,7 +1122,7 @@ bool CFX_RenderDevice::DrawNormalText(pdfium::span<const TextCharPos> pCharPos,
         // rendering options provided by |text_options|. No change needs to be
         // done for |text_options| here.
         anti_alias = FT_RENDER_MODE_LCD;
-        normalize = !pFont->GetFaceRec() ||
+        normalize = !font->GetFaceRec() ||
                     options.aliasing_type != CFX_TextRenderOptions::kLcd;
       }
     }
@@ -1144,9 +1138,9 @@ bool CFX_RenderDevice::DrawNormalText(pdfium::span<const TextCharPos> pCharPos,
 
 #if BUILDFLAG(IS_WIN)
   if (GetDeviceType() == DeviceType::kPrinter) {
-    if (ShouldDrawDeviceText(pFont, options) &&
-        device_driver_->DrawDeviceText(pCharPos, pFont, mtText2Device,
-                                       font_size, fill_color, text_options)) {
+    if (ShouldDrawDeviceText(font, options) &&
+        device_driver_->DrawDeviceText(pCharPos, font, mtText2Device, font_size,
+                                       fill_color, text_options)) {
       return true;
     }
     if (FXARGB_A(fill_color) < 255) {
@@ -1158,9 +1152,9 @@ bool CFX_RenderDevice::DrawNormalText(pdfium::span<const TextCharPos> pCharPos,
 #endif
 
   if (try_native_text && options.native_text) {
-    if (ShouldDrawDeviceText(pFont, options) &&
-        device_driver_->DrawDeviceText(pCharPos, pFont, mtText2Device,
-                                       font_size, fill_color, text_options)) {
+    if (ShouldDrawDeviceText(font, options) &&
+        device_driver_->DrawDeviceText(pCharPos, font, mtText2Device, font_size,
+                                       fill_color, text_options)) {
       return true;
     }
   }
@@ -1169,10 +1163,10 @@ bool CFX_RenderDevice::DrawNormalText(pdfium::span<const TextCharPos> pCharPos,
   CFX_Matrix text2Device = mtText2Device;
   char2device.Scale(font_size, -font_size);
   if (fabs(char2device.a) + fabs(char2device.b) > 50 * 1.0f || is_printer) {
-    if (pFont->GetFaceRec()) {
+    if (font->GetFaceRec()) {
       CFX_FillRenderOptions path_options;
       path_options.aliased_path = !is_text_smooth;
-      return DrawTextPath(pCharPos, pFont, font_size, mtText2Device, nullptr,
+      return DrawTextPath(pCharPos, font, font_size, mtText2Device, nullptr,
                           nullptr, fill_color, 0, nullptr, path_options);
     }
   }
@@ -1185,7 +1179,7 @@ bool CFX_RenderDevice::DrawNormalText(pdfium::span<const TextCharPos> pCharPos,
     glyph.origin_.y = FXSYS_roundf(glyph.device_origin_.y);
 
     CFX_Matrix matrix = charpos.GetEffectiveMatrix(char2device);
-    glyph.glyph_ = pFont->LoadGlyphBitmap(
+    glyph.glyph_ = font->LoadGlyphBitmap(
         charpos.glyph_index_, charpos.font_style_, matrix,
         charpos.font_char_width_, anti_alias, &text_options);
   }
@@ -1300,7 +1294,7 @@ bool CFX_RenderDevice::DrawNormalText(pdfium::span<const TextCharPos> pCharPos,
 }
 
 bool CFX_RenderDevice::DrawTextPath(pdfium::span<const TextCharPos> pCharPos,
-                                    CFX_Font* pFont,
+                                    CFX_Font* font,
                                     float font_size,
                                     const CFX_Matrix& mtText2User,
                                     const CFX_Matrix* pUser2Device,
@@ -1311,7 +1305,7 @@ bool CFX_RenderDevice::DrawTextPath(pdfium::span<const TextCharPos> pCharPos,
                                     const CFX_FillRenderOptions& fill_options) {
   for (const auto& charpos : pCharPos) {
     const CFX_Path* pPath =
-        pFont->LoadGlyphPath(charpos.glyph_index_, charpos.font_char_width_);
+        font->LoadGlyphPath(charpos.glyph_index_, charpos.font_char_width_);
     if (!pPath) {
       continue;
     }

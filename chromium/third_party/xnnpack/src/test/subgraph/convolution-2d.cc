@@ -4,10 +4,8 @@
 // LICENSE file in the root directory of this source tree.
 
 #include <algorithm>
-#include <array>
 #include <cassert>
 #include <chrono>
-#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -19,10 +17,11 @@
 #include <gtest/gtest.h>
 #include "include/xnnpack.h"
 #include "src/xnnpack/buffer.h"
-#include "src/xnnpack/common.h"
 #include "src/xnnpack/datatype.h"
 #include "src/xnnpack/math.h"
 #include "test/replicable_random_device.h"
+#include "test/subgraph/calculate_quantization_params.h"
+#include "test/subgraph/fake-dynamic-quantize.h"
 #include "test/subgraph/stencil.h"
 #include "test/subgraph/subgraph-tester.h"
 
@@ -138,80 +137,6 @@ ConvolutionParams StencilToConvolutionParams(const StencilParams& kh,
   return params;
 }
 
-template <typename T>
-xnn_quantization_params quantization_for_range(float min, float max) {
-  xnn_quantization_params result;
-  result.scale = (max - min) / (static_cast<float>(NumericLimits<T>::max()) -
-                                static_cast<float>(NumericLimits<T>::min()));
-  result.zero_point = NumericLimits<T>::min() - min / result.scale;
-  return result;
-}
-
-template <typename Input, typename Filter, typename Output>
-xnn_quantization_params CalculateConvolutionQuantizationParams(
-    size_t reduction_size, xnn_quantization_params input_quantization,
-    xnn_quantization_params filter_quantization) {
-  if (!xnn_datatype_is_quantized(xnn_datatype_of<Output>())) {
-    return {0, 1.0f};
-  }
-
-  // Get the dequantized input and filter ranges.
-  const float input_min =
-      dequantize(NumericLimits<Input>::min(), input_quantization);
-  const float input_max =
-      dequantize(NumericLimits<Input>::max(), input_quantization);
-  const float filter_min =
-      dequantize(NumericLimits<Filter>::min(), filter_quantization);
-  const float filter_max =
-      dequantize(NumericLimits<Filter>::max(), filter_quantization);
-
-  // Find the range of the product of an input and a filter value.
-  std::array<float, 4> corners = {
-      input_min * filter_min,
-      input_max * filter_min,
-      input_min * filter_max,
-      input_max * filter_max,
-  };
-  auto input_filter_minmax =
-      std::minmax_element(corners.begin(), corners.end());
-
-  const float output_min = *input_filter_minmax.first * reduction_size;
-  const float output_max = *input_filter_minmax.second * reduction_size;
-
-  // Now we want the output quantization to hold the range of the output.
-  return quantization_for_range<Output>(output_min, output_max);
-}
-
-// Dynamic quantization looks a lot like a float input/output, but the error is
-// hard to quantify and test well. Rather than do that, we can just generate
-// input data that has (close to) zero error when dynamically quantized, which
-// makes it easier to test.
-template <typename Data>
-void FakeDynamicQuantize(Tensor<Data> input, float qmin, float qmax) {
-  auto minmax = std::minmax_element(input.begin(), input.end());
-  const float rmin = *minmax.first;
-  const float rmax = *minmax.second;
-  const float scale = rmin == rmax ? 1.0f : (qmax - qmin) / (rmax - rmin);
-  const float inv_scale = 1.0f / scale;
-  for (auto& i : input) {
-    i = std::round((i - rmin) * scale) * inv_scale;
-  }
-}
-
-template <typename Data>
-void FakeDynamicQuantize(Tensor<Data> input, xnn_datatype datatype) {
-  if (datatype == xnn_datatype_qdint8) {
-    FakeDynamicQuantize(input, -128.0f, 127.0f);
-  } else if (datatype == xnn_datatype_qduint8) {
-    FakeDynamicQuantize(input, 0.0f, 255.0f);
-  } else {
-    XNN_UNREACHABLE;
-  }
-}
-
-template <typename Data>
-void FakeDynamicQuantize(const Tensor<quantized<Data>>& input, xnn_datatype) {}
-
 template <typename Data, typename Filter, typename Bias>
 void TestImpl(xnn_datatype convert_to = xnn_datatype_invalid) {
   const bool channelwise_quantization =
@@ -295,8 +220,9 @@ void TestImpl(xnn_datatype convert_to = xnn_datatype_invalid) {
     // The output quantization is computed from the kernel size and input
     // quantization.
     xnn_quantization_params output_quantization =
-        CalculateConvolutionQuantizationParams<Data, Filter, Data>(
-            reduction_size, input_quantization, filter_quantization);
+        CalculateGEMMQuantizationParams<Data, Filter, Data>(
+            reduction_size, input_quantization, filter_quantization,
+            /*bias_quantization=*/{0, 1.0f});
     xnn_quantization_params bias_quantization = {
         0, input_quantization.scale * filter_quantization.scale};
 

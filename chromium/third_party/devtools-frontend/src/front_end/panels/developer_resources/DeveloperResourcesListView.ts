@@ -162,7 +162,7 @@ const DEFAULT_VIEW: View = (input, _output, target) => {
           })}
           </table>
         </devtools-data-grid>`,
-        target, {host: input});
+        target);
   // clang-format on
 };
 
@@ -173,7 +173,7 @@ export class DeveloperResourcesListView extends UI.Widget.VBox {
   readonly #view: View;
   #filters: TextUtils.TextUtils.ParsedFilter[] = [];
   constructor(element: HTMLElement, view = DEFAULT_VIEW) {
-    super(true, undefined, element);
+    super(element, {useShadowDom: true});
     this.#view = view;
   }
 
@@ -224,7 +224,7 @@ export class DeveloperResourcesListView extends UI.Widget.VBox {
       } else {
         resourceMatch = i18nString(UIStrings.numberOfResourceMatch, {n: numberOfResourceMatch});
       }
-      UI.ARIAUtils.alert(resourceMatch);
+      UI.ARIAUtils.LiveAnnouncer.alert(resourceMatch);
     });
   }
 

@@ -9,10 +9,13 @@ $assert CHANNEL_TILE % SIMD_SIZE == 0
 $assert KERNEL_TILE >= 2
 $assert ACCUMULATORS >= 1
 #include <assert.h>
+#include <stddef.h>
+#include <stdint.h>
 
-#include "src/xnnpack/simd/f32-${ARCH}.h"
-
+#include "src/xnnpack/common.h"
 #include "src/xnnpack/dwconv.h"
+#include "src/xnnpack/microparams.h"
+#include "src/xnnpack/simd/f32-${ARCH}.h"
 
 
 void xnn_f32_dwconv_minmax_ukernel_${KERNEL_TILE}p${CHANNEL_TILE}c__${ARCH}${"" if ACCUMULATORS == 1 else "_acc%d" % ACCUMULATORS}(
@@ -26,7 +29,7 @@ void xnn_f32_dwconv_minmax_ukernel_${KERNEL_TILE}p${CHANNEL_TILE}c__${ARCH}${"" 
     size_t input_offset,
     size_t input_pixel_stride,
     const float* zero,
-    const struct xnn_f32_minmax_params params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f32_minmax_params* restrict params)
 {
   assert(channels != 0);
   assert(output_width != 0);

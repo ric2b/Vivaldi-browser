@@ -395,9 +395,11 @@ TEST_P(TensorToArrayTest, MakeArrayFromTensor) {
                           absl::MakeSpan(GetParam().device_ids),
                           GetParam().sharding, thread_pool));
 
-  TF_ASSERT_OK_AND_ASSIGN(auto disassembled_arrays,
-                          assembled_array->DisassembleIntoSingleDeviceArrays(
-                              xla::ifrt::ArrayCopySemantics::kAlwaysCopy));
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto disassembled_arrays,
+      assembled_array->DisassembleIntoSingleDeviceArrays(
+          xla::ifrt::ArrayCopySemantics::kAlwaysCopy,
+          xla::ifrt::SingleDeviceShardSemantics::kAddressableShards));
 
   ASSERT_EQ(disassembled_arrays.size(), GetParam().expected_out_tensors.size());
 
@@ -665,9 +667,10 @@ TEST(ShardingUtilsTest, MismatchRank) {
 
   EXPECT_THAT(MakeArrayFromTensor(*client, input_tensor, device_list,
                                   std::move(sharding), thread_pool),
-              StatusIs(absl::StatusCode::kInvalidArgument,
-                       "shape must have 2 dimensions, but has 3 dimensions: "
-                       "shape=[2,1,2], sharding={devices=[2,1]<=[2]}"));
+              absl_testing::StatusIs(
+                  absl::StatusCode::kInvalidArgument,
+                  "shape must have 2 dimensions, but has 3 dimensions: "
+                  "shape=[2,1,2], sharding={devices=[2,1]<=[2]}"));
 }
 
 }  // namespace

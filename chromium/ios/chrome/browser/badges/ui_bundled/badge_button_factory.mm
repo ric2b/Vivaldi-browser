@@ -22,6 +22,7 @@
 // Vivaldi
 #import "app/vivaldi_apptools.h"
 #import "ios/ui/vivaldi_overflow_menu/vivaldi_oveflow_menu_constants.h"
+#import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
@@ -68,6 +69,12 @@ const CGFloat kSymbolIncognitoFullScreenPointSize = 14.;
       return [self permissionsCameraBadgeButton];
     case kBadgeTypePermissionsMicrophone:
       return [self permissionsMicrophoneBadgeButton];
+
+    // Vivaldi
+    case kBadgeTypeReaderMode:
+      return [self readerModeBadgeButton];
+    // End Vivaldi
+
     case kBadgeTypeNone:
       NOTREACHED() << "A badge should not have kBadgeTypeNone";
   }
@@ -295,5 +302,23 @@ const CGFloat kSymbolIncognitoFullScreenPointSize = 14.;
                               constraintEqualToAnchor:button.heightAnchor] ]];
   return button;
 }
+
+// Vivaldi
+- (BadgeButton*)readerModeBadgeButton {
+  // Use a book symbol for reader mode
+  UIImage* image =
+    [CustomSymbolWithPointSize(vOverflowReaderMode, kInfobarSymbolPointSize)
+      imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+  BadgeButton* button = [self createButtonForType:kBadgeTypeReaderMode
+                                            image:image];
+  [button addTarget:self.delegate
+             action:@selector(readerModeBadgeButtonTapped:)
+   forControlEvents:UIControlEventTouchUpInside];
+  button.accessibilityIdentifier =
+    kBadgeButtonReaderModeAccessibilityIdentifier;
+  button.accessibilityLabel = l10n_util::GetNSString(IDS_IOS_READER_MODE_TITLE);
+  button.tintColor = [UIColor colorNamed:kTextPrimaryColor];
+  return button;
+} // End Vivaldi
 
 @end

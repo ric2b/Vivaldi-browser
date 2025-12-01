@@ -9,11 +9,21 @@
 
 #include "base/memory/raw_ptr.h"
 #include "build/build_config.h"
+#include "content/browser/renderer_host/overscroll_controller.h"
 #include "content/browser/renderer_host/render_view_host_delegate_view.h"
+
 #include "content/browser/web_contents/web_contents_view.h"
 
-namespace content {
+// Vivaldi addition.
+#if defined(USE_AURA)
+#include "content/browser/web_contents/aura/gesture_nav_simple.h"
 
+namespace content {
+class GestureNavSimple;
+} //namespace content
+#endif  // USE_AURA
+
+namespace content {
 class RenderWidgetHostImpl;
 class RenderWidgetHostViewChildFrame;
 class WebContentsImpl;
@@ -59,7 +69,6 @@ class WebContentsViewChildFrame : public WebContentsView,
 #endif
   void OnCapturerCountChanged() override;
   void FullscreenStateChanged(bool is_fullscreen) override;
-  void UpdateWindowControlsOverlay(const gfx::Rect& bounding_rect) override;
   BackForwardTransitionAnimationManager*
   GetBackForwardTransitionAnimationManager() override;
   void DestroyBackForwardTransitionAnimationManager() override;
@@ -100,6 +109,15 @@ class WebContentsViewChildFrame : public WebContentsView,
   bool IsWebContentsViewChildFrame() const override;
 
  private:
+
+#if defined(USE_AURA)
+  void InstallOverscrollControllerDelegate(
+      RenderWidgetHostViewChildFrame* view);
+
+  // Responsible for handling gesture-nav and pull-to-refresh UI.
+  std::unique_ptr<GestureNavSimple> gesture_nav_simple_;
+#endif // USE_AURA
+
   WebContentsView* GetOuterView();
   const WebContentsView* GetOuterView() const;
 

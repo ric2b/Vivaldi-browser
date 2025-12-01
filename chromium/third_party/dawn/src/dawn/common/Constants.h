@@ -64,6 +64,10 @@ static constexpr uint32_t kMaxSupportedImmediateDataBytes = 64u;
 // Device Default limitation for user immediate constants is 16 bytes.
 static constexpr uint32_t kDefaultMaxImmediateDataBytes = 16u;
 
+// Default subgroup sizes.
+static constexpr uint32_t kDefaultSubgroupMinSize = 4u;
+static constexpr uint32_t kDefaultSubgroupMaxSize = 128u;
+
 // Per stage maximum limits used to optimized Dawn internals.
 static constexpr uint32_t kMaxSampledTexturesPerShaderStage = 16;
 static constexpr uint32_t kMaxSamplersPerShaderStage = 16;
@@ -103,6 +107,10 @@ static constexpr size_t kWireBufferAlignment = 8u;
 
 // Timestamp query quantization mask to perform a granularity of ~0.1ms.
 static constexpr uint32_t kTimestampQuantizationMask = 0xFFFF0000;
+
+// Max dynamic offset counts used to optimize Dawn internals.
+static constexpr uint32_t kMaxDynamicUniformBuffersPerPipelineLayout = 16u;
+static constexpr uint32_t kMaxDynamicStorageBuffersPerPipelineLayout = 16u;
 
 }  // namespace dawn
 

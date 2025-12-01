@@ -188,7 +188,7 @@ void DownloadItemMetadata::OpenDownload() const {
 }
 
 void DownloadItemMetadata::PromptForPassword() const {
-#if !BUILDFLAG(IS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS)
   if (DownloadBubbleUIController* controller =
           DownloadBubbleUIController::GetForDownload(item_);
       controller) {
@@ -229,6 +229,17 @@ void DownloadItemMetadata::ProcessScanResult(
   if (!callback_.is_null()) {
     callback_.Run(MaybeOverrideScanResult(reason, deep_scan_result));
   }
+}
+
+google::protobuf::RepeatedPtrField<std::string>
+DownloadItemMetadata::CollectFrameUrls() const {
+  return enterprise_connectors::CollectFrameUrls(
+      content::DownloadItemUtils::GetWebContents(item_),
+      enterprise_connectors::DeepScanAccessPoint::DOWNLOAD);
+}
+
+content::WebContents* DownloadItemMetadata::web_contents() const {
+  return content::DownloadItemUtils::GetOriginalWebContents(item_.get());
 }
 
 base::WeakPtr<DownloadItemMetadata> DownloadItemMetadata::GetWeakPtr() {

@@ -48,7 +48,7 @@
     </enum>
 
     <request name="get_surface">
-      <description summary="create a new toplevel decoration object">
+      <description summary="create a new alpha modifier surface object">
         Create a new alpha modifier surface object associated with the
         given wl_surface. If there is already such an object associated with
         the wl_surface, the already_constructed error will be raised.
